@@ -1,0 +1,23 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "zkir-lsp",
+    srcs = ["zkir-lsp.cpp"],
+    deps = [
+        "@llvm-project//mlir:AllExtensions",
+        "@llvm-project//mlir:AllPassesAndDialects",
+        "@llvm-project//mlir:MlirLspServerLib",
+    ],
+)
+
+cc_binary(
+    name = "zkir-opt",
+    srcs = ["zkir-opt.cpp"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:AllExtensions",
+        "@llvm-project//mlir:AllPassesAndDialects",
+        "@llvm-project//mlir:MlirOptLib",
+        "@llvm-project//mlir:TosaDialect",
+    ],
+)
