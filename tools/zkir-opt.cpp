@@ -4,6 +4,7 @@
 #include "mlir/InitAllPasses.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
+#include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h"
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 
@@ -17,6 +18,7 @@ int main(int argc, char **argv) {
 
   // Dialect conversion passes
   mlir::zkir::mod_arith::registerModArithToArithPasses();
+  mlir::zkir::arith::registerArithToModArithPasses();
 
   return failed(mlir::MlirOptMain(argc, argv, "ZKIR optimizer\n", registry));
 }
