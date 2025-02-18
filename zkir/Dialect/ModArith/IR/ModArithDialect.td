@@ -1,0 +1,22 @@
+#ifndef ZKIR_DIALECT_MODARITH_IR_MODARITHDIALECT_TD_
+#define ZKIR_DIALECT_MODARITH_IR_MODARITHDIALECT_TD_
+
+include "mlir/IR/DialectBase.td"
+include "mlir/IR/OpBase.td"
+
+def ModArith_Dialect : Dialect {
+  let name = "mod_arith";
+  let description = [{
+    The `mod_arith` dialect contains operations used for modulo arithmetic.
+  }];
+
+  let cppNamespace = "::mlir::zkir::mod_arith";
+  let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 1;
+
+  let dependentDialects = [
+    "arith::ArithDialect",
+  ];
+}
+
+#endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHDIALECT_TD_

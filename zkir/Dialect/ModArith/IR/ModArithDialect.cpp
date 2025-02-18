@@ -1,0 +1,181 @@
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+
+#include <cassert>
+#include <optional>
+
+#include "llvm/include/llvm/ADT/TypeSwitch.h"            // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinAttributes.h"      // from @llvm-project
+#include "mlir/include/mlir/IR/BuiltinTypes.h"           // from @llvm-project
+#include "mlir/include/mlir/IR/DialectImplementation.h"  // from @llvm-project
+#include "mlir/include/mlir/IR/Location.h"               // from @llvm-project
+#include "mlir/include/mlir/IR/MLIRContext.h"            // from @llvm-project
+#include "mlir/include/mlir/IR/OpImplementation.h"       // from @llvm-project
+#include "mlir/include/mlir/IR/OperationSupport.h"       // from @llvm-project
+#include "mlir/include/mlir/IR/TypeUtilities.h"          // from @llvm-project
+#include "mlir/include/mlir/Support/LLVM.h"              // from @llvm-project
+#include "mlir/include/mlir/Support/LogicalResult.h"     // from @llvm-project
+
+// NOLINTBEGIN(misc-include-cleaner): Required to define ModArithDialect,
+// ModArithTypes, ModArithOps, ModArithAttributes
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
+// NOLINTEND(misc-include-cleaner)
+
+// Generated definitions
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.cpp.inc"
+
+#define GET_ATTRDEF_CLASSES
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"
+
+#define GET_TYPEDEF_CLASSES
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"
+
+#define GET_OP_CLASSES
+#include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc"
+
+namespace mlir {
+namespace zkir {
+namespace mod_arith {
+
+class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
+ public:
+  using OpAsmDialectInterface::OpAsmDialectInterface;
+
+  AliasResult getAlias(Type type, raw_ostream &os) const override {
+    auto res = llvm::TypeSwitch<Type, AliasResult>(type)
+                   .Case<ModArithType>([&](auto &modArithType) {
+                     os << "Z";
+                     os << modArithType.getModulus().getValue();
+                     os << "_";
+                     os << modArithType.getModulus().getType();
+                     return AliasResult::FinalAlias;
+                   })
+                   .Default([&](Type) { return AliasResult::NoAlias; });
+    return res;
+  }
+};
+
+void ModArithDialect::initialize() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"
+      >();
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"
+      >();
+  addOperations<
+#define GET_OP_LIST
+#include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc"
+      >();
+
+  addInterface<ModArithOpAsmDialectInterface>();
+}
+
+/// Ensures that the underlying integer type is wide enough for the modulus
+template <typename OpType>
+LogicalResult verifyModArithType(OpType op, ModArithType type) {
+  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  unsigned modWidth = modulus.getActiveBits();
+  if (modWidth > bitWidth - 1)
+    return op.emitOpError()
+           << "underlying type's bitwidth must be 1 bit larger than "
+           << "the modulus bitwidth, but got " << bitWidth
+           << " while modulus requires width " << modWidth << ".";
+  return success();
+}
+
+template <typename OpType>
+LogicalResult verifySameWidth(OpType op, ModArithType modArithType,
+                              IntegerType integerType) {
+  unsigned bitWidth = modArithType.getModulus().getValue().getBitWidth();
+  unsigned intWidth = integerType.getWidth();
+  if (intWidth != bitWidth)
+    return op.emitOpError()
+           << "the result integer type should be of the same width as the "
+           << "mod arith type width, but got " << intWidth
+           << " while mod arith type width " << bitWidth << ".";
+  return success();
+}
+
+LogicalResult ExtractOp::verify() {
+  auto modArithType = getOperandModArithType(*this);
+  auto integerType = getResultIntegerType(*this);
+  auto result = verifySameWidth(*this, modArithType, integerType);
+  if (result.failed()) return result;
+  return verifyModArithType(*this, modArithType);
+}
+
+LogicalResult ReduceOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+LogicalResult AddOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+LogicalResult SubOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+LogicalResult MulOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+LogicalResult MacOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
+  APInt parsedValue(256, 0);
+  Type parsedType;
+
+  if (failed(parser.parseInteger(parsedValue))) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "found invalid integer value");
+    return failure();
+  }
+
+  if (parser.parseColon() || parser.parseType(parsedType)) return failure();
+
+  auto modArithType = dyn_cast<ModArithType>(parsedType);
+  if (!modArithType) return failure();
+
+  auto outputBitWidth =
+      modArithType.getModulus().getType().getIntOrFloatBitWidth();
+  if (parsedValue.getActiveBits() > outputBitWidth)
+    return parser.emitError(parser.getCurrentLocation(),
+                            "constant value is too large for the modulus");
+
+  auto intValue = IntegerAttr::get(modArithType.getModulus().getType(),
+                                   parsedValue.trunc(outputBitWidth));
+  result.addAttribute(
+      "value", ModArithAttr::get(parser.getContext(), modArithType, intValue));
+  result.addTypes(modArithType);
+  return success();
+}
+
+void ConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  // getValue chain:
+  // op's ModArithAttribute value
+  //   -> ModArithAttribute's IntegerAttr value
+  //   -> IntegerAttr's APInt value
+  getValue().getValue().getValue().print(p.getStream(), /*isSigned=*/false);
+  p << " : ";
+  p.printType(getOutput().getType());
+}
+
+LogicalResult ConstantOp::inferReturnTypes(
+    mlir::MLIRContext *context, std::optional<mlir::Location> loc,
+    ConstantOpAdaptor adaptor, llvm::SmallVectorImpl<mlir::Type> &returnTypes) {
+  returnTypes.push_back(adaptor.getValue().getType());
+  return success();
+}
+
+}  // namespace mod_arith
+}  // namespace zkir
+}  // namespace mlir

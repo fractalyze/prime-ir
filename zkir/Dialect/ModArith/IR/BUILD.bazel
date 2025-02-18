@@ -1,0 +1,150 @@
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "Dialect",
+    srcs = [
+        "ModArithDialect.cpp",
+    ],
+    hdrs = [
+        "ModArithAttributes.h",
+        "ModArithDialect.h",
+        "ModArithOps.h",
+        "ModArithTypes.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":dialect_inc_gen",
+        ":ops_inc_gen",
+        ":types_inc_gen",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+td_library(
+    name = "td_files",
+    srcs = [
+        "ModArithAttributes.td",
+        "ModArithDialect.td",
+        "ModArithOps.td",
+        "ModArithTypes.td",
+    ],
+    deps = [
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "attributes_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-attrdef-decls"],
+            "ModArithAttributes.h.inc",
+        ),
+        (
+            ["-gen-attrdef-defs"],
+            "ModArithAttributes.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "ModArithAttributes.td",
+    deps = [
+        ":dialect_inc_gen",
+        ":types_inc_gen",
+        ":td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "dialect_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-dialect-decls"],
+            "ModArithDialect.h.inc",
+        ),
+        (
+            ["-gen-dialect-defs"],
+            "ModArithDialect.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "ModArithDialect.td",
+    deps = [
+        ":td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "types_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-typedef-decls"],
+            "ModArithTypes.h.inc",
+        ),
+        (
+            ["-gen-typedef-defs"],
+            "ModArithTypes.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "ModArithTypes.td",
+    deps = [
+        ":dialect_inc_gen",
+        ":td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "ops_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-op-decls"],
+            "ModArithOps.h.inc",
+        ),
+        (
+            ["-gen-op-defs"],
+            "ModArithOps.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "ModArithOps.td",
+    deps = [
+        ":dialect_inc_gen",
+        ":td_files",
+        ":types_inc_gen",
+    ],
+)
+
+cc_library(
+    name = "ModArith",
+    srcs = [
+        "ModArithDialect.cpp",
+    ],
+    hdrs = [
+        "ModArithAttributes.h",
+        "ModArithDialect.h",
+        "ModArithOps.h",
+        "ModArithTypes.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":dialect_inc_gen",
+        ":ops_inc_gen",
+        ":types_inc_gen",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:Support",
+    ],
+)

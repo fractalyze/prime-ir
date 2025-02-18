@@ -4,14 +4,19 @@
 #include "mlir/InitAllPasses.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
-int main(int argc, char **argv) {
-  mlir::registerAllPasses();
-  // TODO(chokobole): register passes
+#include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 
+int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
+  registry.insert<mlir::zkir::mod_arith::ModArithDialect>();
   mlir::registerAllDialects(registry);
   mlir::registerAllExtensions(registry);
-  // TODO(chokobole): register dialects
+
+  mlir::registerAllPasses();
+
+  // Dialect conversion passes
+  mlir::zkir::mod_arith::registerModArithToArithPasses();
 
   return failed(mlir::MlirOptMain(argc, argv, "ZKIR optimizer\n", registry));
 }
