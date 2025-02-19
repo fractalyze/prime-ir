@@ -150,8 +150,11 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(parser.getCurrentLocation(),
                             "constant value is too large for the modulus");
 
+  // NOTE(ashjeong): `trunc()` changed to `zextOrTrunc()` since `mod_arith.constant 0 : i256`
+  //      of large modulus fails as `parser.parseInteger(parsedValue)` on line 136 mistakenly
+  //      truncates a value of 0 with 256 bit-width to 64 bit-width. 
   auto intValue = IntegerAttr::get(modArithType.getModulus().getType(),
-                                   parsedValue.trunc(outputBitWidth));
+                                   parsedValue.zextOrTrunc(outputBitWidth));
   result.addAttribute(
       "value", ModArithAttr::get(parser.getContext(), modArithType, intValue));
   result.addTypes(modArithType);

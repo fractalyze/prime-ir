@@ -19,4 +19,16 @@ def ModArithToArith : Pass<"mod-arith-to-arith", "ModuleOp"> {
   ];
 }
 
+defvar DefGE = ConstantEnumCase<Arith_CmpIPredicateAttr, "uge">;
+defvar DefOverflow = ConstantEnumCase<Arith_IntegerOverflowAttr, "none">;
+
+def ConvertSubIfGE : Pattern<
+  (ModArith_SubIfGEOp $x, $y),
+  [
+    (Arith_SubIOp:$subOp $x, $y, DefOverflow),
+    (Arith_CmpIOp:$cmpOp DefGE, $x, $y),
+    (SelectOp $cmpOp, $subOp, $x)
+  ]
+>;
+
 #endif  // ZKIR_DIALECT_MODARITH_CONVERSIONS_MODARITHTOARITH_MODARITHTOARITH_TD_

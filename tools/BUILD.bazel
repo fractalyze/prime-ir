@@ -1,5 +1,9 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
 
+package(
+    default_visibility = ["//visibility:public"],
+)
+
 cc_binary(
     name = "zkir-lsp",
     srcs = ["zkir-lsp.cpp"],
@@ -15,6 +19,7 @@ cc_binary(
     srcs = ["zkir-opt.cpp"],
     deps = [
         "//zkir/Dialect/ModArith/Conversions/ModArithToArith",
+        "//zkir/Dialect/Arith/Conversions/ArithToModArith",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",

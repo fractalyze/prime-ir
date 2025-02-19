@@ -1,0 +1,35 @@
+load("//bazel:lit.bzl", "glob_lit_tests")
+
+package(
+    default_visibility = ["//visibility:public"],
+    licenses = ["notice"],
+)
+
+# Bundle together all of the test utilities that are used by tests.
+filegroup(
+    name = "test_utilities",
+    testonly = True,
+    data = [
+        ":lit.cfg.py",
+        "@zkir//tools:zkir-opt",
+        "@llvm-project//llvm:FileCheck",
+        "@llvm-project//llvm:lit",
+        "@llvm-project//llvm:not",
+    ],
+)
+
+glob_lit_tests(
+    name = "all_tests",
+    data = [":test_utilities"],
+    # Note: the driver argument is silently ignored for the OSS version of this
+    # macro, replacing it with a standard invocation of lit whose config is in
+    # lit.cfg.py
+    driver = "@zkir//tests:run_lit.sh",
+    test_file_exts = ["mlir"],
+)
+
+exports_files(
+    [
+        "run_lit.sh",
+    ],
+)
