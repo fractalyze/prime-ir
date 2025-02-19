@@ -1,0 +1,21 @@
+[tool.pytest.ini_options]
+norecursedirs = [
+  ".git",
+  "__pycache__",
+  "bazel",
+  "bazel-bin",
+  "bazel-heir",
+  "bazel-out",
+  "bazel-testlogs",
+  "docs",
+  "external",
+  "tests",
+  "tools",
+  "venv",
+]
+
+[tool.pyink]
+line-length = 80
+unstable = true
+pyink-indentation = 2
+pyink-use-majority-quotes = true

@@ -1,0 +1,67 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+
+# Built-in hooks
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: "v4.4.0"
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+        args: ['--maxkb=500000'] # 500MB
+
+# clang-format
+-   repo: https://github.com/pre-commit/mirrors-clang-format
+    rev: "v18.1.2"
+    hooks:
+    -   id: clang-format
+        args: ["--style=Google"]
+
+# Starlark
+-   repo: https://github.com/keith/pre-commit-buildifier
+    rev: "6.3.3"
+    hooks:
+      - id: buildifier
+      - id: buildifier-lint
+
+# Check for spelling
+-   repo: https://github.com/codespell-project/codespell
+    rev: "v2.2.5"
+    hooks:
+      - id: codespell
+        args: ["-L", "crate, fpt", "--skip=MODULE.bazel.lock"]
+
+# Changes tabs to spaces
+-   repo: https://github.com/Lucas-C/pre-commit-hooks
+    rev: "v1.5.4"
+    hooks:
+      - id: remove-tabs
+        exclude: ".*[.]go"
+
+# Github workflow actionlint
+-   repo: https://github.com/Mateusz-Grzelinski/actionlint-py
+    rev: "v1.7.6.22"
+    hooks:
+      - id: actionlint
+        additional_dependencies: [ pyflakes>=3.0.1, shellcheck-py>=0.9.0.5 ]
+
+# mdformat
+- repo: https://github.com/executablebooks/mdformat
+  rev: 0.7.17
+  hooks:
+  - id: mdformat
+    args: ["--wrap=80"]
+    additional_dependencies:
+    - mdformat-gfm
+    - mdformat-frontmatter
+
+# python formatter
+- repo: https://github.com/google/pyink
+  rev: 24.10.1
+  hooks:
+    - id: pyink
+      language_version: python3.11
+
+exclude: patches/.*\.patch$
