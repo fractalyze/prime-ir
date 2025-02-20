@@ -97,7 +97,7 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant",
   let hasCustomAssemblyFormat = 1;
 
   let builders = [
-    OpBuilder<(ins "::mlir::zkir::mod_arith::ModArithType":$ty, "int64_t":$value), [{
+    OpBuilder<(ins "::mlir::zkir::mod_arith::ModArithType":$ty, "llvm::APInt":$value), [{
       return build($_builder, $_state, ty, mod_arith::ModArithAttr::get(ty, value));
     }]>
   ];

@@ -90,7 +90,7 @@ struct ConvertConstant : public OpConversionPattern<mlir::arith::ConstantOp> {
 
     auto result = b.create<mod_arith::ConstantOp>(mod_arith::ModArithAttr::get(
         convertArithType(op.getType()),
-        cast<IntegerAttr>(op.getValue()).getValue().getSExtValue()));
+        cast<IntegerAttr>(op.getValue()).getValue()));
 
     rewriter.replaceOp(op, result);
     return success();

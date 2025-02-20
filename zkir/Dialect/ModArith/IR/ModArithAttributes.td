@@ -27,7 +27,7 @@ def ModArith_ModArithAttr : ModArith_Attr<
   let assemblyFormat = "$value `:` $type";
   let builders = [
     AttrBuilderWithInferredContext<(ins "ModArithType":$type,
-                                        "const int64_t":$value), [{
+                                        "llvm::APInt":$value), [{
       return $_get(
         type.getContext(),
         type,
