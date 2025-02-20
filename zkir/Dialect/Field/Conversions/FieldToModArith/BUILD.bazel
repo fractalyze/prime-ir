@@ -1,0 +1,57 @@
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "FieldToModArith",
+    srcs = ["FieldToModArith.cpp"],
+    hdrs = [
+        "FieldToModArith.h",
+    ],
+    deps = [
+        ":pass_inc_gen",
+        "//zkir/Dialect/Field/IR:Field",
+        "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Utils:ConversionUtils",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:AffineDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LinalgDialect",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
+        "@llvm-project//mlir:TransformUtils",
+    ],
+)
+
+gentbl_cc_library(
+    name = "pass_inc_gen",
+    tbl_outs = [
+        (
+            [
+                "-gen-pass-decls",
+                "-name=FieldToModArith",
+            ],
+            "FieldToModArith.h.inc",
+        ),
+        (
+            ["-gen-rewriters"],
+            "FieldToModArith.cpp.inc",
+        ),
+        (
+            ["-gen-pass-doc"],
+            "FieldToModArith.md",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "FieldToModArith.td",
+    deps = [
+        "//zkir/Dialect/Field/IR:ops_inc_gen",
+        "//zkir/Dialect/Field/IR:td_files",
+        "//zkir/Dialect/ModArith/IR:td_files",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
