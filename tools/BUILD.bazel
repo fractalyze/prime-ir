@@ -8,6 +8,7 @@ cc_binary(
     name = "zkir-lsp",
     srcs = ["zkir-lsp.cpp"],
     deps = [
+        "//zkir/Dialect/ModArith/IR:ModArith",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",
         "@llvm-project//mlir:MlirLspServerLib",
