@@ -5,7 +5,7 @@ package(
 )
 
 cc_library(
-    name = "Dialect",
+    name = "ModArith",
     srcs = [
         "ModArithDialect.cpp",
     ],
@@ -122,29 +122,5 @@ gentbl_cc_library(
         ":dialect_inc_gen",
         ":td_files",
         ":types_inc_gen",
-    ],
-)
-
-cc_library(
-    name = "ModArith",
-    srcs = [
-        "ModArithDialect.cpp",
-    ],
-    hdrs = [
-        "ModArithAttributes.h",
-        "ModArithDialect.h",
-        "ModArithOps.h",
-        "ModArithTypes.h",
-    ],
-    deps = [
-        ":attributes_inc_gen",
-        ":dialect_inc_gen",
-        ":ops_inc_gen",
-        ":types_inc_gen",
-        "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:ArithDialect",
-        "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:InferTypeOpInterface",
-        "@llvm-project//mlir:Support",
     ],
 )

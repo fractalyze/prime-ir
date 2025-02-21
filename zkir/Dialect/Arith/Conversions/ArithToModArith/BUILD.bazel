@@ -12,7 +12,7 @@ cc_library(
     ],
     deps = [
         ":pass_inc_gen",
-        "//zkir/Dialect/ModArith/IR:Dialect",
+        "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Utils:ConversionUtils",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:AffineUtils",
