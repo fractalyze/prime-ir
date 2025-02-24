@@ -18,8 +18,9 @@ cc_binary(
     name = "zkir-opt",
     srcs = ["zkir-opt.cpp"],
     deps = [
-        "//zkir/Dialect/ModArith/Conversions/ModArithToArith",
         "//zkir/Dialect/Arith/Conversions/ArithToModArith",
+        "//zkir/Dialect/ModArith/Conversions/ModArithToArith",
+        "//zkir/Dialect/ModArith/IR:ModArith",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",

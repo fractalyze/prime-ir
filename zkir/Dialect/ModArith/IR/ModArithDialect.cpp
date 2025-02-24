@@ -17,10 +17,10 @@
 
 // NOLINTBEGIN(misc-include-cleaner): Required to define ModArithDialect,
 // ModArithTypes, ModArithOps, ModArithAttributes
+#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 // NOLINTEND(misc-include-cleaner)
 
 // Generated definitions
@@ -150,9 +150,10 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     return parser.emitError(parser.getCurrentLocation(),
                             "constant value is too large for the modulus");
 
-  // NOTE(ashjeong): `trunc()` changed to `zextOrTrunc()` since `mod_arith.constant 0 : i256`
-  //      of large modulus fails as `parser.parseInteger(parsedValue)` on line 136 mistakenly
-  //      truncates a value of 0 with 256 bit-width to 64 bit-width. 
+  // NOTE(ashjeong): `trunc()` changed to `zextOrTrunc()` since
+  // `mod_arith.constant 0 : i256` of large modulus fails as
+  // `parser.parseInteger(parsedValue)` on line 136 mistakenly truncates a value
+  // of 0 with 256 bit-width to 64 bit-width.
   auto intValue = IntegerAttr::get(modArithType.getModulus().getType(),
                                    parsedValue.zextOrTrunc(outputBitWidth));
   result.addAttribute(

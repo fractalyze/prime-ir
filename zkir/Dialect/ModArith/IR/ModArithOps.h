@@ -2,11 +2,11 @@
 #define ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_
 
 // NOLINTBEGIN(misc-include-cleaner): Required to define ModArithOps
+#include "mlir/include/mlir/IR/BuiltinOps.h"  // from @llvm-project
+#include "mlir/include/mlir/Interfaces/InferTypeOpInterface.h"  // from @llvm-project
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "mlir/include/mlir/IR/BuiltinOps.h"  // from @llvm-project
-#include "mlir/include/mlir/Interfaces/InferTypeOpInterface.h"  // from @llvm-project
 // NOLINTEND(misc-include-cleaner)
 
 #define GET_OP_CLASSES

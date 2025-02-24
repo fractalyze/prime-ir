@@ -56,9 +56,8 @@ struct ConvertBinOp : public OpConversionPattern<SourceArithOp> {
 // don't depend on the logic of the dialect beyond the
 // type converter.
 void addStructuralConversionPatterns(TypeConverter &typeConverter,
-  RewritePatternSet &patterns,
-  ConversionTarget &target);
-
+                                     RewritePatternSet &patterns,
+                                     ConversionTarget &target);
 
 }  // namespace zkir
 }  // namespace mlir

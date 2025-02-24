@@ -3,7 +3,6 @@
 #include "mlir/InitAllExtensions.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
-
 #include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h"
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"

@@ -4,11 +4,6 @@
 #include <cstdint>
 #include <utility>
 
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
-#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
-#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
-#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "zkir/Utils/ConversionUtils.h"
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
 #include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"  // from @llvm-project
@@ -21,6 +16,11 @@
 #include "mlir/include/mlir/IR/ValueRange.h"             // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"              // from @llvm-project
 #include "mlir/include/mlir/Transforms/DialectConversion.h"  // from @llvm-project
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "zkir/Utils/ConversionUtils.h"
 
 namespace mlir {
 namespace zkir {
@@ -211,7 +211,8 @@ void ArithToModArith::runOnOperation() {
       .add<ConvertConstant, ConvertExtSI, ConvertExtUI,
            ConvertBinOp<mlir::arith::AddIOp, mod_arith::AddOp>,
            ConvertBinOp<mlir::arith::SubIOp, mod_arith::SubOp>,
-           ConvertBinOp<mlir::arith::MulIOp, mod_arith::MulOp>, ConvertLoadOp>(typeConverter, context);
+           ConvertBinOp<mlir::arith::MulIOp, mod_arith::MulOp>, ConvertLoadOp>(
+          typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 

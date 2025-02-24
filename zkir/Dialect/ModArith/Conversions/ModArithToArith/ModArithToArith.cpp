@@ -2,10 +2,6 @@
 
 #include <utility>
 
-#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
-#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
-#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "zkir/Utils/ConversionUtils.h"
 #include "llvm/include/llvm/Support/Casting.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"  // from @llvm-project
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
@@ -23,6 +19,10 @@
 #include "mlir/include/mlir/Support/LLVM.h"              // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"     // from @llvm-project
 #include "mlir/include/mlir/Transforms/DialectConversion.h"  // from @llvm-project
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "zkir/Utils/ConversionUtils.h"
 
 namespace mlir {
 namespace zkir {
@@ -268,10 +268,9 @@ void ModArithToArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns
-      .add<ConvertEncapsulate, ConvertExtract, ConvertReduce, ConvertAdd,
-           ConvertSub, ConvertMul, ConvertMac,
-           ConvertConstant>(typeConverter, context);
+  patterns.add<ConvertEncapsulate, ConvertExtract, ConvertReduce, ConvertAdd,
+               ConvertSub, ConvertMul, ConvertMac, ConvertConstant>(
+      typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 

@@ -60,8 +60,8 @@ gentbl_cc_library(
     td_file = "ModArithAttributes.td",
     deps = [
         ":dialect_inc_gen",
-        ":types_inc_gen",
         ":td_files",
+        ":types_inc_gen",
     ],
 )
 
