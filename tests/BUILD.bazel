@@ -11,10 +11,10 @@ filegroup(
     testonly = True,
     data = [
         ":lit.cfg.py",
+        "//tools:zkir-opt",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:lit",
         "@llvm-project//llvm:not",
-        "@zkir//tools:zkir-opt",
     ],
 )
 
@@ -24,7 +24,7 @@ glob_lit_tests(
     # Note: the driver argument is silently ignored for the OSS version of this
     # macro, replacing it with a standard invocation of lit whose config is in
     # lit.cfg.py
-    driver = "@zkir//tests:run_lit.sh",
+    driver = "//tests:run_lit.sh",
     test_file_exts = ["mlir"],
 )
 
