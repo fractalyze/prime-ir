@@ -62,6 +62,6 @@ repos:
   rev: 24.10.1
   hooks:
     - id: pyink
-      language_version: python3.11
+      language_version: python3.10
 
 exclude: patches/.*\.patch$
