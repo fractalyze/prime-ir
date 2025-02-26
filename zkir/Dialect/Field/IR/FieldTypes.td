@@ -1,5 +1,5 @@
-#ifndef ZKIR_TYPES_FIELD_IR_FIELDTYPES_TD_
-#define ZKIR_TYPES_FIELD_IR_FIELDTYPES_TD_
+#ifndef ZKIR_DIALECT_FIELD_IR_FIELDTYPES_TD_
+#define ZKIR_DIALECT_FIELD_IR_FIELDTYPES_TD_
 
 include "zkir/Dialect/Field/IR/FieldDialect.td"
 
@@ -35,4 +35,4 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInte
 
 def PrimeFieldLike: TypeOrValueSemanticsContainer<Field_PrimeFieldType, "prime-field-like">;
 
-#endif  // ZKIR_TYPES_FIELD_IR_FIELDTYPES_TD_
+#endif  // ZKIR_DIALECT_FIELD_IR_FIELDTYPES_TD_

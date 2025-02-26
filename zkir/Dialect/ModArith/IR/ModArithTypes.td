@@ -1,5 +1,5 @@
-#ifndef ZKIR_TYPES_MODARITH_IR_MODARITHTYPES_TD_
-#define ZKIR_TYPES_MODARITH_IR_MODARITHTYPES_TD_
+#ifndef ZKIR_DIALECT_MODARITH_IR_MODARITHTYPES_TD_
+#define ZKIR_DIALECT_MODARITH_IR_MODARITHTYPES_TD_
 
 include "zkir/Dialect/ModArith/IR/ModArithDialect.td"
 
@@ -54,4 +54,4 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [MemRefElementTypeI
 
 def ModArithLike: TypeOrValueSemanticsContainer<ModArith_ModArithType, "mod_arith-like">;
 
-#endif  // ZKIR_TYPES_MODARITH_IR_MODARITHTYPES_TD_
+#endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHTYPES_TD_
