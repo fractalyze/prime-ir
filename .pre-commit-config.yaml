@@ -19,6 +19,13 @@ repos:
     - id: clang-format
       args: ["--style=Google"]
 
+# cpplint
+- repo: https://github.com/pocc/pre-commit-hooks
+  rev: master
+  hooks:
+    - id: cpplint
+      args: ["--filter=-whitespace/indent_namespace, -legal/copyright, -build/namespaces, -runtime/references"]
+
 # Starlark
 - repo: https://github.com/keith/pre-commit-buildifier
   rev: "6.3.3"
