@@ -11,7 +11,7 @@ namespace arith {
 #include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h.inc"
 
 #define GEN_PASS_REGISTRATION
-#include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h.inc"
+#include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h.inc"  // NOLINT(build/include)
 
 }  // namespace arith
 }  // namespace zkir

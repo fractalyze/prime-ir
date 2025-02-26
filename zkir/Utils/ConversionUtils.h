@@ -34,7 +34,7 @@ namespace zkir {
 
 template <typename SourceArithOp, typename TargetModArithOp>
 struct ConvertBinOp : public OpConversionPattern<SourceArithOp> {
-  ConvertBinOp(mlir::MLIRContext *context)
+  explicit ConvertBinOp(mlir::MLIRContext *context)
       : OpConversionPattern<SourceArithOp>(context) {}
 
   using OpConversionPattern<SourceArithOp>::OpConversionPattern;

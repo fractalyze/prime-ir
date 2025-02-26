@@ -14,13 +14,9 @@
 #include "mlir/include/mlir/IR/TypeUtilities.h"          // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"              // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"     // from @llvm-project
-
-// NOLINTBEGIN(misc-include-cleaner): Required to define FieldDialect,
-// FieldTypes, FieldOps, FieldAttributes
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
-// NOLINTEND(misc-include-cleaner)
 
 // Generated definitions
 #include "zkir/Dialect/Field/IR/FieldDialect.cpp.inc"
@@ -58,15 +54,15 @@ class FieldOpAsmDialectInterface : public OpAsmDialectInterface {
 void FieldDialect::initialize() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "zkir/Dialect/Field/IR/FieldTypes.cpp.inc"
+#include "zkir/Dialect/Field/IR/FieldTypes.cpp.inc"  // NOLINT(build/include)
       >();
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "zkir/Dialect/Field/IR/FieldAttributes.cpp.inc"
+#include "zkir/Dialect/Field/IR/FieldAttributes.cpp.inc"  // NOLINT(build/include)
       >();
   addOperations<
 #define GET_OP_LIST
-#include "zkir/Dialect/Field/IR/FieldOps.cpp.inc"
+#include "zkir/Dialect/Field/IR/FieldOps.cpp.inc"  // NOLINT(build/include)
       >();
 
   addInterface<FieldOpAsmDialectInterface>();

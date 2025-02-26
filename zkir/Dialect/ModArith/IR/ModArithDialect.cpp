@@ -4,6 +4,7 @@
 #include <optional>
 
 #include "llvm/include/llvm/ADT/TypeSwitch.h"            // from @llvm-project
+#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"    // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinAttributes.h"      // from @llvm-project
 #include "mlir/include/mlir/IR/BuiltinTypes.h"           // from @llvm-project
 #include "mlir/include/mlir/IR/DialectImplementation.h"  // from @llvm-project
@@ -14,14 +15,9 @@
 #include "mlir/include/mlir/IR/TypeUtilities.h"          // from @llvm-project
 #include "mlir/include/mlir/Support/LLVM.h"              // from @llvm-project
 #include "mlir/include/mlir/Support/LogicalResult.h"     // from @llvm-project
-
-// NOLINTBEGIN(misc-include-cleaner): Required to define ModArithDialect,
-// ModArithTypes, ModArithOps, ModArithAttributes
-#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"  // from @llvm-project
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-// NOLINTEND(misc-include-cleaner)
 
 // Generated definitions
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.cpp.inc"
@@ -60,15 +56,15 @@ class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
 void ModArithDialect::initialize() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"  // NOLINT(build/include)
       >();
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"  // NOLINT(build/include)
       >();
   addOperations<
 #define GET_OP_LIST
-#include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc"
+#include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc"  // NOLINT(build/include)
       >();
 
   addInterface<ModArithOpAsmDialectInterface>();

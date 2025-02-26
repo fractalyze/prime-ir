@@ -45,7 +45,7 @@ Type convertModArithLikeType(ShapedType type) {
 
 class ModArithToArithTypeConverter : public TypeConverter {
  public:
-  ModArithToArithTypeConverter(MLIRContext *ctx) {
+  explicit ModArithToArithTypeConverter(MLIRContext *ctx) {
     addConversion([](Type type) { return type; });
     addConversion(
         [](ModArithType type) -> Type { return convertModArithType(type); });
@@ -85,7 +85,7 @@ inline Type modulusType(Op op, bool mul = false) {
 }
 
 struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
-  ConvertEncapsulate(mlir::MLIRContext *context)
+  explicit ConvertEncapsulate(mlir::MLIRContext *context)
       : OpConversionPattern<EncapsulateOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -99,7 +99,7 @@ struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
 };
 
 struct ConvertExtract : public OpConversionPattern<ExtractOp> {
-  ConvertExtract(mlir::MLIRContext *context)
+  explicit ConvertExtract(mlir::MLIRContext *context)
       : OpConversionPattern<ExtractOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -113,7 +113,7 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
 };
 
 struct ConvertConstant : public OpConversionPattern<ConstantOp> {
-  ConvertConstant(mlir::MLIRContext *context)
+  explicit ConvertConstant(mlir::MLIRContext *context)
       : OpConversionPattern<ConstantOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -133,7 +133,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
 };
 
 struct ConvertReduce : public OpConversionPattern<ReduceOp> {
-  ConvertReduce(mlir::MLIRContext *context)
+  explicit ConvertReduce(mlir::MLIRContext *context)
       : OpConversionPattern<ReduceOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -157,7 +157,7 @@ struct ConvertReduce : public OpConversionPattern<ReduceOp> {
 // It is assumed inputs are canonical representatives
 // ModArithType ensures add/sub result can not overflow
 struct ConvertAdd : public OpConversionPattern<AddOp> {
-  ConvertAdd(mlir::MLIRContext *context)
+  explicit ConvertAdd(mlir::MLIRContext *context)
       : OpConversionPattern<AddOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -177,7 +177,7 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 };
 
 struct ConvertSub : public OpConversionPattern<SubOp> {
-  ConvertSub(mlir::MLIRContext *context)
+  explicit ConvertSub(mlir::MLIRContext *context)
       : OpConversionPattern<SubOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -198,7 +198,7 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 };
 
 struct ConvertMul : public OpConversionPattern<MulOp> {
-  ConvertMul(mlir::MLIRContext *context)
+  explicit ConvertMul(mlir::MLIRContext *context)
       : OpConversionPattern<MulOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -223,7 +223,7 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 };
 
 struct ConvertMac : public OpConversionPattern<MacOp> {
-  ConvertMac(mlir::MLIRContext *context)
+  explicit ConvertMac(mlir::MLIRContext *context)
       : OpConversionPattern<MacOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;

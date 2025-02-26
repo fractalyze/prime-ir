@@ -49,7 +49,7 @@ Type convertPrimeFieldLikeType(ShapedType type) {
 
 class PrimeFieldToModArithTypeConverter : public TypeConverter {
  public:
-  PrimeFieldToModArithTypeConverter(MLIRContext *ctx) {
+  explicit PrimeFieldToModArithTypeConverter(MLIRContext *ctx) {
     addConversion([](Type type) { return type; });
     addConversion([](PrimeFieldType type) -> Type {
       return convertPrimeFieldType(type);
@@ -61,7 +61,7 @@ class PrimeFieldToModArithTypeConverter : public TypeConverter {
 };
 
 struct ConvertConstant : public OpConversionPattern<ConstantOp> {
-  ConvertConstant(mlir::MLIRContext *context)
+  explicit ConvertConstant(mlir::MLIRContext *context)
       : OpConversionPattern<ConstantOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -81,7 +81,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
 };
 
 struct ConvertAdd : public OpConversionPattern<AddOp> {
-  ConvertAdd(mlir::MLIRContext *context)
+  explicit ConvertAdd(mlir::MLIRContext *context)
       : OpConversionPattern<AddOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -98,7 +98,7 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 };
 
 struct ConvertSub : public OpConversionPattern<SubOp> {
-  ConvertSub(mlir::MLIRContext *context)
+  explicit ConvertSub(mlir::MLIRContext *context)
       : OpConversionPattern<SubOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -115,7 +115,7 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 };
 
 struct ConvertMul : public OpConversionPattern<MulOp> {
-  ConvertMul(mlir::MLIRContext *context)
+  explicit ConvertMul(mlir::MLIRContext *context)
       : OpConversionPattern<MulOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
