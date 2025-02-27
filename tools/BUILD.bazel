@@ -10,6 +10,7 @@ cc_binary(
     deps = [
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Dialect/Poly/IR:Poly",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",
         "@llvm-project//mlir:MlirLspServerLib",
@@ -25,6 +26,7 @@ cc_binary(
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/Conversions/ModArithToArith",
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Dialect/Poly/IR:Poly",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",
