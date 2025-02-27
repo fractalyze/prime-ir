@@ -13,10 +13,7 @@ class Field_Attr<string name, string attrMnemonic, list<Trait> traits = []>
 
 def Field_PrimeFieldAttr : Field_Attr<"PrimeField", "pf", [TypedAttrInterface]> {
   let summary = "Attribute representing the prime field element";
-  let parameters = (ins
-    "PrimeFieldType":$type,
-    "IntegerAttr": $value
-  );
+  let parameters = (ins "PrimeFieldType":$type, "IntegerAttr":$value);
   let assemblyFormat = "$value `:` $type";
   let builders = [
     AttrBuilderWithInferredContext<(ins "PrimeFieldType":$type,
