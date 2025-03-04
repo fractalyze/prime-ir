@@ -204,12 +204,12 @@ void ArithToModArith::runOnOperation() {
   });
 
   RewritePatternSet patterns(context);
-  patterns
-      .add<ConvertConstant, ConvertExtSI, ConvertExtUI,
-           ConvertBinOp<mlir::arith::AddIOp, mod_arith::AddOp>,
-           ConvertBinOp<mlir::arith::SubIOp, mod_arith::SubOp>,
-           ConvertBinOp<mlir::arith::MulIOp, mod_arith::MulOp>, ConvertLoadOp>(
-          typeConverter, context);
+  patterns.add<ConvertConstant, ConvertExtSI, ConvertExtUI,
+               ConvertBinOp<mlir::arith::AddIOp, mod_arith::AddOp>,
+               ConvertBinOp<mlir::arith::SubIOp, mod_arith::SubOp>,
+               ConvertBinOp<mlir::arith::MulIOp, mod_arith::MulOp>,
+               ConvertAny<tensor::FromElementsOp>, ConvertLoadOp>(typeConverter,
+                                                                  context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 

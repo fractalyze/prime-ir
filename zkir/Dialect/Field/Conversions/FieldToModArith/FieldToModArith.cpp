@@ -154,10 +154,13 @@ void PrimeFieldToModArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns.add<ConvertConstant, ConvertAdd, ConvertSub, ConvertMul>(
-      typeConverter, context);
+  patterns.add<ConvertConstant, ConvertAdd, ConvertSub, ConvertMul,
+               ConvertAny<tensor::FromElementsOp>>(typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
+
+  target.addDynamicallyLegalOp<tensor::FromElementsOp>(
+      [&](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();
