@@ -198,10 +198,7 @@ void ArithToModArith::runOnOperation() {
             typeConverter.isLegal(op->getResultTypes()));
   });
 
-  target.addDynamicallyLegalOp<
-      memref::AllocOp, memref::DeallocOp, memref::StoreOp, memref::SubViewOp,
-      memref::CopyOp, tensor::FromElementsOp, tensor::ExtractOp,
-      affine::AffineStoreOp, affine::AffineLoadOp>([&](Operation *op) {
+  target.addDynamicallyLegalOp<tensor::FromElementsOp>([&](Operation *op) {
     return typeConverter.isLegal(op->getOperandTypes()) &&
            typeConverter.isLegal(op->getResultTypes());
   });
