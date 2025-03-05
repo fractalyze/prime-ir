@@ -16,6 +16,7 @@ def ModArithToArith : Pass<"mod-arith-to-arith", "ModuleOp"> {
   let dependentDialects = [
     "mlir::arith::ArithDialect",
     "mlir::zkir::mod_arith::ModArithDialect",
+    "mlir::scf::SCFDialect",
   ];
 }
 

@@ -129,6 +129,24 @@ def ModArith_ReduceOp : ModArith_Op<"reduce", [Pure, ElementwiseMappable, SameOp
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
+def ModArith_InverseOp : ModArith_Op<"inverse", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "Compute the multiplicative inverse of a mod arith element";
+
+  let description = [{
+    `mod_arith.inverse x` computes the multiplicative inverse of `x`.
+
+    Examples:
+    ```
+    %0 = mod_arith.constant 5 : !mod_arith.int<7:i4>
+    %c0 = mod_arith.inverse %0 : !mod_arith.int<7:i4>
+    ```
+  }];
+
+  let arguments = (ins ModArithLike:$input);
+  let results = (outs ModArithLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
 class ModArith_BinaryOp<string mnemonic, list<Trait> traits = []> :
     ModArith_Op<mnemonic, traits # [SameOperandsAndResultType, Pure, ElementwiseMappable]>,
     Arguments<(ins ModArithLike:$lhs, ModArithLike:$rhs)>,

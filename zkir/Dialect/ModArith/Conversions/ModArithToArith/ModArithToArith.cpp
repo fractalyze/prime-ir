@@ -6,6 +6,7 @@
 #include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/include/mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/include/mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/include/mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/include/mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/include/mlir/IR/BuiltinAttributes.h"
@@ -152,6 +153,120 @@ struct ConvertReduce : public OpConversionPattern<ReduceOp> {
   }
 };
 
+struct ConvertInverse : public OpConversionPattern<InverseOp> {
+  explicit ConvertInverse(mlir::MLIRContext *context)
+      : OpConversionPattern<InverseOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      InverseOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    // TODO(batzor): Support tensor input.
+    if (mlir::isa<ShapedType>(op.getInput().getType())) {
+      return op->emitError("tensor input not supported");
+    }
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto operand = adaptor.getInput();
+    auto modArithType = getResultModArithType(op);
+    auto modulus = modArithType.getModulus();
+    auto resultType = modulus.getType();
+
+    Value zero = b.create<arith::ConstantOp>(IntegerAttr::get(resultType, 0));
+    Value one = b.create<arith::ConstantOp>(IntegerAttr::get(resultType, 1));
+    Value r0 = b.create<arith::ConstantOp>(
+        IntegerAttr::get(resultType, modulus.getValue()));
+    Value r1 = operand;
+
+    // Prepare the initial values vector.
+    SmallVector<Value, 4> initValues = {r0, r1, zero, one};
+    // Create a vector of types corresponding to the initial values.
+    SmallVector<Type, 4> resultTypes;
+    for (Value v : initValues) resultTypes.push_back(v.getType());
+
+    auto whileOp = b.create<scf::WhileOp>(
+        resultTypes, initValues,
+        /*beforeBuilder =*/
+        [&](OpBuilder &builder, Location loc, ValueRange args) {
+          ImplicitLocOpBuilder beforeBuilder(loc, builder);
+
+          // Condition: continue while r1 != 0
+          Value cond = beforeBuilder.create<arith::CmpIOp>(
+              arith::CmpIPredicate::ne, args[1], zero);
+          beforeBuilder.create<scf::ConditionOp>(cond, args);
+        },
+        /*afterBuilder =*/
+        [&](OpBuilder &builder, Location loc, ValueRange args) {
+          ImplicitLocOpBuilder builderAfter(loc, builder);
+
+          // Extract current values: r0, r1, t0, t1.
+          Value currR0 = args[0];
+          Value currR1 = args[1];
+          Value currT0 = args[2];
+          Value currT1 = args[3];
+          // Compute quotient: q = r0 / r1.
+          Value q = builderAfter.create<arith::DivUIOp>(currR0, currR1);
+          // Compute new remainder: newR = r0 % r1.
+          Value newR = builderAfter.create<arith::RemUIOp>(currR0, currR1);
+          // Compute new coefficient: newT = t0 - (t1 * q).
+          Value prod = builderAfter.create<arith::MulIOp>(currT1, q);
+          Value newT = builderAfter.create<arith::SubIOp>(currT0, prod);
+          // Yield updated loop-carried values: (r1, newR, t1, newT).
+          builderAfter.create<scf::YieldOp>(
+              ValueRange({currR1, newR, currT1, newT}));
+        });
+
+    // After the loop, final values are:
+    //   finalR0 = gcd(x, mod) and finalT = candidate inverse.
+    Value finalR0 = whileOp.getResult(0);
+    Value finalT = whileOp.getResult(2);
+
+    // Check if the gcd is 1 (i.e. the inverse exists).
+    Value gcdIsOne =
+        b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, finalR0, one);
+    auto ifOp = b.create<scf::IfOp>(resultType, gcdIsOne, /*withElse=*/true);
+
+    // Then branch: inverse exists.
+    {
+      Block *thenBlock = &ifOp.getThenRegion().front();
+      ImplicitLocOpBuilder bThen(op.getLoc(), rewriter);
+      bThen.setInsertionPointToEnd(thenBlock);
+      // If finalT is negative, adjust it by adding the modulus.
+      Value isNeg =
+          bThen.create<arith::CmpIOp>(arith::CmpIPredicate::slt, finalT, zero);
+      auto innerIf =
+          bThen.create<scf::IfOp>(resultType, isNeg, /*withElse=*/true);
+      {
+        Block *innerThen = &innerIf.getThenRegion().front();
+        ImplicitLocOpBuilder bInnerThen(op.getLoc(), rewriter);
+        bInnerThen.setInsertionPointToEnd(innerThen);
+        Value posInv = bInnerThen.create<arith::AddIOp>(
+            op.getLoc(), finalT, bInnerThen.create<arith::ConstantOp>(modulus));
+        bInnerThen.create<scf::YieldOp>(posInv);
+      }
+      {
+        Block *innerElse = &innerIf.getElseRegion().front();
+        ImplicitLocOpBuilder bInnerElse(op.getLoc(), rewriter);
+        bInnerElse.setInsertionPointToEnd(innerElse);
+        bInnerElse.create<scf::YieldOp>(finalT);
+      }
+      bThen.create<scf::YieldOp>(innerIf.getResult(0));
+    }
+    // Else branch: inverse does not exist, so return 0.
+    {
+      Block *elseBlock = &ifOp.getElseRegion().front();
+      ImplicitLocOpBuilder bElse(op.getLoc(), rewriter);
+      bElse.setInsertionPointToEnd(elseBlock);
+      bElse.create<scf::YieldOp>(zero);
+    }
+
+    rewriter.replaceOp(op, ifOp.getResult(0));
+    return success();
+  }
+};
+
 // It is assumed inputs are canonical representatives
 // ModArithType ensures add/sub result can not overflow
 struct ConvertAdd : public OpConversionPattern<AddOp> {
@@ -272,7 +387,8 @@ void ModArithToArith::runOnOperation() {
   rewrites::populateWithGenerated(patterns);
   patterns.add<ConvertEncapsulate, ConvertExtract, ConvertReduce, ConvertAdd,
                ConvertSub, ConvertMul, ConvertMac, ConvertConstant,
-               ConvertAny<tensor::FromElementsOp>>(typeConverter, context);
+               ConvertInverse, ConvertAny<tensor::FromElementsOp>>(
+      typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
