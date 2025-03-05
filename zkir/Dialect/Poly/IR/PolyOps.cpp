@@ -1,6 +1,6 @@
 #include "zkir/Dialect/Poly/IR/PolyOps.h"
 
-#include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"
+#include "mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h"
 #include "zkir/Dialect/Poly/IR/PolyTypes.h"

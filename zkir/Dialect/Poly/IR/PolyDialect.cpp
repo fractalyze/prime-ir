@@ -1,6 +1,6 @@
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"
 
-#include "llvm/include/llvm/ADT/TypeSwitch.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h"
 #include "zkir/Dialect/Poly/IR/PolyOps.h"

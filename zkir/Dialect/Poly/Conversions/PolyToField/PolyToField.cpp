@@ -2,8 +2,8 @@
 
 #include <utility>
 
-#include "mlir/include/mlir/IR/BuiltinOps.h"
-#include "mlir/include/mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Poly/IR/PolyOps.h"

@@ -1,7 +1,7 @@
 #ifndef ZKIR_DIALECT_POLY_CONVERSIONS_POLYTOFIELD_POLYTOFIELD_H_
 #define ZKIR_DIALECT_POLY_CONVERSIONS_POLYTOFIELD_POLYTOFIELD_H_
 
-#include "mlir/include/mlir/Pass/Pass.h"
+#include "mlir/Pass/Pass.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 
 namespace mlir::zkir::poly {

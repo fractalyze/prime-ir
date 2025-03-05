@@ -1,8 +1,8 @@
 #ifndef ZKIR_DIALECT_FIELD_IR_FIELDOPS_H_
 #define ZKIR_DIALECT_FIELD_IR_FIELDOPS_H_
 
-#include "mlir/include/mlir/IR/BuiltinOps.h"
-#include "mlir/include/mlir/Interfaces/InferTypeOpInterface.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"

@@ -1,7 +1,7 @@
 #ifndef ZKIR_DIALECT_ARITH_CONVERSIONS_ARITHTOMODARITH_ARITHTOMODARITH_H_
 #define ZKIR_DIALECT_ARITH_CONVERSIONS_ARITHTOMODARITH_ARITHTOMODARITH_H_
 
-#include "mlir/include/mlir/Pass/Pass.h"
+#include "mlir/Pass/Pass.h"
 
 namespace mlir::zkir::arith {
 

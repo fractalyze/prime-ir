@@ -1,7 +1,7 @@
 #ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_FIELDTOMODARITH_H_
 #define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_FIELDTOMODARITH_H_
 
-#include "mlir/include/mlir/Pass/Pass.h"
+#include "mlir/Pass/Pass.h"
 
 namespace mlir::zkir::field {
 
