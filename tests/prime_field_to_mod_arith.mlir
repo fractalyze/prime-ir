@@ -1,6 +1,7 @@
 // RUN: tools/zkir-opt -prime-field-to-mod-arith --split-input-file %s | FileCheck %s --enable-var-scope
 !PF1 = !field.pf<3:i32>
 !PFv = tensor<4x!PF1>
+#elem = #field.pf_elem<31> : !PF1
 
 // CHECK-LABEL: @test_lower_constant
 // CHECK-SAME: () -> [[T:.*]] {

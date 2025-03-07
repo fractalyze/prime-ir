@@ -11,10 +11,10 @@ class Field_Attr<string name, string attrMnemonic, list<Trait> traits = []>
   let mnemonic = attrMnemonic;
 }
 
-def Field_PrimeFieldAttr : Field_Attr<"PrimeField", "pf", [TypedAttrInterface]> {
+def Field_PrimeFieldAttr : Field_Attr<"PrimeField", "pf_elem", [TypedAttrInterface]> {
   let summary = "Attribute representing the prime field element";
   let parameters = (ins "PrimeFieldType":$type, "IntegerAttr":$value);
-  let assemblyFormat = "$value `:` $type";
+  let assemblyFormat = "`<` $value `>` `:` $type";
   let builders = [
     AttrBuilderWithInferredContext<(ins "PrimeFieldType":$type,
                                         "const llvm::APInt":$value), [{
