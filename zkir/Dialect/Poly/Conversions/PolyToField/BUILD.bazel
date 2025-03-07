@@ -1,0 +1,52 @@
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "PolyToField",
+    srcs = ["PolyToField.cpp"],
+    hdrs = [
+        "PolyToField.h",
+    ],
+    deps = [
+        ":pass_inc_gen",
+        "//zkir/Dialect/Field/IR:Field",
+        "//zkir/Dialect/Poly/IR:Poly",
+        "//zkir/Utils:ConversionUtils",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
+
+gentbl_cc_library(
+    name = "pass_inc_gen",
+    tbl_outs = [
+        (
+            [
+                "-gen-pass-decls",
+                "-name=PolyToField",
+            ],
+            "PolyToField.h.inc",
+        ),
+        (
+            ["-gen-rewriters"],
+            "PolyToField.cpp.inc",
+        ),
+        (
+            ["-gen-pass-doc"],
+            "PolyToField.md",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "PolyToField.td",
+    deps = [
+        "//zkir/Dialect/Field/IR:td_files",
+        "//zkir/Dialect/Poly/IR:td_files",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)

@@ -8,6 +8,7 @@
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "zkir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"
 
 int main(int argc, char **argv) {
@@ -24,6 +25,7 @@ int main(int argc, char **argv) {
   mlir::zkir::mod_arith::registerModArithToArithPasses();
   mlir::zkir::arith::registerArithToModArithPasses();
   mlir::zkir::field::registerFieldToModArithPasses();
+  mlir::zkir::poly::registerPolyToFieldPasses();
 
   return failed(mlir::MlirOptMain(argc, argv, "ZKIR optimizer\n", registry));
 }
