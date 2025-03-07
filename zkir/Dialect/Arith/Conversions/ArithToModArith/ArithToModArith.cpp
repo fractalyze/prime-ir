@@ -22,9 +22,7 @@
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/ConversionUtils.h"
 
-namespace mlir {
-namespace zkir {
-namespace arith {
+namespace mlir::zkir::arith {
 
 #define GEN_PASS_DEF_ARITHTOMODARITH
 #include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h.inc"
@@ -218,6 +216,4 @@ void ArithToModArith::runOnOperation() {
   }
 }
 
-}  // namespace arith
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::arith

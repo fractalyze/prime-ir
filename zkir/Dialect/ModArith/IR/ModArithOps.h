@@ -10,9 +10,7 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h.inc"
 
-namespace mlir {
-namespace zkir {
-namespace mod_arith {
+namespace mlir::zkir::mod_arith {
 
 template <typename OpType>
 inline ModArithType getResultModArithType(OpType op) {
@@ -34,8 +32,6 @@ inline IntegerType getOperandIntegerType(OpType op) {
   return cast<IntegerType>(getElementTypeOrSelf(op.getOperand().getType()));
 }
 
-}  // namespace mod_arith
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::mod_arith
 
 #endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_

@@ -26,9 +26,7 @@
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/ConversionUtils.h"
 
-namespace mlir {
-namespace zkir {
-namespace field {
+namespace mlir::zkir::field {
 
 #define GEN_PASS_DEF_PRIMEFIELDTOMODARITH
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc"
@@ -186,6 +184,5 @@ void PrimeFieldToModArith::runOnOperation() {
     signalPassFailure();
   }
 }
-}  // namespace field
-}  // namespace zkir
-}  // namespace mlir
+
+}  // namespace mlir::zkir::field

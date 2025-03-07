@@ -31,9 +31,7 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc"
 
-namespace mlir {
-namespace zkir {
-namespace mod_arith {
+namespace mlir::zkir::mod_arith {
 
 class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
  public:
@@ -189,6 +187,4 @@ LogicalResult ConstantOp::inferReturnTypes(
   return success();
 }
 
-}  // namespace mod_arith
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::mod_arith

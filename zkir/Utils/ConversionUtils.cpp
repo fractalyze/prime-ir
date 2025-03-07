@@ -29,8 +29,7 @@
 #include "mlir/include/mlir/Support/LogicalResult.h"
 #include "mlir/include/mlir/Transforms/DialectConversion.h"
 
-namespace mlir {
-namespace zkir {
+namespace mlir::zkir {
 
 using ::mlir::func::CallOp;
 using ::mlir::func::FuncOp;
@@ -100,5 +99,4 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
                                                        target);
 }
 
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir

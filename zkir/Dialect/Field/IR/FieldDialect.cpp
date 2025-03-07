@@ -30,9 +30,7 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/Field/IR/FieldOps.cpp.inc"
 
-namespace mlir {
-namespace zkir {
-namespace field {
+namespace mlir::zkir::field {
 
 class FieldOpAsmDialectInterface : public OpAsmDialectInterface {
  public:
@@ -129,6 +127,4 @@ LogicalResult ConstantOp::inferReturnTypes(
   return success();
 }
 
-}  // namespace field
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::field
