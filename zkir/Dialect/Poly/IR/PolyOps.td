@@ -20,7 +20,7 @@ def Poly_ConstantOp : Op<Poly_Dialect, "constant",
 
     ```mlir
     !base_field = !field.pf<3:i32>
-    !poly_ty = !polynomial.polynomial<!base_field, 32>
+    !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant <1 + x**2> : !poly_ty
     ```
   }];
@@ -58,7 +58,7 @@ def Poly_AddOp : Poly_BinaryOp<"add", [Commutative]> {
 
     ```mlir
     !base_field = !field.pf<3:i32>
-    !poly_ty = !polynomial.polynomial<!base_field, 32>
+    !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
     %1 = poly.constant int<x**5 - x + 1> : !poly_ty
     %2 = poly.add %0, %1 : !poly_ty
@@ -82,7 +82,7 @@ def Poly_SubOp : Poly_BinaryOp<"sub"> {
 
     ```mlir
     !base_field = !field.pf<3:i32>
-    !poly_ty = !polynomial.polynomial<!base_field, 32>
+    !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
     %1 = poly.constant int<x**5 - x + 1> : !poly_ty
     %2 = poly.sub %0, %1 : !poly_ty
@@ -106,7 +106,7 @@ def Poly_MulOp : Poly_BinaryOp<"mul", [Commutative]> {
 
     ```mlir
     !base_field = !field.pf<3:i32>
-    !poly_ty = !polynomial.polynomial<!base_field, 32>
+    !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
     %1 = poly.constant int<x**5 - x + 1> : !poly_ty
     %2 = poly.mul %0, %1 : !poly_ty
