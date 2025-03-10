@@ -1,6 +1,6 @@
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"
 
-#include "llvm/include/llvm/ADT/TypeSwitch.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h"
 #include "zkir/Dialect/Poly/IR/PolyOps.h"
@@ -18,9 +18,7 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/Poly/IR/PolyOps.cpp.inc"
 
-namespace mlir {
-namespace zkir {
-namespace poly {
+namespace mlir::zkir::poly {
 
 class PolyOpAsmDialectInterface : public OpAsmDialectInterface {
  public:
@@ -56,6 +54,4 @@ void PolyDialect::initialize() {
   addInterface<PolyOpAsmDialectInterface>();
 }
 
-}  // namespace poly
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::poly

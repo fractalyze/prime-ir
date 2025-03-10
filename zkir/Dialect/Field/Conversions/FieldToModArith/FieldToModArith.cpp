@@ -2,22 +2,22 @@
 
 #include <utility>
 
-#include "llvm/include/llvm/Support/Casting.h"
-#include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/include/mlir/Dialect/Linalg/IR/Linalg.h"
-#include "mlir/include/mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/include/mlir/IR/BuiltinAttributeInterfaces.h"
-#include "mlir/include/mlir/IR/BuiltinAttributes.h"
-#include "mlir/include/mlir/IR/BuiltinOps.h"
-#include "mlir/include/mlir/IR/BuiltinTypeInterfaces.h"
-#include "mlir/include/mlir/IR/BuiltinTypes.h"
-#include "mlir/include/mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/include/mlir/IR/MLIRContext.h"
-#include "mlir/include/mlir/IR/PatternMatch.h"
-#include "mlir/include/mlir/IR/TypeUtilities.h"
-#include "mlir/include/mlir/Support/LLVM.h"
-#include "mlir/include/mlir/Support/LogicalResult.h"
-#include "mlir/include/mlir/Transforms/DialectConversion.h"
+#include "llvm/Support/Casting.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/BuiltinAttributeInterfaces.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/TypeUtilities.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
@@ -26,9 +26,7 @@
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/ConversionUtils.h"
 
-namespace mlir {
-namespace zkir {
-namespace field {
+namespace mlir::zkir::field {
 
 #define GEN_PASS_DEF_PRIMEFIELDTOMODARITH
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc"
@@ -73,9 +71,44 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
 
     auto pftype = getResultPrimeFieldType(op);
     auto modType = convertPrimeFieldType(pftype);
-    auto cval = b.create<mod_arith::ConstantOp>(
-        modType, op.getValue().getValue().getValue());
+    auto cval = b.create<mod_arith::ConstantOp>(modType, op.getValue());
     rewriter.replaceOp(op, cval);
+    return success();
+  }
+};
+
+struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
+  explicit ConvertEncapsulate(mlir::MLIRContext *context)
+      : OpConversionPattern<EncapsulateOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      EncapsulateOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto resultType = typeConverter->convertType(op.getResult().getType());
+    auto enc = b.create<mod_arith::EncapsulateOp>(resultType,
+                                                  adaptor.getOperands()[0]);
+    rewriter.replaceOp(op, enc);
+    return success();
+  }
+};
+
+struct ConvertInverse : public OpConversionPattern<InverseOp> {
+  explicit ConvertInverse(mlir::MLIRContext *context)
+      : OpConversionPattern<InverseOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      InverseOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto inv = b.create<mod_arith::InverseOp>(adaptor.getOperands()[0]);
+    rewriter.replaceOp(op, inv);
     return success();
   }
 };
@@ -154,8 +187,9 @@ void PrimeFieldToModArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns.add<ConvertConstant, ConvertAdd, ConvertSub, ConvertMul,
-               ConvertAny<tensor::FromElementsOp>>(typeConverter, context);
+  patterns.add<ConvertConstant, ConvertEncapsulate, ConvertInverse, ConvertAdd,
+               ConvertSub, ConvertMul, ConvertAny<tensor::FromElementsOp>>(
+      typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
@@ -166,6 +200,5 @@ void PrimeFieldToModArith::runOnOperation() {
     signalPassFailure();
   }
 }
-}  // namespace field
-}  // namespace zkir
-}  // namespace mlir
+
+}  // namespace mlir::zkir::field

@@ -4,27 +4,24 @@
 #include <cstdint>
 #include <utility>
 
-#include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/include/mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/include/mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/include/mlir/IR/BuiltinAttributes.h"
-#include "mlir/include/mlir/IR/BuiltinTypes.h"
-#include "mlir/include/mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/include/mlir/IR/MLIRContext.h"
-#include "mlir/include/mlir/IR/PatternMatch.h"
-#include "mlir/include/mlir/IR/ValueRange.h"
-#include "mlir/include/mlir/Support/LLVM.h"
-#include "mlir/include/mlir/Transforms/DialectConversion.h"
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/ValueRange.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/ConversionUtils.h"
 
-namespace mlir {
-namespace zkir {
-namespace arith {
+namespace mlir::zkir::arith {
 
 #define GEN_PASS_DEF_ARITHTOMODARITH
 #include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h.inc"
@@ -88,9 +85,8 @@ struct ConvertConstant : public OpConversionPattern<mlir::arith::ConstantOp> {
       return failure();
     }
 
-    auto result = b.create<mod_arith::ConstantOp>(mod_arith::ModArithAttr::get(
-        convertArithType(op.getType()),
-        cast<IntegerAttr>(op.getValue()).getValue()));
+    auto result = b.create<mod_arith::ConstantOp>(
+        convertArithType(op.getType()), op.getValue());
 
     rewriter.replaceOp(op, result);
     return success();
@@ -218,6 +214,4 @@ void ArithToModArith::runOnOperation() {
   }
 }
 
-}  // namespace arith
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::arith

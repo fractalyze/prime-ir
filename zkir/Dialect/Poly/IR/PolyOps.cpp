@@ -1,13 +1,11 @@
 #include "zkir/Dialect/Poly/IR/PolyOps.h"
 
-#include "mlir/include/mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"
+#include "mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h"
 #include "zkir/Dialect/Poly/IR/PolyTypes.h"
 
-namespace mlir {
-namespace zkir {
-namespace poly {
+namespace mlir::zkir::poly {
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   Attribute attr = polynomial::IntPolynomialAttr::parse(parser, nullptr);
@@ -32,6 +30,4 @@ void ConstantOp::print(OpAsmPrinter &p) {
   p.printType(getOutput().getType());
 }
 
-}  // namespace poly
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::poly

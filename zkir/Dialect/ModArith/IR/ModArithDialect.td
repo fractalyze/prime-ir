@@ -12,7 +12,6 @@ def ModArith_Dialect : Dialect {
 
   let cppNamespace = "::mlir::zkir::mod_arith";
   let useDefaultTypePrinterParser = 1;
-  let useDefaultAttributePrinterParser = 1;
 
   let dependentDialects = [
     "arith::ArithDialect",

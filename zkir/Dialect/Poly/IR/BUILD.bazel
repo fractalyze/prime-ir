@@ -53,11 +53,17 @@ gentbl_cc_library(
     includes = ["../../../.."],
     tbl_outs = [
         (
-            ["-gen-attrdef-decls"],
+            [
+                "-gen-attrdef-decls",
+                "--attrdefs-dialect=poly",
+            ],
             "PolyAttributes.h.inc",
         ),
         (
-            ["-gen-attrdef-defs"],
+            [
+                "-gen-attrdef-defs",
+                "--attrdefs-dialect=poly",
+            ],
             "PolyAttributes.cpp.inc",
         ),
     ],

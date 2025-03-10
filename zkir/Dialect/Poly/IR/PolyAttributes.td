@@ -3,6 +3,7 @@
 
 include "zkir/Dialect/Poly/IR/PolyDialect.td"
 include "zkir/Dialect/Poly/IR/PolyTypes.td"
+include "zkir/Dialect/Field/IR/FieldAttributes.td"
 
 class Poly_Attr<string name, string attrMnemonic, list<Trait> traits = []>
     : AttrDef<Poly_Dialect, name, traits> {
@@ -32,6 +33,28 @@ def Poly_UnivariatePolyAttr : Poly_Attr<"UnivariatePoly", "univariate_polynomial
   }];
   let parameters = (ins Poly_PolyType:$type, "::mlir::polynomial::IntPolynomialAttr":$value);
   let assemblyFormat = "$value `:` $type";
+}
+
+def Poly_PrimitiveRootAttr: Poly_Attr<"PrimitiveRoot", "primitive_root"> {
+  let summary = "an attribute containing an integer and its degree as a root of unity";
+  let description = [{
+    A primitive root attribute stores an integer root `value` and an integer
+    `degree`, corresponding to a primitive root of unity of the given degree in
+    an unspecified ring.
+
+    This is used as an attribute on `poly.ntt` and `poly.intt` ops
+    to specify the root of unity used in lowering the transform.
+
+    Example:
+
+    ```mlir
+    !PF1 = !field.pf<7:i32>
+    #elem = #field.elem<2> : !PF1
+    #root = #poly.primitive_root<root=%generator, degree=3>
+    ```
+  }];
+  let parameters = (ins Field_PrimeFieldAttr:$root, "IntegerAttr":$degree);
+  let assemblyFormat = "`<` struct(params) `>`";
 }
 
 #endif  // ZKIR_DIALECT_POLY_IR_POLYATTRIBUTES_TD_

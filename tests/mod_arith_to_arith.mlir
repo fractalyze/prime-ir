@@ -4,13 +4,13 @@
 !Zpv = tensor<4x!Zp>
 
 // CHECK-LABEL: @test_lower_constant
-// CHECK-SAME: () -> i5 {
+// CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_constant() -> !mod_arith.int<3 : i5> {
   // CHECK-NOT: mod_arith.constant
-  // CHECK: %[[CVAL:.*]] = arith.constant 5 : i5
-  // CHECK: %[[CMOD:.*]] = arith.constant 3 : i5
-  // CHECK: %[[REMU:.*]] = arith.remui %[[CVAL]], %[[CMOD]] : i5
-  // CHECK: return %[[REMU]] : i5
+  // CHECK: %[[CVAL:.*]] = arith.constant 5 : [[T]]
+  // CHECK: %[[CMOD:.*]] = arith.constant 3 : [[T]]
+  // CHECK: %[[REMU:.*]] = arith.remui %[[CVAL]], %[[CMOD]] : [[T]]
+  // CHECK: return %[[REMU]] : [[T]]
   %res = mod_arith.constant 5:  !mod_arith.int<3 : i5>
   return %res: !mod_arith.int<3 : i5>
 }
@@ -75,6 +75,39 @@ func.func @test_lower_reduce_vec(%lhs : !Zpv) -> !Zpv {
   // CHECK: return %[[REM]] : [[T]]
   %res = mod_arith.reduce %lhs: !Zpv
   return %res : !Zpv
+}
+
+// CHECK-LABEL: @test_lower_inverse
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_inverse(%lhs : !Zp) -> !Zp {
+  // CHECK-NOT: mod_arith.inverse
+  // CHECK: %[[C0:.*]] = arith.constant 0 : [[T]]
+  // CHECK: %[[C1:.*]] = arith.constant 1 : [[T]]
+  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
+  // CHECK:      %[[WHILE_RES:.*]]:4 = scf.while (%[[ARG1:.*]] = %[[CMOD]], %[[ARG2:.*]] = %[[INPUT]], %[[ARG3:.*]] = %[[C0]], %[[ARG4:.*]] = %[[C1]]) : ([[T]], [[T]], [[T]], [[T]]) -> ([[T]], [[T]], [[T]], [[T]]) {
+  // CHECK-NEXT:   %[[COND:.*]] = arith.cmpi ne, %[[ARG2]], %[[C0]] : [[T]]
+  // CHECK-NEXT:   scf.condition(%[[COND]]) %[[ARG1]], %[[ARG2]], %[[ARG3]], %[[ARG4]] : [[T]], [[T]], [[T]], [[T]]
+  // CHECK-NEXT: } do {
+  // CHECK-NEXT: ^bb0(%[[ARG1_LOOP:.*]]: [[T]], %[[ARG2_LOOP:.*]]: [[T]], %[[ARG3_LOOP:.*]]: [[T]], %[[ARG4_LOOP:.*]]: [[T]]):
+  // CHECK-NEXT:   %[[DIV:.*]] = arith.divui %[[ARG1_LOOP]], %[[ARG2_LOOP]] : [[T]]
+  // CHECK-NEXT:   %[[REM:.*]] = arith.remui %[[ARG1_LOOP]], %[[ARG2_LOOP]] : [[T]]
+  // CHECK-NEXT:   %[[MUL:.*]] = arith.muli %[[ARG4_LOOP]], %[[DIV]] : [[T]]
+  // CHECK-NEXT:   %[[SUB:.*]] = arith.subi %[[ARG3_LOOP]], %[[MUL]] : [[T]]
+  // CHECK-NEXT:   scf.yield %[[ARG2_LOOP]], %[[REM]], %[[ARG4_LOOP]], %[[SUB]] : [[T]], [[T]], [[T]], [[T]]
+  // CHECK-NEXT: }
+  // CHECK:      %[[EQ_COND:.*]] = arith.cmpi eq, %[[WHILE_RES]]#0, %[[C1]] : [[T]]
+  // CHECK-NEXT: %[[IF_RES:.*]] = scf.if %[[EQ_COND]] -> ([[T]]) {
+  // CHECK:      %[[SLT_COND:.*]] = arith.cmpi slt, %[[WHILE_RES]]#2, %[[C0]] : [[T]]
+  // CHECK-NEXT: %[[INNER_IF_RES:.*]] = scf.if %[[SLT_COND]] -> ([[T]]) {
+  // CHECK:      %[[C65537:.*]] = arith.constant 65537 : [[T]]
+  // CHECK-NEXT: %[[ADD:.*]] = arith.addi %[[WHILE_RES]]#2, %[[C65537]] : [[T]]
+  // CHECK-NEXT: scf.yield %[[ADD]] : [[T]]
+  // CHECK:      scf.yield %[[WHILE_RES]]#2 : [[T]]
+  // CHECK:      scf.yield %[[INNER_IF_RES]] : [[T]]
+  // CHECK:      scf.yield %[[C0]] : [[T]]
+  // CHECK:      return %[[IF_RES]] : [[T]]
+  %res = mod_arith.inverse %lhs : !Zp
+  return %res : !Zp
 }
 
 // CHECK-LABEL: @test_lower_add
@@ -161,11 +194,11 @@ func.func @test_lower_mul_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_constant_tensor() -> !Zpv {
   // CHECK-NOT: mod_arith.constant
-  // CHECK: %[[C0:.*]] = arith.constant 5 : i32
-  // CHECK: %[[C1:.*]] = arith.constant 65537 : i32
-  // CHECK: %[[C2:.*]] = arith.remui %[[C0]], %[[C1]] : i32
+  // CHECK: %[[C0:.*]] = arith.constant 5 : [[INT:.*]]
+  // CHECK: %[[C1:.*]] = arith.constant 65537 : [[INT]]
+  // CHECK: %[[C2:.*]] = arith.remui %[[C0]], %[[C1]] : [[INT]]
   %c0 = mod_arith.constant 5:  !Zp
-  // CHECK: %[[RES:.*]] = tensor.from_elements %[[C2]], %[[C2]], %[[C2]], %[[C2]] : tensor<4xi32>
+  // CHECK: %[[RES:.*]] = tensor.from_elements %[[C2]], %[[C2]], %[[C2]], %[[C2]] : [[T]]
   %res = tensor.from_elements %c0, %c0, %c0, %c0 : !Zpv
   // CHECK: return %[[RES]] : [[T]]
   return %res : !Zpv
@@ -215,6 +248,7 @@ func.func @test_lower_subifge(%lhs : tensor<4xi8>, %rhs : tensor<4xi8>) -> tenso
   // CHECK: %[[CMP:.*]] = arith.cmpi uge, %[[LHS]], %[[RHS]] : [[TENSOR_TYPE]]
   // CHECK: %[[RES:.*]] = arith.select %[[CMP]], %[[SUB]], %[[LHS]] : tensor<4xi1>, [[TENSOR_TYPE]]
   %res = mod_arith.subifge %lhs, %rhs: tensor<4xi8>
+  // CHECK: return %[[RES]] : [[TENSOR_TYPE]]
   return %res : tensor<4xi8>
 }
 
@@ -228,5 +262,6 @@ func.func @test_lower_subifge_int(%lhs : i8, %rhs : i8) -> i8 {
   // CHECK: %[[CMP:.*]] = arith.cmpi uge, %[[LHS]], %[[RHS]] : [[INT_TYPE]]
   // CHECK: %[[RES:.*]] = arith.select %[[CMP]], %[[SUB]], %[[LHS]] : [[INT_TYPE]]
   %res = mod_arith.subifge %lhs, %rhs: i8
+  // CHECK: return %[[RES]] : [[INT_TYPE]]
   return %res : i8
 }

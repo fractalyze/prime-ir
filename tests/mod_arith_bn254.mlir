@@ -4,6 +4,7 @@
 !Zv = !mod_arith.int<4 : i4>
 
 // CHECK-LABEL: @test_bn254_add
+// CHECK-SAME: () -> [[T:.*]] {
 func.func @test_bn254_add() -> !Zp {
   %0 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208580 :!Zp // -3
   %1 = mod_arith.constant 1 : !Zp
@@ -19,12 +20,13 @@ func.func @test_bn254_add() -> !Zp {
   %res1 = mod_arith.add %res0, %i2 : !Zp // 4
   %res2 = mod_arith.add %res1, %i3 : !Zp // 6
 
-  // CHECK: %[[RES:.*]] = arith.constant 6 : i256
-  // CHECK: return %[[RES]] : i256
+  // CHECK: %[[RES:.*]] = arith.constant 6 : [[T]]
+  // CHECK: return %[[RES]] : [[T]]
   return %res2 : !Zp // 6
 }
 
 // CHECK-LABEL: @test_bn254_sub
+// CHECK-SAME: () -> [[T:.*]] {
 func.func @test_bn254_sub() -> !Zp {
   %0 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208585 :!Zp // 2
   %1 = mod_arith.constant 2 : !Zp
@@ -39,13 +41,14 @@ func.func @test_bn254_sub() -> !Zp {
   %res1 = mod_arith.sub %res0, %i2 : !Zp // 2
   %res2 = mod_arith.sub %res1, %3 : !Zp // 4
 
-  // CHECK: %[[RES:.*]] = arith.constant 4 : i256
-  // CHECK: return %[[RES]] : i256
+  // CHECK: %[[RES:.*]] = arith.constant 4 : [[T]]
+  // CHECK: return %[[RES]] : [[T]]
   return %res2 : !Zp
 }
 
 // CHECK-LABEL: @test_bn254_mult
 // @ashjeong: this works, but changing to "-2" gives different direct result
+// CHECK-SAME: () -> [[T:.*]] {
 func.func @test_bn254_mult() -> !Zp {
   %0 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208585 :!Zp // 2
   %1 = mod_arith.constant 0 : !Zp
@@ -63,7 +66,7 @@ func.func @test_bn254_mult() -> !Zp {
   %res2 = mod_arith.add %res0, %i4 : !Zp // 8
   %res3 = mod_arith.add %res1, %res2 : !Zp // 6
 
-  // CHECK: %[[RES:.*]] = arith.constant 6 : i256
-  // CHECK: return %[[RES]] : i256
+  // CHECK: %[[RES:.*]] = arith.constant 6 : [[T]]
+  // CHECK: return %[[RES]] : [[T]]
   return %res3 : !Zp
 }

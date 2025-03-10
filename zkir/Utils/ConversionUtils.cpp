@@ -7,30 +7,29 @@
 #include <string>
 #include <utility>
 
-#include "llvm/include/llvm/ADT/TypeSwitch.h"
-#include "llvm/include/llvm/Support/ErrorHandling.h"
-#include "mlir/include/mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/include/mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/include/mlir/Dialect/Func/Transforms/FuncConversions.h"
-#include "mlir/include/mlir/Dialect/SCF/Transforms/Patterns.h"
-#include "mlir/include/mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/include/mlir/IR/BuiltinTypes.h"
-#include "mlir/include/mlir/IR/IRMapping.h"
-#include "mlir/include/mlir/IR/OpDefinition.h"
-#include "mlir/include/mlir/IR/OperationSupport.h"
-#include "mlir/include/mlir/IR/PatternMatch.h"
-#include "mlir/include/mlir/IR/Region.h"
-#include "mlir/include/mlir/IR/Value.h"
-#include "mlir/include/mlir/IR/Verifier.h"
-#include "mlir/include/mlir/IR/Visitors.h"
-#include "mlir/include/mlir/Interfaces/FunctionInterfaces.h"
-#include "mlir/include/mlir/Support/LLVM.h"
-#include "mlir/include/mlir/Support/LogicalResult.h"
-#include "mlir/include/mlir/Transforms/DialectConversion.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "llvm/Support/ErrorHandling.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/IRMapping.h"
+#include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/Region.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/Verifier.h"
+#include "mlir/IR/Visitors.h"
+#include "mlir/Interfaces/FunctionInterfaces.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
+#include "mlir/Transforms/DialectConversion.h"
 
-namespace mlir {
-namespace zkir {
+namespace mlir::zkir {
 
 using ::mlir::func::CallOp;
 using ::mlir::func::FuncOp;
@@ -100,5 +99,4 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
                                                        target);
 }
 
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir

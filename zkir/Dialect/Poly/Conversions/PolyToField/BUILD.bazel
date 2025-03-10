@@ -6,25 +6,19 @@ package(
 )
 
 cc_library(
-    name = "ModArithToArith",
-    srcs = ["ModArithToArith.cpp"],
+    name = "PolyToField",
+    srcs = ["PolyToField.cpp"],
     hdrs = [
-        "ModArithToArith.h",
+        "PolyToField.h",
     ],
     deps = [
         ":pass_inc_gen",
-        "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Dialect/Field/IR:Field",
+        "//zkir/Dialect/Poly/IR:Poly",
         "//zkir/Utils:ConversionUtils",
-        "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:AffineDialect",
-        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:LinalgDialect",
         "@llvm-project//mlir:Pass",
-        "@llvm-project//mlir:SCFDialect",
-        "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
-        "@llvm-project//mlir:TransformUtils",
     ],
 )
 
@@ -34,25 +28,24 @@ gentbl_cc_library(
         (
             [
                 "-gen-pass-decls",
-                "-name=ModArithToArith",
+                "-name=PolyToField",
             ],
-            "ModArithToArith.h.inc",
+            "PolyToField.h.inc",
         ),
         (
             ["-gen-rewriters"],
-            "ModArithToArith.cpp.inc",
+            "PolyToField.cpp.inc",
         ),
         (
             ["-gen-pass-doc"],
-            "ModArithToArith.md",
+            "PolyToField.md",
         ),
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "ModArithToArith.td",
+    td_file = "PolyToField.td",
     deps = [
-        "//zkir/Dialect/ModArith/IR:ops_inc_gen",
-        "//zkir/Dialect/ModArith/IR:td_files",
-        "@llvm-project//mlir:ArithOpsTdFiles",
+        "//zkir/Dialect/Field/IR:td_files",
+        "//zkir/Dialect/Poly/IR:td_files",
         "@llvm-project//mlir:OpBaseTdFiles",
         "@llvm-project//mlir:PassBaseTdFiles",
     ],

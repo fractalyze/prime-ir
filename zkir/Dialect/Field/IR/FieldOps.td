@@ -10,7 +10,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-def PrimeField_ConstantOp : Op<Field_Dialect, "pf.constant", [Pure, InferTypeOpAdaptor]> {
+def PrimeField_ConstantOp : Op<Field_Dialect, "pf.constant", [Pure]> {
   let summary = "Define a constant prime field element via an attribute";
   let description = [{
     Example:
@@ -20,13 +20,15 @@ def PrimeField_ConstantOp : Op<Field_Dialect, "pf.constant", [Pure, InferTypeOpA
     ```
   }];
 
-  let arguments = (ins Field_PrimeFieldAttr:$value);
-  let results = (outs Field_PrimeFieldType:$output);
+  let arguments = (ins TypedAttrInterface:$value);
+  let results = (outs PrimeFieldLike:$output);
   let hasCustomAssemblyFormat = 1;
-
   let builders = [
-    OpBuilder<(ins "PrimeFieldType":$ty, "const llvm::APInt":$value), [{
-      return build($_builder, $_state, ty, PrimeFieldAttr::get(ty, value));
+    OpBuilder<(ins "PrimeFieldType":$ty, "llvm::APInt":$value), [{
+      return build($_builder, $_state, ty, IntegerAttr::get(ty.getModulus().getType(), value));
+    }]>,
+    OpBuilder<(ins "PrimeFieldType":$ty, "uint64_t":$value), [{
+      return build($_builder, $_state, ty, IntegerAttr::get(ty.getModulus().getType(), value));
     }]>
   ];
 }
@@ -36,6 +38,40 @@ class PrimeField_Op<string mnemonic, list<Trait> traits = [Pure]> :
   Op<Field_Dialect, mnemonic, traits> {
   let cppNamespace = "::mlir::zkir::field";
   let assemblyFormat = "$operand attr-dict `:` type($result)";
+}
+
+def PrimeField_EncapsulateOp : PrimeField_Op<"pf.encapsulate", [Pure, ElementwiseMappable]> {
+  let summary = "encapsulate an integer into a field type";
+
+  let description = [{
+    `field.pf.encapsulate` converts the integer to be of field type.
+
+    Examples:
+    ```
+    field.pf.encapsulate %c0 : i32 -> !field.pf<7>
+    field.pf.encapsulate %c1 : i64 -> !field.pf<7>
+    ```
+  }];
+
+  let arguments = (ins
+    SignlessIntegerLike:$input
+  );
+  let results = (outs PrimeFieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+}
+
+// Prime field multiplicative inverse
+def PrimeField_InverseOp : PrimeField_Op<"pf.inverse", [Involution, SameOperandsAndResultType]> {
+  let summary = "prime field multiplicative inverse";
+  let description = [{
+    Computes the multiplicative inverse of a field element.
+
+    Example:
+      %inv_a = field.pf.inverse %a : !field.pf<primeModulus>
+  }];
+  let arguments = (ins PrimeFieldLike:$input);
+  let results = (outs PrimeFieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
 // A helper class for binary prime field operations.

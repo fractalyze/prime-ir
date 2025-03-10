@@ -20,7 +20,7 @@ def Poly_ConstantOp : Op<Poly_Dialect, "constant",
 
     ```mlir
     !base_field = !field.pf<3:i32>
-    !poly_ty = !polynomial.polynomial<!base_field>
+    !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant <1 + x**2> : !poly_ty
     ```
   }];
@@ -58,7 +58,7 @@ def Poly_AddOp : Poly_BinaryOp<"add", [Commutative]> {
 
     ```mlir
     !base_field = !field.pf<3:i32>
-    !poly_ty = !polynomial.polynomial<!base_field>
+    !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
     %1 = poly.constant int<x**5 - x + 1> : !poly_ty
     %2 = poly.add %0, %1 : !poly_ty
@@ -82,7 +82,7 @@ def Poly_SubOp : Poly_BinaryOp<"sub"> {
 
     ```mlir
     !base_field = !field.pf<3:i32>
-    !poly_ty = !polynomial.polynomial<!base_field>
+    !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
     %1 = poly.constant int<x**5 - x + 1> : !poly_ty
     %2 = poly.sub %0, %1 : !poly_ty
@@ -106,12 +106,58 @@ def Poly_MulOp : Poly_BinaryOp<"mul", [Commutative]> {
 
     ```mlir
     !base_field = !field.pf<3:i32>
-    !poly_ty = !polynomial.polynomial<!base_field>
+    !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
     %1 = poly.constant int<x**5 - x + 1> : !poly_ty
     %2 = poly.mul %0, %1 : !poly_ty
     ```
   }];
+}
+
+def Poly_ToTensorOp : Poly_Op<"to_tensor", [Pure]> {
+  let summary = "Creates a tensor containing the coefficients of a polynomial.";
+  let description = [{
+    `poly.to_tensor` creates a dense tensor value containing the
+    coefficients of the input polynomial. The output tensor contains the
+    coefficients in degree-increasing order.
+
+    Example:
+
+    ```mlir
+    !base_field = !field.pf<3:i32>
+    !poly_ty = !poly.polynomial<!base_field, 32>
+    %0 = poly.constant <1 + x**2> : !poly_ty
+    %tensor = poly.to_tensor %0
+    ```
+  }];
+  let arguments = (ins Poly_PolyType:$input);
+  let results = (outs RankedTensorOf<[AnyType]>:$output);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
+}
+
+def Poly_FromTensorOp : Poly_Op<"from_tensor", [Pure]> {
+  let summary = "Creates a polynomial from integer coefficients stored in a tensor.";
+  let description = [{
+    `polynomial.from_tensor` creates a polynomial value from a tensor of coefficients.
+    The input tensor must list the coefficients in degree-increasing order.
+
+    The input one-dimensional tensor may have size at most the return polynomial's
+    `maxDegree + 1`, with smaller dimension implying that all higher-degree terms have
+    zero coefficient.
+
+    Example:
+
+    ```mlir
+    !base_field = !field.pf<3:i32>
+    !poly_ty = !poly.polynomial<!base_field, 2>
+    %coeffs = tensor.from_elements [2, 2, 5] : tensor<3xi32>
+    %poly = poly.from_tensor %coeffs : tensor<3xi32> -> !poly_ty
+    ```
+  }];
+  let arguments = (ins RankedTensorOf<[AnyType]>:$input);
+  let results = (outs Poly_PolyType:$output);
+
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
 }
 
 #endif  // ZKIR_DIALECT_POLY_IR_POLYOPS_TD_

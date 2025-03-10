@@ -3,27 +3,23 @@
 #include <cassert>
 #include <optional>
 
-#include "llvm/include/llvm/ADT/TypeSwitch.h"
-#include "mlir/include/mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/include/mlir/IR/BuiltinAttributes.h"
-#include "mlir/include/mlir/IR/BuiltinTypes.h"
-#include "mlir/include/mlir/IR/DialectImplementation.h"
-#include "mlir/include/mlir/IR/Location.h"
-#include "mlir/include/mlir/IR/MLIRContext.h"
-#include "mlir/include/mlir/IR/OpImplementation.h"
-#include "mlir/include/mlir/IR/OperationSupport.h"
-#include "mlir/include/mlir/IR/TypeUtilities.h"
-#include "mlir/include/mlir/Support/LLVM.h"
-#include "mlir/include/mlir/Support/LogicalResult.h"
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Location.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/TypeUtilities.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 // Generated definitions
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.cpp.inc"
-
-#define GET_ATTRDEF_CLASSES
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"
@@ -31,9 +27,7 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc"
 
-namespace mlir {
-namespace zkir {
-namespace mod_arith {
+namespace mlir::zkir::mod_arith {
 
 class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
  public:
@@ -57,10 +51,6 @@ void ModArithDialect::initialize() {
   addTypes<
 #define GET_TYPEDEF_LIST
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"  // NOLINT(build/include)
-      >();
-  addAttributes<
-#define GET_ATTRDEF_LIST
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"  // NOLINT(build/include)
       >();
   addOperations<
 #define GET_OP_LIST
@@ -126,22 +116,17 @@ LogicalResult MacOp::verify() {
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  APInt parsedValue(0, 0, /*isSigned=*/true);
+  APInt parsedInt;
   Type parsedType;
 
-  if (failed(parser.parseInteger(parsedValue))) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "found invalid integer value");
+  if (parser.parseInteger(parsedInt) || parser.parseColonType(parsedType))
     return failure();
-  }
 
-  if (parsedValue.isNegative()) {
+  if (parsedInt.isNegative()) {
     parser.emitError(parser.getCurrentLocation(),
                      "negative value is not allowed");
     return failure();
   }
-
-  if (parser.parseColon() || parser.parseType(parsedType)) return failure();
 
   auto modArithType = dyn_cast<ModArithType>(parsedType);
   if (!modArithType) return failure();
@@ -152,43 +137,28 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   }
 
-  auto outputBitWidth =
-      modArithType.getModulus().getType().getIntOrFloatBitWidth();
-  if (parsedValue.getActiveBits() > outputBitWidth)
-    return parser.emitError(
-        parser.getCurrentLocation(),
-        "constant value is too large for the underlying type");
+  auto outputBitWidth = modArithType.getModulus().getValue().getBitWidth();
+  if (parsedInt.getActiveBits() > outputBitWidth) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "constant value is too large for the underlying type");
+    return failure();
+  }
 
-  // NOTE(ashjeong): `trunc()` changed to `zextOrTrunc()` since
-  // `mod_arith.constant 0 : i256` of large modulus fails as
-  // `parser.parseInteger(parsedValue)` on line 136 mistakenly truncates a value
-  // of 0 with 256 bit-width to 64 bit-width.
-  auto intValue = IntegerAttr::get(modArithType.getModulus().getType(),
-                                   parsedValue.zextOrTrunc(outputBitWidth));
+  // zero-extend or truncate to the correct bitwidth
+  parsedInt = parsedInt.zextOrTrunc(outputBitWidth);
   result.addAttribute(
-      "value", ModArithAttr::get(parser.getContext(), modArithType, intValue));
-  result.addTypes(modArithType);
+      "value",
+      IntegerAttr::get(IntegerType::get(parser.getContext(), outputBitWidth),
+                       parsedInt));
+  result.addTypes(parsedType);
   return success();
 }
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  // getValue chain:
-  // op's ModArithAttribute value
-  //   -> ModArithAttribute's IntegerAttr value
-  //   -> IntegerAttr's APInt value
-  getValue().getValue().getValue().print(p.getStream(), /*isSigned=*/false);
+  p.printAttributeWithoutType(getValue());
   p << " : ";
   p.printType(getOutput().getType());
 }
 
-LogicalResult ConstantOp::inferReturnTypes(
-    mlir::MLIRContext *context, std::optional<mlir::Location> loc,
-    ConstantOpAdaptor adaptor, llvm::SmallVectorImpl<mlir::Type> &returnTypes) {
-  returnTypes.push_back(adaptor.getValue().getType());
-  return success();
-}
-
-}  // namespace mod_arith
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::mod_arith

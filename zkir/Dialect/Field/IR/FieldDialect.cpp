@@ -3,17 +3,17 @@
 #include <cassert>
 #include <optional>
 
-#include "llvm/include/llvm/ADT/TypeSwitch.h"
-#include "mlir/include/mlir/IR/BuiltinAttributes.h"
-#include "mlir/include/mlir/IR/BuiltinTypes.h"
-#include "mlir/include/mlir/IR/DialectImplementation.h"
-#include "mlir/include/mlir/IR/Location.h"
-#include "mlir/include/mlir/IR/MLIRContext.h"
-#include "mlir/include/mlir/IR/OpImplementation.h"
-#include "mlir/include/mlir/IR/OperationSupport.h"
-#include "mlir/include/mlir/IR/TypeUtilities.h"
-#include "mlir/include/mlir/Support/LLVM.h"
-#include "mlir/include/mlir/Support/LogicalResult.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/Location.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/TypeUtilities.h"
+#include "mlir/Support/LLVM.h"
+#include "mlir/Support/LogicalResult.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
@@ -30,9 +30,7 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/Field/IR/FieldOps.cpp.inc"
 
-namespace mlir {
-namespace zkir {
-namespace field {
+namespace mlir::zkir::field {
 
 class FieldOpAsmDialectInterface : public OpAsmDialectInterface {
  public:
@@ -69,25 +67,24 @@ void FieldDialect::initialize() {
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  APInt parsedValue(0, 0, /*isSigned=*/true);
+  APInt parsedInt;
   Type parsedType;
 
-  if (failed(parser.parseInteger(parsedValue))) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "found invalid integer value");
+  if (parser.parseInteger(parsedInt) || parser.parseColonType(parsedType))
     return failure();
-  }
 
-  if (parsedValue.isNegative()) {
+  if (parsedInt.isNegative()) {
     parser.emitError(parser.getCurrentLocation(),
                      "negative value is not allowed");
     return failure();
   }
 
-  if (parser.parseColon() || parser.parseType(parsedType)) return failure();
-
   auto pfType = dyn_cast<PrimeFieldType>(parsedType);
-  if (!pfType) return failure();
+  if (!pfType) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "type must be of prime field type");
+    return failure();
+  }
 
   auto modulus = pfType.getModulus().getValue();
 
@@ -97,38 +94,27 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     return failure();
   }
 
-  auto outputBitWidth = pfType.getModulus().getType().getIntOrFloatBitWidth();
-  if (parsedValue.getActiveBits() > outputBitWidth)
+  auto outputBitWidth = pfType.getModulus().getValue().getBitWidth();
+  if (parsedInt.getActiveBits() > outputBitWidth)
     return parser.emitError(
         parser.getCurrentLocation(),
         "constant value is too large for the underlying type");
 
-  auto intValue = IntegerAttr::get(pfType.getModulus().getType(),
-                                   parsedValue.zextOrTrunc(outputBitWidth));
+  // zero-extend or truncate to the correct bitwidth
+  parsedInt = parsedInt.zextOrTrunc(outputBitWidth);
   result.addAttribute(
-      "value", PrimeFieldAttr::get(parser.getContext(), pfType, intValue));
+      "value",
+      IntegerAttr::get(IntegerType::get(parser.getContext(), outputBitWidth),
+                       parsedInt));
   result.addTypes(pfType);
   return success();
 }
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  // getValue chain:
-  // op's PrimeFieldAttr value
-  //   -> PrimeFieldAttr's IntegerAttr value
-  //   -> IntegerAttr's APInt value
-  getValue().getValue().getValue().print(p.getStream(), /*isSigned=*/false);
+  p.printAttributeWithoutType(getValue());
   p << " : ";
   p.printType(getOutput().getType());
 }
 
-LogicalResult ConstantOp::inferReturnTypes(
-    mlir::MLIRContext *context, std::optional<mlir::Location> loc,
-    ConstantOpAdaptor adaptor, llvm::SmallVectorImpl<mlir::Type> &returnTypes) {
-  returnTypes.push_back(adaptor.getValue().getType());
-  return success();
-}
-
-}  // namespace field
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::field

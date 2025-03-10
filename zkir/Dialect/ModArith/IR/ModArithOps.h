@@ -1,18 +1,15 @@
 #ifndef ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_
 #define ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_
 
-#include "mlir/include/mlir/IR/BuiltinOps.h"
-#include "mlir/include/mlir/Interfaces/InferTypeOpInterface.h"
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 #define GET_OP_CLASSES
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h.inc"
 
-namespace mlir {
-namespace zkir {
-namespace mod_arith {
+namespace mlir::zkir::mod_arith {
 
 template <typename OpType>
 inline ModArithType getResultModArithType(OpType op) {
@@ -34,8 +31,6 @@ inline IntegerType getOperandIntegerType(OpType op) {
   return cast<IntegerType>(getElementTypeOrSelf(op.getOperand().getType()));
 }
 
-}  // namespace mod_arith
-}  // namespace zkir
-}  // namespace mlir
+}  // namespace mlir::zkir::mod_arith
 
 #endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_

@@ -2,7 +2,6 @@
 #define ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_TD_
 
 include "zkir/Dialect/ModArith/IR/ModArithDialect.td"
-include "zkir/Dialect/ModArith/IR/ModArithAttributes.td"
 include "zkir/Dialect/ModArith/IR/ModArithTypes.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonTypeConstraints.td"
@@ -83,7 +82,7 @@ def ModArith_ModSwitchOp : ModArith_Op<"mod_switch", [Pure, SameOperandsAndResul
 }
 
 def ModArith_ConstantOp : Op<ModArith_Dialect, "constant",
-    [Pure, InferTypeOpAdaptor]> {
+    [Pure]> {
   let summary = "Define a constant value via an attribute.";
   let description = [{
     Example:
@@ -92,15 +91,9 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant",
     %0 = mod_arith.constant 123 : !mod_arith.int<65537:i32>
     ```
   }];
-  let arguments = (ins ModArith_ModArithAttr:$value);
-  let results = (outs ModArith_ModArithType:$output);
+  let arguments = (ins TypedAttrInterface:$value);
+  let results = (outs ModArithLike:$output);
   let hasCustomAssemblyFormat = 1;
-
-  let builders = [
-    OpBuilder<(ins "::mlir::zkir::mod_arith::ModArithType":$ty, "llvm::APInt":$value), [{
-      return build($_builder, $_state, ty, mod_arith::ModArithAttr::get(ty, value));
-    }]>
-  ];
 }
 
 
@@ -126,6 +119,24 @@ def ModArith_ReduceOp : ModArith_Op<"reduce", [Pure, ElementwiseMappable, SameOp
   );
   let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
+def ModArith_InverseOp : ModArith_Op<"inverse", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "Compute the multiplicative inverse of a mod arith element";
+
+  let description = [{
+    `mod_arith.inverse x` computes the multiplicative inverse of `x`.
+
+    Examples:
+    ```
+    %0 = mod_arith.constant 5 : !mod_arith.int<7:i4>
+    %c0 = mod_arith.inverse %0 : !mod_arith.int<7:i4>
+    ```
+  }];
+
+  let arguments = (ins ModArithLike:$input);
+  let results = (outs ModArithLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
