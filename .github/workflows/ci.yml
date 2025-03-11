@@ -23,15 +23,6 @@ jobs:
       - name: Checkout ZKIR
         uses: actions/checkout@v4
 
-      - name: Install FileCheck
-        run: |
-          sudo apt install llvm-19-tools
-          sudo ln -s /usr/bin/FileCheck-19 /usr/local/bin/FileCheck
-
-      - name: Install lit
-        run:
-          pip install lit
-
       - name: Setup Bazelisk
         uses: bazelbuild/setup-bazelisk@v2
 

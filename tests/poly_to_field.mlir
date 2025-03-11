@@ -1,4 +1,4 @@
-// RUN: tools/zkir-opt -poly-to-field --split-input-file %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -poly-to-field --split-input-file %s | FileCheck %s --enable-var-scope
 
 !PF1 = !field.pf<7:i255>
 !poly_ty1 = !poly.polynomial<!PF1, 3>

@@ -1,4 +1,4 @@
-// RUN: tools/zkir-opt -mod-arith-to-arith --split-input-file %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -mod-arith-to-arith --split-input-file %s | FileCheck %s --enable-var-scope
 
 !Zp = !mod_arith.int<65537 : i32>
 !Zpv = tensor<4x!Zp>
