@@ -36,7 +36,7 @@ class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
   AliasResult getAlias(Type type, raw_ostream &os) const override {
     auto res = llvm::TypeSwitch<Type, AliasResult>(type)
                    .Case<ModArithType>([&](auto &modArithType) {
-                     os << "Z";
+                     os << "z";
                      os << modArithType.getModulus().getValue();
                      os << "_";
                      os << modArithType.getModulus().getType();
