@@ -178,6 +178,7 @@ def Poly_NTTOp : Poly_Op<"ntt", [Pure]> {
   );
   let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
+  let hasCanonicalizer = 1;
 }
 
 def Poly_INTTOp : Poly_Op<"intt", [Pure]> {
@@ -195,6 +196,7 @@ def Poly_INTTOp : Poly_Op<"intt", [Pure]> {
   );
   let results = (outs Poly_PolyType:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
+  let hasCanonicalizer = 1;
 }
 
 #endif  // ZKIR_DIALECT_POLY_IR_POLYOPS_TD_
