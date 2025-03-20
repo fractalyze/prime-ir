@@ -8,6 +8,7 @@ cc_binary(
     name = "zkir-lsp",
     srcs = ["zkir-lsp.cpp"],
     deps = [
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/Poly/IR:Poly",
@@ -22,6 +23,7 @@ cc_binary(
     srcs = ["zkir-opt.cpp"],
     deps = [
         "//zkir/Dialect/Arith/Conversions/ArithToModArith",
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//zkir/Dialect/Field/Conversions/FieldToModArith",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/Conversions/ModArithToArith",
