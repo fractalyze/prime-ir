@@ -153,18 +153,6 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
   zkir::field::PrimeFieldAttr invRoot =
       zkir::field::PrimeFieldAttr::get(root.getType(), invRootVal);
 
-  // Make sure the root is in the correct bitwidth.
-  // FIXME(batzor): in the first place, it shouldn't be possible to create a
-  // `PrimeFieldAttr` with a value that has different bitwidth. One example can
-  // be:
-  // ```
-  // !PF1 = !field.pf<7:i32>
-  // #elem = #field.pf_elem<2> : !PF1
-  // ```
-  // which creates 64-bit value, but the modulus is 32-bit.
-  rootVal = rootVal.zextOrTrunc(mod.getBitWidth());
-  rootInvVal = rootInvVal.zextOrTrunc(mod.getBitWidth());
-
   // Compute the exponent table.
   SmallVector<APInt> roots, invRoots;
   precomputeRoots(rootVal, mod, degree.getInt(), roots, invRoots);

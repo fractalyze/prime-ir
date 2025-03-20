@@ -34,6 +34,8 @@ def Field_PrimeFieldAttr : Field_Attr<"PrimeField", "pf_elem", [TypedAttrInterfa
   let extraClassDeclaration = [{
     using ValueType = Attribute;
   }];
+
+  let genVerifyDecl = 1;
 }
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDATTRS_TD_

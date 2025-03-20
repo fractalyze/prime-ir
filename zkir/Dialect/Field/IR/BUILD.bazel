@@ -8,6 +8,7 @@ package(
 cc_library(
     name = "Field",
     srcs = [
+        "FieldAttributes.cpp",
         "FieldDialect.cpp",
     ],
     hdrs = [

@@ -5,7 +5,7 @@
 !poly_ty1 = !poly.polynomial<!PF1, 32>
 !poly_ty2 = !poly.polynomial<!PF2, 32>
 #uni_poly = #poly.univariate_polynomial<x**6 + 1> : !poly_ty2
-#elem = #field.pf_elem<2>  : !PF1
+#elem = #field.pf_elem<2:i32>  : !PF1
 #root = #poly.primitive_root<root=#elem, degree=3>
 
 // CHECK-LABEL: @test_poly_syntax
