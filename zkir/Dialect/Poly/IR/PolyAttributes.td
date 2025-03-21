@@ -53,8 +53,15 @@ def Poly_PrimitiveRootAttr: Poly_Attr<"PrimitiveRoot", "primitive_root"> {
     #root = #poly.primitive_root<root=%generator, degree=3>
     ```
   }];
+  let extraClassDeclaration = [{
+    field::PrimeFieldAttr getInvRoot() const;
+    field::PrimeFieldAttr getInvDegree() const;
+    DenseElementsAttr getRoots() const;
+    DenseElementsAttr getInvRoots() const;
+  }];
   let parameters = (ins Field_PrimeFieldAttr:$root, "IntegerAttr":$degree);
   let assemblyFormat = "`<` struct(params) `>`";
+  let genStorageClass = 0;
 }
 
 #endif  // ZKIR_DIALECT_POLY_IR_POLYATTRIBUTES_TD_

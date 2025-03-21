@@ -8,6 +8,7 @@ package(
 cc_library(
     name = "Poly",
     srcs = [
+        "PolyAttributes.cpp",
         "PolyDialect.cpp",
         "PolyOps.cpp",
     ],
