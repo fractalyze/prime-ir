@@ -28,6 +28,7 @@ cc_binary(
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/Poly/Conversions/PolyToField",
         "//zkir/Dialect/Poly/IR:Poly",
+        "//zkir/Pipelines:PipelineRegistration",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",

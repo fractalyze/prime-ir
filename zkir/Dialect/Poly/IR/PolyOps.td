@@ -160,4 +160,43 @@ def Poly_FromTensorOp : Poly_Op<"from_tensor", [Pure]> {
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
 }
 
+def Poly_NTTOp : Poly_Op<"ntt", [Pure]> {
+  let summary = "Computes the Number Theoretic Transform.";
+  let description = [{
+    `poly.ntt` computes the forward integer Number Theoretic Transform
+    (NTT) on the input polynomial. It returns a tensor containing a point-value
+    representation of the input polynomial.
+
+    Given an input polynomial `F(x)` with degree `n`, and a primitive `n`-th root of
+    unity `omega[n]`, the output is the list of $n$ evaluations
+
+      `f[k] = F(omega[n]^k) ; k = {0, ..., n-1}`
+  }];
+  let arguments = (ins
+    Poly_PolyType:$input,
+    Poly_PrimitiveRootAttr:$root
+  );
+  let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
+  let hasCanonicalizer = 1;
+}
+
+def Poly_INTTOp : Poly_Op<"intt", [Pure]> {
+  let summary = "Computes the inverse Number Theoretic Transform.";
+  let description = [{
+    `poly.intt` computes the inverse Number Theoretic Transform (INTT) on the input
+    point-value representation tensor and outputs polynomial in its coefficient form.
+
+    The input tensor is interpreted as a point-value representation of the
+    output polynomial at powers of a primitive `n`-th root of unity.
+  }];
+  let arguments = (ins
+    RankedTensorOf<[Field_PrimeFieldType]>:$input,
+    Poly_PrimitiveRootAttr:$root
+  );
+  let results = (outs Poly_PolyType:$output);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
+  let hasCanonicalizer = 1;
+}
+
 #endif  // ZKIR_DIALECT_POLY_IR_POLYOPS_TD_

@@ -60,6 +60,28 @@ def PrimeField_EncapsulateOp : PrimeField_Op<"pf.encapsulate", [Pure, Elementwis
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
+def PrimeField_ExtractOp : PrimeField_Op<"pf.extract", [Pure, ElementwiseMappable]> {
+  let summary = "extract the integer stored inside field type";
+
+  let description = [{
+    `field.pf.extract` extracts the integer inside the mod_arith type.
+
+    It is required that the bitwidth of the output integer type is the same
+    as that of the storage type of the input field type.
+
+    Examples:
+    ```
+    %c0 = field.pf.extract %f0 : !field.pf<7 : i32> -> i32
+    ```
+  }];
+
+  let arguments = (ins
+    PrimeFieldLike:$input
+  );
+  let results = (outs SignlessIntegerLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+}
+
 // Prime field multiplicative inverse
 def PrimeField_InverseOp : PrimeField_Op<"pf.inverse", [Involution, SameOperandsAndResultType]> {
   let summary = "prime field multiplicative inverse";

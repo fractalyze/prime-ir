@@ -1,7 +1,7 @@
 // RUN: zkir-opt -prime-field-to-mod-arith --split-input-file %s | FileCheck %s --enable-var-scope
 !PF1 = !field.pf<3:i32>
 !PFv = tensor<4x!PF1>
-#elem = #field.pf_elem<31> : !PF1
+#elem = #field.pf_elem<31:i32> : !PF1
 
 // CHECK-LABEL: @test_lower_constant
 // CHECK-SAME: () -> [[T:.*]] {
@@ -30,6 +30,26 @@ func.func @test_lower_encapsulate_vec(%lhs : tensor<4xi32>) -> tensor<4x!PF1> {
   %res = field.pf.encapsulate %lhs : tensor<4xi32> -> tensor<4x!PF1>
   // CHECK: return %[[RES]] : [[TF]]
   return %res : tensor<4x!PF1>
+}
+
+// CHECK-LABEL: @test_lower_extract
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[F:.*]] {
+func.func @test_lower_extract(%lhs : !PF1) -> i32 {
+  // CHECK-NOT: field.pf.extract
+  // CHECK: %[[RES:.*]] = mod_arith.extract %[[LHS]] : [[T]] -> [[F]]
+  %res = field.pf.extract %lhs : !PF1 -> i32
+  // CHECK: return %[[RES]] : [[F]]
+  return %res : i32
+}
+
+// CHECK-LABEL: @test_lower_extract_vec
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[TF:.*]] {
+func.func @test_lower_extract_vec(%lhs : tensor<4x!PF1>) -> tensor<4xi32> {
+  // CHECK-NOT: field.pf.extract
+  // CHECK: %[[RES:.*]] = mod_arith.extract %[[LHS]] : [[T]] -> [[TF]]
+  %res = field.pf.extract %lhs : tensor<4x!PF1> -> tensor<4xi32>
+  // CHECK: return %[[RES]] : [[TF]]
+  return %res : tensor<4xi32>
 }
 
 // CHECK-LABEL: @test_lower_inverse

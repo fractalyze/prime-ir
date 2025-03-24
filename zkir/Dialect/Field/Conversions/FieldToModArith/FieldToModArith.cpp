@@ -96,6 +96,25 @@ struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
   }
 };
 
+struct ConvertExtract : public OpConversionPattern<ExtractOp> {
+  explicit ConvertExtract(mlir::MLIRContext *context)
+      : OpConversionPattern<ExtractOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      ExtractOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto resultType = typeConverter->convertType(op.getResult().getType());
+    auto extracted =
+        b.create<mod_arith::ExtractOp>(resultType, adaptor.getOperands()[0]);
+    rewriter.replaceOp(op, extracted);
+    return success();
+  }
+};
+
 struct ConvertInverse : public OpConversionPattern<InverseOp> {
   explicit ConvertInverse(mlir::MLIRContext *context)
       : OpConversionPattern<InverseOp>(context) {}
@@ -187,13 +206,20 @@ void PrimeFieldToModArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns.add<ConvertConstant, ConvertEncapsulate, ConvertInverse, ConvertAdd,
-               ConvertSub, ConvertMul, ConvertAny<tensor::FromElementsOp>>(
-      typeConverter, context);
+  patterns
+      .add<ConvertConstant, ConvertEncapsulate, ConvertExtract, ConvertInverse,
+           ConvertAdd, ConvertSub, ConvertMul, ConvertAny<affine::AffineForOp>,
+           ConvertAny<affine::AffineYieldOp>, ConvertAny<linalg::GenericOp>,
+           ConvertAny<linalg::YieldOp>, ConvertAny<tensor::CastOp>,
+           ConvertAny<tensor::ExtractOp>, ConvertAny<tensor::FromElementsOp>,
+           ConvertAny<tensor::InsertOp>>(typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
-  target.addDynamicallyLegalOp<tensor::FromElementsOp>(
+  target.addDynamicallyLegalOp<affine::AffineForOp, affine::AffineYieldOp,
+                               linalg::GenericOp, linalg::YieldOp,
+                               tensor::CastOp, tensor::ExtractOp,
+                               tensor::FromElementsOp, tensor::InsertOp>(
       [&](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {

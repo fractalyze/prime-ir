@@ -1,6 +1,7 @@
 #include "zkir/Dialect/Poly/IR/PolyOps.h"
 
 #include "mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"
+#include "mlir/include/mlir/IR/PatternMatch.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h"
 #include "zkir/Dialect/Poly/IR/PolyTypes.h"
@@ -28,6 +29,20 @@ void ConstantOp::print(OpAsmPrinter &p) {
   getValueAttr().getValue().print(p);
   p << " : ";
   p.printType(getOutput().getType());
+}
+
+namespace {
+#include "zkir/Dialect/Poly/IR/PolyCanonicalization.cpp.inc"
+}  // namespace
+
+void NTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                        MLIRContext *context) {
+  results.add<NTTAfterINTT>(context);
+}
+
+void INTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                         MLIRContext *context) {
+  results.add<INTTAfterNTT>(context);
 }
 
 }  // namespace mlir::zkir::poly

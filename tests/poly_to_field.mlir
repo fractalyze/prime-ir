@@ -3,6 +3,8 @@
 !PF1 = !field.pf<7:i255>
 !poly_ty1 = !poly.polynomial<!PF1, 3>
 !poly_ty2 = !poly.polynomial<!PF1, 4>
+#elem = #field.pf_elem<2:i255>  : !PF1
+#root = #poly.primitive_root<root=#elem, degree=4>
 
 // FIXME(batzor): without this line, the test will fail with the following error:
 // LLVM ERROR: can't create Attribute 'mlir::polynomial::IntPolynomialAttr' because storage uniquer isn't initialized: the dialect was likely not loaded, or the attribute wasn't added with addAttributes<...>() in the Dialect::initialize() method.
@@ -62,4 +64,20 @@ func.func @test_lower_from_tensor(%t : tensor<4x!PF1>) -> !poly_ty1 {
   // CHECK: return %[[LHS]] : [[T]]
   %res = poly.from_tensor %t : tensor<4x!PF1> -> !poly_ty1
   return %res : !poly_ty1
+}
+
+// CHECK-LABEL: @test_lower_ntt
+// CHECK-SAME: (%[[INPUT:.*]]: [[P:.*]]) -> [[T:.*]] {
+func.func @test_lower_ntt(%input : !poly_ty1) -> tensor<4x!PF1> {
+  // CHECK-NOT: poly.ntt
+  %res = poly.ntt %input {root=#root} : !poly_ty1 -> tensor<4x!PF1>
+  return %res: tensor<4x!PF1>
+}
+
+// CHECK-LABEL: @test_lower_intt
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[P:.*]] {
+func.func @test_lower_intt(%input : tensor<4x!PF1>) -> !poly_ty1 {
+  // CHECK-NOT: poly.intt
+  %res = poly.intt %input {root=#root} : tensor<4x!PF1> -> !poly_ty1
+  return %res: !poly_ty1
 }

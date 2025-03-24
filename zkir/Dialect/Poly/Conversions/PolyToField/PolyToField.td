@@ -12,6 +12,8 @@ def PolyToField : Pass<"poly-to-field", "ModuleOp"> {
     This pass lowers the `poly` dialect to the `field` dialect.
   }];
   let dependentDialects = [
+    "mlir::affine::AffineDialect",
+    "mlir::linalg::LinalgDialect",
     "mlir::zkir::field::FieldDialect",
   ];
 }

@@ -10,6 +10,7 @@
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"
+#include "zkir/Pipelines/PipelineRegistration.h"
 
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
@@ -26,6 +27,10 @@ int main(int argc, char **argv) {
   mlir::zkir::arith::registerArithToModArithPasses();
   mlir::zkir::field::registerFieldToModArithPasses();
   mlir::zkir::poly::registerPolyToFieldPasses();
+
+  mlir::PassPipelineRegistration<>(
+      "poly-to-llvm", "Run passes to lower the polynomial dialect to LLVM",
+      mlir::zkir::pipelines::polyToLLVMPipelineBuilder);
 
   return failed(mlir::MlirOptMain(argc, argv, "ZKIR optimizer\n", registry));
 }
