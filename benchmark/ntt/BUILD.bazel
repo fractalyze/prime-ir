@@ -1,0 +1,12 @@
+load("//benchmark:benchmark.bzl", "zkir_benchmark_test")
+
+zkir_benchmark_test(
+    name = "ntt_benchmark_test",
+    mlir_src = "ntt_benchmark.mlir",
+    tags = ["manual"],
+    test_src = ["ntt_benchmark_test.cc"],
+    zkir_opt_flags = ["-poly-to-llvm"],
+    deps = [
+        "//benchmark:BenchmarkUtils",
+    ],
+)
