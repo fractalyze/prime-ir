@@ -8,9 +8,9 @@ AlwaysBreakTemplateDeclarations: Yes
 # This specifies how pointers should be formatted in the code.
 # When this option is set to true, it means that the asterisk (*) used
 # to declare a pointer will be bound to the type rather than the variable name.
-# For example, with this setting enabled, the declaration of a pointer will
-# look like int* ptr; instead of int *ptr;.
-PointerBindsToType: true
+# For example, with this setting disabled, the declaration of a pointer will
+# look like int *ptr; instead of int* ptr;.
+PointerBindsToType: false
 
 # Specify the #include statement order.  This implements the order mandated by
 # the Google C++ Style Guide: related header, C headers, C++ headers, library
@@ -33,9 +33,6 @@ IncludeCategories:
   # Other libraries' h files (with angles).
   - Regex:    '^<'
     Priority: 40
-  # Your project's h files.
-  - Regex:    '^"(zkir)'
-    Priority: 50
   # Other libraries' h files (with quotes).
   - Regex:    '^"'
     Priority: 40
