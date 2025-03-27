@@ -70,7 +70,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt parsedInt;
   Type parsedType;
 
-  if (parser.parseInteger(parsedInt) || parser.parseColonType(parsedType))
+  if (failed(parser.parseInteger(parsedInt)) ||
+      failed(parser.parseColonType(parsedType)))
     return failure();
 
   if (parsedInt.isNegative()) {

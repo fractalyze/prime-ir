@@ -12,7 +12,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   Attribute attr = polynomial::IntPolynomialAttr::parse(parser, nullptr);
   PolyType type;
   if (attr) {
-    if (parser.parseColonType(type)) return failure();
+    if (failed(parser.parseColonType(type))) return failure();
     polynomial::IntPolynomialAttr intPolyAttr =
         mlir::cast<polynomial::IntPolynomialAttr>(attr);
 
