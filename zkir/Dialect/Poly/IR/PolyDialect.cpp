@@ -27,8 +27,7 @@ class PolyOpAsmDialectInterface : public OpAsmDialectInterface {
   AliasResult getAlias(Type type, raw_ostream &os) const override {
     auto res = llvm::TypeSwitch<Type, AliasResult>(type)
                    .Case<PolyType>([&](auto &polyType) {
-                     os << "Poly";
-                     os << "_PF";
+                     os << "poly_pf";
                      os << polyType.getBaseField().getModulus().getValue();
                      return AliasResult::FinalAlias;
                    })

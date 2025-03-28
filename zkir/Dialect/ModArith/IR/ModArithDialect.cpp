@@ -36,7 +36,7 @@ class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
   AliasResult getAlias(Type type, raw_ostream &os) const override {
     auto res = llvm::TypeSwitch<Type, AliasResult>(type)
                    .Case<ModArithType>([&](auto &modArithType) {
-                     os << "Z";
+                     os << "z";
                      os << modArithType.getModulus().getValue();
                      os << "_";
                      os << modArithType.getModulus().getType();
@@ -119,7 +119,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt parsedInt;
   Type parsedType;
 
-  if (parser.parseInteger(parsedInt) || parser.parseColonType(parsedType))
+  if (failed(parser.parseInteger(parsedInt)) ||
+      failed(parser.parseColonType(parsedType)))
     return failure();
 
   if (parsedInt.isNegative()) {

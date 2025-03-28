@@ -4,6 +4,7 @@
 #include "mlir/InitAllPasses.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h"
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
@@ -17,6 +18,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::zkir::mod_arith::ModArithDialect>();
   registry.insert<mlir::zkir::field::FieldDialect>();
   registry.insert<mlir::zkir::poly::PolyDialect>();
+  registry.insert<mlir::zkir::elliptic_curve::EllipticCurveDialect>();
   mlir::registerAllDialects(registry);
   mlir::registerAllExtensions(registry);
 

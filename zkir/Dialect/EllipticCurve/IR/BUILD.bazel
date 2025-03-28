@@ -1,0 +1,139 @@
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "EllipticCurve",
+    srcs = [
+        "EllipticCurveDialect.cpp",
+    ],
+    hdrs = [
+        "EllipticCurveAttributes.h",
+        "EllipticCurveDialect.h",
+        "EllipticCurveOps.h",
+        "EllipticCurveTypes.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":dialect_inc_gen",
+        ":ops_inc_gen",
+        ":types_inc_gen",
+        "//zkir/Dialect/Field/IR:Field",
+        "//zkir/Dialect/Poly/IR:Poly",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+td_library(
+    name = "td_files",
+    srcs = [
+        "EllipticCurveAttributes.td",
+        "EllipticCurveDialect.td",
+        "EllipticCurveOps.td",
+        "EllipticCurveTypes.td",
+    ],
+    deps = [
+        "//zkir/Dialect/Field/IR:td_files",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "dialect_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-dialect-decls"],
+            "EllipticCurveDialect.h.inc",
+        ),
+        (
+            ["-gen-dialect-defs"],
+            "EllipticCurveDialect.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveDialect.td",
+    deps = [
+        ":td_files",
+        "//zkir/Dialect/Field/IR:td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "attributes_inc_gen",
+    tbl_outs = [
+        (
+            [
+                "-gen-attrdef-decls",
+                "--attrdefs-dialect=elliptic_curve",
+            ],
+            "EllipticCurveAttributes.h.inc",
+        ),
+        (
+            [
+                "-gen-attrdef-defs",
+                "--attrdefs-dialect=elliptic_curve",
+            ],
+            "EllipticCurveAttributes.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveAttributes.td",
+    deps = [
+        ":td_files",
+        "//zkir/Dialect/Field/IR:td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "types_inc_gen",
+    tbl_outs = [
+        (
+            [
+                "-gen-typedef-decls",
+                "--typedefs-dialect=elliptic_curve",
+            ],
+            "EllipticCurveTypes.h.inc",
+        ),
+        (
+            [
+                "-gen-typedef-defs",
+                "--typedefs-dialect=elliptic_curve",
+            ],
+            "EllipticCurveTypes.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveTypes.td",
+    deps = [
+        ":td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "ops_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-op-decls"],
+            "EllipticCurveOps.h.inc",
+        ),
+        (
+            ["-gen-op-defs"],
+            "EllipticCurveOps.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveOps.td",
+    deps = [
+        ":td_files",
+        "//zkir/Dialect/Field/IR:td_files",
+    ],
+)

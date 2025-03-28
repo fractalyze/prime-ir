@@ -39,8 +39,7 @@ class FieldOpAsmDialectInterface : public OpAsmDialectInterface {
   AliasResult getAlias(Type type, raw_ostream &os) const override {
     auto res = llvm::TypeSwitch<Type, AliasResult>(type)
                    .Case<PrimeFieldType>([&](auto &pfElemType) {
-                     os << "PF";
-                     os << "_";
+                     os << "pf";
                      os << pfElemType.getModulus().getValue();
                      return AliasResult::FinalAlias;
                    })
@@ -70,7 +69,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt parsedInt;
   Type parsedType;
 
-  if (parser.parseInteger(parsedInt) || parser.parseColonType(parsedType))
+  if (failed(parser.parseInteger(parsedInt)) ||
+      failed(parser.parseColonType(parsedType)))
     return failure();
 
   if (parsedInt.isNegative()) {

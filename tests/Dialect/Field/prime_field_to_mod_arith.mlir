@@ -85,7 +85,7 @@ func.func @test_lower_add() -> !PF1 {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_add_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
   // CHECK-NOT: field.pf.add
-  // CHECK: %[[RES:.*]] = mod_arith.add %[[LHS]], %[[RHS]] : tensor<4x!Z3_i32_>
+  // CHECK: %[[RES:.*]] = mod_arith.add %[[LHS]], %[[RHS]] : tensor<4x!z3_i32_>
   %res = field.pf.add %lhs, %rhs : !PFv
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PFv
