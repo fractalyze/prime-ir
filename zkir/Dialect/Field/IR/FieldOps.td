@@ -4,6 +4,7 @@
 include "zkir/Dialect/Field/IR/FieldAttributes.td"
 include "zkir/Dialect/Field/IR/FieldDialect.td"
 include "zkir/Dialect/Field/IR/FieldTypes.td"
+include "zkir/Dialect/ModArith/IR/ModArithAttributes.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
@@ -82,6 +83,45 @@ def PrimeField_ExtractOp : PrimeField_Op<"pf.extract", [Pure, ElementwiseMappabl
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
+def PrimeField_ToMontOp : PrimeField_Op<"pf.to_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "convert from standard form to montgomery representation";
+
+  let description = [{
+    `field.pf.to_mont x` produces x * R mod q, where `R` is the montgomery factor.
+
+    Examples:
+    ```
+    %m0 = field.pf.to_mont %c0 {montgomery=#mont} : !PF
+    ```
+  }];
+
+  let arguments = (ins
+    PrimeFieldLike:$input,
+    ModArith_MontgomeryAttr:$montgomery
+  );
+  let results = (outs PrimeFieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
+def PrimeField_FromMontOp : PrimeField_Op<"pf.from_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "convert from montgomery representation to standard form";
+  let description = [{
+    `field.pf.from_mont x` produces x * R⁻¹ mod q, where `R` is the montgomery factor.
+
+    Examples:
+    ```
+    %m0 = field.pf.from_mont %c0 {montgomery=#mont} : !PF
+    ```
+  }];
+
+  let arguments = (ins
+    PrimeFieldLike:$input,
+    ModArith_MontgomeryAttr:$montgomery
+  );
+  let results = (outs PrimeFieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
 // Prime field multiplicative inverse
 def PrimeField_InverseOp : PrimeField_Op<"pf.inverse", [Involution, SameOperandsAndResultType]> {
   let summary = "prime field multiplicative inverse";
@@ -135,6 +175,28 @@ def PrimeField_MulOp : PrimeField_BinaryOp<"pf.mul", [Commutative]> {
     Example:
       %r = field.mul %a, %b : !field.pf<primeModulus>
   }];
+}
+
+def PrimeField_MontMulOp : PrimeField_BinaryOp<"pf.mont_mul", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "compute a montgomery multiplication";
+
+  let description = [{
+    `field.pf.mont_mul %a, %b` produces a * b * R⁻¹ mod q, where `R` is the
+    montgomery factor.
+
+    Examples:
+    ```
+    %m0 = field.pf.mont_mul %a, %b {montgomery=#mont} : !PF
+    ```
+  }];
+
+  let arguments = (ins
+    PrimeFieldLike:$lhs,
+    PrimeFieldLike:$rhs,
+    ModArith_MontgomeryAttr:$montgomery
+  );
+  let results = (outs PrimeFieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDOPS_TD_

@@ -6,6 +6,7 @@
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 
 #define GET_OP_CLASSES
 #include "zkir/Dialect/Field/IR/FieldOps.h.inc"

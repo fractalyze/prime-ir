@@ -22,6 +22,7 @@ cc_library(
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
+        "//zkir/Dialect/ModArith/IR:ModArith",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
@@ -39,6 +40,7 @@ td_library(
         "FieldTypes.td",
     ],
     deps = [
+        "//zkir/Dialect/ModArith/IR:td_files",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",
@@ -119,5 +121,6 @@ gentbl_cc_library(
     td_file = "FieldOps.td",
     deps = [
         ":td_files",
+        "//zkir/Dialect/ModArith/IR:td_files",
     ],
 )
