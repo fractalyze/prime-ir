@@ -119,6 +119,18 @@ LogicalResult MontReduceOp::verify() {
   return success();
 }
 
+LogicalResult ToMontOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+LogicalResult FromMontOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+LogicalResult MontMulOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
 LogicalResult AddOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }

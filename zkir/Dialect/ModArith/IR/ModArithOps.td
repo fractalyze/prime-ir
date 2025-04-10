@@ -145,6 +145,47 @@ def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [Pure, ElementwiseMappabl
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
+def ModArith_ToMontOp : ModArith_Op<"to_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "convert from standard form to montgomery representation";
+
+  let description = [{
+    `mod_arith.to_mont x` produces x * R mod q, where `R` is the montgomery factor.
+
+    Examples:
+    ```
+    %m0 = mod_arith.to_mont %c0 {montgomery=#mont} : mod_arith.int<65537 : i256>
+    ```
+  }];
+
+  let arguments = (ins
+    ModArithLike:$input,
+    ModArith_MontgomeryAttr:$montgomery
+  );
+  let results = (outs ModArithLike:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
+def ModArith_FromMontOp : ModArith_Op<"from_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "convert from montgomery representation to standard form";
+  let description = [{
+    `mod_arith.from_mont x` produces x * R⁻¹ mod q, where `R` is the montgomery factor.
+
+    Examples:
+    ```
+    %m0 = mod_arith.from_mont %c0 {montgomery=#mont} : mod_arith.int<65537 : i256>
+    ```
+  }];
+
+  let arguments = (ins
+    ModArithLike:$input,
+    ModArith_MontgomeryAttr:$montgomery
+  );
+  let results = (outs ModArithLike:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
 def ModArith_InverseOp : ModArith_Op<"inverse", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
   let summary = "Compute the multiplicative inverse of a mod arith element";
 
@@ -200,6 +241,30 @@ def ModArith_MulOp : ModArith_BinaryOp<"mul", [Commutative]> {
     representatives and guarantees the output being canonical representative.
   }];
 }
+
+def ModArith_MontMulOp : ModArith_Op<"mont_mul", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "compute a montgomery multiplication";
+
+  let description = [{
+    `mod_arith.mont_mul %a, %b` produces a * b * R⁻¹ mod q, where `R` is the
+    montgomery factor.
+
+    Examples:
+    ```
+    %m0 = mod_arith.mont_mul %a, %b : mod_arith.int<65537 : i256>
+    ```
+  }];
+
+  let arguments = (ins
+    ModArithLike:$lhs,
+    ModArithLike:$rhs,
+    ModArith_MontgomeryAttr:$montgomery
+  );
+  let results = (outs ModArithLike:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
 
 def ModArith_MacOp : ModArith_Op<"mac", [SameOperandsAndResultType, Pure, ElementwiseMappable]> {
   let summary = "modular multiplication-and-accumulation operation";

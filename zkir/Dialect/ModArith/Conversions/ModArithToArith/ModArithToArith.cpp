@@ -219,6 +219,56 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
   }
 };
 
+struct ConvertToMont : public OpConversionPattern<ToMontOp> {
+  explicit ConvertToMont(mlir::MLIRContext *context)
+      : OpConversionPattern<ToMontOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      ToMontOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    IntegerAttr rSquaredAttr = op.getMontgomery().getRSquared();
+
+    // x * R = REDC(x * rSquared)
+    auto rSquared =
+        b.create<arith::ConstantOp>(op.getMontgomery().getRSquared());
+    auto extended = b.create<arith::ExtUIOp>(rSquaredAttr.getType(),
+                                             adaptor.getOperands()[0]);
+
+    // TODO(batzor): Use extended multiplication to avoid full length
+    // multiplication. Now we extend both operands to 2x the bitwidth of the
+    // modulus to avoid the truncation in multiplication.
+    auto product = b.create<arith::MulIOp>(extended, rSquared);
+    auto reduced = b.create<MontReduceOp>(op.getResult().getType(), product,
+                                          op.getMontgomery());
+    rewriter.replaceOp(op, reduced);
+    return success();
+  }
+};
+
+struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
+  explicit ConvertFromMont(mlir::MLIRContext *context)
+      : OpConversionPattern<FromMontOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      FromMontOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // x * R⁻¹ = REDC(x)
+    auto extended = b.create<arith::ExtUIOp>(
+        op.getMontgomery().getRSquared().getType(), adaptor.getOperands()[0]);
+    auto reduced = b.create<MontReduceOp>(op.getResult().getType(), extended,
+                                          op.getMontgomery());
+    rewriter.replaceOp(op, reduced);
+    return success();
+  }
+};
+
 struct ConvertInverse : public OpConversionPattern<InverseOp> {
   explicit ConvertInverse(mlir::MLIRContext *context)
       : OpConversionPattern<InverseOp>(context) {}
@@ -429,6 +479,30 @@ struct ConvertMac : public OpConversionPattern<MacOp> {
   }
 };
 
+struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
+  explicit ConvertMontMul(mlir::MLIRContext *context)
+      : OpConversionPattern<MontMulOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      MontMulOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto lhs =
+        b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getLhs());
+    auto rhs =
+        b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getRhs());
+    auto mul = b.create<arith::MulIOp>(lhs, rhs);
+    auto reduced = b.create<mod_arith::MontReduceOp>(
+        getResultModArithType(op), mul.getResult(), op.getMontgomery());
+
+    rewriter.replaceOp(op, reduced);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.cpp.inc"
@@ -453,12 +527,13 @@ void ModArithToArith::runOnOperation() {
   rewrites::populateWithGenerated(patterns);
   patterns
       .add<ConvertEncapsulate, ConvertExtract, ConvertReduce, ConvertMontReduce,
-           ConvertAdd, ConvertSub, ConvertMul, ConvertMac, ConvertConstant,
-           ConvertInverse, ConvertAny<affine::AffineForOp>,
-           ConvertAny<affine::AffineYieldOp>, ConvertAny<linalg::GenericOp>,
-           ConvertAny<linalg::YieldOp>, ConvertAny<tensor::CastOp>,
-           ConvertAny<tensor::ExtractOp>, ConvertAny<tensor::FromElementsOp>,
-           ConvertAny<tensor::InsertOp>>(typeConverter, context);
+           ConvertToMont, ConvertFromMont, ConvertAdd, ConvertSub, ConvertMul,
+           ConvertMontMul, ConvertMac, ConvertConstant, ConvertInverse,
+           ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineYieldOp>,
+           ConvertAny<linalg::GenericOp>, ConvertAny<linalg::YieldOp>,
+           ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
+           ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::InsertOp>>(
+          typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
