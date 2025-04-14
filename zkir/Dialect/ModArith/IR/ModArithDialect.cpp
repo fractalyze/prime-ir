@@ -95,6 +95,10 @@ LogicalResult verifySameWidth(OpType op, ModArithType modArithType,
   return success();
 }
 
+LogicalResult NegateOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
 LogicalResult ExtractOp::verify() {
   auto modArithType = getOperandModArithType(*this);
   auto integerType = getResultIntegerType(*this);

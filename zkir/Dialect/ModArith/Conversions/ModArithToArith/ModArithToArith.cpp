@@ -128,6 +128,24 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
   }
 };
 
+struct ConvertNegate : public OpConversionPattern<NegateOp> {
+  explicit ConvertNegate(mlir::MLIRContext *context)
+      : OpConversionPattern<NegateOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      NegateOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
+    auto sub = b.create<arith::SubIOp>(cmod, adaptor.getOperands()[0]);
+    rewriter.replaceOp(op, sub);
+    return success();
+  }
+};
+
 struct ConvertReduce : public OpConversionPattern<ReduceOp> {
   explicit ConvertReduce(mlir::MLIRContext *context)
       : OpConversionPattern<ReduceOp>(context) {}
@@ -530,15 +548,15 @@ void ModArithToArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns
-      .add<ConvertEncapsulate, ConvertExtract, ConvertReduce, ConvertMontReduce,
-           ConvertToMont, ConvertFromMont, ConvertAdd, ConvertSub, ConvertMul,
-           ConvertMontMul, ConvertMac, ConvertConstant, ConvertInverse,
-           ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineYieldOp>,
-           ConvertAny<linalg::GenericOp>, ConvertAny<linalg::YieldOp>,
-           ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
-           ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::InsertOp>>(
-          typeConverter, context);
+  patterns.add<
+      ConvertNegate, ConvertEncapsulate, ConvertExtract, ConvertReduce,
+      ConvertMontReduce, ConvertToMont, ConvertFromMont, ConvertAdd, ConvertSub,
+      ConvertMul, ConvertMontMul, ConvertMac, ConvertConstant, ConvertInverse,
+      ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineYieldOp>,
+      ConvertAny<linalg::GenericOp>, ConvertAny<linalg::YieldOp>,
+      ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
+      ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::InsertOp>>(
+      typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 

@@ -97,6 +97,24 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant",
   let hasCustomAssemblyFormat = 1;
 }
 
+def ModArith_NegateOp : ModArith_Op<"negate", [Pure, ElementwiseMappable, SameOperandsAndResultType, Involution]> {
+  let summary = "negate a mod arith element";
+
+  let description = [{
+    `mod_arith.negate x` computes $-x \mod q$
+    Examples:
+    ```
+    %1 = mod_arith.negate %0 : mod_arith.int<65537: i32>
+    ```
+  }];
+
+  let arguments = (ins
+    ModArithLike:$input
+  );
+  let results = (outs ModArithLike:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
 
 def ModArith_ReduceOp : ModArith_Op<"reduce", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
   let summary = "reduce the mod arith type to its canonical representative";
