@@ -15,11 +15,15 @@
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 // Generated definitions
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.cpp.inc"
+
+#define GET_ATTRDEF_CLASSES
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"
@@ -48,6 +52,10 @@ class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
 };
 
 void ModArithDialect::initialize() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"  // NOLINT(build/include)
+      >();
   addTypes<
 #define GET_TYPEDEF_LIST
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"  // NOLINT(build/include)
@@ -99,6 +107,30 @@ LogicalResult ReduceOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }
 
+LogicalResult MontReduceOp::verify() {
+  IntegerType integerType = getOperandIntegerType(*this);
+  ModArithType modArithType = getResultModArithType(*this);
+  unsigned intWidth = integerType.getWidth();
+  unsigned modWidth = modArithType.getModulus().getValue().getBitWidth();
+  if (intWidth != 2 * modWidth)
+    return emitOpError() << "Expected operand width to be " << 2 * modWidth
+                         << ", but got " << intWidth
+                         << " while modulus width is " << modWidth << ".";
+  return success();
+}
+
+LogicalResult ToMontOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+LogicalResult FromMontOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
+LogicalResult MontMulOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
 LogicalResult AddOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }
@@ -146,11 +178,10 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   }
 
   // zero-extend or truncate to the correct bitwidth
-  parsedInt = parsedInt.zextOrTrunc(outputBitWidth);
+  parsedInt = parsedInt.zextOrTrunc(outputBitWidth).urem(modulus);
   result.addAttribute(
       "value",
-      IntegerAttr::get(IntegerType::get(parser.getContext(), outputBitWidth),
-                       parsedInt));
+      IntegerAttr::get(modArithType.getModulus().getType(), parsedInt));
   result.addTypes(parsedType);
   return success();
 }

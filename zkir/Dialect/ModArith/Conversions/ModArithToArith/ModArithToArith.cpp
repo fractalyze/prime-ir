@@ -123,9 +123,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     auto cval = b.create<arith::ConstantOp>(op.getLoc(), adaptor.getValue());
-    auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
-    auto remu = b.create<arith::RemUIOp>(cval, cmod);
-    rewriter.replaceOp(op, remu);
+    rewriter.replaceOp(op, cval);
     return success();
   }
 };
@@ -148,6 +146,123 @@ struct ConvertReduce : public OpConversionPattern<ReduceOp> {
     // TODO(google/heir #710): better with a subifge
     auto remu = b.create<arith::RemUIOp>(add, cmod);
     rewriter.replaceOp(op, remu);
+    return success();
+  }
+};
+
+struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
+  explicit ConvertMontReduce(mlir::MLIRContext *context)
+      : OpConversionPattern<MontReduceOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      MontReduceOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // `T` is the operand (e.g. the result of a multiplication, twice the
+    // bitwidth of modulus).
+    Value T = adaptor.getOperands()[0];
+
+    // Extract Montgomery constants: `nPrime` and `modulus`.
+    IntegerAttr nPrimeAttr = op.getMontgomeryAttr().getNPrime();
+    Value nPrime = b.create<arith::ConstantOp>(nPrimeAttr);
+    TypedAttr modAttr = modulusAttr(op);
+    Value mod = b.create<arith::ConstantOp>(modAttr);
+
+    // Retrieve the modulus bitwidth.
+    unsigned modBitWidth = cast<IntegerType>(modAttr.getType()).getWidth();
+
+    // Compute number of limbs.
+    const unsigned limbWidth = APInt::APINT_BITS_PER_WORD;
+    unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+
+    // Arith operations require the operands to be of same bit width
+    Value modExt = b.create<arith::ExtUIOp>(T.getType(), mod);
+
+    // Prepare constants for limb operations.
+    Value limbWidthConst =
+        b.create<arith::ConstantOp>(b.getIntegerAttr(T.getType(), limbWidth));
+
+    // Because the number of limbs (numLimbs) is known at compile time, we can
+    // unroll the loop as a straight-line chain of operations. Let `u` be the
+    // current working value, initially `T`.
+    Value u = T;
+    for (unsigned i = 0; i < numLimbs; ++i) {
+      // Extract the current lowest limb: `u` (mod `base`)
+      Value lowerLimb = b.create<arith::TruncIOp>(nPrimeAttr.getType(), u);
+      // Compute `m` = `lowerLimb` * `nPrime` (mod `base`)
+      Value m = b.create<arith::MulIOp>(lowerLimb, nPrime);
+      // Compute `m` * `N` , where `N` is modulus
+      Value mExt = b.create<arith::ExtUIOp>(T.getType(), m);
+      Value mN = b.create<arith::MulIOp>(modExt, mExt);
+      // Add the product to `u`.
+      Value sum = b.create<arith::AddIOp>(u, mN);
+      // Shift right by `limbWidth` to discard the zeroed limb.
+      u = b.create<arith::ShRUIOp>(sum, limbWidthConst);
+    }
+
+    // Final conditional subtraction: if (`u_final` >= modulus) then subtract
+    // modulus.
+    Value cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, u, modExt);
+    Value sub = b.create<arith::SubIOp>(u, modExt);
+    Value result = b.create<arith::SelectOp>(cmp, sub, u);
+
+    // Truncate the result to the bitwidth of the modulus.
+    Value truncated = b.create<arith::TruncIOp>(mod.getType(), result);
+
+    rewriter.replaceOp(op, truncated);
+    return success();
+  }
+};
+
+struct ConvertToMont : public OpConversionPattern<ToMontOp> {
+  explicit ConvertToMont(mlir::MLIRContext *context)
+      : OpConversionPattern<ToMontOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      ToMontOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    IntegerAttr rSquaredAttr = op.getMontgomery().getRSquared();
+
+    // x * R = REDC(x * rSquared)
+    auto rSquared =
+        b.create<arith::ConstantOp>(op.getMontgomery().getRSquared());
+    auto extended = b.create<arith::ExtUIOp>(rSquaredAttr.getType(),
+                                             adaptor.getOperands()[0]);
+
+    // TODO(batzor): Use extended multiplication to avoid full length
+    // multiplication. Now we extend both operands to 2x the bitwidth of the
+    // modulus to avoid the truncation in multiplication.
+    auto product = b.create<arith::MulIOp>(extended, rSquared);
+    auto reduced = b.create<MontReduceOp>(op.getResult().getType(), product,
+                                          op.getMontgomery());
+    rewriter.replaceOp(op, reduced);
+    return success();
+  }
+};
+
+struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
+  explicit ConvertFromMont(mlir::MLIRContext *context)
+      : OpConversionPattern<FromMontOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      FromMontOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // x * R⁻¹ = REDC(x)
+    auto extended = b.create<arith::ExtUIOp>(
+        op.getMontgomery().getRSquared().getType(), adaptor.getOperands()[0]);
+    auto reduced = b.create<MontReduceOp>(op.getResult().getType(), extended,
+                                          op.getMontgomery());
+    rewriter.replaceOp(op, reduced);
     return success();
   }
 };
@@ -281,9 +396,11 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
     auto add = b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs());
-    auto remu = b.create<arith::RemUIOp>(add, cmod);
+    auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, add, cmod);
+    auto sub = b.create<arith::SubIOp>(add, cmod);
+    auto select = b.create<arith::SelectOp>(ifge, sub, add);
 
-    rewriter.replaceOp(op, remu);
+    rewriter.replaceOp(op, select);
     return success();
   }
 };
@@ -302,9 +419,11 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
     auto sub = b.create<arith::SubIOp>(adaptor.getLhs(), adaptor.getRhs());
     auto add = b.create<arith::AddIOp>(sub, cmod);
-    auto remu = b.create<arith::RemUIOp>(add, cmod);
+    auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge,
+                                        adaptor.getLhs(), adaptor.getRhs());
+    auto select = b.create<arith::SelectOp>(ifge, sub, add);
 
-    rewriter.replaceOp(op, remu);
+    rewriter.replaceOp(op, select);
     return success();
   }
 };
@@ -362,6 +481,30 @@ struct ConvertMac : public OpConversionPattern<MacOp> {
   }
 };
 
+struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
+  explicit ConvertMontMul(mlir::MLIRContext *context)
+      : OpConversionPattern<MontMulOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      MontMulOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto lhs =
+        b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getLhs());
+    auto rhs =
+        b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getRhs());
+    auto mul = b.create<arith::MulIOp>(lhs, rhs);
+    auto reduced = b.create<mod_arith::MontReduceOp>(
+        getResultModArithType(op), mul.getResult(), op.getMontgomery());
+
+    rewriter.replaceOp(op, reduced);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.cpp.inc"
@@ -385,8 +528,9 @@ void ModArithToArith::runOnOperation() {
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
   patterns
-      .add<ConvertEncapsulate, ConvertExtract, ConvertReduce, ConvertAdd,
-           ConvertSub, ConvertMul, ConvertMac, ConvertConstant, ConvertInverse,
+      .add<ConvertEncapsulate, ConvertExtract, ConvertReduce, ConvertMontReduce,
+           ConvertToMont, ConvertFromMont, ConvertAdd, ConvertSub, ConvertMul,
+           ConvertMontMul, ConvertMac, ConvertConstant, ConvertInverse,
            ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineYieldOp>,
            ConvertAny<linalg::GenericOp>, ConvertAny<linalg::YieldOp>,
            ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,

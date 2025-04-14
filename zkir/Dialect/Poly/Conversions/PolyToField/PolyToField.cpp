@@ -202,8 +202,14 @@ struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
 
 // Butterfly : Cooley-Tukey
 static std::pair<Value, Value> bflyCT(ImplicitLocOpBuilder &b, Value A, Value B,
-                                      Value root) {
-  auto rootB = b.create<field::MulOp>(B, root);
+                                      Value root,
+                                      mod_arith::MontgomeryAttr montAttr) {
+  Value rootB;
+  if (montAttr != mod_arith::MontgomeryAttr()) {
+    rootB = b.create<field::MontMulOp>(B, root, montAttr);
+  } else {
+    rootB = b.create<field::MulOp>(B, root);
+  }
   auto ctPlus = b.create<field::AddOp>(A, rootB);
   auto ctMinus = b.create<field::SubOp>(A, rootB);
   return {std::move(ctPlus), std::move(ctMinus)};
@@ -211,10 +217,16 @@ static std::pair<Value, Value> bflyCT(ImplicitLocOpBuilder &b, Value A, Value B,
 
 // Butterfly : Gentleman-Sande
 static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
-                                      Value root) {
+                                      Value root,
+                                      mod_arith::MontgomeryAttr montAttr) {
   auto gsPlus = b.create<field::AddOp>(A, B);
   auto gsMinus = b.create<field::SubOp>(A, B);
-  auto gsMinusRoot = b.create<field::MulOp>(gsMinus, root);
+  Value gsMinusRoot;
+  if (montAttr != mod_arith::MontgomeryAttr()) {
+    gsMinusRoot = b.create<field::MontMulOp>(gsMinus, root, montAttr);
+  } else {
+    gsMinusRoot = b.create<field::MulOp>(gsMinus, root);
+  }
   return {std::move(gsPlus), std::move(gsMinusRoot)};
 }
 
@@ -429,8 +441,10 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
                     // (bflyGS) variant, depending on whether we are performing
                     // an inverse transform.
                     // ---------------------------------------------------------
-                    auto bflyResult = kInverse ? bflyGS(b, A, B, root)
-                                               : bflyCT(b, A, B, root);
+                    auto bflyResult =
+                        kInverse
+                            ? bflyGS(b, A, B, root, rootAttr.getMontgomery())
+                            : bflyCT(b, A, B, root, rootAttr.getMontgomery());
 
                     // Write the results back into the coefficient array.
                     // Insert the "plus" result into `indexA` and the "minus"

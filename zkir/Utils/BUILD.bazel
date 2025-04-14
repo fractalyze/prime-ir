@@ -5,6 +5,15 @@ package(
 )
 
 cc_library(
+    name = "APIntUtils",
+    srcs = ["APIntUtils.cpp"],
+    hdrs = ["APIntUtils.h"],
+    deps = [
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+cc_library(
     name = "ConversionUtils",
     srcs = ["ConversionUtils.cpp"],
     hdrs = ["ConversionUtils.h"],

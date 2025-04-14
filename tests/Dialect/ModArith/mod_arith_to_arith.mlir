@@ -7,10 +7,8 @@
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_constant() -> !mod_arith.int<3 : i5> {
   // CHECK-NOT: mod_arith.constant
-  // CHECK: %[[CVAL:.*]] = arith.constant 5 : [[T]]
-  // CHECK: %[[CMOD:.*]] = arith.constant 3 : [[T]]
-  // CHECK: %[[REMU:.*]] = arith.remui %[[CVAL]], %[[CMOD]] : [[T]]
-  // CHECK: return %[[REMU]] : [[T]]
+  // CHECK: %[[CVAL:.*]] = arith.constant 2 : [[T]]
+  // CHECK: return %[[CVAL]] : [[T]]
   %res = mod_arith.constant 5:  !mod_arith.int<3 : i5>
   return %res: !mod_arith.int<3 : i5>
 }
@@ -116,7 +114,9 @@ func.func @test_lower_add(%lhs : !Zp, %rhs : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.add
   // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
   // CHECK: %[[ADD:.*]] = arith.addi %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.remui %[[ADD]], %[[CMOD]] : [[T]]
+  // CHECK: %[[IFGE:.*]] = arith.cmpi uge, %[[ADD]], %[[CMOD]] : [[T]]
+  // CHECK: %[[SUB:.*]] = arith.subi %[[ADD]], %[[CMOD]] : [[T]]
+  // CHECK: %[[REM:.*]] = arith.select %[[IFGE]], %[[SUB]], %[[ADD]] : [[T]]
   // CHECK: return %[[REM]] : [[T]]
   %res = mod_arith.add %lhs, %rhs : !Zp
   return %res : !Zp
@@ -128,7 +128,9 @@ func.func @test_lower_add_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   // CHECK-NOT: mod_arith.add
   // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[T]]
   // CHECK: %[[ADD:.*]] = arith.addi %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.remui %[[ADD]], %[[CMOD]] : [[T]]
+  // CHECK: %[[IFGE:.*]] = arith.cmpi uge, %[[ADD]], %[[CMOD]] : [[T]]
+  // CHECK: %[[SUB:.*]] = arith.subi %[[ADD]], %[[CMOD]] : [[T]]
+  // CHECK: %[[REM:.*]] = arith.select %[[IFGE]], %[[SUB]], %[[ADD]] : tensor<4xi1>, [[T]]
   // CHECK: return %[[REM]] : [[T]]
   %res = mod_arith.add %lhs, %rhs : !Zpv
   return %res : !Zpv
@@ -141,8 +143,9 @@ func.func @test_lower_sub(%lhs : !Zp, %rhs : !Zp) -> !Zp {
   // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[LHS]], %[[RHS]] : [[T]]
   // CHECK: %[[ADD:.*]] = arith.addi %[[SUB]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.remui %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: return %[[REM]] : [[T]]
+  // CHECK: %[[IFGE:.*]] = arith.cmpi uge, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[SELECT:.*]] = arith.select %[[IFGE]], %[[SUB]], %[[ADD]] : [[T]]
+  // CHECK: return %[[SELECT]] : [[T]]
   %res = mod_arith.sub %lhs, %rhs : !Zp
   return %res : !Zp
 }
@@ -154,8 +157,9 @@ func.func @test_lower_sub_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[LHS]], %[[RHS]] : [[T]]
   // CHECK: %[[ADD:.*]] = arith.addi %[[SUB]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.remui %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: return %[[REM]] : [[T]]
+  // CHECK: %[[IFGE:.*]] = arith.cmpi uge, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[SELECT:.*]] = arith.select %[[IFGE]], %[[SUB]], %[[ADD]] : tensor<4xi1>, [[T]]
+  // CHECK: return %[[SELECT]] : [[T]]
   %res = mod_arith.sub %lhs, %rhs : !Zpv
   return %res : !Zpv
 }
@@ -195,10 +199,8 @@ func.func @test_lower_mul_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
 func.func @test_lower_constant_tensor() -> !Zpv {
   // CHECK-NOT: mod_arith.constant
   // CHECK: %[[C0:.*]] = arith.constant 5 : [[INT:.*]]
-  // CHECK: %[[C1:.*]] = arith.constant 65537 : [[INT]]
-  // CHECK: %[[C2:.*]] = arith.remui %[[C0]], %[[C1]] : [[INT]]
   %c0 = mod_arith.constant 5:  !Zp
-  // CHECK: %[[RES:.*]] = tensor.from_elements %[[C2]], %[[C2]], %[[C2]], %[[C2]] : [[T]]
+  // CHECK: %[[RES:.*]] = tensor.from_elements %[[C0]], %[[C0]], %[[C0]], %[[C0]] : [[T]]
   %res = tensor.from_elements %c0, %c0, %c0, %c0 : !Zpv
   // CHECK: return %[[RES]] : [[T]]
   return %res : !Zpv

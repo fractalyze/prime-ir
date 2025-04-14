@@ -5,75 +5,15 @@
 #include "llvm/Support/ThreadPool.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::poly {
-
-/// Cloned after upstream removal in
-/// https://github.com/llvm/llvm-project/pull/87644
-///
-/// Computes the multiplicative inverse of this APInt for a given modulo. The
-/// iterative extended Euclidean algorithm is used to solve for this value,
-/// however we simplify it to speed up calculating only the inverse, and take
-/// advantage of div+rem calculations. We also use some tricks to avoid copying
-/// (potentially large) APInts around.
-/// WARNING: a value of '0' may be returned,
-///          signifying that no multiplicative inverse exists!
-static APInt multiplicativeInverse(const APInt &x, const APInt &modulo) {
-  assert(x.ult(modulo) && "This APInt must be smaller than the modulo");
-  // Using the properties listed at the following web page (accessed 06/21/08):
-  //   http://www.numbertheory.org/php/euclid.html
-  // (especially the properties numbered 3, 4 and 9) it can be proved that
-  // BitWidth bits suffice for all the computations in the algorithm implemented
-  // below. More precisely, this number of bits suffice if the multiplicative
-  // inverse exists, but may not suffice for the general extended Euclidean
-  // algorithm.
-
-  auto BitWidth = x.getBitWidth();
-  APInt r[2] = {modulo, x};
-  APInt t[2] = {APInt(BitWidth, 0), APInt(BitWidth, 1)};
-  APInt q(BitWidth, 0);
-
-  unsigned i;
-  for (i = 0; r[i ^ 1] != 0; i ^= 1) {
-    // An overview of the math without the confusing bit-flipping:
-    // q = r[i-2] / r[i-1]
-    // r[i] = r[i-2] % r[i-1]
-    // t[i] = t[i-2] - t[i-1] * q
-    x.udivrem(r[i], r[i ^ 1], q, r[i]);
-    t[i] -= t[i ^ 1] * q;
-  }
-
-  // If this APInt and the modulo are not coprime, there is no multiplicative
-  // inverse, so return 0. We check this by looking at the next-to-last
-  // remainder, which is the gcd(*this,modulo) as calculated by the Euclidean
-  // algorithm.
-  if (r[i] != 1) return APInt(BitWidth, 0);
-
-  // The next-to-last t is the multiplicative inverse.  However, we are
-  // interested in a positive inverse. Calculate a positive one from a negative
-  // one if necessary. A simple addition of the modulo suffices because
-  // abs(t[i]) is known to be less than *this/2 (see the link above).
-  if (t[i].isNegative()) t[i] += modulo;
-
-  return std::move(t[i]);
-}
-
-// Multiply two integers x, y modulo mod.
-static APInt mulMod(const APInt &_x, const APInt &_y, const APInt &_mod) {
-  assert(_x.getBitWidth() == _y.getBitWidth() &&
-         "expected same bitwidth of operands");
-  auto intermediateBitwidth = _mod.getBitWidth() * 2;
-  APInt x = _x.zext(intermediateBitwidth);
-  APInt y = _y.zext(intermediateBitwidth);
-  APInt mod = _mod.zext(intermediateBitwidth);
-  APInt res = (x * y).urem(mod);
-  return res.trunc(_x.getBitWidth());
-}
 
 // Compute the first degree powers of root modulo mod.
 static void precomputeRoots(APInt root, const APInt &mod, unsigned degree,
                             SmallVector<APInt> &roots,
-                            SmallVector<APInt> &invRoots) {
+                            SmallVector<APInt> &invRoots,
+                            std::optional<IntegerAttr> montgomeryR) {
   unsigned kBitWidth = llvm::bit_width(degree);
 
   // Precompute powers-of-two: `powerOfTwo[k]` = `root^(2^k)` mod `mod`.
@@ -83,11 +23,17 @@ static void precomputeRoots(APInt root, const APInt &mod, unsigned degree,
     powerOfTwo[k] = mulMod(powerOfTwo[k - 1], powerOfTwo[k - 1], mod);
   }
 
+  // Coset factor
+  APInt coset(mod.getBitWidth(), 1);
+  if (montgomeryR) {
+    coset = montgomeryR->getValue();
+  }
+
   // Prepare the result vector.
   roots.resize(degree);
   invRoots.resize(degree);
-  roots[0] = APInt(root.getBitWidth(), 1);     // Identity element.
-  invRoots[0] = APInt(root.getBitWidth(), 1);  // Identity element.
+  roots[0] = coset;
+  invRoots[0] = coset;
 
   llvm::StdThreadPool pool(llvm::hardware_concurrency());
 
@@ -103,8 +49,9 @@ static void precomputeRoots(APInt root, const APInt &mod, unsigned degree,
         exp >>= 1;
         bit++;
       }
-      roots[i] = result;
-      invRoots[degree - i] = result;
+
+      roots[i] = mulMod(coset, result, mod);
+      invRoots[degree - i] = mulMod(coset, result, mod);
     });
   }
 
@@ -134,6 +81,10 @@ DenseElementsAttr PrimitiveRootAttr::getInvRoots() const {
   return getImpl()->invRoots;
 }
 
+zkir::mod_arith::MontgomeryAttr PrimitiveRootAttr::getMontgomery() const {
+  return getImpl()->montgomery;
+}
+
 namespace detail {
 
 PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
@@ -141,6 +92,7 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
   // Extract the root and degree from the key.
   zkir::field::PrimeFieldAttr root = std::get<0>(key);
   IntegerAttr degree = std::get<1>(key);
+  zkir::mod_arith::MontgomeryAttr montgomery = std::get<2>(key);
 
   APInt mod = root.getType().getModulus().getValue();
   APInt rootVal = root.getValue().getValue();
@@ -155,8 +107,11 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
 
   // Compute the exponent table.
   SmallVector<APInt> roots, invRoots;
-  precomputeRoots(rootVal, mod, degree.getInt(), roots, invRoots);
-
+  std::optional<IntegerAttr> montgomeryR;
+  if (montgomery != zkir::mod_arith::MontgomeryAttr()) {
+    montgomeryR = montgomery.getR();
+  }
+  precomputeRoots(rootVal, mod, degree.getInt(), roots, invRoots, montgomeryR);
   // Create a ranked tensor type for the exponents attribute.
   auto tensorType = RankedTensorType::get(
       {degree.getInt()}, root.getType().getModulus().getType());
@@ -167,7 +122,8 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
   return new (allocator.allocate<PrimitiveRootAttrStorage>())
       PrimitiveRootAttrStorage(std::move(degree), std::move(invDegree),
                                std::move(root), std::move(invRoot),
-                               std::move(rootsAttr), std::move(invRootsAttr));
+                               std::move(rootsAttr), std::move(invRootsAttr),
+                               std::move(montgomery));
 }
 
 }  // namespace detail

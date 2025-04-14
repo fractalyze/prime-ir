@@ -8,17 +8,21 @@ package(
 cc_library(
     name = "ModArith",
     srcs = [
+        "ModArithAttributes.cpp",
         "ModArithDialect.cpp",
     ],
     hdrs = [
+        "ModArithAttributes.h",
         "ModArithDialect.h",
         "ModArithOps.h",
         "ModArithTypes.h",
     ],
     deps = [
+        ":attributes_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
+        "//zkir/Utils:APIntUtils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
@@ -30,6 +34,7 @@ cc_library(
 td_library(
     name = "td_files",
     srcs = [
+        "ModArithAttributes.td",
         "ModArithDialect.td",
         "ModArithOps.td",
         "ModArithTypes.td",
@@ -39,6 +44,25 @@ td_library(
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",
         "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "attributes_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-attrdef-decls"],
+            "ModArithAttributes.h.inc",
+        ),
+        (
+            ["-gen-attrdef-defs"],
+            "ModArithAttributes.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "ModArithAttributes.td",
+    deps = [
+        ":td_files",
     ],
 )
 

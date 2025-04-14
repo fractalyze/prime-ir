@@ -124,6 +124,7 @@ def zkir_benchmark_test(name, mlir_src, test_src, zkir_opt_flags = [], data = []
         name = llvmir_target,
         src = generated_zkir_opt_name,
         pass_flags = ["--mlir-to-llvmir"],
+        tags = tags,
         generated_filename = generated_llvmir_name,
     )
 
@@ -131,6 +132,7 @@ def zkir_benchmark_test(name, mlir_src, test_src, zkir_opt_flags = [], data = []
         name = obj_name,
         src = generated_llvmir_name,
         pass_flags = ["-relocation-model=pic", "-filetype=obj"],
+        tags = tags,
         generated_filename = generated_obj_name,
     )
     cc_import(

@@ -3,6 +3,7 @@
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 

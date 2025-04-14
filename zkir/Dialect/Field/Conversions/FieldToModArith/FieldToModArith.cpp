@@ -115,6 +115,44 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
   }
 };
 
+struct ConvertToMont : public OpConversionPattern<ToMontOp> {
+  explicit ConvertToMont(mlir::MLIRContext *context)
+      : OpConversionPattern<ToMontOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      ToMontOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    auto extracted = b.create<mod_arith::ToMontOp>(
+        resultType, adaptor.getOperands()[0], op.getMontgomery());
+    rewriter.replaceOp(op, extracted);
+    return success();
+  }
+};
+
+struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
+  explicit ConvertFromMont(mlir::MLIRContext *context)
+      : OpConversionPattern<FromMontOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      FromMontOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    Type resultType = typeConverter->convertType(op.getResult().getType());
+    auto extracted = b.create<mod_arith::FromMontOp>(
+        resultType, adaptor.getOperands()[0], op.getMontgomery());
+    rewriter.replaceOp(op, extracted);
+    return success();
+  }
+};
+
 struct ConvertInverse : public OpConversionPattern<InverseOp> {
   explicit ConvertInverse(mlir::MLIRContext *context)
       : OpConversionPattern<InverseOp>(context) {}
@@ -183,6 +221,24 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
   }
 };
 
+struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
+  explicit ConvertMontMul(mlir::MLIRContext *context)
+      : OpConversionPattern<MontMulOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      MontMulOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto mul = b.create<mod_arith::MontMulOp>(
+        adaptor.getLhs(), adaptor.getRhs(), op.getMontgomery());
+    rewriter.replaceOp(op, mul);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
@@ -207,8 +263,9 @@ void PrimeFieldToModArith::runOnOperation() {
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
   patterns
-      .add<ConvertConstant, ConvertEncapsulate, ConvertExtract, ConvertInverse,
-           ConvertAdd, ConvertSub, ConvertMul, ConvertAny<affine::AffineForOp>,
+      .add<ConvertConstant, ConvertEncapsulate, ConvertExtract, ConvertToMont,
+           ConvertFromMont, ConvertInverse, ConvertAdd, ConvertSub, ConvertMul,
+           ConvertMontMul, ConvertAny<affine::AffineForOp>,
            ConvertAny<affine::AffineYieldOp>, ConvertAny<linalg::GenericOp>,
            ConvertAny<linalg::YieldOp>, ConvertAny<tensor::CastOp>,
            ConvertAny<tensor::ExtractOp>, ConvertAny<tensor::FromElementsOp>,
