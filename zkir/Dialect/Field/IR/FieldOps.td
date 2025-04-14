@@ -119,6 +119,22 @@ def PrimeField_InverseOp : PrimeField_Op<"pf.inverse", [Involution, SameOperands
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
+// Prime field negation
+def PrimeField_NegateOp : PrimeField_Op<"pf.negate", [Pure, ElementwiseMappable, SameOperandsAndResultType, Involution]> {
+  let summary = "Prime field negation";
+  let description = [{
+    Computes the negation of a field element.
+
+    Example:
+    ```
+    %negation = field.pf.negate %a : field.pf<primeModulus>
+    ```
+  }];
+  let arguments = (ins PrimeFieldLike:$input);
+  let results = (outs PrimeFieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
 // A helper class for binary prime field operations.
 class PrimeField_BinaryOp<string mnemonic, list<Trait> traits = []> :
   PrimeField_Op<mnemonic, traits # [SameOperandsAndResultType, Pure, ElementwiseMappable]>,

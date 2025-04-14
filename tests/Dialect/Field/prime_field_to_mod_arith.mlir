@@ -113,6 +113,24 @@ func.func @test_lower_inverse_vec(%lhs : !PFv) -> !PFv {
   return %res : !PFv
 }
 
+// CHECK-LABEL: @test_lower_negate
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_negate(%lhs : !PF1) -> !PF1 {
+  // CHECK-NOT: field.pf.negate
+  // CHECK: %[[RES:.*]] = mod_arith.negate %[[LHS]] : [[T]]
+  %res = field.pf.negate %lhs : !PF1
+  return %res : !PF1
+}
+
+// CHECK-LABEL: @test_lower_negate_vec
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_negate_vec(%lhs : !PF1) -> !PF1 {
+  // CHECK-NOT: field.pf.negate
+  // CHECK: %[[RES:.*]] = mod_arith.negate %[[LHS]] : [[T]]
+  %res = field.pf.negate %lhs : !PF1
+  return %res : !PF1
+}
+
 // CHECK-LABEL: @test_lower_add
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_add() -> !PF1 {

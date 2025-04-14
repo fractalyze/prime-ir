@@ -179,6 +179,23 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
   }
 };
 
+struct ConvertNegate : public OpConversionPattern<NegateOp> {
+  explicit ConvertNegate(mlir::MLIRContext *context)
+      : OpConversionPattern<NegateOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      NegateOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto neg = b.create<mod_arith::NegateOp>(adaptor.getOperands()[0]);
+    rewriter.replaceOp(op, neg);
+    return success();
+  }
+};
+
 struct ConvertAdd : public OpConversionPattern<AddOp> {
   explicit ConvertAdd(mlir::MLIRContext *context)
       : OpConversionPattern<AddOp>(context) {}
@@ -273,8 +290,8 @@ void PrimeFieldToModArith::runOnOperation() {
   rewrites::populateWithGenerated(patterns);
   patterns.add<
       ConvertConstant, ConvertEncapsulate, ConvertExtract, ConvertToMont,
-      ConvertFromMont, ConvertInverse, ConvertAdd, ConvertSub, ConvertMul,
-      ConvertMontMul, ConvertAny<affine::AffineForOp>,
+      ConvertFromMont, ConvertInverse, ConvertNegate, ConvertAdd, ConvertSub,
+      ConvertMul, ConvertMontMul, ConvertAny<affine::AffineForOp>,
       ConvertAny<affine::AffineParallelOp>, ConvertAny<affine::AffineLoadOp>,
       ConvertAny<affine::AffineStoreOp>, ConvertAny<affine::AffineYieldOp>,
       ConvertAny<linalg::GenericOp>, ConvertAny<linalg::YieldOp>,
