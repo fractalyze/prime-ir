@@ -13,7 +13,7 @@ template <typename T>
 class Memref {
  public:
   Memref(size_t h, size_t w) {
-    allocatedPtr = reinterpret_cast<T*>(malloc(sizeof(T) * w * h));
+    allocatedPtr = reinterpret_cast<T *>(malloc(sizeof(T) * w * h));
     alignedPtr = allocatedPtr;
 
     offset = 0;
@@ -23,15 +23,15 @@ class Memref {
     strides[1] = 1;
   }
 
-  T* pget(size_t i, size_t j) const {
+  T *pget(size_t i, size_t j) const {
     return &alignedPtr[offset + i * strides[0] + j * strides[1]];
   }
 
   T get(size_t i, size_t j) const { return *pget(i, j); }
 
  private:
-  T* allocatedPtr;
-  T* alignedPtr;
+  T *allocatedPtr;
+  T *alignedPtr;
   size_t offset;
   size_t sizes[2];
   size_t strides[2];
