@@ -5,7 +5,7 @@ zkir_benchmark_test(
     mlir_src = "ntt_benchmark.mlir",
     tags = ["manual"],
     test_src = ["ntt_benchmark_test.cc"],
-    zkir_opt_flags = ["-poly-to-llvm"],
+    zkir_opt_flags = ["-poly-to-omp"],
     deps = [
         "//benchmark:BenchmarkUtils",
     ],

@@ -32,7 +32,11 @@ int main(int argc, char **argv) {
 
   mlir::PassPipelineRegistration<>(
       "poly-to-llvm", "Run passes to lower the polynomial dialect to LLVM",
-      mlir::zkir::pipelines::polyToLLVMPipelineBuilder);
+      mlir::zkir::pipelines::polyToLLVMPipelineBuilder<false>);
+  mlir::PassPipelineRegistration<>(
+      "poly-to-omp",
+      "Run passes to lower the polynomial dialect to OpenMP + LLVM",
+      mlir::zkir::pipelines::polyToLLVMPipelineBuilder<true>);
 
   return failed(mlir::MlirOptMain(argc, argv, "ZKIR optimizer\n", registry));
 }

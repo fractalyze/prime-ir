@@ -3,7 +3,9 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/BufferizationToMemRef/BufferizationToMemRef.h"
 #include "mlir/Conversion/ConvertToLLVM/ToLLVMPass.h"
+#include "mlir/Conversion/OpenMPToLLVM/ConvertOpenMPToLLVM.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Conversion/SCFToOpenMP/SCFToOpenMP.h"
 #include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Arith/Transforms/Passes.h"
 #include "mlir/Dialect/Bufferization/Transforms/FuncBufferizableOpInterfaceImpl.h"
@@ -41,6 +43,7 @@ void oneShotBufferize(OpPassManager &manager) {
   manager.addPass(createCanonicalizerPass());
 }
 
+template <bool allowOpenMP>
 void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(zkir::poly::createPolyToField());
   manager.addPass(zkir::field::createPrimeFieldToModArith());
@@ -49,9 +52,11 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
 
   // Linalg
   manager.addNestedPass<FuncOp>(createConvertElementwiseToLinalgPass());
+  manager.addNestedPass<FuncOp>(createLinalgElementwiseOpFusionPass());
   // Needed to lower affine.map and affine.apply
   manager.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
   manager.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
+  manager.addPass(affine::createAffineParallelize());
   manager.addPass(createLowerAffinePass());
   manager.addNestedPass<FuncOp>(memref::createExpandOpsPass());
   manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
@@ -61,7 +66,7 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
 
   // Linalg must be bufferized before it can be lowered
   // But lowering to loops also re-introduces affine.apply, so re-lower that
-  manager.addNestedPass<FuncOp>(createConvertLinalgToLoopsPass());
+  manager.addNestedPass<FuncOp>(createConvertLinalgToParallelLoopsPass());
   manager.addPass(createLowerAffinePass());
   manager.addPass(createBufferizationToMemRefPass());
 
@@ -73,6 +78,9 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
 
   // ToLLVM
   manager.addPass(arith::createArithExpandOpsPass());
+  if constexpr (allowOpenMP) {
+    manager.addPass(createConvertSCFToOpenMPPass());
+  }
   manager.addPass(createConvertSCFToCFPass());
   manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
 
@@ -80,6 +88,7 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   // and affine.apply
   manager.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
   manager.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
+  manager.addPass(affine::createAffineParallelize());
   manager.addPass(createLowerAffinePass());
   manager.addPass(createConvertToLLVMPass());
 
@@ -89,5 +98,8 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(createCSEPass());
   manager.addPass(createSymbolDCEPass());
 }
+
+template void polyToLLVMPipelineBuilder<false>(mlir::OpPassManager &manager);
+template void polyToLLVMPipelineBuilder<true>(mlir::OpPassManager &manager);
 
 }  // namespace mlir::zkir::pipelines
