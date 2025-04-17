@@ -185,10 +185,8 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     Value tHigh = adaptor.getOperands()[1];
 
     // Extract Montgomery constants: `nPrime` and `modulus`.
-    IntegerAttr nPrimeAttr = op.getMontgomeryAttr().getNPrime();
-    Value nPrime = b.create<arith::ConstantOp>(nPrimeAttr);
+    TypedAttr nPrimeAttr = op.getMontgomeryAttr().getNPrime();
     TypedAttr modAttr = modulusAttr(op);
-    Value mod = b.create<arith::ConstantOp>(modAttr);
 
     // Retrieve the modulus bitwidth.
     unsigned modBitWidth = cast<IntegerType>(modAttr.getType()).getWidth();
@@ -198,23 +196,43 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
 
     // Prepare constants for limb operations.
-    auto limbWidthConst = b.create<arith::ConstantOp>(
-        b.getIntegerAttr(tLow.getType(), limbWidth));
-    auto lowLimbMask = b.create<arith::ConstantOp>(b.getIntegerAttr(
-        tLow.getType(), APInt::getAllOnes(limbWidth).zext(modBitWidth)));
-    auto lowLimbShift = b.create<arith::ConstantOp>(
-        b.getIntegerAttr(tLow.getType(), (numLimbs - 1) * limbWidth));
+    Type limbType = nPrimeAttr.getType();
+    TypedAttr limbWidthAttr =
+        b.getIntegerAttr(getElementTypeOrSelf(tLow), limbWidth);
+    TypedAttr limbMaskAttr =
+        b.getIntegerAttr(getElementTypeOrSelf(tLow),
+                         APInt::getAllOnes(limbWidth).zext(modBitWidth));
+    TypedAttr limbShiftAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow),
+                                               (numLimbs - 1) * limbWidth);
+
+    // Splat the attributes to match the shape of `tLow`.
+    if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
+      limbType = shapedType.cloneWith(std::nullopt, limbType);
+      nPrimeAttr =
+          SplatElementsAttr::get(cast<ShapedType>(limbType), nPrimeAttr);
+      limbWidthAttr = SplatElementsAttr::get(shapedType, limbWidthAttr);
+      limbMaskAttr = SplatElementsAttr::get(shapedType, limbMaskAttr);
+      limbShiftAttr = SplatElementsAttr::get(shapedType, limbShiftAttr);
+      modAttr = SplatElementsAttr::get(shapedType, modAttr);
+    }
+
+    // Create constants for the Montgomery reduction.
+    auto nPrimeConst = b.create<arith::ConstantOp>(nPrimeAttr);
+    auto limbWidthConst = b.create<arith::ConstantOp>(limbWidthAttr);
+    auto limbMaskConst = b.create<arith::ConstantOp>(limbMaskAttr);
+    auto limbShiftConst = b.create<arith::ConstantOp>(limbShiftAttr);
+    auto modConst = b.create<arith::ConstantOp>(modAttr);
 
     // Because the number of limbs (`numLimbs`) is known at compile time, we can
     // unroll the loop as a straight-line chain of operations.
     for (unsigned i = 0; i < numLimbs; ++i) {
       // Extract the current lowest limb: `tLow` (mod `base`)
-      auto lowerLimb = b.create<arith::TruncIOp>(nPrimeAttr.getType(), tLow);
+      auto lowerLimb = b.create<arith::TruncIOp>(limbType, tLow);
       // Compute `m` = `lowerLimb` * `nPrime` (mod `base`)
-      auto m = b.create<arith::MulIOp>(lowerLimb, nPrime);
+      auto m = b.create<arith::MulIOp>(lowerLimb, nPrimeConst);
       // Compute `m` * `N` , where `N` is modulus
-      auto mExt = b.create<arith::ExtUIOp>(mod.getType(), m);
-      auto mN = b.create<arith::MulUIExtendedOp>(mod, mExt);
+      auto mExt = b.create<arith::ExtUIOp>(tLow.getType(), m);
+      auto mN = b.create<arith::MulUIExtendedOp>(modConst, mExt);
       // Add the product to `T`.
       auto sum = b.create<arith::AddUIExtendedOp>(tLow, mN.getLow());
       tLow = sum.getSum();
@@ -226,8 +244,8 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
       // Shift right by `limbWidth` to discard the zeroed limb.
       tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
       // copy the lowest limb of `tHigh` to the highest limb of `tLow`
-      Value tHighLimb = b.create<arith::AndIOp>(tHigh, lowLimbMask);
-      tHighLimb = b.create<arith::ShLIOp>(tHighLimb, lowLimbShift);
+      Value tHighLimb = b.create<arith::AndIOp>(tHigh, limbMaskConst);
+      tHighLimb = b.create<arith::ShLIOp>(tHighLimb, limbShiftConst);
       tLow = b.create<arith::OrIOp>(tLow, tHighLimb);
       // Shift right `tHigh` by `limbWidth`.
       tHigh = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
@@ -235,8 +253,9 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
 
     // Final conditional subtraction: if (`tLow` >= `modulus`) then subtract
     // `modulus`.
-    auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, tLow, mod);
-    auto sub = b.create<arith::SubIOp>(tLow, mod);
+    auto cmp =
+        b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, tLow, modConst);
+    auto sub = b.create<arith::SubIOp>(tLow, modConst);
     auto result = b.create<arith::SelectOp>(cmp, sub, tLow);
 
     rewriter.replaceOp(op, result);
