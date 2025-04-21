@@ -36,7 +36,7 @@ class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
 def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
   let summary = "An elliptic curve point";
   let description = [{
-    Defines an elliptic curve point in affine(x, y), Jacobian(x, y, z), or XYZZ(x, y, z², z³) form.
+    Defines an elliptic curve point in Affine(x, y), Jacobian(x, y, z), or XYZZ(x, y, z², z³) form.
 
     Example:
     ```
@@ -45,11 +45,10 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
     %2 = elliptic_curve.point %x, %y, %zz, %zzz : !elliptic_curve.xyzz<#curve>
     ```
   }];
-  let arguments = (ins Field_PrimeFieldAttr:$x, Field_PrimeFieldAttr:$y,
-                   OptionalAttr<Field_PrimeFieldAttr>:$z, OptionalAttr<Field_PrimeFieldAttr>:$zz,
-                   OptionalAttr<Field_PrimeFieldAttr>:$zzz);
+  let arguments = (ins Variadic<Field_PrimeFieldType>:$coords);
   let results = (outs PointLike:$output);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 ////////////// POINT ARITHMETIC OPERATIONS //////////////
