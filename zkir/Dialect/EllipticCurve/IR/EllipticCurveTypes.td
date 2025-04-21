@@ -75,4 +75,16 @@ def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [MemRefElementTy
   let assemblyFormat = "`<` $curve `>`";
 }
 
+def AffineLike : TypeOrValueSemanticsContainer<
+    EllipticCurve_AffineType, "affine-like">;
+
+def JacobianLike : TypeOrValueSemanticsContainer<
+    EllipticCurve_JacobianType, "jacobian-like">;
+
+def XYZZLike : TypeOrValueSemanticsContainer<
+    EllipticCurve_XYZZType, "xyzz-like">;
+
+def PointLike : TypeConstraint<Or<[
+    AffineLike.predicate, JacobianLike.predicate, XYZZLike.predicate]>,
+    "affine-like or jacobian-like or xyzz-like">;
 #endif  // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVETYPES_TD_
