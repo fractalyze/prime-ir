@@ -35,22 +35,26 @@ func.func @test_lower_inverse() {
 #Fq_mont = #mod_arith.montgomery<!Fq>
 
 func.func @test_lower_mont_reduce() {
-  %p = arith.constant 3723 : i512
-  %p_mont = mod_arith.mont_reduce %p {montgomery=#Fq_mont} : i512 -> !Fq
+  %p = arith.constant 2188824287183927522224640574525727508854836440041603434369820418657580849561 : i256
+  %zero = arith.constant 0 : i256
+  // `pR` is `p` << 256 so just give `p` as `high` and set `low` to 0
+  %p_mont = mod_arith.mont_reduce %zero, %p {montgomery=#Fq_mont} : i256 -> !Fq
 
   %2 = mod_arith.extract %p_mont : !Fq -> i256
-  %3 = vector.from_elements %2 : vector<1xi256>
-  %4 = vector.bitcast %3 : vector<1xi256> to vector<8xi32>
-  %mem = memref.alloc() : memref<8xi32>
+  // check if mod_arith.mont_reduce(pR) == p
+  %true = arith.cmpi eq, %2, %p : i256
+  %trueExt = arith.extui %true : i1 to i32
+  %3 = vector.from_elements %trueExt : vector<1xi32>
+  %mem = memref.alloc() : memref<1xi32>
   %idx_0 = arith.constant 0 : index
-  vector.store %4, %mem[%idx_0] : memref<8xi32>, vector<8xi32>
+  vector.store %3, %mem[%idx_0] : memref<1xi32>, vector<1xi32>
 
-  %U = memref.cast %mem : memref<8xi32> to memref<*xi32>
+  %U = memref.cast %mem : memref<1xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
   return
 }
 
-// CHECK_TEST_MONT_REDUCE: [-1635059004, -1772563805, -2074116324, -156049350, 156881531, -524227392, -1359481138, 438709201]
+// CHECK_TEST_MONT_REDUCE: [1]
 
 func.func @test_lower_mont_mul() {
   %p = mod_arith.constant 17221657567640823606390383439573883756117969501024189775361 : !Fq

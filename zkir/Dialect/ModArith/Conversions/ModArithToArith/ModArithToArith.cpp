@@ -163,7 +163,8 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
 
     // `T` is the operand (e.g. the result of a multiplication, twice the
     // bitwidth of modulus).
-    Value T = adaptor.getOperands()[0];
+    Value tLow = adaptor.getOperands()[0];
+    Value tHigh = adaptor.getOperands()[1];
 
     // Extract Montgomery constants: `nPrime` and `modulus`.
     IntegerAttr nPrimeAttr = op.getMontgomeryAttr().getNPrime();
@@ -178,41 +179,49 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     const unsigned limbWidth = APInt::APINT_BITS_PER_WORD;
     unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
 
-    // Arith operations require the operands to be of same bit width
-    Value modExt = b.create<arith::ExtUIOp>(T.getType(), mod);
-
     // Prepare constants for limb operations.
-    Value limbWidthConst =
-        b.create<arith::ConstantOp>(b.getIntegerAttr(T.getType(), limbWidth));
+    auto limbWidthConst = b.create<arith::ConstantOp>(
+        b.getIntegerAttr(tLow.getType(), limbWidth));
+    auto lowLimbMask = b.create<arith::ConstantOp>(b.getIntegerAttr(
+        tLow.getType(), APInt::getAllOnes(limbWidth).zext(modBitWidth)));
+    auto lowLimbShift = b.create<arith::ConstantOp>(
+        b.getIntegerAttr(tLow.getType(), (numLimbs - 1) * limbWidth));
 
-    // Because the number of limbs (numLimbs) is known at compile time, we can
-    // unroll the loop as a straight-line chain of operations. Let `u` be the
-    // current working value, initially `T`.
-    Value u = T;
+    // Because the number of limbs (`numLimbs`) is known at compile time, we can
+    // unroll the loop as a straight-line chain of operations.
     for (unsigned i = 0; i < numLimbs; ++i) {
-      // Extract the current lowest limb: `u` (mod `base`)
-      Value lowerLimb = b.create<arith::TruncIOp>(nPrimeAttr.getType(), u);
+      // Extract the current lowest limb: `tLow` (mod `base`)
+      auto lowerLimb = b.create<arith::TruncIOp>(nPrimeAttr.getType(), tLow);
       // Compute `m` = `lowerLimb` * `nPrime` (mod `base`)
-      Value m = b.create<arith::MulIOp>(lowerLimb, nPrime);
+      auto m = b.create<arith::MulIOp>(lowerLimb, nPrime);
       // Compute `m` * `N` , where `N` is modulus
-      Value mExt = b.create<arith::ExtUIOp>(T.getType(), m);
-      Value mN = b.create<arith::MulIOp>(modExt, mExt);
-      // Add the product to `u`.
-      Value sum = b.create<arith::AddIOp>(u, mN);
+      auto mExt = b.create<arith::ExtUIOp>(mod.getType(), m);
+      auto mN = b.create<arith::MulUIExtendedOp>(mod, mExt);
+      // Add the product to `T`.
+      auto sum = b.create<arith::AddUIExtendedOp>(tLow, mN.getLow());
+      tLow = sum.getSum();
+      tHigh = b.create<arith::AddIOp>(tHigh, mN.getHigh());
+      // Add carry from the `sum` to `tHigh`.
+      auto carryExt =
+          b.create<arith::ExtUIOp>(tHigh.getType(), sum.getOverflow());
+      tHigh = b.create<arith::AddIOp>(tHigh, carryExt);
       // Shift right by `limbWidth` to discard the zeroed limb.
-      u = b.create<arith::ShRUIOp>(sum, limbWidthConst);
+      tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
+      // copy the lowest limb of `tHigh` to the highest limb of `tLow`
+      Value tHighLimb = b.create<arith::AndIOp>(tHigh, lowLimbMask);
+      tHighLimb = b.create<arith::ShLIOp>(tHighLimb, lowLimbShift);
+      tLow = b.create<arith::OrIOp>(tLow, tHighLimb);
+      // Shift right `tHigh` by `limbWidth`.
+      tHigh = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
     }
 
-    // Final conditional subtraction: if (`u_final` >= modulus) then subtract
-    // modulus.
-    Value cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, u, modExt);
-    Value sub = b.create<arith::SubIOp>(u, modExt);
-    Value result = b.create<arith::SelectOp>(cmp, sub, u);
+    // Final conditional subtraction: if (`tLow` >= `modulus`) then subtract
+    // `modulus`.
+    auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, tLow, mod);
+    auto sub = b.create<arith::SubIOp>(tLow, mod);
+    auto result = b.create<arith::SelectOp>(cmp, sub, tLow);
 
-    // Truncate the result to the bitwidth of the modulus.
-    Value truncated = b.create<arith::TruncIOp>(mod.getType(), result);
-
-    rewriter.replaceOp(op, truncated);
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -227,20 +236,15 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
       ToMontOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    IntegerAttr rSquaredAttr = op.getMontgomery().getRSquared();
 
     // x * R = REDC(x * rSquared)
     auto rSquared =
         b.create<arith::ConstantOp>(op.getMontgomery().getRSquared());
-    auto extended = b.create<arith::ExtUIOp>(rSquaredAttr.getType(),
-                                             adaptor.getOperands()[0]);
-
-    // TODO(batzor): Use extended multiplication to avoid full length
-    // multiplication. Now we extend both operands to 2x the bitwidth of the
-    // modulus to avoid the truncation in multiplication.
-    auto product = b.create<arith::MulIOp>(extended, rSquared);
-    auto reduced = b.create<MontReduceOp>(op.getResult().getType(), product,
-                                          op.getMontgomery());
+    auto product =
+        b.create<arith::MulUIExtendedOp>(adaptor.getOperands()[0], rSquared);
+    auto reduced =
+        b.create<MontReduceOp>(op.getResult().getType(), product.getLow(),
+                               product.getHigh(), op.getMontgomery());
     rewriter.replaceOp(op, reduced);
     return success();
   }
@@ -258,10 +262,11 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     // x * R⁻¹ = REDC(x)
-    auto extended = b.create<arith::ExtUIOp>(
-        op.getMontgomery().getRSquared().getType(), adaptor.getOperands()[0]);
-    auto reduced = b.create<MontReduceOp>(op.getResult().getType(), extended,
-                                          op.getMontgomery());
+    auto zeroHighConst = b.create<arith::ConstantOp>(
+        IntegerAttr::get(op.getMontgomery().getRSquared().getType(), 0));
+    auto reduced = b.create<MontReduceOp>(op.getResult().getType(),
+                                          adaptor.getOperands()[0],
+                                          zeroHighConst, op.getMontgomery());
     rewriter.replaceOp(op, reduced);
     return success();
   }
@@ -492,13 +497,11 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto lhs =
-        b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getLhs());
-    auto rhs =
-        b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getRhs());
-    auto mul = b.create<arith::MulIOp>(lhs, rhs);
+    auto mul =
+        b.create<arith::MulUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
     auto reduced = b.create<mod_arith::MontReduceOp>(
-        getResultModArithType(op), mul.getResult(), op.getMontgomery());
+        getResultModArithType(op), mul.getLow(), mul.getHigh(),
+        op.getMontgomery());
 
     rewriter.replaceOp(op, reduced);
     return success();

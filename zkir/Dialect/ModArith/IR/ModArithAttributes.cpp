@@ -61,12 +61,9 @@ MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
   // Construct the `rInvAttr` with the bitwidth of the modulus
   IntegerAttr rInvAttr = IntegerAttr::get(modType.getModulus().getType(), rInv);
 
-  // Construct the `rSquaredAttr` with 2x the bitwidth of the modulus
-  // NOTE(batzor): It is currently 2x bitwidth due to how the `ToMontOp` works
-  // but should be later changed.
-  IntegerAttr rSquaredAttr = IntegerAttr::get(
-      IntegerType::get(modType.getContext(), modulus.getBitWidth() * 2),
-      rSquared.zext(modulus.getBitWidth() * 2));
+  // Construct the `rSquaredAttr` with the bitwidth of the modulus
+  IntegerAttr rSquaredAttr =
+      IntegerAttr::get(modType.getModulus().getType(), rSquared);
 
   // Construct the `nPrimeAttr` with the bitwidth `w`
   IntegerAttr nPrimeAttr = IntegerAttr::get(

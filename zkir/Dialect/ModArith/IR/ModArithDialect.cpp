@@ -108,14 +108,14 @@ LogicalResult ReduceOp::verify() {
 }
 
 LogicalResult MontReduceOp::verify() {
-  IntegerType integerType = getOperandIntegerType(*this);
+  IntegerType integerType =
+      cast<IntegerType>(getElementTypeOrSelf(this->getLow().getType()));
   ModArithType modArithType = getResultModArithType(*this);
   unsigned intWidth = integerType.getWidth();
   unsigned modWidth = modArithType.getModulus().getValue().getBitWidth();
-  if (intWidth != 2 * modWidth)
-    return emitOpError() << "Expected operand width to be " << 2 * modWidth
-                         << ", but got " << intWidth
-                         << " while modulus width is " << modWidth << ".";
+  if (intWidth != modWidth)
+    return emitOpError() << "Expected operand width to be " << modWidth
+                         << ", but got " << intWidth << " instead.";
   return success();
 }
 

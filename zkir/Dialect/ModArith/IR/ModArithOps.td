@@ -123,7 +123,7 @@ def ModArith_ReduceOp : ModArith_Op<"reduce", [Pure, ElementwiseMappable, SameOp
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [Pure, ElementwiseMappable]> {
+def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [Pure, ElementwiseMappable, SameTypeOperands]> {
   let summary = "applies montgomery reduction to the integer of twice the modulus bitwidth";
 
   let description = [{
@@ -137,12 +137,13 @@ def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [Pure, ElementwiseMappabl
   }];
 
   let arguments = (ins
-    SignlessIntegerLike:$input,
+    SignlessIntegerLike:$low,
+    SignlessIntegerLike:$high,
     ModArith_MontgomeryAttr:$montgomery
   );
   let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
-  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+  let assemblyFormat = "operands attr-dict `:` type($low) `->` type($output)";
 }
 
 def ModArith_ToMontOp : ModArith_Op<"to_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
