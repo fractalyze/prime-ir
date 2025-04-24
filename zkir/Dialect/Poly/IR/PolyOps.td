@@ -12,18 +12,19 @@ class Poly_Op<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def Poly_ConstantOp : Op<Poly_Dialect, "constant",
-    [Pure]> {
+def Poly_ConstantOp : Op<Poly_Dialect, "constant", [Pure]> {
   let summary = "Define a constant polynomial via an attribute.";
   let description = [{
-    Example:
+    Defines a constant polynomial in the given polynomial ring type.
 
-    ```mlir
+    Example:
+    ```
     !base_field = !field.pf<3:i32>
     !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant <1 + x**2> : !poly_ty
     ```
   }];
+
   let arguments = (ins Poly_UnivariatePolyAttr:$value);
   let results = (outs Poly_PolyType:$output);
   let hasCustomAssemblyFormat = 1;
@@ -55,8 +56,7 @@ def Poly_AddOp : Poly_BinaryOp<"add", [Commutative]> {
     the coefficient type.
 
     Example:
-
-    ```mlir
+    ```
     !base_field = !field.pf<3:i32>
     !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
@@ -79,8 +79,7 @@ def Poly_SubOp : Poly_BinaryOp<"sub"> {
     the coefficient type.
 
     Example:
-
-    ```mlir
+    ```
     !base_field = !field.pf<3:i32>
     !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
@@ -103,8 +102,7 @@ def Poly_MulOp : Poly_BinaryOp<"mul", [Commutative]> {
     the coefficient type.
 
     Example:
-
-    ```mlir
+    ```
     !base_field = !field.pf<3:i32>
     !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant int<1 + x**2> : !poly_ty
@@ -115,28 +113,27 @@ def Poly_MulOp : Poly_BinaryOp<"mul", [Commutative]> {
 }
 
 def Poly_ToTensorOp : Poly_Op<"to_tensor", [Pure]> {
-  let summary = "Creates a tensor containing the coefficients of a polynomial.";
+  let summary = "Create a tensor containing the coefficients of a polynomial.";
   let description = [{
-    `poly.to_tensor` creates a dense tensor value containing the
-    coefficients of the input polynomial. The output tensor contains the
-    coefficients in degree-increasing order.
+    Creates a dense tensor value containing the coefficients of the input polynomial.
+    The output tensor contains the coefficients in degree-increasing order.
 
     Example:
-
-    ```mlir
+    ```
     !base_field = !field.pf<3:i32>
     !poly_ty = !poly.polynomial<!base_field, 32>
     %0 = poly.constant <1 + x**2> : !poly_ty
     %tensor = poly.to_tensor %0
     ```
   }];
+
   let arguments = (ins Poly_PolyType:$input);
   let results = (outs RankedTensorOf<[AnyType]>:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
 }
 
 def Poly_FromTensorOp : Poly_Op<"from_tensor", [Pure]> {
-  let summary = "Creates a polynomial from integer coefficients stored in a tensor.";
+  let summary = "Create a polynomial from integer coefficients stored in a tensor.";
   let description = [{
     `polynomial.from_tensor` creates a polynomial value from a tensor of coefficients.
     The input tensor must list the coefficients in degree-increasing order.
@@ -146,24 +143,23 @@ def Poly_FromTensorOp : Poly_Op<"from_tensor", [Pure]> {
     zero coefficient.
 
     Example:
-
-    ```mlir
+    ```
     !base_field = !field.pf<3:i32>
     !poly_ty = !poly.polynomial<!base_field, 2>
     %coeffs = tensor.from_elements [2, 2, 5] : tensor<3xi32>
     %poly = poly.from_tensor %coeffs : tensor<3xi32> -> !poly_ty
     ```
   }];
+
   let arguments = (ins RankedTensorOf<[AnyType]>:$input);
   let results = (outs Poly_PolyType:$output);
-
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
 }
 
 def Poly_NTTOp : Poly_Op<"ntt", [Pure]> {
-  let summary = "Computes the Number Theoretic Transform.";
+  let summary = "Compute the number theoretic transform.";
   let description = [{
-    `poly.ntt` computes the forward integer Number Theoretic Transform
+    Computes the forward integer Number Theoretic Transform
     (NTT) on the input polynomial. It returns a tensor containing a point-value
     representation of the input polynomial.
 
@@ -171,7 +167,13 @@ def Poly_NTTOp : Poly_Op<"ntt", [Pure]> {
     unity `omega[n]`, the output is the list of $n$ evaluations
 
       `f[k] = F(omega[n]^k) ; k = {0, ..., n-1}`
+
+    Example:
+    ```
+    %evals = poly.ntt %poly {root=#root}: !poly_ty -> tensor<4x!pf>
+    ```
   }];
+
   let arguments = (ins
     Poly_PolyType:$input,
     Poly_PrimitiveRootAttr:$root
@@ -182,13 +184,18 @@ def Poly_NTTOp : Poly_Op<"ntt", [Pure]> {
 }
 
 def Poly_INTTOp : Poly_Op<"intt", [Pure]> {
-  let summary = "Computes the inverse Number Theoretic Transform.";
+  let summary = "Compute the inverse Number Theoretic Transform.";
   let description = [{
-    `poly.intt` computes the inverse Number Theoretic Transform (INTT) on the input
+    Computes the inverse Number Theoretic Transform (INTT) on the input
     point-value representation tensor and outputs polynomial in its coefficient form.
 
     The input tensor is interpreted as a point-value representation of the
     output polynomial at powers of a primitive `n`-th root of unity.
+
+    Example:
+    ```
+    %poly = poly.intt %evals {root=#root} : tensor<4x!pf> -> !poly_ty
+    ```
   }];
   let arguments = (ins
     RankedTensorOf<[Field_PrimeFieldType]>:$input,

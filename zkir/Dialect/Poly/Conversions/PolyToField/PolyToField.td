@@ -7,7 +7,6 @@ include "mlir/Pass/PassBase.td"
 
 def PolyToField : Pass<"poly-to-field", "ModuleOp"> {
   let summary = "Lower `poly` to `field`";
-
   let description = [{
     This pass lowers the `poly` dialect to the `field` dialect.
   }];

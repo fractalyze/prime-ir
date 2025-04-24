@@ -10,11 +10,11 @@ class ModArith_Attr<string name, string attrMnemonic, list<Trait> traits = []>
 }
 
 def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
-  let summary = "Attribute with precomputed Montgomery parameters";
+  let summary = "An attribute with precomputed Montgomery parameters";
   let description = [{
     This attribute contains the precomputed Montgomery parameters for a given
-    modulus. It is used to optimize Montgomery multiplication and
-    other operations in the `mod_arith` dialect.
+    modulus. It is used to for efficient multiplication when the modulus is fixed
+    at compile time.
   }];
   let parameters = (ins "ModArithType":$modType);
   let extraClassDeclaration = [{

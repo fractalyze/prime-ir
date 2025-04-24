@@ -12,7 +12,7 @@ class Field_Attr<string name, string attrMnemonic, list<Trait> traits = []>
 }
 
 def Field_PrimeFieldAttr : Field_Attr<"PrimeField", "pf_elem", [TypedAttrInterface]> {
-  let summary = "Attribute representing the prime field element";
+  let summary = "An attribute representing a prime field element";
   let parameters = (ins "PrimeFieldType":$type, "IntegerAttr":$value);
   let assemblyFormat = "`<` $value `>` `:` $type";
   let builders = [
@@ -34,7 +34,6 @@ def Field_PrimeFieldAttr : Field_Attr<"PrimeField", "pf_elem", [TypedAttrInterfa
   let extraClassDeclaration = [{
     using ValueType = Attribute;
   }];
-
   let genVerifyDecl = 1;
 }
 

@@ -11,13 +11,13 @@ class EllipticCurve_Attr<string name, string attrMnemonic, list<Trait> traits = 
 }
 
 def EllipticCurve_ShortWeierstrassAttr : EllipticCurve_Attr<"ShortWeierstrass", "sw", [SameTypeOperands]> {
-  let summary = "An attribute defining an elliptic curve";
+  let summary = "An attribute representing a short Weierstrass elliptic curve";
   let description = [{
     An elliptic curve in short weierstrass form is defined by the equation y² = x³ + ax + b
     (where a and b are finite field elements) and a generator point G in the form (x, y).
 
     Example:
-    ```mlir
+    ```
     !PF = !field.pf<35:i32>
     #3 = #field.pf_elem<3> : !PF
 

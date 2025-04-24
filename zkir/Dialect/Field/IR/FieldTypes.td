@@ -22,14 +22,12 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInte
     `field.pf<p>` represents an element in a prime field where arithmetic operations
     are performed modulo a prime modulus `p`.
 
-    Examples:
+    Example:
     ```
     !PF1 = !field.pf<7>
     ```
   }];
-  let parameters = (ins
-    "IntegerAttr": $modulus
-  );
+  let parameters = (ins "IntegerAttr": $modulus);
   let assemblyFormat = "`<` $modulus `>`";
 }
 

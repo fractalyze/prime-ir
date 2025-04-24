@@ -7,13 +7,11 @@ include "mlir/IR/OpBase.td"
 def ModArith_Dialect : Dialect {
   let name = "mod_arith";
   let description = [{
-    The `mod_arith` dialect contains operations used for modulo arithmetic.
+    The `mod_arith` dialect contains operations used for modular arithmetic.
   }];
-
   let cppNamespace = "::mlir::zkir::mod_arith";
   let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
-
   let dependentDialects = [
     "arith::ArithDialect",
   ];

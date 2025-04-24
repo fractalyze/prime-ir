@@ -39,12 +39,12 @@ class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
 ////////////// POINT INITIALIZATIONS //////////////
 
 def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
-  let summary = "Defines an elliptic curve point";
+  let summary = "An elliptic curve point";
   let description = [{
     Defines an elliptic curve point in affine(x, y), Jacobian(x, y, z), or XYZZ(x, y, z², z³) form.
 
     Example:
-    ```mlir
+    ```
     %0 = elliptic_curve.point %x, %y : !elliptic_curve.affine<#curve>
     %1 = elliptic_curve.point %x, %y, %z : !elliptic_curve.jacobian<#curve>
     %2 = elliptic_curve.point %x, %y, %zz, %zzz : !elliptic_curve.xyzz<#curve>
@@ -61,7 +61,7 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
 
 // // Elliptic curve point addition.
 def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
-  let summary = "elliptic curve addition";
+  let summary = "Elliptic curve point addition operation";
   let description = [{
     Computes the sum of two elliptic curve points.
 
@@ -72,7 +72,7 @@ def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
     XYZZ, XYZZ -> XYZZ
 
     Example:
-    ```mlir
+    ```
     %sum = elliptic_curve.add %a, %b : !affine, !jacobian -> !jacobian
     ```
   }];
@@ -80,7 +80,7 @@ def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
 
 // // Elliptic curve point subtraction.
 def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
-  let summary = "elliptic curve subtraction";
+  let summary = "Elliptic curve point subtraction operation";
   let description = [{
     Computes the difference between two elliptic curve points.
 
@@ -91,7 +91,7 @@ def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
     XYZZ, XYZZ -> XYZZ
 
     Example:
-    ```mlir
+    ```
     %difference = elliptic_curve.sub %a, %b : !affine, !jacobian -> !jacobian
     ```
   }];
@@ -99,7 +99,7 @@ def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
 
 // Elliptic curve point negation.
 def EllipticCurve_NegOp : EllipticCurve_UnaryOp<"neg", [Involution, SameOperandsAndResultType]> {
-  let summary = "elliptic curve negation";
+  let summary = "Elliptic curve point negation operation";
   let description = [{
     Computes the negation of an elliptic curve point.
 
@@ -108,7 +108,7 @@ def EllipticCurve_NegOp : EllipticCurve_UnaryOp<"neg", [Involution, SameOperands
     XYZZ -> XYZZ
 
     Example:
-    ```mlir
+    ```
     %negation = elliptic_curve.neg %a : !jacobian
     ```
   }];
@@ -117,7 +117,7 @@ def EllipticCurve_NegOp : EllipticCurve_UnaryOp<"neg", [Involution, SameOperands
 
 // Elliptic curve point doubling.
 def EllipticCurve_DblOp : EllipticCurve_UnaryOp<"dbl"> {
-  let summary = "elliptic curve doubling";
+  let summary = "Elliptic curve point doubling operation";
   let description = [{
     Computes the double of an elliptic curve point. If an affine point is doubled,
     it becomes Jacobian. If a Jacobian or XYZZ point is doubled, its type remains the same.
@@ -127,7 +127,7 @@ def EllipticCurve_DblOp : EllipticCurve_UnaryOp<"dbl"> {
     XYZZ -> XYZZ
 
     Example:
-    ```mlir
+    ```
     %doubled = elliptic_curve.dbl %a : !affine -> !jacobian
     ```
   }];
@@ -137,7 +137,7 @@ def EllipticCurve_DblOp : EllipticCurve_UnaryOp<"dbl"> {
 
 // Elliptic curve point scalar multiplication.
 def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutative, ElementwiseMappable]> {
-  let summary = "elliptic curve scalar multiplication";
+  let summary = "Elliptic curve point scalar multiplication";
   let description = [{
     Computes the product of an elliptic curve point and a scalar prime field value.
 
@@ -146,7 +146,7 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutativ
     XYZZ -> XYZZ
 
     Example:
-    ```mlir
+    ```
     %product = elliptic_curve.scalar_mul %affine1, %b : !affine, !PF -> !jacobian
     ```
   }];
@@ -159,13 +159,13 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutativ
 ////////////// POINT CONVERSIONS //////////////
 
 def EllipticCurve_ConvertPointTypeOp : EllipticCurve_UnaryOp<"convert_point_type"> {
-  let summary = "Converts a point from one form to another.";
+  let summary = "Convert a point from one form to another.";
   let description = [{
     Converts a point on an elliptic curve from one form to another.
     Possible forms are Affine, Jacobian, and XYZZ.
 
     Example:
-    ```mlir
+    ```
     !affine = !elliptic_curve.affine<#sw>
     !jacobian = !elliptic_curve.jacobian<#sw>
 

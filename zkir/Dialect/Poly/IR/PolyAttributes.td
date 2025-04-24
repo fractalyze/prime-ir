@@ -11,7 +11,7 @@ class Poly_Attr<string name, string attrMnemonic, list<Trait> traits = []>
 }
 
 def Poly_UnivariatePolyAttr : Poly_Attr<"UnivariatePoly", "univariate_polynomial"> {
-  let summary = "an attribute containing a single-variable polynomial with field coefficients";
+  let summary = "The attribute representing a univariate polynomial with field coefficients";
   let description = [{
     A polynomial attribute represents a single-variable polynomial with field
     coefficients, which is used to define the modulus of a `QuotientRingAttr`, as well
@@ -24,8 +24,7 @@ def Poly_UnivariatePolyAttr : Poly_Attr<"UnivariatePoly", "univariate_polynomial
     must occur at most once.
 
     Example:
-
-    ```mlir
+    ```
     !PF1 = !field.pf<7:i32>
     !poly_ty = !poly.polynomial<!PF1>
     #poly = #poly.univariate_polynomial<x**3 + x + 1> : !poly_ty
@@ -46,8 +45,7 @@ def Poly_PrimitiveRootAttr: Poly_Attr<"PrimitiveRoot", "primitive_root"> {
     to specify the root of unity used in lowering the transform.
 
     Example:
-
-    ```mlir
+    ```
     !PF1 = !field.pf<7:i32>
     #elem = #field.elem<2> : !PF1
     #root = #poly.primitive_root<root=%generator, degree=3>

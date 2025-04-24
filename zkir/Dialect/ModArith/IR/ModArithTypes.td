@@ -39,16 +39,14 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [MemRefElementTypeI
     functions) are appropriately reduced to the canonical representative.
     `modulus` is the modulus the arithmetic working with.
 
-    Examples:
+    Example:
     ```
     !Zp1 = !mod_arith.int<7> // implicitly being i64
     !Zp2 = !mod_arith.int<65537 : i32>
     !Zp3 = !mod_arith.int<536903681 : i64>
     ```
   }];
-  let parameters = (ins
-    "IntegerAttr":$modulus
-  );
+  let parameters = (ins "IntegerAttr":$modulus);
   let assemblyFormat = "`<` $modulus `>`";
 }
 

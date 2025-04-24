@@ -8,7 +8,6 @@ def EllipticCurve_Dialect : Dialect {
   let summary = "Dialect for elliptic curve operations and types";
   let description = "Dialect for elliptic curve operations and types. Contains Affine, Jacobian, and XYZZ point types.";
   let cppNamespace = "::mlir::zkir::elliptic_curve";
-
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
 }

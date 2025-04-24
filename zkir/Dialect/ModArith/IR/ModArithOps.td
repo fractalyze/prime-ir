@@ -10,44 +10,41 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-
-class ModArith_Op<string mnemonic, list<Trait> traits = [Pure]> :
-        Op<ModArith_Dialect, mnemonic, traits> {
+class ModArith_Op<string mnemonic, list<Trait> traits = [Pure]>
+    : Op<ModArith_Dialect, mnemonic, traits> {
   let cppNamespace = "::mlir::zkir::mod_arith";
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
 // type conversion operations
 def ModArith_EncapsulateOp : ModArith_Op<"encapsulate", [Pure, ElementwiseMappable]> {
-  let summary = "encapsulate an integer into a mod_arith type";
-
+  let summary = "Encapsulate an integer into a modular type integer";
   let description = [{
-    `mod_arith.encapsulate` converts the integer to be of mod_arith type.
+    Converts the integer to be of modular type integer.
 
-    Examples:
+    It is required that the bitwidth of the input integer type is the same
+    as that of the storage type of the output modular integer type.
+
+    Example:
     ```
     mod_arith.encapsulate %c0 : i32 -> mod_arith.int<65537 : i32>
     mod_arith.encapsulate %c1 : i64 -> mod_arith.int<65537>
     ```
   }];
-
-  let arguments = (ins
-    SignlessIntegerLike:$input
-  );
+  let arguments = (ins SignlessIntegerLike:$input);
   let results = (outs ModArithLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
 def ModArith_ExtractOp : ModArith_Op<"extract", [Pure, ElementwiseMappable]> {
-  let summary = "extract the integer stored inside mod_arith type";
-
+  let summary = "Extract the integer from inside modular type integer";
   let description = [{
-    `mod_arith.extract` extracts the integer inside the mod_arith type.
+    Extracts the integer inside the modular type integer.
 
     It is required that the bitwidth of the output integer type is the same
-    as that of the storage type of the input mod_arith type.
+    as that of the storage type of the input modular type integer.
 
-    Examples:
+    Example:
     ```
     %m0 = mod_arith.encapsulate %c0 : i32 -> mod_arith.int<65537 : i32>
     %m1 = mod_arith.encapsulate %c1 : i64 -> mod_arith.int<65537>
@@ -55,30 +52,24 @@ def ModArith_ExtractOp : ModArith_Op<"extract", [Pure, ElementwiseMappable]> {
     %c3 = mod_arith.extract %m1 : mod_arith.int<65537> -> i64
     ```
   }];
-
-  let arguments = (ins
-    ModArithLike:$input
-  );
+  let arguments = (ins ModArithLike:$input);
   let results = (outs SignlessIntegerLike:$output);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
 def ModArith_ModSwitchOp : ModArith_Op<"mod_switch", [Pure, SameOperandsAndResultShape]> {
-  let summary = "change the modulus of a mod_arith";
-
+  let summary = "Change the modulus";
   let description = [{
-    `mod_arith.mod_switch` switches the modulus of a mod_arith type.
+    Switches the modulus of a modular type integer.
 
-    Examples:
+    Example:
     ```
     `mod_arith.mod_switch %c0 : mod_arith.int<65537 : i32> to mod_arith.int<65539 : i32>`
     ```
   }];
-
   let arguments = (ins ModArith_ModArithType:$input);
   let results = (outs ModArith_ModArithType:$output);
-
   let assemblyFormat = "$input attr-dict `:` type($input) `to` type($output)";
 }
 
@@ -88,7 +79,7 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant",
   let description = [{
     Example:
 
-    ```mlir
+    ```
     %0 = mod_arith.constant 123 : !mod_arith.int<65537:i32>
     ```
   }];
@@ -98,32 +89,27 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant",
 }
 
 def ModArith_NegateOp : ModArith_Op<"negate", [Pure, ElementwiseMappable, SameOperandsAndResultType, Involution]> {
-  let summary = "negate a mod arith element";
-
+  let summary = "Modular negation";
   let description = [{
-    `mod_arith.negate x` computes $-x \mod q$
-    Examples:
+    Computes the negation of a modular type integer.
+
+    Example:
     ```
     %1 = mod_arith.negate %0 : mod_arith.int<65537: i32>
     ```
   }];
-
-  let arguments = (ins
-    ModArithLike:$input
-  );
+  let arguments = (ins ModArithLike:$input);
   let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
 def ModArith_ReduceOp : ModArith_Op<"reduce", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
-  let summary = "reduce the mod arith type to its canonical representative";
-
+  let summary = "Modular reduction";
   let description = [{
-    `mod_arith.reduce x` produces $y$, the canonical representative in $[0, q)$
-    such that $x \equiv y \mod q$.
+    Computes the modulo of a given integer.
 
-    Examples:
+    Example:
     ```
     %c0 = arith.constant 65538 : i32
     %m0 = mod_arith.encapsulate %c0 : i32 -> mod_arith.int<65537 : i32>
@@ -132,28 +118,25 @@ def ModArith_ReduceOp : ModArith_Op<"reduce", [Pure, ElementwiseMappable, SameOp
     // mod_arith.extract %m1 produces 1
     ```
   }];
-
-  let arguments = (ins
-    ModArithLike:$input
-  );
+  let arguments = (ins ModArithLike:$input);
   let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
 def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [Pure, ElementwiseMappable, SameTypeOperands]> {
-  let summary = "applies montgomery reduction to the integer of twice the modulus bitwidth";
-
+  let summary = "Montgomery reduction";
   let description = [{
-    `mod_arith.mont_reduce` produces the canonical representative in [0, q).
+    Performs Montgomery reduction on an integer that is twice the bitwidth of the modulus,
+    represented as separate low and high parts. This is typically used for reducing the output of extended
+    multiplication operations.
 
-    Examples:
+    Example:
     ```
     %c0 = arith.constant 65538231231312311 : i512
     %m0 = mod_arith.mont_reduce %c0 {montgomery=#mont} : i512 -> mod_arith.int<65537 : i256>
     ```
   }];
-
   let arguments = (ins
     SignlessIntegerLike:$low,
     SignlessIntegerLike:$high,
@@ -165,17 +148,16 @@ def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [Pure, ElementwiseMappabl
 }
 
 def ModArith_ToMontOp : ModArith_Op<"to_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
-  let summary = "convert from standard form to montgomery representation";
-
+  let summary = "Convert from standard form to montgomery representation";
   let description = [{
-    `mod_arith.to_mont x` produces x * R mod q, where `R` is the montgomery factor.
+    Transforms modular type integer to the Montgomery domain.
+    In other words, it computes x * R⁻¹ mod q for the given operand `x`, where `R` is the montgomery factor.
 
-    Examples:
+    Example:
     ```
     %m0 = mod_arith.to_mont %c0 {montgomery=#mont} : mod_arith.int<65537 : i256>
     ```
   }];
-
   let arguments = (ins
     ModArithLike:$input,
     ModArith_MontgomeryAttr:$montgomery
@@ -186,16 +168,16 @@ def ModArith_ToMontOp : ModArith_Op<"to_mont", [Pure, ElementwiseMappable, SameO
 }
 
 def ModArith_FromMontOp : ModArith_Op<"from_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
-  let summary = "convert from montgomery representation to standard form";
+  let summary = "Convert from montgomery representation to standard form";
   let description = [{
-    `mod_arith.from_mont x` produces x * R⁻¹ mod q, where `R` is the montgomery factor.
+    Transforms modular type integer back from the Montgomery domain.
+    In other words, it computes x * R mod q for the given operand `x`, where `R` is the montgomery factor.
 
-    Examples:
+    Example:
     ```
     %m0 = mod_arith.from_mont %c0 {montgomery=#mont} : mod_arith.int<65537 : i256>
     ```
   }];
-
   let arguments = (ins
     ModArithLike:$input,
     ModArith_MontgomeryAttr:$montgomery
@@ -206,18 +188,16 @@ def ModArith_FromMontOp : ModArith_Op<"from_mont", [Pure, ElementwiseMappable, S
 }
 
 def ModArith_InverseOp : ModArith_Op<"inverse", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
-  let summary = "Compute the multiplicative inverse of a mod arith element";
-
+  let summary = "Modular inverse operation";
   let description = [{
-    `mod_arith.inverse x` computes the multiplicative inverse of `x`.
+    Computes the modular inverse of a given modular type integer.
 
-    Examples:
+    Example:
     ```
     %0 = mod_arith.constant 5 : !mod_arith.int<7:i4>
     %c0 = mod_arith.inverse %0 : !mod_arith.int<7:i4>
     ```
   }];
-
   let arguments = (ins ModArithLike:$input);
   let results = (outs ModArithLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($output)";
@@ -232,48 +212,38 @@ class ModArith_BinaryOp<string mnemonic, list<Trait> traits = []> :
 }
 
 def ModArith_AddOp : ModArith_BinaryOp<"add", [Commutative]> {
-  let summary = "modular addition operation";
+  let summary = "Modular addition operation";
   let description = [{
-    Computes modular addition.
-
-    Unless otherwise specified, the operation assumes both inputs are canonical
-    representatives and guarantees the output being canonical representative.
+    Performs modular addition on the given two modular type integers.
   }];
 }
 
 def ModArith_SubOp : ModArith_BinaryOp<"sub"> {
-  let summary = "modular subtraction operation";
+  let summary = "Modular subtraction operation";
   let description = [{
-    Computes modular subtraction.
-
-    Unless otherwise specified, the operation assumes both inputs are canonical
-    representatives and guarantees the output being canonical representative.
+    Performs modular subtraction on the given two modular type integers.
   }];
 }
 
 def ModArith_MulOp : ModArith_BinaryOp<"mul", [Commutative]> {
-  let summary = "modular multiplication operation";
+  let summary = "Modular multiplication operation";
   let description = [{
-    Computes modular multiplication.
-
-    Unless otherwise specified, the operation assumes both inputs are canonical
-    representatives and guarantees the output being canonical representative.
+    Performs modular multiplication on the given two modular type integers.
+    WARNING: This operation assumes that both operands are in the standard form.
   }];
 }
 
 def ModArith_MontMulOp : ModArith_Op<"mont_mul", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
-  let summary = "compute a montgomery multiplication";
-
+  let summary = "Montgomery multiplication operation";
   let description = [{
-    `mod_arith.mont_mul %a, %b` produces a * b * R⁻¹ mod q, where `R` is the
-    montgomery factor.
+    Performs Montgomery multiplication in the Montgomery domain.
+    In other words, it computes a * b * R⁻¹ mod q, where `R` is the Montgomery factor.
 
-    Examples:
+    Example:
     ```
     %m0 = mod_arith.mont_mul %a, %b : mod_arith.int<65537 : i256>
     ```
   }];
-
   let arguments = (ins
     ModArithLike:$lhs,
     ModArithLike:$rhs,
@@ -286,13 +256,9 @@ def ModArith_MontMulOp : ModArith_Op<"mont_mul", [Pure, ElementwiseMappable, Sam
 
 
 def ModArith_MacOp : ModArith_Op<"mac", [SameOperandsAndResultType, Pure, ElementwiseMappable]> {
-  let summary = "modular multiplication-and-accumulation operation";
-
+  let summary = "Modular multiplication-and-accumulation operation";
   let description = [{
-    `mod_arith.mac x, y, z` computes $(x * y) + z$
-
-    Unless otherwise specified, the operation assumes all inputs are canonical
-    representatives and guarantees the output being canonical representative.
+    Multiplies the first operand with the second operand and adds the result to the third operand.
   }];
   let arguments = (ins ModArithLike:$lhs, ModArithLike:$rhs, ModArithLike:$acc);
   let results = (outs ModArithLike:$output);
@@ -301,8 +267,11 @@ def ModArith_MacOp : ModArith_Op<"mac", [SameOperandsAndResultType, Pure, Elemen
 }
 
 def ModArith_SubIfGEOp : ModArith_Op<"subifge", [SameOperandsAndResultType]> {
-  let summary = "Compute (x >= y) ? x - y : x.";
-
+  let summary = "Subtract if greater than or equal to";
+  let description = [{
+    Subtracts the second operand from the first operand if the first operand is greater than or equal to the second operand.
+    Otherwise, it returns the first operand unchanged.
+  }];
   let arguments = (ins
     SignlessIntegerLike:$lhs,
     SignlessIntegerLike:$rhs

@@ -6,8 +6,7 @@ include "mlir/Dialect/Arith/IR/ArithOps.td"
 include "mlir/Pass/PassBase.td"
 
 def ArithToModArith : Pass<"arith-to-mod-arith", "ModuleOp"> {
-  let summary = "Lower standard `arith` to `mod-arith`.";
-
+  let summary = "Lower standard `arith` to `mod_arith`.";
   let description = [{
     This pass lowers the `arith` dialect to their `mod-arith` equivalents.
 
@@ -18,7 +17,6 @@ def ArithToModArith : Pass<"arith-to-mod-arith", "ModuleOp"> {
     later pass, these large precision MAC operations (typically
     64 or 32-bit) will be lowered into small precision (8 or 4b) operations
     that can be mapped to CGGI operations.   }];
-
   let dependentDialects = [
     "mlir::arith::ArithDialect",
     "mlir::zkir::mod_arith::ModArithDialect",
