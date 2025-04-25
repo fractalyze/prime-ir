@@ -1,0 +1,20 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "Add",
+    srcs = ["Add.cpp"],
+    hdrs = [
+        "Add.h",
+    ],
+    deps = [
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//zkir/Dialect/Field/IR:Field",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
