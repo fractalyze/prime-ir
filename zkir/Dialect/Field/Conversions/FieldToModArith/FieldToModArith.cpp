@@ -265,6 +265,24 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
   }
 };
 
+struct ConvertSquare : public OpConversionPattern<SquareOp> {
+  explicit ConvertSquare(mlir::MLIRContext *context)
+      : OpConversionPattern<SquareOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      SquareOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto square =
+        b.create<mod_arith::MulOp>(adaptor.getInput(), adaptor.getInput());
+    rewriter.replaceOp(op, square);
+    return success();
+  }
+};
+
 struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
   explicit ConvertMontMul(mlir::MLIRContext *context)
       : OpConversionPattern<MontMulOp>(context) {}
@@ -309,12 +327,13 @@ void PrimeFieldToModArith::runOnOperation() {
   patterns.add<
       ConvertConstant, ConvertEncapsulate, ConvertExtract, ConvertToMont,
       ConvertFromMont, ConvertInverse, ConvertNegate, ConvertAdd, ConvertDouble,
-      ConvertSub, ConvertMul, ConvertMontMul, ConvertAny<affine::AffineForOp>,
-      ConvertAny<affine::AffineParallelOp>, ConvertAny<affine::AffineLoadOp>,
-      ConvertAny<affine::AffineStoreOp>, ConvertAny<affine::AffineYieldOp>,
-      ConvertAny<linalg::GenericOp>, ConvertAny<linalg::YieldOp>,
-      ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
-      ConvertAny<tensor::FromElementsOp>, ConvertAny<bufferization::ToMemrefOp>,
+      ConvertSub, ConvertMul, ConvertSquare, ConvertMontMul,
+      ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineParallelOp>,
+      ConvertAny<affine::AffineLoadOp>, ConvertAny<affine::AffineStoreOp>,
+      ConvertAny<affine::AffineYieldOp>, ConvertAny<linalg::GenericOp>,
+      ConvertAny<linalg::YieldOp>, ConvertAny<tensor::CastOp>,
+      ConvertAny<tensor::ExtractOp>, ConvertAny<tensor::FromElementsOp>,
+      ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>, ConvertAny<tensor::InsertOp>>(
       typeConverter, context);
 

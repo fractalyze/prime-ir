@@ -198,6 +198,23 @@ def PrimeField_MulOp : PrimeField_BinaryOp<"pf.mul", [Commutative]> {
   }];
 }
 
+// Prime field square.
+def PrimeField_SquareOp : PrimeField_Op<"pf.square", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "Prime field square";
+  let description = [{
+    Computes the square of a field element.
+
+    Example:
+    ```
+    %square = field.pf.square %a : field.pf<primeModulus>
+    ```
+  }];
+
+  let arguments = (ins PrimeFieldLike:$input);
+  let results = (outs PrimeFieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
 def PrimeField_MontMulOp : PrimeField_BinaryOp<"pf.mont_mul", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
   let summary = "Montgomery multiplication";
   let description = [{

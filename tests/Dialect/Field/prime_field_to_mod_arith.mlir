@@ -217,6 +217,27 @@ func.func @test_lower_mul_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
   return %res : !PFv
 }
 
+// CHECK-LABEL: @test_lower_square
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_lower_square() -> !PF1 {
+  // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
+  %c0 = field.pf.constant 4 : !PF1
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[C0]], %[[C0]] : [[T]]
+  %res = field.pf.square %c0 : !PF1
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : !PF1
+}
+
+// CHECK-LABEL: @test_lower_square_vec
+// CHECK-SAME: (%[[VAL:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_square_vec(%val : !PFv) -> !PFv {
+  // CHECK-NOT: field.pf.square
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[VAL]], %[[VAL]] : [[T]]
+  %res = field.pf.square %val : !PFv
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : !PFv
+}
+
 // CHECK-LABEL: @test_lower_mont_mul
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_mont_mul() -> !PF1 {
