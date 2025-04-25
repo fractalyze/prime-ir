@@ -117,3 +117,38 @@ func.func @test_negation() {
   %xyzz2 = elliptic_curve.negate %xyzz1 : !xyzz
   return
 }
+
+// CHECK-LABEL: @test_subtraction
+func.func @test_subtraction() {
+  %var1 = field.pf.constant 1 : !PF
+  %var2 = field.pf.constant 2 : !PF
+  %var3 = field.pf.constant 3 : !PF
+  %var4 = field.pf.constant 4 : !PF
+  %var5 = field.pf.constant 5 : !PF
+  %var6 = field.pf.constant 6 : !PF
+  %var8 = field.pf.constant 8 : !PF
+
+  %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
+  %affine2 = elliptic_curve.point %var3, %var6 : !PF -> !affine
+
+  %jacobian1 = elliptic_curve.point %var1, %var5, %var2 : !PF -> !jacobian
+  %jacobian2 = elliptic_curve.point %var3, %var6, %var1 : !PF -> !jacobian
+
+  %xyzz1 = elliptic_curve.point %var1, %var5, %var4, %var8 : !PF -> !xyzz
+  %xyzz2 = elliptic_curve.point %var3, %var6, %var1, %var1 : !PF -> !xyzz
+
+  // CHECK-NOT: elliptic_curve.sub
+  // affine, affine -> jacobian
+  %affine3 = elliptic_curve.sub %affine1, %affine2 : !affine, !affine -> !jacobian
+  // affine, jacobian -> jacobian
+  %jacobian3 = elliptic_curve.sub %affine1, %jacobian1 : !affine, !jacobian -> !jacobian
+  %jacobian4 = elliptic_curve.sub %jacobian1, %affine1 : !jacobian, !affine -> !jacobian
+  // affine, xyzz -> xyzz
+  %xyzz3 = elliptic_curve.sub %affine1, %xyzz1 : !affine, !xyzz -> !xyzz
+  %xyzz4 = elliptic_curve.sub %xyzz1, %affine1 : !xyzz, !affine -> !xyzz
+  // jacobian, jacobian -> jacobian
+  %jacobian5 = elliptic_curve.sub %jacobian1, %jacobian2 : !jacobian, !jacobian -> !jacobian
+  // xyzz, xyzz -> xyzz
+  %xyzz5 = elliptic_curve.sub %xyzz1, %xyzz2 : !xyzz, !xyzz -> !xyzz
+  return
+}

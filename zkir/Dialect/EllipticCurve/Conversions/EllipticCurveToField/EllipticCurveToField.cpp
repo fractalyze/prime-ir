@@ -373,6 +373,31 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
   }
 };
 
+struct ConvertSub : public OpConversionPattern<SubOp> {
+  explicit ConvertSub(MLIRContext *context)
+      : OpConversionPattern<SubOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      SubOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    Value p1 = adaptor.getLhs();
+    Value p2 = adaptor.getRhs();
+    Type p1Type = op.getLhs().getType();
+    Type p2Type = op.getRhs().getType();
+    Type outputType = op.getOutput().getType();
+
+    Value negP2 = convertNegateImpl(p2, p2Type, b);
+    Value result = convertAddImpl(p1, negP2, p1Type, p2Type, outputType, b);
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.cpp.inc"
@@ -397,8 +422,8 @@ void EllipticCurveToField::runOnOperation() {
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
   patterns.add<ConvertPoint, ConvertExtract, ConvertConvertPointType,
-               ConvertAdd, ConvertDouble, ConvertNegate>(typeConverter,
-                                                         context);
+               ConvertAdd, ConvertDouble, ConvertNegate, ConvertSub>(
+      typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
