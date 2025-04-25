@@ -1,0 +1,50 @@
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "EllipticCurveToField",
+    srcs = ["EllipticCurveToField.cpp"],
+    hdrs = [
+        "EllipticCurveToField.h",
+    ],
+    deps = [
+        ":pass_inc_gen",
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//zkir/Dialect/Field/IR:Field",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:TransformUtils",
+    ],
+)
+
+gentbl_cc_library(
+    name = "pass_inc_gen",
+    tbl_outs = [
+        (
+            [
+                "-gen-pass-decls",
+                "-name=EllipticCurveToField",
+            ],
+            "EllipticCurveToField.h.inc",
+        ),
+        (
+            ["-gen-rewriters"],
+            "EllipticCurveToField.cpp.inc",
+        ),
+        (
+            ["-gen-pass-doc"],
+            "EllipticCurveToField.md",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveToField.td",
+    deps = [
+        "//zkir/Dialect/EllipticCurve/IR:td_files",
+        "//zkir/Dialect/Field/IR:td_files",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)

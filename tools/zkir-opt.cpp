@@ -4,6 +4,7 @@
 #include "mlir/InitAllPasses.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h"
+#include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
@@ -29,6 +30,7 @@ int main(int argc, char **argv) {
   mlir::zkir::arith::registerArithToModArithPasses();
   mlir::zkir::field::registerFieldToModArithPasses();
   mlir::zkir::poly::registerPolyToFieldPasses();
+  mlir::zkir::elliptic_curve::registerEllipticCurveToFieldPasses();
 
   mlir::PassPipelineRegistration<>(
       "poly-to-llvm", "Run passes to lower the polynomial dialect to LLVM",
