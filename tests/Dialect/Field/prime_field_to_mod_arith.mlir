@@ -152,6 +152,27 @@ func.func @test_lower_add_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
   return %res : !PFv
 }
 
+// CHECK-LABEL: @test_lower_double
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_lower_double() -> !PF1 {
+  // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
+  %c0 = field.pf.constant 4 : !PF1
+  // CHECK: %[[RES:.*]] = mod_arith.add %[[C0]], %[[C0]] : [[T]]
+  %res = field.pf.double %c0 : !PF1
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : !PF1
+}
+
+// CHECK-LABEL: @test_lower_double_vec
+// CHECK-SAME: (%[[VAL:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_double_vec(%val : !PFv) -> !PFv {
+  // CHECK-NOT: field.pf.double
+  // CHECK: %[[RES:.*]] = mod_arith.add %[[VAL]], %[[VAL]] : [[T]]
+  %res = field.pf.double %val : !PFv
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : !PFv
+}
+
 // CHECK-LABEL: @test_lower_sub
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_sub() -> !PF1 {

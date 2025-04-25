@@ -156,6 +156,22 @@ def PrimeField_AddOp : PrimeField_BinaryOp<"pf.add", [Commutative]> {
   }];
 }
 
+// Prime field double.
+def PrimeField_DoubleOp : PrimeField_Op<"pf.double", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "Prime field double";
+  let description = [{
+    Computes the double of a field element.
+
+    Example:
+    ```
+    %double = field.pf.double %a : field.pf<primeModulus>
+    ```
+  }];
+  let arguments = (ins PrimeFieldLike:$input);
+  let results = (outs PrimeFieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
 // Prime field subtraction.
 def PrimeField_SubOp : PrimeField_BinaryOp<"pf.sub"> {
   let summary = "Prime field subtraction";
