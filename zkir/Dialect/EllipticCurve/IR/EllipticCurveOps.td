@@ -52,9 +52,9 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
   let hasCustomAssemblyFormat = 1;
 }
 
-////////////// BINARY OPERATIONS //////////////
+////////////// POINT ARITHMETIC OPERATIONS //////////////
 
-// // Elliptic curve point addition.
+// Elliptic curve point addition.
 def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
   let summary = "Elliptic curve point addition operation";
   let description = [{
@@ -73,7 +73,7 @@ def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
   }];
 }
 
-// // Elliptic curve point subtraction.
+// Elliptic curve point subtraction.
 def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
   let summary = "Elliptic curve point subtraction operation";
   let description = [{
