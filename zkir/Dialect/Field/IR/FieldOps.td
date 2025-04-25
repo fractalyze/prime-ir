@@ -16,7 +16,7 @@ def PrimeField_ConstantOp : Op<Field_Dialect, "pf.constant", [Pure]> {
   let description = [{
     Example:
     ```
-    %0 = field.pf.constant 123 : !field.pf<7>
+    %0 = field.pf.constant 123 : field.pf<7>
     ```
   }];
   let arguments = (ins TypedAttrInterface:$value);
@@ -46,8 +46,8 @@ def PrimeField_EncapsulateOp : PrimeField_Op<"pf.encapsulate", [Pure, Elementwis
 
     Example:
     ```
-    field.pf.encapsulate %c0 : i32 -> !field.pf<7>
-    field.pf.encapsulate %c1 : i64 -> !field.pf<7>
+    field.pf.encapsulate %c0 : i32 -> field.pf<7>
+    field.pf.encapsulate %c1 : i64 -> field.pf<7>
     ```
   }];
   let arguments = (ins SignlessIntegerLike:$input);
@@ -65,7 +65,7 @@ def PrimeField_ExtractOp : PrimeField_Op<"pf.extract", [Pure, ElementwiseMappabl
 
     Example:
     ```
-    %c0 = field.pf.extract %f0 : !field.pf<7 : i32> -> i32
+    %c0 = field.pf.extract %f0 : field.pf<7 : i32> -> i32
     ```
   }];
   let arguments = (ins PrimeFieldLike:$input);
@@ -111,7 +111,7 @@ def PrimeField_InverseOp : PrimeField_Op<"pf.inverse", [Involution, SameOperands
 
     Example:
     ```
-    %inv_a = field.pf.inverse %a : !field.pf<primeModulus>
+    %inv_a = field.pf.inverse %a : field.pf<primeModulus>
     ```
   }];
   let arguments = (ins PrimeFieldLike:$input);
@@ -151,7 +151,7 @@ def PrimeField_AddOp : PrimeField_BinaryOp<"pf.add", [Commutative]> {
 
     Example:
     ```
-    %r = field.pf.add %a, %b : !field.pf<primeModulus>
+    %r = field.pf.add %a, %b : field.pf<primeModulus>
     ```
   }];
 }
@@ -180,7 +180,7 @@ def PrimeField_SubOp : PrimeField_BinaryOp<"pf.sub"> {
 
     Example:
     ```
-    %r = field.pf.sub %a, %b : !field.pf<primeModulus>
+    %r = field.pf.sub %a, %b : field.pf<primeModulus>
     ```
   }];
 }
@@ -193,7 +193,7 @@ def PrimeField_MulOp : PrimeField_BinaryOp<"pf.mul", [Commutative]> {
 
     Example:
     ```
-    %r = field.mul %a, %b : !field.pf<primeModulus>
+    %r = field.mul %a, %b : field.pf<primeModulus>
     ```
   }];
 }

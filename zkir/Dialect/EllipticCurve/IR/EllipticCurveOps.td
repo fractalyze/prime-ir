@@ -40,9 +40,9 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
 
     Example:
     ```
-    %0 = elliptic_curve.point %x, %y : !elliptic_curve.affine<#curve>
-    %1 = elliptic_curve.point %x, %y, %z : !elliptic_curve.jacobian<#curve>
-    %2 = elliptic_curve.point %x, %y, %zz, %zzz : !elliptic_curve.xyzz<#curve>
+    %0 = elliptic_curve.point %x, %y : elliptic_curve.affine<#curve>
+    %1 = elliptic_curve.point %x, %y, %z : elliptic_curve.jacobian<#curve>
+    %2 = elliptic_curve.point %x, %y, %zz, %zzz : elliptic_curve.xyzz<#curve>
     ```
   }];
   let arguments = (ins Variadic<Field_PrimeFieldType>:$coords);
@@ -160,8 +160,8 @@ def EllipticCurve_ConvertPointTypeOp : EllipticCurve_UnaryOp<"convert_point_type
 
     Example:
     ```
-    !affine = !elliptic_curve.affine<#sw>
-    !jacobian = !elliptic_curve.jacobian<#sw>
+    !affine = elliptic_curve.affine<#sw>
+    !jacobian = elliptic_curve.jacobian<#sw>
 
     %converted = elliptic_curve.convert_point_type %0 : !affine -> !jacobian
     ```
