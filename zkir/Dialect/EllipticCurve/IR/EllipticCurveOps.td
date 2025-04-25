@@ -128,7 +128,7 @@ def EllipticCurve_NegateOp : EllipticCurve_UnaryOp<"negate", [Involution, SameOp
 }
 
 // Elliptic curve point doubling.
-def EllipticCurve_DblOp : EllipticCurve_UnaryOp<"dbl"> {
+def EllipticCurve_DoubleOp : EllipticCurve_UnaryOp<"double"> {
   let summary = "Elliptic curve point doubling operation";
   let description = [{
     Computes the double of an elliptic curve point. If an affine point is doubled,
@@ -140,7 +140,7 @@ def EllipticCurve_DblOp : EllipticCurve_UnaryOp<"dbl"> {
 
     Example:
     ```
-    %doubled = elliptic_curve.dbl %a : !affine -> !jacobian
+    %doubled = elliptic_curve.double %a : !affine -> !jacobian
     ```
   }];
   let hasVerifier = 1;
