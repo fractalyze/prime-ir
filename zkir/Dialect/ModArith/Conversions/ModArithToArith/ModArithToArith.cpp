@@ -7,6 +7,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
@@ -610,7 +611,8 @@ void ModArithToArith::runOnOperation() {
            ConvertAny<bufferization::MaterializeInDestinationOp>,
            ConvertAny<bufferization::ToMemrefOp>,
            ConvertAny<bufferization::ToTensorOp>, ConvertAny<linalg::GenericOp>,
-           ConvertAny<linalg::YieldOp>, ConvertAny<tensor::CastOp>,
+           ConvertAny<linalg::YieldOp>, ConvertAny<memref::LoadOp>,
+           ConvertAny<memref::StoreOp>, ConvertAny<tensor::CastOp>,
            ConvertAny<tensor::ExtractOp>, ConvertAny<tensor::FromElementsOp>,
            ConvertAny<tensor::InsertOp>>(typeConverter, context);
 
@@ -621,8 +623,9 @@ void ModArithToArith::runOnOperation() {
       affine::AffineApplyOp, affine::AffineStoreOp, affine::AffineYieldOp,
       bufferization::MaterializeInDestinationOp, bufferization::ToMemrefOp,
       bufferization::ToTensorOp, linalg::GenericOp, linalg::YieldOp,
-      tensor::CastOp, tensor::ExtractOp, tensor::FromElementsOp,
-      tensor::InsertOp>([&](auto op) { return typeConverter.isLegal(op); });
+      memref::LoadOp, memref::StoreOp, tensor::CastOp, tensor::ExtractOp,
+      tensor::FromElementsOp, tensor::InsertOp>(
+      [&](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();

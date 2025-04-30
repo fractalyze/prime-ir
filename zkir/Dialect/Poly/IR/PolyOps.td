@@ -4,6 +4,7 @@
 include "zkir/Dialect/Poly/IR/PolyAttributes.td"
 include "zkir/Dialect/Poly/IR/PolyDialect.td"
 include "zkir/Dialect/Poly/IR/PolyTypes.td"
+include "mlir/Interfaces/DestinationStyleOpInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -154,6 +155,24 @@ def Poly_FromTensorOp : Poly_Op<"from_tensor", [Pure]> {
   let arguments = (ins RankedTensorOf<[AnyType]>:$input);
   let results = (outs Poly_PolyType:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
+}
+
+def Poly_BitReverseOp : Poly_Op<"bit_reverse", [Involution, DestinationStyleOpInterface, SameOperandsAndResultType]> {
+  let summary = "Bit reverse the given tensor.";
+  let description = [{
+    Bit-reverses the given tensor.
+
+    Example:
+    ```
+    %evals = poly.bit_reverse %some_tensor : tensor<4x!pf>
+    ```
+  }];
+  let arguments = (ins RankedTensorOf<[Field_PrimeFieldType]>:$dest);
+  let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
+  let assemblyFormat = "$dest attr-dict `:` type($dest)";
+  let extraClassDeclaration = [{
+    MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
+  }];
 }
 
 def Poly_NTTOp : Poly_Op<"ntt", [Pure]> {
