@@ -98,7 +98,9 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(zkir::poly::createPolyToField());
   manager.addPass(zkir::field::createPrimeFieldToModArith());
   manager.addPass(zkir::mod_arith::createModArithToArith());
-  manager.addPass(createCanonicalizerPass());
+  // FIXME(batzor): With this, some memref loads are canonicalized even though
+  // it was modified in the middle, causing `poly_ntt_runner` test to fail.
+  // manager.addPass(createCanonicalizerPass());
 
   // Linalg
   manager.addNestedPass<FuncOp>(createConvertElementwiseToLinalgPass());

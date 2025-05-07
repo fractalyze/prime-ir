@@ -506,26 +506,34 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
         b.create<affine::AffineYieldOp>(ValueRange{batchSize, rootExp});
       });
 
-  // The final result is the coefficient tensor after all stages.
-  Value result = b.create<bufferization::ToTensorOp>(
-      tensorType.cloneWith(std::nullopt, baseFieldType), inputMemref,
-      /*restrict=*/true, /*writable=*/true);
-
   // For the inverse NTT, we must scale the output by the multiplicative inverse
   // of the degree.
   if constexpr (kInverse) {
     // TODO(batzor): Use scalar multiplication directly when it's available.
-    auto invDegreeConst =
+    Value invDegree =
         b.create<arith::ConstantOp>(rootAttr.getInvDegree().getValue());
-    auto degreeInvTensor = b.create<tensor::SplatOp>(invDegreeConst, rootsType);
-    auto fieldTensor = b.create<field::EncapsulateOp>(modType, degreeInvTensor);
-    if (rootAttr.getMontgomery() != mod_arith::MontgomeryAttr()) {
-      result = b.create<field::MontMulOp>(result, fieldTensor,
-                                          rootAttr.getMontgomery());
-    } else {
-      result = b.create<field::MulOp>(result, fieldTensor);
-    }
+    invDegree = b.create<field::EncapsulateOp>(baseFieldType, invDegree);
+    b.create<linalg::MapOp>(
+        /*inputs=*/ValueRange{inputMemref},
+        /*outputs=*/inputMemref,
+        /*bodyBuilder=*/
+        [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
+          ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
+          Value mulResult;
+          if (rootAttr.getMontgomery() != mod_arith::MontgomeryAttr()) {
+            mulResult = b.create<field::MontMulOp>(args[0], invDegree,
+                                                   rootAttr.getMontgomery());
+          } else {
+            mulResult = b.create<field::MulOp>(args[0], invDegree);
+          }
+          b.create<linalg::YieldOp>(mulResult);
+        });
   }
+
+  // The final result is the coefficient tensor after all stages.
+  Value result = b.create<bufferization::ToTensorOp>(
+      tensorType.cloneWith(std::nullopt, baseFieldType), inputMemref,
+      /*restrict=*/true, /*writable=*/true);
 
   return result;
 }

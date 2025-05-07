@@ -611,10 +611,11 @@ void ModArithToArith::runOnOperation() {
            ConvertAny<bufferization::MaterializeInDestinationOp>,
            ConvertAny<bufferization::ToMemrefOp>,
            ConvertAny<bufferization::ToTensorOp>, ConvertAny<linalg::GenericOp>,
-           ConvertAny<linalg::YieldOp>, ConvertAny<memref::LoadOp>,
-           ConvertAny<memref::StoreOp>, ConvertAny<tensor::CastOp>,
-           ConvertAny<tensor::ExtractOp>, ConvertAny<tensor::FromElementsOp>,
-           ConvertAny<tensor::InsertOp>>(typeConverter, context);
+           ConvertAny<linalg::MapOp>, ConvertAny<linalg::YieldOp>,
+           ConvertAny<memref::LoadOp>, ConvertAny<memref::StoreOp>,
+           ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
+           ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::InsertOp>>(
+          typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
@@ -622,9 +623,9 @@ void ModArithToArith::runOnOperation() {
       affine::AffineForOp, affine::AffineParallelOp, affine::AffineLoadOp,
       affine::AffineApplyOp, affine::AffineStoreOp, affine::AffineYieldOp,
       bufferization::MaterializeInDestinationOp, bufferization::ToMemrefOp,
-      bufferization::ToTensorOp, linalg::GenericOp, linalg::YieldOp,
-      memref::LoadOp, memref::StoreOp, tensor::CastOp, tensor::ExtractOp,
-      tensor::FromElementsOp, tensor::InsertOp>(
+      bufferization::ToTensorOp, linalg::GenericOp, linalg::MapOp,
+      linalg::YieldOp, memref::LoadOp, memref::StoreOp, tensor::CastOp,
+      tensor::ExtractOp, tensor::FromElementsOp, tensor::InsertOp>(
       [&](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
