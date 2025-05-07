@@ -29,13 +29,11 @@ static void fillWithRandom(Memref<i256> *input, const i256 &kPrime) {
   }
 }
 
-extern "C" void _mlir_ciface_ntt(Memref<i256> *output, Memref<i256> *input);
-extern "C" void _mlir_ciface_intt(Memref<i256> *output, Memref<i256> *input);
+extern "C" void _mlir_ciface_ntt(Memref<i256> *buffer);
+extern "C" void _mlir_ciface_intt(Memref<i256> *buffer);
 
-extern "C" void _mlir_ciface_ntt_mont(Memref<i256> *output,
-                                      Memref<i256> *input);
-extern "C" void _mlir_ciface_intt_mont(Memref<i256> *output,
-                                       Memref<i256> *input);
+extern "C" void _mlir_ciface_ntt_mont(Memref<i256> *buffer);
+extern "C" void _mlir_ciface_intt_mont(Memref<i256> *buffer);
 
 void BM_ntt_benchmark(::benchmark::State &state) {
   Memref<i256> input(NUM_COEFFS, 1);
@@ -43,15 +41,17 @@ void BM_ntt_benchmark(::benchmark::State &state) {
 
   Memref<i256> ntt(NUM_COEFFS, 1);
   for (auto _ : state) {
-    _mlir_ciface_ntt(&ntt, &input);
+    state.PauseTiming();
+    memcpy(ntt.pget(0, 0), input.pget(0, 0), sizeof(i256) * NUM_COEFFS);
+    state.ResumeTiming();
+    _mlir_ciface_ntt(&ntt);
   }
 
-  Memref<i256> intt(NUM_COEFFS, 1);
-  _mlir_ciface_intt(&intt, &ntt);
+  _mlir_ciface_intt(&ntt);
 
   for (int i = 0; i < NUM_COEFFS; i++) {
     for (int j = 0; j < 4; j++) {
-      EXPECT_EQ(intt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
+      EXPECT_EQ(ntt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
     }
   }
 }
@@ -63,16 +63,20 @@ void BM_intt_benchmark(::benchmark::State &state) {
   fillWithRandom(&input, kPrime);
 
   Memref<i256> ntt(NUM_COEFFS, 1);
-  _mlir_ciface_ntt(&ntt, &input);
+  memcpy(ntt.pget(0, 0), input.pget(0, 0), sizeof(i256) * NUM_COEFFS);
+  _mlir_ciface_ntt(&ntt);
 
   Memref<i256> intt(NUM_COEFFS, 1);
   for (auto _ : state) {
-    _mlir_ciface_intt(&intt, &ntt);
+    state.PauseTiming();
+    memcpy(intt.pget(0, 0), ntt.pget(0, 0), sizeof(i256) * NUM_COEFFS);
+    state.ResumeTiming();
+    _mlir_ciface_intt(&ntt);
   }
 
   for (int i = 0; i < NUM_COEFFS; i++) {
     for (int j = 0; j < 4; j++) {
-      EXPECT_EQ(intt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
+      EXPECT_EQ(ntt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
     }
   }
 }
@@ -85,15 +89,17 @@ void BM_ntt_mont_benchmark(::benchmark::State &state) {
 
   Memref<i256> ntt(NUM_COEFFS, 1);
   for (auto _ : state) {
-    _mlir_ciface_ntt_mont(&ntt, &input);
+    state.PauseTiming();
+    memcpy(ntt.pget(0, 0), input.pget(0, 0), sizeof(i256) * NUM_COEFFS);
+    state.ResumeTiming();
+    _mlir_ciface_ntt_mont(&ntt);
   }
 
-  Memref<i256> intt(NUM_COEFFS, 1);
-  _mlir_ciface_intt_mont(&intt, &ntt);
+  _mlir_ciface_intt_mont(&ntt);
 
   for (int i = 0; i < NUM_COEFFS; i++) {
     for (int j = 0; j < 4; j++) {
-      EXPECT_EQ(intt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
+      EXPECT_EQ(ntt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
     }
   }
 }
@@ -105,11 +111,15 @@ void BM_intt_mont_benchmark(::benchmark::State &state) {
   fillWithRandom(&input, kPrime);
 
   Memref<i256> ntt(NUM_COEFFS, 1);
-  _mlir_ciface_ntt_mont(&ntt, &input);
+  memcpy(ntt.pget(0, 0), input.pget(0, 0), sizeof(i256) * NUM_COEFFS);
+  _mlir_ciface_ntt_mont(&ntt);
 
   Memref<i256> intt(NUM_COEFFS, 1);
   for (auto _ : state) {
-    _mlir_ciface_intt_mont(&intt, &ntt);
+    state.PauseTiming();
+    memcpy(intt.pget(0, 0), ntt.pget(0, 0), sizeof(i256) * NUM_COEFFS);
+    state.ResumeTiming();
+    _mlir_ciface_intt_mont(&intt);
   }
 
   for (int i = 0; i < NUM_COEFFS; i++) {
@@ -131,12 +141,12 @@ BENCHMARK(BM_intt_mont_benchmark)->Unit(::benchmark::kMillisecond);
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
 //   L2 Unified 4096 KiB (x14)
-// Load Average: 6.49, 5.64, 5.49
-// -------------------------------------------------------------------------
-// Benchmark                               Time             CPU   Iterations
-// -------------------------------------------------------------------------
-// BM_ntt_benchmark                     1656 ms         1050 ms            1
-// BM_intt_benchmark/iterations:1       1791 ms         1090 ms            1
-// BM_ntt_mont_benchmark                38.6 ms         18.6 ms           40
-// BM_intt_mont_benchmark               99.4 ms         56.4 ms           11
+// Load Average: 8.66, 7.19, 7.37
+// -----------------------------------------------------------------
+// Benchmark                       Time             CPU   Iterations
+// -----------------------------------------------------------------
+// BM_ntt_benchmark             1603 ms         1085 ms            1
+// BM_intt_benchmark            1585 ms         1120 ms            1
+// BM_ntt_mont_benchmark        34.7 ms         16.8 ms           42
+// BM_intt_mont_benchmark       33.8 ms         16.6 ms           42
 // NOLINTEND()
