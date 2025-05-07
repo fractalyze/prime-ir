@@ -67,17 +67,17 @@ func.func @test_lower_from_tensor(%t : tensor<4x!PF1>) -> !poly_ty1 {
 }
 
 // CHECK-LABEL: @test_lower_ntt
-// CHECK-SAME: (%[[INPUT:.*]]: [[P:.*]]) -> [[T:.*]] {
-func.func @test_lower_ntt(%input : !poly_ty1) -> tensor<4x!PF1> {
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_ntt(%input : tensor<4x!PF1>) -> tensor<4x!PF1> {
   // CHECK-NOT: poly.ntt
-  %res = poly.ntt %input {root=#root} : !poly_ty1 -> tensor<4x!PF1>
+  %res = poly.ntt %input {root=#root} : tensor<4x!PF1>
   return %res: tensor<4x!PF1>
 }
 
 // CHECK-LABEL: @test_lower_intt
 // CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[P:.*]] {
-func.func @test_lower_intt(%input : tensor<4x!PF1>) -> !poly_ty1 {
+func.func @test_lower_intt(%input : tensor<4x!PF1>) -> tensor<4x!PF1> {
   // CHECK-NOT: poly.intt
-  %res = poly.intt %input {root=#root} : tensor<4x!PF1> -> !poly_ty1
-  return %res: !poly_ty1
+  %res = poly.intt %input {root=#root} : tensor<4x!PF1>
+  return %res: tensor<4x!PF1>
 }

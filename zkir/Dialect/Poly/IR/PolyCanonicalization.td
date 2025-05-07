@@ -8,8 +8,8 @@ include "mlir/IR/PatternBase.td"
 def Equal : Constraint<CPred<"$0 == $1">>;
 
 def INTTAfterNTT : Pat<
-  (Poly_INTTOp (Poly_NTTOp $poly, $r1), $r2),
-  (replaceWithValue $poly),
+  (Poly_INTTOp (Poly_NTTOp $tensor, $r1), $r2),
+  (replaceWithValue $tensor),
   [(Equal $r1, $r2)]
 >;
 

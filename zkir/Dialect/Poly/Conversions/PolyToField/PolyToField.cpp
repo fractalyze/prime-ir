@@ -507,10 +507,9 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
       });
 
   // The final result is the coefficient tensor after all stages.
-  UnitAttr restrictAttr = b.getUnitAttr();
   Value result = b.create<bufferization::ToTensorOp>(
       tensorType.cloneWith(std::nullopt, baseFieldType), inputMemref,
-      restrictAttr);
+      /*restrict=*/true, /*writable=*/true);
 
   // For the inverse NTT, we must scale the output by the multiplicative inverse
   // of the degree.
@@ -542,26 +541,19 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto polyTy = dyn_cast<PolyType>(op.getInput().getType());
-    if (!polyTy) {
-      op.emitError(
-          "Can't directly lower for a tensor of polynomials. "
-          "First run --convert-elementwise-to-affine.");
-      return failure();
-    }
+    auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
+    auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
 
-    auto coeffType = cast<field::PrimeFieldType>(polyTy.getBaseField());
     auto coeffStorageType = coeffType.getModulus().getType();
-    auto inputType = dyn_cast<RankedTensorType>(adaptor.getInput().getType());
     auto intTensorType =
-        RankedTensorType::get(inputType.getShape(), coeffStorageType);
+        RankedTensorType::get(tensorType.getShape(), coeffStorageType);
 
     // Transform the input tensor to bit-reversed order.
-    auto bitReversed = b.create<BitReverseOp>(adaptor.getInput());
+    auto bitReversed = b.create<BitReverseOp>(adaptor.getDest());
 
     // Compute the ntt and extract the values
     Value nttResult =
-        fastNTT<false>(b, op.getRoot(), intTensorType, inputType, bitReversed);
+        fastNTT<false>(b, op.getRoot(), intTensorType, tensorType, bitReversed);
 
     rewriter.replaceOp(op, nttResult);
     return success();
@@ -577,21 +569,17 @@ struct ConvertINTT : public OpConversionPattern<INTTOp> {
   LogicalResult matchAndRewrite(
       INTTOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
-    auto res = getCommonConversionInfo(op, typeConverter);
-    if (failed(res)) return failure();
-    auto typeInfo = res.value();
-
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto coeffType = cast<field::PrimeFieldType>(typeInfo.coefficientType);
-    auto coeffStorageType = coeffType.getModulus().getType();
-    auto inputType = cast<RankedTensorType>(adaptor.getInput().getType());
-    auto intTensorType =
-        RankedTensorType::get(inputType.getShape(), coeffStorageType);
+    auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
+    auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
 
-    auto tensorType = typeConverter->convertType(op.getOutput().getType());
+    auto coeffStorageType = coeffType.getModulus().getType();
+    auto intTensorType =
+        RankedTensorType::get(tensorType.getShape(), coeffStorageType);
+
     auto inttResult = fastNTT<true>(b, op.getRoot(), intTensorType, tensorType,
-                                    adaptor.getInput());
+                                    adaptor.getDest());
     auto reversedBitOrder = b.create<BitReverseOp>(inttResult);
     rewriter.replaceOp(op, reversedBitOrder);
 

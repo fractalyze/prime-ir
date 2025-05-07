@@ -177,11 +177,11 @@ def Poly_BitReverseOp : Poly_Op<"bit_reverse", [Involution, DestinationStyleOpIn
   }];
 }
 
-def Poly_NTTOp : Poly_Op<"ntt", [Pure]> {
+def Poly_NTTOp : Poly_Op<"ntt", [Pure, DestinationStyleOpInterface, SameOperandsAndResultType]> {
   let summary = "Compute the number theoretic transform.";
   let description = [{
     Computes the forward integer Number Theoretic Transform
-    (NTT) on the input polynomial. It returns a tensor containing a point-value
+    (NTT) on the input coefficients. It returns a tensor containing a point-value
     representation of the input polynomial.
 
     Given an input polynomial `F(x)` with degree `n`, and a primitive `n`-th root of
@@ -191,20 +191,24 @@ def Poly_NTTOp : Poly_Op<"ntt", [Pure]> {
 
     Example:
     ```
-    %evals = poly.ntt %poly {root=#root}: !poly_ty -> tensor<4x!pf>
+    %coeffs = poly.to_tensor %poly : !poly_ty -> tensor<4x!pf>
+    %evals = poly.ntt %coeffs {root=#root}: tensor<4x!pf>
     ```
   }];
 
   let arguments = (ins
-    Poly_PolyType:$input,
+    RankedTensorOf<[Field_PrimeFieldType]>:$dest,
     Poly_PrimitiveRootAttr:$root
   );
   let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
-  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
+  let assemblyFormat = "$dest attr-dict `:` type($dest)";
   let hasCanonicalizer = 1;
+  let extraClassDeclaration = [{
+    MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
+  }];
 }
 
-def Poly_INTTOp : Poly_Op<"intt", [Pure]> {
+def Poly_INTTOp : Poly_Op<"intt", [Pure, DestinationStyleOpInterface, SameOperandsAndResultType]> {
   let summary = "Compute the inverse Number Theoretic Transform.";
   let description = [{
     Computes the inverse Number Theoretic Transform (INTT) on the input
@@ -215,16 +219,19 @@ def Poly_INTTOp : Poly_Op<"intt", [Pure]> {
 
     Example:
     ```
-    %poly = poly.intt %evals {root=#root} : tensor<4x!pf> -> !poly_ty
+    %coeffs = poly.intt %evals {root=#root} : tensor<4x!pf>
     ```
   }];
   let arguments = (ins
-    RankedTensorOf<[Field_PrimeFieldType]>:$input,
+    RankedTensorOf<[Field_PrimeFieldType]>:$dest,
     Poly_PrimitiveRootAttr:$root
   );
-  let results = (outs Poly_PolyType:$output);
-  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
+  let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
+  let assemblyFormat = "$dest attr-dict `:` type($dest)";
   let hasCanonicalizer = 1;
+  let extraClassDeclaration = [{
+    MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
+  }];
 }
 
 #endif  // ZKIR_DIALECT_POLY_IR_POLYOPS_TD_
