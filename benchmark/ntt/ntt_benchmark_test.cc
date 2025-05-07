@@ -25,11 +25,10 @@ static void fillWithRandom(Memref<i256> *input, const i256 &kPrime) {
   std::mt19937_64 rng(std::random_device{}());  // NOLINT(whitespace/braces)
   std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
   for (int i = 0; i < NUM_COEFFS; i++) {
-    *input->pget(0, i) = i256::randomLT(kPrime, rng, dist);
+    *input->pget(i, 0) = i256::randomLT(kPrime, rng, dist);
   }
 }
 
-extern "C" void _mlir_ciface_input_generation(Memref<i256> *output);
 extern "C" void _mlir_ciface_ntt(Memref<i256> *output, Memref<i256> *input);
 extern "C" void _mlir_ciface_intt(Memref<i256> *output, Memref<i256> *input);
 
@@ -39,21 +38,20 @@ extern "C" void _mlir_ciface_intt_mont(Memref<i256> *output,
                                        Memref<i256> *input);
 
 void BM_ntt_benchmark(::benchmark::State &state) {
-  Memref<i256> input(1, NUM_COEFFS);
-  _mlir_ciface_input_generation(&input);
+  Memref<i256> input(NUM_COEFFS, 1);
   fillWithRandom(&input, kPrime);
 
-  Memref<i256> ntt(1, NUM_COEFFS);
+  Memref<i256> ntt(NUM_COEFFS, 1);
   for (auto _ : state) {
     _mlir_ciface_ntt(&ntt, &input);
   }
 
-  Memref<i256> intt(1, NUM_COEFFS);
+  Memref<i256> intt(NUM_COEFFS, 1);
   _mlir_ciface_intt(&intt, &ntt);
 
   for (int i = 0; i < NUM_COEFFS; i++) {
     for (int j = 0; j < 4; j++) {
-      EXPECT_EQ(intt.pget(0, i)->limbs[j], input.pget(0, i)->limbs[j]);
+      EXPECT_EQ(intt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
     }
   }
 }
@@ -61,21 +59,20 @@ void BM_ntt_benchmark(::benchmark::State &state) {
 BENCHMARK(BM_ntt_benchmark)->Unit(::benchmark::kMillisecond);
 
 void BM_intt_benchmark(::benchmark::State &state) {
-  Memref<i256> input(1, NUM_COEFFS);
-  _mlir_ciface_input_generation(&input);
+  Memref<i256> input(NUM_COEFFS, 1);
   fillWithRandom(&input, kPrime);
 
-  Memref<i256> ntt(1, NUM_COEFFS);
+  Memref<i256> ntt(NUM_COEFFS, 1);
   _mlir_ciface_ntt(&ntt, &input);
 
-  Memref<i256> intt(1, NUM_COEFFS);
+  Memref<i256> intt(NUM_COEFFS, 1);
   for (auto _ : state) {
     _mlir_ciface_intt(&intt, &ntt);
   }
 
   for (int i = 0; i < NUM_COEFFS; i++) {
     for (int j = 0; j < 4; j++) {
-      EXPECT_EQ(intt.pget(0, i)->limbs[j], input.pget(0, i)->limbs[j]);
+      EXPECT_EQ(intt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
     }
   }
 }
@@ -83,21 +80,20 @@ void BM_intt_benchmark(::benchmark::State &state) {
 BENCHMARK(BM_intt_benchmark)->Unit(::benchmark::kMillisecond);
 
 void BM_ntt_mont_benchmark(::benchmark::State &state) {
-  Memref<i256> input(1, NUM_COEFFS);
-  _mlir_ciface_input_generation(&input);
+  Memref<i256> input(NUM_COEFFS, 1);
   fillWithRandom(&input, kPrime);
 
-  Memref<i256> ntt(1, NUM_COEFFS);
+  Memref<i256> ntt(NUM_COEFFS, 1);
   for (auto _ : state) {
     _mlir_ciface_ntt_mont(&ntt, &input);
   }
 
-  Memref<i256> intt(1, NUM_COEFFS);
+  Memref<i256> intt(NUM_COEFFS, 1);
   _mlir_ciface_intt_mont(&intt, &ntt);
 
   for (int i = 0; i < NUM_COEFFS; i++) {
     for (int j = 0; j < 4; j++) {
-      EXPECT_EQ(intt.pget(0, i)->limbs[j], input.pget(0, i)->limbs[j]);
+      EXPECT_EQ(intt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
     }
   }
 }
@@ -105,21 +101,20 @@ void BM_ntt_mont_benchmark(::benchmark::State &state) {
 BENCHMARK(BM_ntt_mont_benchmark)->Unit(::benchmark::kMillisecond);
 
 void BM_intt_mont_benchmark(::benchmark::State &state) {
-  Memref<i256> input(1, NUM_COEFFS);
-  _mlir_ciface_input_generation(&input);
+  Memref<i256> input(NUM_COEFFS, 1);
   fillWithRandom(&input, kPrime);
 
-  Memref<i256> ntt(1, NUM_COEFFS);
+  Memref<i256> ntt(NUM_COEFFS, 1);
   _mlir_ciface_ntt_mont(&ntt, &input);
 
-  Memref<i256> intt(1, NUM_COEFFS);
+  Memref<i256> intt(NUM_COEFFS, 1);
   for (auto _ : state) {
     _mlir_ciface_intt_mont(&intt, &ntt);
   }
 
   for (int i = 0; i < NUM_COEFFS; i++) {
     for (int j = 0; j < 4; j++) {
-      EXPECT_EQ(intt.pget(0, i)->limbs[j], input.pget(0, i)->limbs[j]);
+      EXPECT_EQ(intt.pget(i, 0)->limbs[j], input.pget(i, 0)->limbs[j]);
     }
   }
 }

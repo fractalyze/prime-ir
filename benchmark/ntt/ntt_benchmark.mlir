@@ -10,14 +10,6 @@
 #mont = #mod_arith.montgomery<!mod>
 #root_mont = #poly.primitive_root<root=#root_elem, degree=1048576:i256, montgomery=#mont>
 
-func.func @input_generation() -> !poly_ty attributes { llvm.emit_c_interface } {
-  %c42 = arith.constant 6420 : i256
-  %full = tensor.splat %c42 : !intt_ty
-  %coeffs = field.pf.encapsulate %full : !intt_ty -> !coefft_ty
-  %poly = poly.from_tensor %coeffs : !coefft_ty -> !poly_ty
-  return %poly : !poly_ty
-}
-
 func.func @ntt(%arg0 : !poly_ty) -> !intt_ty attributes { llvm.emit_c_interface } {
   %0 = poly.ntt %arg0 {root=#root} : !poly_ty -> !coefft_ty
   %1 = field.pf.extract %0 : !coefft_ty -> !intt_ty
