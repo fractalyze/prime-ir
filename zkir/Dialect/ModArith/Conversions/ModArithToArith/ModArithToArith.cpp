@@ -158,11 +158,15 @@ struct ConvertReduce : public OpConversionPattern<ReduceOp> {
       ReduceOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
+                                             arith::IntegerOverflowFlags::nsw);
+    auto noOverflow =
+        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
 
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
     // ModArithType ensures cmod can be correctly interpreted as a signed number
     auto rems = b.create<arith::RemSIOp>(adaptor.getOperands()[0], cmod);
-    auto add = b.create<arith::AddIOp>(rems, cmod);
+    auto add = b.create<arith::AddIOp>(rems, cmod, noOverflow);
     // TODO(google/heir #710): better with a subifge
     auto remu = b.create<arith::RemUIOp>(add, cmod);
     rewriter.replaceOp(op, remu);
@@ -207,6 +211,11 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     TypedAttr limbShiftAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow),
                                                (numLimbs - 1) * limbWidth);
 
+    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
+                                             arith::IntegerOverflowFlags::nsw);
+    auto noOverflow =
+        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
+
     // Splat the attributes to match the shape of `tLow`.
     if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
       limbType = shapedType.cloneWith(std::nullopt, limbType);
@@ -238,11 +247,11 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
       // Add the product to `T`.
       auto sum = b.create<arith::AddUIExtendedOp>(tLow, mN.getLow());
       tLow = sum.getSum();
-      tHigh = b.create<arith::AddIOp>(tHigh, mN.getHigh());
+      tHigh = b.create<arith::AddIOp>(tHigh, mN.getHigh(), noOverflow);
       // Add carry from the `sum` to `tHigh`.
       auto carryExt =
           b.create<arith::ExtUIOp>(tHigh.getType(), sum.getOverflow());
-      tHigh = b.create<arith::AddIOp>(tHigh, carryExt);
+      tHigh = b.create<arith::AddIOp>(tHigh, carryExt, noOverflow);
       // Shift right by `limbWidth` to discard the zeroed limb.
       tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
       // copy the lowest limb of `tHigh` to the highest limb of `tLow`
@@ -257,7 +266,7 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     // `modulus`.
     auto cmp =
         b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, tLow, modConst);
-    auto sub = b.create<arith::SubIOp>(tLow, modConst);
+    auto sub = b.create<arith::SubIOp>(tLow, modConst, noOverflow);
     auto result = b.create<arith::SelectOp>(cmp, sub, tLow);
 
     rewriter.replaceOp(op, result);
@@ -438,10 +447,16 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
+                                             arith::IntegerOverflowFlags::nsw);
+    auto noOverflow =
+        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
+
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
-    auto add = b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs());
+    auto add =
+        b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs(), noOverflow);
     auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, add, cmod);
-    auto sub = b.create<arith::SubIOp>(add, cmod);
+    auto sub = b.create<arith::SubIOp>(add, cmod, noOverflow);
     auto select = b.create<arith::SelectOp>(ifge, sub, add);
 
     rewriter.replaceOp(op, select);
@@ -459,10 +474,15 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
       SubOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
+                                             arith::IntegerOverflowFlags::nsw);
+    auto noOverflow =
+        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
 
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
-    auto sub = b.create<arith::SubIOp>(adaptor.getLhs(), adaptor.getRhs());
-    auto add = b.create<arith::AddIOp>(sub, cmod);
+    auto sub =
+        b.create<arith::SubIOp>(adaptor.getLhs(), adaptor.getRhs(), noOverflow);
+    auto add = b.create<arith::AddIOp>(sub, cmod, noOverflow);
     auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge,
                                         adaptor.getLhs(), adaptor.getRhs());
     auto select = b.create<arith::SelectOp>(ifge, sub, add);
@@ -507,6 +527,10 @@ struct ConvertMac : public OpConversionPattern<MacOp> {
       MacOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
+                                             arith::IntegerOverflowFlags::nsw);
+    auto noOverflow =
+        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
 
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op, true));
     auto x = b.create<arith::ExtUIOp>(modulusType(op, true),
@@ -516,7 +540,7 @@ struct ConvertMac : public OpConversionPattern<MacOp> {
     auto acc = b.create<arith::ExtUIOp>(modulusType(op, true),
                                         adaptor.getOperands()[2]);
     auto mul = b.create<arith::MulIOp>(x, y);
-    auto add = b.create<arith::AddIOp>(mul, acc);
+    auto add = b.create<arith::AddIOp>(mul, acc, noOverflow);
     auto remu = b.create<arith::RemUIOp>(add, cmod);
     auto trunc = b.create<arith::TruncIOp>(modulusType(op), remu);
 
