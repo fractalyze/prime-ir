@@ -31,3 +31,13 @@ cc_library(
         "@llvm-project//mlir:TransformUtils",
     ],
 )
+
+cc_library(
+    name = "OpUtils",
+    srcs = ["OpUtils.cpp"],
+    hdrs = ["OpUtils.h"],
+    deps = [
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
