@@ -5,6 +5,7 @@ include "zkir/Dialect/Field/IR/FieldAttributes.td"
 include "zkir/Dialect/Field/IR/FieldDialect.td"
 include "zkir/Dialect/Field/IR/FieldTypes.td"
 include "zkir/Dialect/ModArith/IR/ModArithAttributes.td"
+include "mlir/Dialect/Arith/IR/ArithBase.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
@@ -232,6 +233,39 @@ def PrimeField_MontMulOp : PrimeField_BinaryOp<"pf.mont_mul", [Pure, Elementwise
   );
   let results = (outs PrimeFieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
+def PrimeField_CmpOp : PrimeField_Op<"pf.cmp", [SameTypeOperands, TypesMatchWith<
+  "result type has i1 element type and same shape as operands",
+  "lhs", "result", "getI1SameShape($_self)">]> {
+  let summary = "Prime field comparison operation";
+  let description = [{
+    **From description of `Arith_CmpIOp`**
+    Its first argument is an attribute that defines which type of comparison is
+    performed. The following comparisons are supported:
+
+    -   equal (mnemonic: `"eq"`; integer value: `0`)
+    -   not equal (mnemonic: `"ne"`; integer value: `1`)
+    -   unsigned less than (mnemonic: `"ult"`; integer value: `6`)
+    -   unsigned less than or equal (mnemonic: `"ule"`; integer value: `7`)
+    -   unsigned greater than (mnemonic: `"ugt"`; integer value: `8`)
+    -   unsigned greater than or equal (mnemonic: `"uge"`; integer value: `9`)
+
+    The result is `1` if the comparison is true and `0` otherwise. For vector or
+    tensor operands, the comparison is performed elementwise and the element of
+    the result indicates whether the comparison is true for the operand elements
+    with the same indices as those of the result.
+
+    Example:
+    ```
+    %res = field.pf.cmp slt, %a, %b : !PF
+    ```
+  }];
+  let arguments = (ins Arith_CmpIPredicateAttr:$predicate,
+                       PrimeFieldLike:$lhs,
+                       PrimeFieldLike:$rhs);
+  let results = (outs BoolLike:$result);
+  let assemblyFormat = "$predicate `,` $lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDOPS_TD_

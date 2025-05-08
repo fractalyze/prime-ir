@@ -23,6 +23,7 @@ cc_library(
         ":ops_inc_gen",
         ":types_inc_gen",
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Utils:OpUtils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
@@ -41,6 +42,7 @@ td_library(
     ],
     deps = [
         "//zkir/Dialect/ModArith/IR:td_files",
+        "@llvm-project//mlir:ArithOpsTdFiles",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",

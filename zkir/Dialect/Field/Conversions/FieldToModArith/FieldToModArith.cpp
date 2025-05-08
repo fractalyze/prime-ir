@@ -301,6 +301,26 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
   }
 };
 
+// TODO(ashjeong): Account for Montgomery domain inputs. Currently only accounts
+// for base domain inputs.
+struct ConvertCmp : public OpConversionPattern<CmpOp> {
+  explicit ConvertCmp(mlir::MLIRContext *context)
+      : OpConversionPattern<CmpOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      CmpOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto cmpOp = b.create<mod_arith::CmpOp>(op.getPredicate(), adaptor.getLhs(),
+                                            adaptor.getRhs());
+    rewriter.replaceOp(op, cmpOp);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
@@ -327,7 +347,7 @@ void PrimeFieldToModArith::runOnOperation() {
   patterns.add<
       ConvertConstant, ConvertEncapsulate, ConvertExtract, ConvertToMont,
       ConvertFromMont, ConvertInverse, ConvertNegate, ConvertAdd, ConvertDouble,
-      ConvertSub, ConvertMul, ConvertSquare, ConvertMontMul,
+      ConvertSub, ConvertMul, ConvertSquare, ConvertMontMul, ConvertCmp,
       ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineParallelOp>,
       ConvertAny<affine::AffineLoadOp>, ConvertAny<affine::AffineStoreOp>,
       ConvertAny<affine::AffineYieldOp>, ConvertAny<linalg::GenericOp>,
