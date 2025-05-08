@@ -28,8 +28,8 @@ jobs:
         with:
           bazelisk-cache: true
           disk-cache: ${{ runner.os }}-zkir_bazelbuild
-          repository-cache: false
-          external-cache: false
+          repository-cache: true
+          external-cache: true
 
       - name: Run `bazel build`
         run: |
