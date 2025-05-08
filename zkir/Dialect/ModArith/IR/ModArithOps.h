@@ -1,11 +1,13 @@
 #ifndef ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_
 #define ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_
 
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "zkir/Utils/OpUtils.h"
 
 #define GET_OP_CLASSES
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h.inc"

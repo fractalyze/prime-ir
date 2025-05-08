@@ -4,6 +4,7 @@
 include "zkir/Dialect/ModArith/IR/ModArithAttributes.td"
 include "zkir/Dialect/ModArith/IR/ModArithDialect.td"
 include "zkir/Dialect/ModArith/IR/ModArithTypes.td"
+include "mlir/Dialect/Arith/IR/ArithBase.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
@@ -254,6 +255,38 @@ def ModArith_MontMulOp : ModArith_Op<"mont_mul", [Pure, ElementwiseMappable, Sam
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
+def ModArith_CmpOp : ModArith_Op<"cmp", [SameTypeOperands, TypesMatchWith<
+  "result type has i1 element type and same shape as operands",
+  "lhs", "result", "getI1SameShape($_self)">]> {
+  let summary = "Modular comparison operation";
+  let description = [{
+    **From description of `Arith_CmpIOp`**
+    Its first argument is an attribute that defines which type of comparison is
+    performed. The following comparisons are supported:
+
+    -   equal (mnemonic: `"eq"`; integer value: `0`)
+    -   not equal (mnemonic: `"ne"`; integer value: `1`)
+    -   unsigned less than (mnemonic: `"ult"`; integer value: `6`)
+    -   unsigned less than or equal (mnemonic: `"ule"`; integer value: `7`)
+    -   unsigned greater than (mnemonic: `"ugt"`; integer value: `8`)
+    -   unsigned greater than or equal (mnemonic: `"uge"`; integer value: `9`)
+
+    The result is `1` if the comparison is true and `0` otherwise. For vector or
+    tensor operands, the comparison is performed elementwise and the element of
+    the result indicates whether the comparison is true for the operand elements
+    with the same indices as those of the result.
+
+    Example:
+    ```
+    %res = mod_arith.cmp slt, %a, %b : mod_arith.int<65537 : i256>
+    ```
+  }];
+  let arguments = (ins Arith_CmpIPredicateAttr:$predicate,
+                       ModArithLike:$lhs,
+                       ModArithLike:$rhs);
+  let results = (outs BoolLike:$result);
+  let assemblyFormat = "$predicate `,` $lhs `,` $rhs attr-dict `:` type($lhs)";
+}
 
 def ModArith_MacOp : ModArith_Op<"mac", [SameOperandsAndResultType, Pure, ElementwiseMappable]> {
   let summary = "Modular multiplication-and-accumulation operation";

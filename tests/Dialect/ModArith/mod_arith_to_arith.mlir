@@ -228,6 +228,27 @@ func.func @test_lower_constant_tensor() -> !Zpv {
   return %res : !Zpv
 }
 
+// CHECK-LABEL: @test_lower_cmp
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) {
+func.func @test_lower_cmp(%lhs : !Zp) {
+  // CHECK: %[[RHS:.*]] = arith.constant 5 : [[T]]
+  %rhs = mod_arith.constant 5:  !Zp
+  // CHECK-NOT: mod_arith.cmp
+  // %[[EQUAL:.*]] = arith.cmpi [[eq:.*]], %[[LHS]], %[[RHS]] : [[i32]]
+  // %[[NOTEQUAL:.*]] = arith.cmpi [[ne:.*]], %[[LHS]], %[[RHS]] : [[i32]]
+  // %[[LESSTHAN:.*]] = arith.cmpi [[ult:.*]], %[[LHS]], %[[RHS]] : [[i32]]
+  // %[[LESSTHANOREQUALS:.*]] = arith.cmpi [[ule:.*]], %[[LHS]], %[[RHS]] : [[i32]]
+  // %[[GREATERTHAN:.*]] = arith.cmpi [[ugt:.*]], %[[LHS]], %[[RHS]] : [[i32]]
+  // %[[GREATERTHANOREQUALS:.*]] = arith.cmpi [[uge:.*]], %[[LHS]], %[[RHS]] : [[i32]]
+  %equal = mod_arith.cmp eq, %lhs, %rhs : !Zp
+  %notEqual = mod_arith.cmp ne, %lhs, %rhs : !Zp
+  %lessThan = mod_arith.cmp ult, %lhs, %rhs : !Zp
+  %lessThanOrEquals = mod_arith.cmp ule, %lhs, %rhs : !Zp
+  %greaterThan = mod_arith.cmp ugt, %lhs, %rhs : !Zp
+  %greaterThanOrEquals = mod_arith.cmp uge, %lhs, %rhs : !Zp
+  return
+}
+
 // CHECK-LABEL: @test_lower_mac
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]], %[[ACC:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_mac(%lhs : !Zp, %rhs : !Zp, %acc : !Zp) -> !Zp {
