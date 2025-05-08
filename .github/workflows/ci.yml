@@ -25,14 +25,11 @@ jobs:
 
       - name: Setup Bazelisk
         uses: bazel-contrib/setup-bazel@0.14.0
-
-      - name: Mount Bazel Cache
-        uses: actions/cache@v4
         with:
-          path: "~/.cache/bazel"
-          key: ${{ runner.os }}-zkir_bazelbuild-${{ hashFiles('.bazelversion', '.bazelrc', 'WORKSPACE', 'WORKSPACE.bazel', 'MODULE.bazel') }}
-          restore-keys: |
-            ${{ runner.os }}-zkir_bazelbuild-
+          bazelisk-cache: true
+          disk-cache: ${{ runner.os }}-zkir_bazelbuild
+          repository-cache: false
+          external-cache: false
 
       - name: Run `bazel build`
         run: |
