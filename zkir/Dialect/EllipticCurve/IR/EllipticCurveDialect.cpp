@@ -158,18 +158,18 @@ LogicalResult PointOp::verify() {
   uint8_t numCoords = getNumOperands();
   auto operands = getOperands();
   field::PrimeFieldType baseField =
-      dyn_cast<field::PrimeFieldType>(operands[0].getType());
+      cast<field::PrimeFieldType>(operands[0].getType());
 
-  if (dyn_cast<AffineType>(outputType) && numCoords != 2) {
+  if (isa<AffineType>(outputType) && numCoords != 2) {
     return emitError() << "Wrong number of coordinates for affine type";
-  } else if (dyn_cast<JacobianType>(outputType) && numCoords != 3) {
+  } else if (isa<JacobianType>(outputType) && numCoords != 3) {
     return emitError() << "Wrong number of coordinates for jacobian type";
-  } else if (dyn_cast<XYZZType>(outputType) && numCoords != 4) {
+  } else if (isa<XYZZType>(outputType) && numCoords != 4) {
     return emitError() << "Wrong number of coordinates for xyzz type";
   }
 
   for (int i = 1; i < operands.size(); ++i) {
-    if (baseField != dyn_cast<field::PrimeFieldType>(operands[i].getType())) {
+    if (baseField != cast<field::PrimeFieldType>(operands[i].getType())) {
       return emitError() << "All coordinates are not of the same prime field";
     }
   }
@@ -181,14 +181,14 @@ LogicalResult PointOp::verify() {
 
 template <typename OpType>
 LogicalResult verifyBinaryOp(OpType op) {
-  auto lhsType = op.getLhs().getType();
-  auto rhsType = op.getRhs().getType();
-  auto outputType = op.getOutput().getType();
-  if (dyn_cast<AffineType>(lhsType) || dyn_cast<AffineType>(rhsType)) {
-    if (lhsType == rhsType && dyn_cast<JacobianType>(outputType)) {
+  Type lhsType = op.getLhs().getType();
+  Type rhsType = op.getRhs().getType();
+  Type outputType = op.getOutput().getType();
+  if (isa<AffineType>(lhsType) || isa<AffineType>(rhsType)) {
+    if (lhsType == rhsType && isa<JacobianType>(outputType)) {
       // affine, affine -> Jacobian
       return success();
-    } else if (!dyn_cast<AffineType>(outputType) &&
+    } else if (!isa<AffineType>(outputType) &&
                (lhsType == outputType || rhsType == outputType)) {
       // affine, Jacobian -> Jacobian
       // affine, XYZZ -> XYZZ
@@ -208,9 +208,9 @@ LogicalResult AddOp::verify() { return verifyBinaryOp(*this); }
 LogicalResult SubOp::verify() { return verifyBinaryOp(*this); }
 
 LogicalResult DoubleOp::verify() {
-  auto inputType = getInput().getType();
-  auto outputType = getOutput().getType();
-  if ((dyn_cast<AffineType>(inputType) && dyn_cast<JacobianType>(outputType)) ||
+  Type inputType = getInput().getType();
+  Type outputType = getOutput().getType();
+  if ((isa<AffineType>(inputType) && isa<JacobianType>(outputType)) ||
       inputType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same
@@ -220,18 +220,18 @@ LogicalResult DoubleOp::verify() {
 LogicalResult ScalarMulOp::verify() {
   Type pointType = getPoint().getType();
   Type outputType = getOutput().getType();
-  if ((dyn_cast<AffineType>(pointType) && dyn_cast<JacobianType>(outputType)) ||
+  if ((isa<AffineType>(pointType) && isa<JacobianType>(outputType)) ||
       pointType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same
   return emitError() << "wrong output type given point type";
 }
 
-/////////////// VERIFY POINT CONVERSIONS ////////////////
+//////////////// VERIFY POINT CONVERSIONS ////////////////
 
 LogicalResult ConvertPointTypeOp::verify() {
-  auto inputType = getInput().getType();
-  auto outputType = getOutput().getType();
+  Type inputType = getInput().getType();
+  Type outputType = getOutput().getType();
   if (inputType == outputType) return emitError() << "Converting on same types";
   // TODO(ashjeong): check curves are the same
   return success();
