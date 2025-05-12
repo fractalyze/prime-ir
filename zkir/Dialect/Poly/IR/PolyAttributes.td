@@ -35,29 +35,28 @@ def Poly_UnivariatePolyAttr : Poly_Attr<"UnivariatePoly", "univariate_polynomial
 }
 
 def Poly_PrimitiveRootAttr: Poly_Attr<"PrimitiveRoot", "primitive_root"> {
-  let summary = "an attribute containing an integer and its degree as a root of unity";
+  let summary = "an attribute containing a primitive root of unity and its twiddles";
   let description = [{
-    A primitive root attribute stores an integer root `value` and an integer
-    `degree`, corresponding to a primitive root of unity of the given degree in
-    an unspecified ring.
-
-    This is used as an attribute on `poly.ntt` and `poly.intt` ops
-    to specify the root of unity used in lowering the transform.
+    A primitive root attribute stores a primitive root of unity specified by the `RootOfUnityAttr`
+    attribute and also some other necessary precomputed values for (I)NTT operations.
 
     Example:
     ```
     !PF1 = !field.pf<7:i32>
     #elem = #field.elem<2> : !PF1
-    #root = #poly.primitive_root<root=%generator, degree=3>
+    #root_of_unity = #field.root_of_unity<root=#elem, degree=3>
+    #root = #poly.primitive_root<root_of_unity=#root_of_unity>
     ```
   }];
   let extraClassDeclaration = [{
+    IntegerAttr getDegree() const;
+    field::PrimeFieldAttr getRoot() const;
     field::PrimeFieldAttr getInvRoot() const;
     field::PrimeFieldAttr getInvDegree() const;
     DenseElementsAttr getRoots() const;
     DenseElementsAttr getInvRoots() const;
   }];
-  let parameters = (ins Field_PrimeFieldAttr:$root, "IntegerAttr":$degree, OptionalParameter<"mod_arith::MontgomeryAttr">:$montgomery);
+  let parameters = (ins Field_RootOfUnityAttr:$root_of_unity, OptionalParameter<"mod_arith::MontgomeryAttr">:$montgomery);
   let assemblyFormat = "`<` struct(params) `>`";
   let genStorageClass = 0;
 }

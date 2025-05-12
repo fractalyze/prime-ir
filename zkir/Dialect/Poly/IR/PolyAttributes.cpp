@@ -59,15 +59,21 @@ static void precomputeRoots(APInt root, const APInt &mod, unsigned degree,
   pool.wait();
 }
 
+field::RootOfUnityAttr PrimitiveRootAttr::getRootOfUnity() const {
+  return getImpl()->rootOfUnity;
+}
+
 field::PrimeFieldAttr PrimitiveRootAttr::getRoot() const {
-  return getImpl()->root;
+  return getImpl()->rootOfUnity.getRoot();
 }
 
 field::PrimeFieldAttr PrimitiveRootAttr::getInvRoot() const {
   return getImpl()->invRoot;
 }
 
-IntegerAttr PrimitiveRootAttr::getDegree() const { return getImpl()->degree; }
+IntegerAttr PrimitiveRootAttr::getDegree() const {
+  return getImpl()->rootOfUnity.getDegree();
+}
 
 field::PrimeFieldAttr PrimitiveRootAttr::getInvDegree() const {
   return getImpl()->invDegree;
@@ -90,9 +96,10 @@ namespace detail {
 PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
     AttributeStorageAllocator &allocator, KeyTy &&key) {
   // Extract the root and degree from the key.
-  field::PrimeFieldAttr root = std::get<0>(key);
-  IntegerAttr degree = std::get<1>(key);
-  mod_arith::MontgomeryAttr montgomery = std::get<2>(key);
+  field::RootOfUnityAttr rootOfUnity = std::get<0>(key);
+  field::PrimeFieldAttr root = rootOfUnity.getRoot();
+  IntegerAttr degree = rootOfUnity.getDegree();
+  mod_arith::MontgomeryAttr montgomery = std::get<1>(key);
 
   std::optional<IntegerAttr> montgomeryR;
   if (montgomery != mod_arith::MontgomeryAttr()) {
@@ -125,10 +132,9 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
   DenseElementsAttr rootsAttr = DenseElementsAttr::get(tensorType, roots);
   DenseElementsAttr invRootsAttr = DenseElementsAttr::get(tensorType, invRoots);
   return new (allocator.allocate<PrimitiveRootAttrStorage>())
-      PrimitiveRootAttrStorage(std::move(degree), std::move(invDegree),
-                               std::move(root), std::move(invRoot),
-                               std::move(rootsAttr), std::move(invRootsAttr),
-                               std::move(montgomery));
+      PrimitiveRootAttrStorage(std::move(rootOfUnity), std::move(invDegree),
+                               std::move(invRoot), std::move(rootsAttr),
+                               std::move(invRootsAttr), std::move(montgomery));
 }
 
 }  // namespace detail
