@@ -13,14 +13,14 @@
 namespace mlir::zkir::poly::detail {
 
 struct PrimitiveRootAttrStorage : public AttributeStorage {
-  using KeyTy = std::tuple<zkir::field::PrimeFieldAttr, IntegerAttr,
+  using KeyTy = std::tuple<field::PrimeFieldAttr, IntegerAttr,
                            mod_arith::MontgomeryAttr>;
   PrimitiveRootAttrStorage(IntegerAttr degree,
-                           zkir::field::PrimeFieldAttr invDegree,
-                           zkir::field::PrimeFieldAttr root,
-                           zkir::field::PrimeFieldAttr invRoot,
+                           field::PrimeFieldAttr invDegree,
+                           field::PrimeFieldAttr root,
+                           field::PrimeFieldAttr invRoot,
                            DenseElementsAttr roots, DenseElementsAttr invRoots,
-                           zkir::mod_arith::MontgomeryAttr montgomery)
+                           mod_arith::MontgomeryAttr montgomery)
       : degree(std::move(degree)),
         invDegree(std::move(invDegree)),
         root(std::move(root)),
@@ -44,12 +44,12 @@ struct PrimitiveRootAttrStorage : public AttributeStorage {
       AttributeStorageAllocator &allocator, KeyTy &&key);
 
   IntegerAttr degree;
-  zkir::field::PrimeFieldAttr invDegree;
-  zkir::field::PrimeFieldAttr root;
-  zkir::field::PrimeFieldAttr invRoot;
+  field::PrimeFieldAttr invDegree;
+  field::PrimeFieldAttr root;
+  field::PrimeFieldAttr invRoot;
   DenseElementsAttr roots;
   DenseElementsAttr invRoots;
-  zkir::mod_arith::MontgomeryAttr montgomery;
+  mod_arith::MontgomeryAttr montgomery;
 };
 
 }  // namespace mlir::zkir::poly::detail

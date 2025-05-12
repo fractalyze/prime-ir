@@ -29,10 +29,10 @@ namespace mlir::zkir::arith {
 static mod_arith::ModArithType convertArithType(Type type) {
   auto modulusBitSize = static_cast<uint64_t>(type.getIntOrFloatBitWidth());
   auto modulus = (1L << (modulusBitSize - 1L));
-  auto newType = mlir::IntegerType::get(type.getContext(), modulusBitSize + 1);
+  auto newType = IntegerType::get(type.getContext(), modulusBitSize + 1);
 
   return mod_arith::ModArithType::get(type.getContext(),
-                                      mlir::IntegerAttr::get(newType, modulus));
+                                      IntegerAttr::get(newType, modulus));
 }
 
 static Type convertArithLikeType(ShapedType type) {
@@ -129,14 +129,14 @@ struct ConvertExtUI : public OpConversionPattern<mlir::arith::ExtUIOp> {
   }
 };
 
-struct ConvertLoadOp : public OpConversionPattern<mlir::memref::LoadOp> {
+struct ConvertLoadOp : public OpConversionPattern<memref::LoadOp> {
   explicit ConvertLoadOp(MLIRContext *context)
-      : OpConversionPattern<mlir::memref::LoadOp>(context) {}
+      : OpConversionPattern<memref::LoadOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      ::mlir::memref::LoadOp op, OpAdaptor adaptor,
+      memref::LoadOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 

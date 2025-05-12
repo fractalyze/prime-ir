@@ -5,7 +5,7 @@
 namespace zkir {
 namespace {
 
-using ::zkir::benchmark::Memref;
+using benchmark::Memref;
 
 struct i256 {
   uint64_t limbs[4];  // 4 x 64 = 256 bits

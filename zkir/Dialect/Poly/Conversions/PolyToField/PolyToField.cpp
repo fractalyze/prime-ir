@@ -234,7 +234,7 @@ static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
 }
 
 struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
-  explicit ConvertBitReverse(mlir::MLIRContext *context)
+  explicit ConvertBitReverse(MLIRContext *context)
       : OpConversionPattern<BitReverseOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;

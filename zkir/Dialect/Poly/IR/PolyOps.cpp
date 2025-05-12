@@ -14,7 +14,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   if (attr) {
     if (failed(parser.parseColonType(type))) return failure();
     polynomial::IntPolynomialAttr intPolyAttr =
-        mlir::cast<polynomial::IntPolynomialAttr>(attr);
+        cast<polynomial::IntPolynomialAttr>(attr);
 
     result.addAttribute("value", UnivariatePolyAttr::get(parser.getContext(),
                                                          type, intPolyAttr));

@@ -77,7 +77,7 @@ struct ConvertAny<void> : public ConversionPattern {
 
 template <typename SourceArithOp, typename TargetModArithOp>
 struct ConvertBinOp : public OpConversionPattern<SourceArithOp> {
-  explicit ConvertBinOp(mlir::MLIRContext *context)
+  explicit ConvertBinOp(MLIRContext *context)
       : OpConversionPattern<SourceArithOp>(context) {}
 
   using OpConversionPattern<SourceArithOp>::OpConversionPattern;

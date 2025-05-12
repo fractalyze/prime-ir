@@ -10,7 +10,7 @@
 namespace zkir {
 namespace {
 
-using ::zkir::benchmark::Memref;
+using benchmark::Memref;
 
 using i256 = benchmark::BigInt<4>;
 
