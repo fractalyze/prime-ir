@@ -37,4 +37,16 @@ def Field_PrimeFieldAttr : Field_Attr<"PrimeField", "pf_elem", [TypedAttrInterfa
   let genVerifyDecl = 1;
 }
 
+def Field_RootOfUnityAttr : Field_Attr<"RootOfUnity", "root_of_unity", [TypedAttrInterface]> {
+  let summary = "An attribute representing a root of unity in a prime field";
+  let parameters = (ins Field_PrimeFieldAttr:$root, "IntegerAttr":$degree);
+  let assemblyFormat = "`<` $root `,` $degree `>`";
+  let extraClassDeclaration = [{
+    PrimeFieldType getType() const {
+      return getRoot().getType();
+    }
+  }];
+  let genVerifyDecl = 1;
+}
+
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDATTRS_TD_

@@ -23,6 +23,7 @@ cc_library(
         ":ops_inc_gen",
         ":types_inc_gen",
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Utils:APIntUtils",
         "//zkir/Utils:OpUtils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
