@@ -13,10 +13,8 @@ template <bool allowOpenMP>
 void polyToLLVMPipelineBuilder(OpPassManager &manager);
 void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager);
 
-extern template void polyToLLVMPipelineBuilder<false>(
-    mlir::OpPassManager &manager);
-extern template void polyToLLVMPipelineBuilder<true>(
-    mlir::OpPassManager &manager);
+extern template void polyToLLVMPipelineBuilder<false>(OpPassManager &manager);
+extern template void polyToLLVMPipelineBuilder<true>(OpPassManager &manager);
 
 }  // namespace mlir::zkir::pipelines
 

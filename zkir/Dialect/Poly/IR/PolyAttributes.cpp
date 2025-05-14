@@ -59,17 +59,23 @@ static void precomputeRoots(APInt root, const APInt &mod, unsigned degree,
   pool.wait();
 }
 
-zkir::field::PrimeFieldAttr PrimitiveRootAttr::getRoot() const {
-  return getImpl()->root;
+field::RootOfUnityAttr PrimitiveRootAttr::getRootOfUnity() const {
+  return getImpl()->rootOfUnity;
 }
 
-zkir::field::PrimeFieldAttr PrimitiveRootAttr::getInvRoot() const {
+field::PrimeFieldAttr PrimitiveRootAttr::getRoot() const {
+  return getImpl()->rootOfUnity.getRoot();
+}
+
+field::PrimeFieldAttr PrimitiveRootAttr::getInvRoot() const {
   return getImpl()->invRoot;
 }
 
-IntegerAttr PrimitiveRootAttr::getDegree() const { return getImpl()->degree; }
+IntegerAttr PrimitiveRootAttr::getDegree() const {
+  return getImpl()->rootOfUnity.getDegree();
+}
 
-zkir::field::PrimeFieldAttr PrimitiveRootAttr::getInvDegree() const {
+field::PrimeFieldAttr PrimitiveRootAttr::getInvDegree() const {
   return getImpl()->invDegree;
 }
 
@@ -81,7 +87,7 @@ DenseElementsAttr PrimitiveRootAttr::getInvRoots() const {
   return getImpl()->invRoots;
 }
 
-zkir::mod_arith::MontgomeryAttr PrimitiveRootAttr::getMontgomery() const {
+mod_arith::MontgomeryAttr PrimitiveRootAttr::getMontgomery() const {
   return getImpl()->montgomery;
 }
 
@@ -90,12 +96,13 @@ namespace detail {
 PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
     AttributeStorageAllocator &allocator, KeyTy &&key) {
   // Extract the root and degree from the key.
-  zkir::field::PrimeFieldAttr root = std::get<0>(key);
-  IntegerAttr degree = std::get<1>(key);
-  zkir::mod_arith::MontgomeryAttr montgomery = std::get<2>(key);
+  field::RootOfUnityAttr rootOfUnity = std::get<0>(key);
+  field::PrimeFieldAttr root = rootOfUnity.getRoot();
+  IntegerAttr degree = rootOfUnity.getDegree();
+  mod_arith::MontgomeryAttr montgomery = std::get<1>(key);
 
   std::optional<IntegerAttr> montgomeryR;
-  if (montgomery != zkir::mod_arith::MontgomeryAttr()) {
+  if (montgomery != mod_arith::MontgomeryAttr()) {
     montgomeryR = montgomery.getR();
   }
 
@@ -111,8 +118,8 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
 
   field::PrimeFieldAttr invDegree =
       field::PrimeFieldAttr::get(root.getType(), invDegreeVal);
-  zkir::field::PrimeFieldAttr invRoot =
-      zkir::field::PrimeFieldAttr::get(root.getType(), invRootVal);
+  field::PrimeFieldAttr invRoot =
+      field::PrimeFieldAttr::get(root.getType(), invRootVal);
 
   // Compute the exponent table.
   SmallVector<APInt> roots, invRoots;
@@ -125,10 +132,9 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
   DenseElementsAttr rootsAttr = DenseElementsAttr::get(tensorType, roots);
   DenseElementsAttr invRootsAttr = DenseElementsAttr::get(tensorType, invRoots);
   return new (allocator.allocate<PrimitiveRootAttrStorage>())
-      PrimitiveRootAttrStorage(std::move(degree), std::move(invDegree),
-                               std::move(root), std::move(invRoot),
-                               std::move(rootsAttr), std::move(invRootsAttr),
-                               std::move(montgomery));
+      PrimitiveRootAttrStorage(std::move(rootOfUnity), std::move(invDegree),
+                               std::move(invRoot), std::move(rootsAttr),
+                               std::move(invRootsAttr), std::move(montgomery));
 }
 
 }  // namespace detail

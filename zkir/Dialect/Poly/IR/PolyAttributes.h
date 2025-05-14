@@ -13,43 +13,38 @@
 namespace mlir::zkir::poly::detail {
 
 struct PrimitiveRootAttrStorage : public AttributeStorage {
-  using KeyTy = std::tuple<zkir::field::PrimeFieldAttr, IntegerAttr,
-                           mod_arith::MontgomeryAttr>;
-  PrimitiveRootAttrStorage(IntegerAttr degree,
-                           zkir::field::PrimeFieldAttr invDegree,
-                           zkir::field::PrimeFieldAttr root,
-                           zkir::field::PrimeFieldAttr invRoot,
+  using KeyTy = std::tuple<field::RootOfUnityAttr, mod_arith::MontgomeryAttr>;
+  PrimitiveRootAttrStorage(field::RootOfUnityAttr rootOfUnity,
+                           field::PrimeFieldAttr invDegree,
+                           field::PrimeFieldAttr invRoot,
                            DenseElementsAttr roots, DenseElementsAttr invRoots,
-                           zkir::mod_arith::MontgomeryAttr montgomery)
-      : degree(std::move(degree)),
+                           mod_arith::MontgomeryAttr montgomery)
+      : rootOfUnity(std::move(rootOfUnity)),
         invDegree(std::move(invDegree)),
-        root(std::move(root)),
         invRoot(std::move(invRoot)),
         roots(std::move(roots)),
         invRoots(std::move(invRoots)),
         montgomery(std::move(montgomery)) {}
 
-  KeyTy getAsKey() const { return KeyTy(root, degree, montgomery); }
+  KeyTy getAsKey() const { return KeyTy(rootOfUnity, montgomery); }
 
   bool operator==(const KeyTy &key) const {
-    return key == KeyTy(root, degree, montgomery);
+    return key == KeyTy(rootOfUnity, montgomery);
   }
 
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(std::get<0>(key), std::get<1>(key),
-                              std::get<2>(key));
+    return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
   }
 
   static PrimitiveRootAttrStorage *construct(
       AttributeStorageAllocator &allocator, KeyTy &&key);
 
-  IntegerAttr degree;
-  zkir::field::PrimeFieldAttr invDegree;
-  zkir::field::PrimeFieldAttr root;
-  zkir::field::PrimeFieldAttr invRoot;
+  field::RootOfUnityAttr rootOfUnity;
+  field::PrimeFieldAttr invDegree;
+  field::PrimeFieldAttr invRoot;
   DenseElementsAttr roots;
   DenseElementsAttr invRoots;
-  zkir::mod_arith::MontgomeryAttr montgomery;
+  mod_arith::MontgomeryAttr montgomery;
 };
 
 }  // namespace mlir::zkir::poly::detail

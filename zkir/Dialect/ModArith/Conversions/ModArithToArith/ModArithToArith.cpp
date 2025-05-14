@@ -72,7 +72,7 @@ static TypedAttr modulusAttr(Op op, bool mul = false) {
   auto intType = IntegerType::get(op.getContext(), width);
   auto truncmod = modulus.zextOrTrunc(width);
 
-  if (auto st = mlir::dyn_cast<ShapedType>(type)) {
+  if (auto st = dyn_cast<ShapedType>(type)) {
     auto containerType = st.cloneWith(st.getShape(), intType);
     return DenseElementsAttr::get(containerType, truncmod);
   }
@@ -330,7 +330,7 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
       InverseOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     // TODO(batzor): Support tensor input.
-    if (mlir::isa<ShapedType>(op.getInput().getType())) {
+    if (isa<ShapedType>(op.getInput().getType())) {
       return op->emitError("tensor input not supported");
     }
 

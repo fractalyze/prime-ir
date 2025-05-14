@@ -40,14 +40,14 @@ void oneShotBufferize(OpPassManager &manager) {
   manager.addPass(bufferization::createBufferDeallocationSimplificationPass());
   manager.addPass(bufferization::createLowerDeallocationsPass());
   manager.addPass(createCSEPass());
-  manager.addPass(mlir::createBufferizationToMemRefPass());
+  manager.addPass(createBufferizationToMemRefPass());
   manager.addPass(createCanonicalizerPass());
 }
 
 void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
-  manager.addPass(zkir::elliptic_curve::createEllipticCurveToField());
-  manager.addPass(zkir::field::createPrimeFieldToModArith());
-  manager.addPass(zkir::mod_arith::createModArithToArith());
+  manager.addPass(elliptic_curve::createEllipticCurveToField());
+  manager.addPass(field::createPrimeFieldToModArith());
+  manager.addPass(mod_arith::createModArithToArith());
   manager.addPass(createCanonicalizerPass());
 
   // Linalg
@@ -95,9 +95,9 @@ void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
 
 template <bool allowOpenMP>
 void polyToLLVMPipelineBuilder(OpPassManager &manager) {
-  manager.addPass(zkir::poly::createPolyToField());
-  manager.addPass(zkir::field::createPrimeFieldToModArith());
-  manager.addPass(zkir::mod_arith::createModArithToArith());
+  manager.addPass(poly::createPolyToField());
+  manager.addPass(field::createPrimeFieldToModArith());
+  manager.addPass(mod_arith::createModArithToArith());
   // FIXME(batzor): With this, some memref loads are canonicalized even though
   // it was modified in the middle, causing `poly_ntt_runner` test to fail.
   // manager.addPass(createCanonicalizerPass());
@@ -151,7 +151,7 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(createSymbolDCEPass());
 }
 
-template void polyToLLVMPipelineBuilder<false>(mlir::OpPassManager &manager);
-template void polyToLLVMPipelineBuilder<true>(mlir::OpPassManager &manager);
+template void polyToLLVMPipelineBuilder<false>(OpPassManager &manager);
+template void polyToLLVMPipelineBuilder<true>(OpPassManager &manager);
 
 }  // namespace mlir::zkir::pipelines
