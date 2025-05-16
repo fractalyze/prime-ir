@@ -45,14 +45,32 @@ static RankedTensorType convertXYZZType(XYZZType type) {
 
 static Type convertAffineLikeType(ShapedType type) {
   if (auto affineType = dyn_cast<AffineType>(type.getElementType())) {
-    return type.cloneWith(type.getShape(), convertAffineType(affineType));
+    field::PrimeFieldType baseFieldType =
+        affineType.getCurve().getA().getType();
+    SmallVector<int64_t> newShape(type.getShape());
+    newShape.push_back(2);
+    return type.cloneWith(newShape, baseFieldType);
   }
   return type;
 }
 
 static Type convertJacobianLikeType(ShapedType type) {
   if (auto jacobianType = dyn_cast<JacobianType>(type.getElementType())) {
-    return type.cloneWith(type.getShape(), convertJacobianType(jacobianType));
+    field::PrimeFieldType baseFieldType =
+        jacobianType.getCurve().getA().getType();
+    SmallVector<int64_t> newShape(type.getShape());
+    newShape.push_back(3);
+    return type.cloneWith(newShape, baseFieldType);
+  }
+  return type;
+}
+
+static Type convertXYZZLikeType(ShapedType type) {
+  if (auto xyzzType = dyn_cast<XYZZType>(type.getElementType())) {
+    field::PrimeFieldType baseFieldType = xyzzType.getCurve().getA().getType();
+    SmallVector<int64_t> newShape(type.getShape());
+    newShape.push_back(4);
+    return type.cloneWith(newShape, baseFieldType);
   }
   return type;
 }
