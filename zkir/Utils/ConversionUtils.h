@@ -32,7 +32,7 @@
 namespace mlir::zkir {
 
 LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
-                                Operation *op, ArrayRef<Value> operands,
+                                Operation *op, ArrayRef<ValueRange> operands,
                                 ConversionPatternRewriter &rewriter);
 
 template <typename T>
@@ -47,7 +47,7 @@ struct ConvertAny : public ConversionPattern {
   // generate a new op where all operands have been replaced with their
   // materialized/typeconverted versions
   LogicalResult matchAndRewrite(
-      Operation *op, ArrayRef<Value> operands,
+      Operation *op, ArrayRef<ValueRange> operands,
       ConversionPatternRewriter &rewriter) const override {
     if (!isa<T>(op)) {
       return failure();
@@ -69,7 +69,7 @@ struct ConvertAny<void> : public ConversionPattern {
   // generate a new op where all operands have been replaced with their
   // materialized/typeconverted versions
   LogicalResult matchAndRewrite(
-      Operation *op, ArrayRef<Value> operands,
+      Operation *op, ArrayRef<ValueRange> operands,
       ConversionPatternRewriter &rewriter) const override {
     return convertAnyOperand(getTypeConverter(), op, operands, rewriter);
   }

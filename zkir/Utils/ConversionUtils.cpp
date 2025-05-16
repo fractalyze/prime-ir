@@ -36,7 +36,7 @@ using ::mlir::func::FuncOp;
 using ::mlir::func::ReturnOp;
 
 LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
-                                Operation *op, ArrayRef<Value> operands,
+                                Operation *op, ArrayRef<ValueRange> operands,
                                 ConversionPatternRewriter &rewriter) {
   if (typeConverter->isLegal(op)) {
     return failure();
@@ -61,8 +61,12 @@ LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
     regions.push_back(std::move(newRegion));
   }
 
+  SmallVector<Value> flatOperands;
+  for (auto operand : operands) {
+    flatOperands.append(operand.begin(), operand.end());
+  }
   Operation *newOp = rewriter.create(OperationState(
-      op->getLoc(), op->getName().getStringRef(), operands, newResultTypes,
+      op->getLoc(), op->getName().getStringRef(), flatOperands, newResultTypes,
       op->getAttrs(), op->getSuccessors(), regions));
 
   rewriter.replaceOp(op, newOp);
