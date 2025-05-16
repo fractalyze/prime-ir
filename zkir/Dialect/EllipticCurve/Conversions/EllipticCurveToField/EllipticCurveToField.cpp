@@ -613,6 +613,74 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
   }
 };
 
+struct ConvertMSM : public OpConversionPattern<MSMOp> {
+  explicit ConvertMSM(mlir::MLIRContext *context)
+      : OpConversionPattern<MSMOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      MSMOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // 2D tensor of prime field values, e.g.:
+    // |x1, y1, z1|
+    // |x2, y2, z2|
+    Value loweredPointSet = adaptor.getPoints();
+    // 1d tensor of PF, e.g.:
+    // | s1 , s2 |
+    Value scalars = op.getScalars();
+    RankedTensorType loweredPointSetType =
+        cast<RankedTensorType>(loweredPointSet.getType());
+    field::PrimeFieldType baseFieldType =
+        cast<field::PrimeFieldType>(loweredPointSetType.getElementType());
+    unsigned numScalarMuls = loweredPointSetType.getShape()[0];
+    unsigned numCoords = loweredPointSetType.getShape()[1];
+
+    Type inputPointType =
+        cast<RankedTensorType>(op.getPoints().getType()).getElementType();
+    Type outputPointType = op.getOutput().getType();
+    RankedTensorType loweredOutputPointType =
+        RankedTensorType::get({numCoords}, baseFieldType);
+
+    Value accumulator;
+    auto zero = b.create<arith::ConstantIndexOp>(0);
+    auto one = b.create<arith::ConstantIndexOp>(1);
+    auto sz = b.create<arith::ConstantIndexOp>(numCoords);
+    SmallVector<Value> sizes{one, sz};
+    SmallVector<Value> strides{one, one};
+    for (size_t i = 0; i < numScalarMuls; ++i) {
+      auto idx = b.create<arith::ConstantIndexOp>(i);
+
+      // scalar
+      auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{idx});
+
+      // point
+      //  - extract point = tensor<2x3x!PF> -> tensor<1x3x!PF>
+      SmallVector<Value> offsets{idx, zero};
+      auto higherRankedPoint = b.create<tensor::ExtractSliceOp>(
+          loweredPointSet, offsets, sizes, strides);
+      // - reshape point = tensor<1x3x!PF> -> tensor<3x!PF>
+      SmallVector<Value> _outputShape{sz};
+      auto outputShape = b.create<tensor::FromElementsOp>(_outputShape);
+      auto point = b.create<tensor::ReshapeOp>(loweredOutputPointType,
+                                               higherRankedPoint, outputShape);
+
+      Value adder = convertScalarMulImpl(point, scalar, inputPointType,
+                                         outputPointType, b);
+      if (i != 0) {
+        accumulator = convertAddImpl(accumulator, adder, outputPointType,
+                                     outputPointType, outputPointType, b);
+      } else {
+        accumulator = adder;
+      }
+    }
+    rewriter.replaceOp(op, accumulator);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.cpp.inc"
@@ -636,10 +704,11 @@ void EllipticCurveToField::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns.add<ConvertPoint, ConvertPointSet, ConvertPointSetExtract,
-               ConvertExtract, ConvertConvertPointType, ConvertAdd,
-               ConvertDouble, ConvertNegate, ConvertSub, ConvertScalarMul>(
-      typeConverter, context);
+  patterns
+      .add<ConvertPoint, ConvertPointSet, ConvertPointSetExtract,
+           ConvertExtract, ConvertConvertPointType, ConvertAdd, ConvertDouble,
+           ConvertNegate, ConvertSub, ConvertScalarMul, ConvertMSM>(
+          typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 

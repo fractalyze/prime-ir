@@ -192,3 +192,14 @@ func.func @test_point_set() {
   %doubled = elliptic_curve.double %point1 : !affine -> !jacobian
   return
 }
+
+func.func @test_msm() {
+  %var1 = field.pf.constant 1 : !PF
+  %var5 = field.pf.constant 5 : !PF
+
+  %scalars = tensor.from_elements %var1, %var5, %var5 : tensor<3x!PF>
+  %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
+  %points = elliptic_curve.point_set.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
+  %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PF>, tensor<3x!affine> -> !jacobian
+  return
+}
