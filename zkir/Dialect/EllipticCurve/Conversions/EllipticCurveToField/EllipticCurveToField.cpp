@@ -117,8 +117,6 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
   LogicalResult matchAndRewrite(
       ExtractOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }
