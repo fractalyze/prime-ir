@@ -270,3 +270,21 @@ func.func @test_point_set() {
   %doubled = elliptic_curve.double %point1 : !affine -> !jacobian
   return
 }
+
+// CHECK-LABEL: @test_msm
+func.func @test_msm() {
+  // CHECK: %[[VAR1:.*]] = field.pf.constant 1 : ![[PF:.*]]
+  %var1 = field.pf.constant 1 : !PF
+  // CHECK: %[[VAR5:.*]] = field.pf.constant 5 : ![[PF]]
+  %var5 = field.pf.constant 5 : !PF
+
+  // CHECK: %[[SCALARS:.*]] = tensor.from_elements %[[VAR1]], %[[VAR5]], %[[VAR5]] : [[TPF:.*]]
+  %scalars = tensor.from_elements %var1, %var5, %var5 : tensor<3x!PF>
+  // CHECK: %[[AFFINE1:.*]] = elliptic_curve.point %[[VAR1]], %[[VAR5]] : ![[PF]] -> ![[AF:.*]]
+  %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
+  // CHECK: %[[POINTS:.*]] = elliptic_curve.point_set.from_elements %[[AFFINE1]], %[[AFFINE1]], %[[AFFINE1]] : [[TAF:.*]]
+  %points = elliptic_curve.point_set.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
+  // CHECK: %[[MSM_RESULT:.*]] = elliptic_curve.msm %[[SCALARS]], %[[POINTS]] : [[TPF]], [[TAF]] -> ![[JA:.*]]
+  %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PF>, tensor<3x!affine> -> !jacobian
+  return
+}

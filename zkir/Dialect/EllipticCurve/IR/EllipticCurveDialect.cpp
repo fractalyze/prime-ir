@@ -227,6 +227,27 @@ LogicalResult ScalarMulOp::verify() {
   return emitError() << "wrong output type given point type";
 }
 
+LogicalResult MSMOp::verify() {
+  TensorType scalarsType = cast<TensorType>(getScalars().getType());
+  TensorType pointsType = cast<TensorType>(getPoints().getType());
+  Type pointType = pointsType.getElementType();
+  if (scalarsType.getRank() != pointsType.getRank()) {
+    return emitError() << "scalars and points must have the same rank";
+  }
+  Type outputType = getOutput().getType();
+  if ((isa<AffineType>(pointType) || isa<JacobianType>(pointType)) &&
+      !isa<JacobianType>(outputType)) {
+    return emitError() << "affine or jacobian point inputs for msm must result "
+                          "in jacobian output";
+  } else if (isa<XYZZType>(pointType) && !isa<XYZZType>(outputType)) {
+    return emitError()
+           << "xyzz point inputs for msm must result in xyzz output";
+  } else {
+    return success();
+  }
+  // TODO(ashjeong): check curves/fields are the same
+}
+
 //////////////// VERIFY POINT CONVERSIONS ////////////////
 
 LogicalResult ConvertPointTypeOp::verify() {

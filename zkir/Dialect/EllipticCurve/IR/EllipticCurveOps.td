@@ -203,6 +203,27 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutativ
   let assemblyFormat = "operands attr-dict `:` type($scalar) `,` type($point) `->` type($output)";
 }
 
+// Elliptic curve point scalar multiplication.
+def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
+  let summary = "Elliptic curve multi-scalar multiplication";
+  let description = [{
+    Computes multi-scalar multiplication (MSM) of elliptic curve points and scalars.
+
+    affine -> Jacobian
+    Jacobian -> Jacobian
+    XYZZ -> XYZZ
+
+    Example:
+    ```
+    %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PF>, tensor<3x!affine> -> !jacobian
+    ```
+  }];
+  let arguments = (ins RankedTensorOf<[Field_PrimeFieldType]>:$scalars, RankedTensorOf<[PointType]>:$points);
+  let results = (outs PointType:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($scalars) `,` type($points) `->` type($output)";
+}
+
 ////////////// POINT CONVERSIONS //////////////
 
 def EllipticCurve_ConvertPointTypeOp : EllipticCurve_UnaryOp<"convert_point_type"> {
