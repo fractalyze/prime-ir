@@ -170,6 +170,53 @@ struct ConvertPointSet : public OpConversionPattern<PointSetOp> {
   }
 };
 
+/// The lowered form of point set is a 2D tensor of prime field values, while
+/// the ec form is a 1D tensor. Extracting the value must be done specially for
+/// the lowered version.
+struct ConvertPointSetExtract : public OpConversionPattern<PointSetExtractOp> {
+  explicit ConvertPointSetExtract(MLIRContext *context)
+      : OpConversionPattern<PointSetExtractOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      PointSetExtractOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // 2D tensor of prime field values, e.g.:
+    // |x1, y1, z1|
+    // |x2, y2, z2|
+    Value loweredPointSet = adaptor.getPointSet();
+    Value index = adaptor.getIndex();
+    // e.g. tensor<2x3x!PF> (set of jacobian points)
+    auto loweredPointSetType =
+        cast<RankedTensorType>(loweredPointSet.getType());
+    unsigned numCoords = loweredPointSetType.getShape()[1];
+
+    auto zero = b.create<arith::ConstantIndexOp>(0);
+    auto one = b.create<arith::ConstantIndexOp>(1);
+    auto sz = b.create<arith::ConstantIndexOp>(numCoords);
+    SmallVector<Value> offsets{index, zero};
+    SmallVector<Value> sizes{one, sz};
+    SmallVector<Value> strides{one, one};
+    // e.g. tensor<1x3x!PF> (jacobian point in 2D)
+    auto higherRankedLoweredPoint = b.create<tensor::ExtractSliceOp>(
+        loweredPointSet, offsets, sizes, strides);
+
+    SmallVector<Value> _outputShape{sz};
+    auto outputShape = b.create<tensor::FromElementsOp>(_outputShape);
+
+    // e.g. tensor<3x!PF> (jacobian point in 1D)
+    auto point = b.create<tensor::ReshapeOp>(
+        RankedTensorType::get({numCoords},
+                              loweredPointSetType.getElementType()),
+        higherRankedLoweredPoint, outputShape);
+    rewriter.replaceOp(op, point);
+    return success();
+  }
+};
+
 struct ConvertExtract : public OpConversionPattern<ExtractOp> {
   explicit ConvertExtract(MLIRContext *context)
       : OpConversionPattern<ExtractOp>(context) {}
@@ -589,10 +636,10 @@ void EllipticCurveToField::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns.add<ConvertPoint, ConvertPointSet, ConvertExtract,
-               ConvertConvertPointType, ConvertAdd, ConvertDouble,
-               ConvertNegate, ConvertSub, ConvertScalarMul>(typeConverter,
-                                                            context);
+  patterns.add<ConvertPoint, ConvertPointSet, ConvertPointSetExtract,
+               ConvertExtract, ConvertConvertPointType, ConvertAdd,
+               ConvertDouble, ConvertNegate, ConvertSub, ConvertScalarMul>(
+      typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 

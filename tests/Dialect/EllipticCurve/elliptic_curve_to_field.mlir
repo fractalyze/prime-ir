@@ -187,5 +187,8 @@ func.func @test_point_set() {
 
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
   %points = elliptic_curve.point_set.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
+  %idx1 = arith.constant 1 : index
+  %point1 = elliptic_curve.point_set.extract %points, %idx1 : tensor<3x!affine> -> !affine
+  %doubled = elliptic_curve.double %point1 : !affine -> !jacobian
   return
 }
