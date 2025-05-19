@@ -13,7 +13,7 @@ namespace mlir::zkir::elliptic_curve {
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-mdbl-2007-bl
 // Cost: 1M + 5S
 // Assumption: Z == 1
-Value affineDouble(const Value &point, Type inputType,
+Value affineDouble(const Value &point, Type affineType,
                    ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
@@ -39,7 +39,7 @@ Value affineDouble(const Value &point, Type inputType,
   // M = 3*XX+a
   auto mTmp1 = b.create<field::DoubleOp>(xx);
   auto mTmp2 = b.create<field::AddOp>(mTmp1, xx);
-  aAttr = cast<JacobianType>(inputType).getCurve().getA();
+  aAttr = cast<AffineType>(affineType).getCurve().getA();
   auto a = b.create<field::ConstantOp>(basefield, aAttr.getValue());
   auto m = b.create<field::AddOp>(mTmp2, a);
   // X3 = M²-2*S
@@ -62,7 +62,7 @@ Value affineDouble(const Value &point, Type inputType,
 // dbl-2007-bl
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-dbl-2007-bl
 // Cost: 1M + 8S + 1*a
-Value jacobianDefaultDouble(const Value &point, Type inputType,
+Value jacobianDefaultDouble(const Value &point, Type jacobianType,
                             ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
@@ -93,7 +93,7 @@ Value jacobianDefaultDouble(const Value &point, Type inputType,
   auto mTmp1 = b.create<field::DoubleOp>(xx);
   auto mTmp2 = b.create<field::AddOp>(mTmp1, xx);
   auto mTmp3 = b.create<field::SquareOp>(zz);
-  aAttr = cast<JacobianType>(inputType).getCurve().getA();
+  aAttr = cast<JacobianType>(jacobianType).getCurve().getA();
   auto a = b.create<field::ConstantOp>(basefield, aAttr.getValue());
   auto mTmp4 = b.create<field::MulOp>(a, mTmp3);
   auto m = b.create<field::AddOp>(mTmp2, mTmp4);

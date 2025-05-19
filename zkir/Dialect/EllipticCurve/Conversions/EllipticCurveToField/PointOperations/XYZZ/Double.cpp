@@ -12,9 +12,9 @@ namespace mlir::zkir::elliptic_curve {
 // dbl-2008-s-1
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-dbl-2008-s-1
 // Cost: 6M + 4S + 1*a
-Value xyzzDouble(const Value &point, Type inputType, ImplicitLocOpBuilder &b) {
-  if (!isa<XYZZType>(inputType)) {
-    assert(false && "Unsupported point types for XYZZ doubling");
+Value xyzzDouble(const Value &point, Type xyzzType, ImplicitLocOpBuilder &b) {
+  if (!isa<XYZZType>(xyzzType)) {
+    assert(false && "input type must be xyzz");
   }
 
   Value zero = b.create<arith::ConstantIndexOp>(0);
@@ -43,7 +43,7 @@ Value xyzzDouble(const Value &point, Type inputType, ImplicitLocOpBuilder &b) {
   auto mTmp2 = b.create<field::DoubleOp>(mTmp1);
   auto mTmp3 = b.create<field::AddOp>(mTmp2, mTmp1);
   auto mTmp4 = b.create<field::SquareOp>(zz);
-  aAttr = cast<XYZZType>(inputType).getCurve().getA();
+  aAttr = cast<XYZZType>(xyzzType).getCurve().getA();
   auto a = b.create<field::ConstantOp>(basefield, aAttr.getValue());
   auto mTmp5 = b.create<field::MulOp>(a, mTmp4);
   auto m = b.create<field::AddOp>(mTmp3, mTmp5);
