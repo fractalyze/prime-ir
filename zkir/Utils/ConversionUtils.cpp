@@ -65,11 +65,46 @@ LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
   for (auto operand : operands) {
     flatOperands.append(operand.begin(), operand.end());
   }
-  Operation *newOp = rewriter.create(OperationState(
-      op->getLoc(), op->getName().getStringRef(), flatOperands, newResultTypes,
-      op->getAttrs(), op->getSuccessors(), regions));
 
-  rewriter.replaceOp(op, newOp);
+  // If the op is tensor.extract, and the type conversion is 1:N, the return
+  // type is multiple. In this case, we need to split it into multiple extracts.
+  // TODO(batzor): Handle other cases (such as tensor.insert).
+  if (op->getName().getStringRef() == "tensor.extract" &&
+      newResultTypes.size() > 1) {
+    // NOTE: We can assume the 1:N conversion are all of the same type.
+    // Otherwise, the tensor is ill-formed anyways.
+
+    unsigned numResults = newResultTypes.size();
+    newResultTypes.resize(1);
+    // The tensor rank should be increased by 1 in the type conversion.
+    // i.e. tensor<1x2x!QF> -> tensor<1x2x2x!F>
+    // This dimension should be used to extract the result.
+    flatOperands.resize(flatOperands.size() + 1);
+
+    SmallVector<Value> entryValues;
+    entryValues.reserve(numResults);
+    for (size_t i = 0; i < numResults; ++i) {
+      flatOperands.back() =
+          rewriter.create<arith::ConstantIndexOp>(op->getLoc(), i);
+      Value valueAtIndex =
+          rewriter
+              .create(OperationState(
+                  op->getLoc(), "tensor.extract", flatOperands, newResultTypes,
+                  op->getAttrs(), op->getSuccessors(), regions))
+              ->getResult(0);
+      entryValues.push_back(valueAtIndex);
+    }
+
+    SmallVector<ValueRange> newOpResults;
+    newOpResults.push_back(entryValues);
+    rewriter.replaceOpWithMultiple(op, newOpResults);
+    return success();
+  } else {
+    Operation *newOp = rewriter.create(OperationState(
+        op->getLoc(), op->getName().getStringRef(), flatOperands,
+        newResultTypes, op->getAttrs(), op->getSuccessors(), regions));
+    rewriter.replaceOp(op, newOp);
+  }
   return success();
 }
 
