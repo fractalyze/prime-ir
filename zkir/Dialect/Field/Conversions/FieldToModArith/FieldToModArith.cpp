@@ -39,12 +39,31 @@ static mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
   return mod_arith::ModArithType::get(type.getContext(), modulus);
 }
 
-static Type convertPrimeFieldLikeType(ShapedType type) {
-  if (auto primeFieldType = dyn_cast<PrimeFieldType>(type.getElementType())) {
-    return type.cloneWith(type.getShape(),
-                          convertPrimeFieldType(primeFieldType));
-  }
-  return type;
+template <typename T>
+static T convertPrimeFieldLike(T type) {
+  auto primeFieldType = cast<PrimeFieldType>(type.getElementType());
+  return type.cloneWith(type.getShape(), convertPrimeFieldType(primeFieldType));
+}
+
+static LogicalResult convertQuadraticExtFieldType(
+    QuadraticExtFieldType type, SmallVectorImpl<Type> &converted) {
+  IntegerAttr modulus = type.getBaseField().getModulus();
+  auto modArithType = mod_arith::ModArithType::get(type.getContext(), modulus);
+  converted.push_back(modArithType);
+  converted.push_back(modArithType);
+  return success();
+}
+
+template <typename T>
+static T convertQuadraticExtFieldLike(T type) {
+  auto quadraticExtFieldType =
+      cast<QuadraticExtFieldType>(type.getElementType());
+  IntegerAttr modulus = quadraticExtFieldType.getBaseField().getModulus();
+  auto modArithType = mod_arith::ModArithType::get(type.getContext(), modulus);
+
+  SmallVector<int64_t> newShape(type.getShape());
+  newShape.push_back(2);
+  return type.cloneWith(newShape, modArithType);
 }
 
 class FieldToModArithTypeConverter : public TypeConverter {
@@ -54,14 +73,25 @@ class FieldToModArithTypeConverter : public TypeConverter {
     addConversion([](PrimeFieldType type) -> Type {
       return convertPrimeFieldType(type);
     });
+    addConversion([](QuadraticExtFieldType type,
+                     SmallVectorImpl<Type> &converted) -> LogicalResult {
+      return convertQuadraticExtFieldType(type, converted);
+    });
     addConversion([](ShapedType type) -> Type {
-      return convertPrimeFieldLikeType(type);
+      if (isa<PrimeFieldType>(type.getElementType())) {
+        return convertPrimeFieldLike(type);
+      }
+      if (isa<QuadraticExtFieldType>(type.getElementType())) {
+        return convertQuadraticExtFieldLike(type);
+      }
+      return type;
     });
     addConversion([](MemRefType type) -> Type {
-      if (auto primeFieldType =
-              dyn_cast<PrimeFieldType>(type.getElementType())) {
-        return type.cloneWith(type.getShape(),
-                              convertPrimeFieldType(primeFieldType));
+      if (isa<PrimeFieldType>(type.getElementType())) {
+        return convertPrimeFieldLike(cast<BaseMemRefType>(type));
+      }
+      if (isa<QuadraticExtFieldType>(type.getElementType())) {
+        return convertQuadraticExtFieldLike(cast<BaseMemRefType>(type));
       }
       return type;
     });
@@ -322,6 +352,25 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   }
 };
 
+struct ConvertF2Constant : public OpConversionPattern<F2ConstantOp> {
+  explicit ConvertF2Constant(MLIRContext *context)
+      : OpConversionPattern<F2ConstantOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      F2ConstantOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    SmallVector<ValueRange> values;
+    values.push_back({adaptor.getLow(), adaptor.getHigh()});
+
+    rewriter.replaceOpWithMultiple(op, values);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
@@ -352,15 +401,16 @@ void FieldToModArith::runOnOperation() {
       ConvertConstant, ConvertEncapsulate, ConvertExtract, ConvertToMont,
       ConvertFromMont, ConvertInverse, ConvertNegate, ConvertAdd, ConvertDouble,
       ConvertSub, ConvertMul, ConvertSquare, ConvertMontMul, ConvertCmp,
-      ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineParallelOp>,
-      ConvertAny<affine::AffineLoadOp>, ConvertAny<affine::AffineStoreOp>,
-      ConvertAny<affine::AffineYieldOp>, ConvertAny<linalg::GenericOp>,
-      ConvertAny<linalg::MapOp>, ConvertAny<memref::LoadOp>,
-      ConvertAny<memref::StoreOp>, ConvertAny<linalg::YieldOp>,
-      ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
-      ConvertAny<tensor::ExtractSliceOp>, ConvertAny<tensor::InsertSliceOp>,
-      ConvertAny<tensor::EmptyOp>, ConvertAny<tensor::FromElementsOp>,
-      ConvertAny<tensor::ConcatOp>, ConvertAny<tensor::ReshapeOp>,
+      ConvertF2Constant, ConvertAny<affine::AffineForOp>,
+      ConvertAny<affine::AffineParallelOp>, ConvertAny<affine::AffineLoadOp>,
+      ConvertAny<affine::AffineStoreOp>, ConvertAny<affine::AffineYieldOp>,
+      ConvertAny<linalg::GenericOp>, ConvertAny<linalg::MapOp>,
+      ConvertAny<memref::LoadOp>, ConvertAny<memref::StoreOp>,
+      ConvertAny<linalg::YieldOp>, ConvertAny<tensor::CastOp>,
+      ConvertAny<tensor::ExtractOp>, ConvertAny<tensor::ExtractSliceOp>,
+      ConvertAny<tensor::InsertSliceOp>, ConvertAny<tensor::EmptyOp>,
+      ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::ConcatOp>,
+      ConvertAny<tensor::ReshapeOp>,
       ConvertAny<bufferization::MaterializeInDestinationOp>,
       ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>, ConvertAny<tensor::InsertOp>>(

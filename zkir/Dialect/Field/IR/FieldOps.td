@@ -59,6 +59,22 @@ def Field_ConstantOp : Op<Field_Dialect, "pf.constant", [Pure]> {
   ];
 }
 
+def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<
+  "result type is the same as the operand type", "output", "low", "cast<QuadraticExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "high", "cast<QuadraticExtFieldType>($_self).getBaseField()">]> {
+  let summary = "Define a constant quadratic extension field element";
+  let description = [{
+    Example:
+    ```
+    !QF = !field.f2<!PF, #beta>
+    %0 = field.f2.constant %low, %high : !QF
+    ```
+  }];
+  let arguments = (ins Field_PrimeFieldType:$low, Field_PrimeFieldType:$high);
+  let results = (outs Field_QuadraticExtFieldType:$output);
+  let assemblyFormat = "$low `,` $high attr-dict `:` type($output)";
+}
+
 def Field_EncapsulateOp : Field_Op<"pf.encapsulate"> {
   let summary = "Encapsulate an integer into a field type";
   let description = [{

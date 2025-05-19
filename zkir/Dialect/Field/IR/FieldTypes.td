@@ -31,7 +31,32 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInte
   let assemblyFormat = "`<` $modulus `>`";
 }
 
+// Quadratic extension field type definition.
+// This type represents an element in a quadratic extension field parameterized by the underlying field.
+// Currently, it is only defined for prime fields.
+def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
+  MemRefElementTypeInterface]> {
+  let summary = "Quadratic extension field element type";
+  let description = [{
+    Represents an element in a quadratic extension field defined by the given
+    prime field `base_field` and the irreducible binomial `beta`.
+
+    Example:
+    ```
+    !PF = !field.pf<7:i32>
+    #beta = #field.pf_elem<6:i32> : !PF
+    !QF = !field.f2<!PF, #beta>
+    ```
+  }];
+  let parameters = (ins
+   Field_PrimeFieldType: $base_field,
+   "PrimeFieldAttr": $beta
+  );
+  let assemblyFormat = "`<` $base_field `,` $beta `>`";
+}
+
 def PrimeFieldLike: TypeOrValueSemanticsContainer<Field_PrimeFieldType, "prime-field-like">;
-def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate]>, "field-like">;
+def QuadraticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuadraticExtFieldType, "quadratic-ext-field-like">;
+def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, QuadraticExtFieldLike.predicate]>, "field-like">;
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDTYPES_TD_

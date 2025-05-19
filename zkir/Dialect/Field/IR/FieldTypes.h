@@ -3,6 +3,10 @@
 
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 
+namespace mlir::zkir::field {
+class PrimeFieldAttr;
+}
+
 #define GET_TYPEDEF_CLASSES
 #include "zkir/Dialect/Field/IR/FieldTypes.h.inc"
 
