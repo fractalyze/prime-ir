@@ -330,32 +330,6 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
   }
 };
 
-// `point` must be from a tensor::from_elements op
-static Value convertNegateImpl(Value point, Type inputType,
-                               ImplicitLocOpBuilder b) {
-  auto zero = b.create<arith::ConstantIndexOp>(0);
-  auto one = b.create<arith::ConstantIndexOp>(1);
-  auto x = b.create<tensor::ExtractOp>(point, ValueRange{zero});
-  auto y = b.create<tensor::ExtractOp>(point, ValueRange{one});
-
-  auto negatedY = b.create<field::NegateOp>(y);
-  SmallVector<Value> outputCoords{x, negatedY};
-
-  if (isa<JacobianType>(inputType)) {
-    auto two = b.create<arith::ConstantIndexOp>(2);
-    auto z = b.create<tensor::ExtractOp>(point, ValueRange{two});
-    outputCoords.push_back(z);
-  } else if (isa<XYZZType>(inputType)) {
-    auto two = b.create<arith::ConstantIndexOp>(2);
-    auto three = b.create<arith::ConstantIndexOp>(3);
-    auto zz = b.create<tensor::ExtractOp>(point, ValueRange{two});
-    auto zzz = b.create<tensor::ExtractOp>(point, ValueRange{three});
-    outputCoords.push_back(zz);
-    outputCoords.push_back(zzz);
-  }
-  return b.create<tensor::FromElementsOp>(outputCoords);
-}
-
 struct ConvertNegate : public OpConversionPattern<NegateOp> {
   explicit ConvertNegate(MLIRContext *context)
       : OpConversionPattern<NegateOp>(context) {}
@@ -370,7 +344,29 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
     Value point = adaptor.getInput();
     Type inputType = op.getInput().getType();
 
-    rewriter.replaceOp(op, convertNegateImpl(point, inputType, b));
+    auto zero = b.create<arith::ConstantIndexOp>(0);
+    auto one = b.create<arith::ConstantIndexOp>(1);
+    auto x = b.create<tensor::ExtractOp>(point, ValueRange{zero});
+    auto y = b.create<tensor::ExtractOp>(point, ValueRange{one});
+
+    auto negatedY = b.create<field::NegateOp>(y);
+    SmallVector<Value> outputCoords{x, negatedY};
+
+    if (isa<JacobianType>(inputType)) {
+      auto two = b.create<arith::ConstantIndexOp>(2);
+      auto z = b.create<tensor::ExtractOp>(point, ValueRange{two});
+      outputCoords.push_back(z);
+    } else if (isa<XYZZType>(inputType)) {
+      auto two = b.create<arith::ConstantIndexOp>(2);
+      auto three = b.create<arith::ConstantIndexOp>(3);
+      auto zz = b.create<tensor::ExtractOp>(point, ValueRange{two});
+      auto zzz = b.create<tensor::ExtractOp>(point, ValueRange{three});
+      outputCoords.push_back(zz);
+      outputCoords.push_back(zzz);
+    }
+    Value makePoint = b.create<tensor::FromElementsOp>(outputCoords);
+
+    rewriter.replaceOp(op, makePoint);
     return success();
   }
 };
@@ -386,14 +382,9 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Value p1 = adaptor.getLhs();
-    Value p2 = adaptor.getRhs();
-    Type p1Type = op.getLhs().getType();
-    Type p2Type = op.getRhs().getType();
-    Type outputType = op.getOutput().getType();
-
-    Value negP2 = convertNegateImpl(p2, p2Type, b);
-    Value result = convertAddImpl(p1, negP2, p1Type, p2Type, outputType, b);
+    Value negP2 = b.create<elliptic_curve::NegateOp>(op.getRhs());
+    Value result = b.create<elliptic_curve::AddOp>(op.getOutput().getType(),
+                                                   op.getLhs(), negP2);
 
     rewriter.replaceOp(op, result);
     return success();
