@@ -14,8 +14,8 @@ namespace mlir::zkir::elliptic_curve {
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-mdbl-2007-bl
 // Cost: 1M + 5S
 // Assumption: Z == 1
-Value affineToJacobianDouble(const Value &point, const Value &a,
-                             ImplicitLocOpBuilder &b) {
+static Value affineToJacobianDouble(const Value &point, const Value &a,
+                                    ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
 
@@ -58,7 +58,7 @@ Value affineToJacobianDouble(const Value &point, const Value &a,
 // dbl-2009-l
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
 // Cost: 2M + 5S
-Value jacobianA0Double(const Value &point, ImplicitLocOpBuilder &b) {
+static Value jacobianA0Double(const Value &point, ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
   Value two = b.create<arith::ConstantIndexOp>(2);
@@ -104,8 +104,8 @@ Value jacobianA0Double(const Value &point, ImplicitLocOpBuilder &b) {
 // dbl-2007-bl
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-dbl-2007-bl
 // Cost: 1M + 8S + 1*a
-Value jacobianDefaultDouble(const Value &point, const Value &a,
-                            ImplicitLocOpBuilder &b) {
+static Value jacobianDefaultDouble(const Value &point, const Value &a,
+                                   ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
   Value two = b.create<arith::ConstantIndexOp>(2);

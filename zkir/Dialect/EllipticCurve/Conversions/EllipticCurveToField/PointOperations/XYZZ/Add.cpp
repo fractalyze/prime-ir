@@ -14,8 +14,8 @@ namespace mlir::zkir::elliptic_curve {
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-madd-2008-s
 // Cost: 8M + 2S
 // Assumption: ZZ2 == ZZZ2 == 1
-Value xyzzAndAffine(const Value &p1, const Value &p2, Type affineType,
-                    ImplicitLocOpBuilder &b) {
+static Value xyzzAndAffine(const Value &p1, const Value &p2, Type affineType,
+                           ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
   Value two = b.create<arith::ConstantIndexOp>(2);
@@ -83,8 +83,8 @@ Value xyzzAndAffine(const Value &p1, const Value &p2, Type affineType,
 // add-2008-s
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-add-2008-s
 // Cost: 12M + 2S
-Value xyzzAndXyzz(const Value &p1, const Value &p2, Type xyzzType,
-                  ImplicitLocOpBuilder &b) {
+static Value xyzzAndXyzz(const Value &p1, const Value &p2, Type xyzzType,
+                         ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
   Value two = b.create<arith::ConstantIndexOp>(2);

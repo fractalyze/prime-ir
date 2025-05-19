@@ -14,8 +14,8 @@ namespace mlir::zkir::elliptic_curve {
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-mmadd-2007-bl
 // Cost: 4M + 2S
 // Assumption: Z1 == Z2 == 1
-Value affineAndAffine(const Value &p1, const Value &p2, Type affineType,
-                      ImplicitLocOpBuilder &b) {
+static Value affineAndAffine(const Value &p1, const Value &p2, Type affineType,
+                             ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
 
@@ -78,8 +78,8 @@ Value affineAndAffine(const Value &p1, const Value &p2, Type affineType,
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-madd-2007-bl
 // Cost: 7M + 4S
 // Assumption: Z2 == 1
-Value jacobianAndAffine(const Value &p1, const Value &p2, Type affineType,
-                        ImplicitLocOpBuilder &b) {
+static Value jacobianAndAffine(const Value &p1, const Value &p2,
+                               Type affineType, ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
   Value two = b.create<arith::ConstantIndexOp>(2);
@@ -154,8 +154,8 @@ Value jacobianAndAffine(const Value &p1, const Value &p2, Type affineType,
 // add-2007-bl
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-2007-bl
 // Cost: 11M + 5S
-Value jacobianAndJacobian(const Value &p1, const Value &p2, Type jacobianType,
-                          ImplicitLocOpBuilder &b) {
+static Value jacobianAndJacobian(const Value &p1, const Value &p2,
+                                 Type jacobianType, ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
   Value two = b.create<arith::ConstantIndexOp>(2);
