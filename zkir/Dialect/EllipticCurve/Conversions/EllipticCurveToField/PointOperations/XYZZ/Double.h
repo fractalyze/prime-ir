@@ -10,6 +10,8 @@
 
 namespace mlir::zkir::elliptic_curve {
 
+Value affineToXYZZDouble(const Value &point, Type inputType,
+                         ImplicitLocOpBuilder &b);
 Value xyzzDouble(const Value &point, Type inputType, ImplicitLocOpBuilder &b);
 
 }  // namespace mlir::zkir::elliptic_curve
