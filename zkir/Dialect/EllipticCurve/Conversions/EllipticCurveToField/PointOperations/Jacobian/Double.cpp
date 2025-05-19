@@ -13,8 +13,8 @@ namespace mlir::zkir::elliptic_curve {
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-mdbl-2007-bl
 // Cost: 1M + 5S
 // Assumption: Z == 1
-Value affineDouble(const Value &point, Type affineType,
-                   ImplicitLocOpBuilder &b) {
+Value affineToJacobianDouble(const Value &point, Type affineType,
+                             ImplicitLocOpBuilder &b) {
   Value zero = b.create<arith::ConstantIndexOp>(0);
   Value one = b.create<arith::ConstantIndexOp>(1);
 
@@ -120,7 +120,7 @@ Value jacobianDefaultDouble(const Value &point, Type jacobianType,
 Value jacobianDouble(const Value &point, Type inputType,
                      ImplicitLocOpBuilder &b) {
   if (isa<AffineType>(inputType)) {
-    return affineDouble(point, inputType, b);
+    return affineToJacobianDouble(point, inputType, b);
   } else if (isa<JacobianType>(inputType)) {
     return jacobianDefaultDouble(point, inputType, b);
   } else {
