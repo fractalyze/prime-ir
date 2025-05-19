@@ -75,6 +75,10 @@ def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [MemRefElementTy
   let assemblyFormat = "`<` $curve `>`";
 }
 
+def PointType : AnyTypeOf<[
+    EllipticCurve_AffineType, EllipticCurve_JacobianType,
+    EllipticCurve_XYZZType]>;
+
 def AffineLike : TypeOrValueSemanticsContainer<
     EllipticCurve_AffineType, "affine-like">;
 
