@@ -200,13 +200,44 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      InverseOp op, OpAdaptor adaptor,
+      InverseOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto inv = b.create<mod_arith::InverseOp>(adaptor.getOperands()[0]);
-    rewriter.replaceOp(op, inv);
-    return success();
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
+    if (isa<PrimeFieldType>(fieldType)) {
+      auto inv = b.create<mod_arith::InverseOp>(adaptor.getInput()[0]);
+      rewriter.replaceOp(op, inv);
+      return success();
+    }
+    if (isa<QuadraticExtFieldType>(fieldType)) {
+      // construct beta as a mod arith constant
+      auto extFieldType = cast<QuadraticExtFieldType>(fieldType);
+      auto beta = b.create<mod_arith::ConstantOp>(
+          convertPrimeFieldType(extFieldType.getBaseField()),
+          extFieldType.getBeta().getValue());
+
+      // denominator = a₀² - a₁²β
+      // TODO(batzor): Use square op instead of mul
+      auto lowSquared = b.create<mod_arith::MulOp>(adaptor.getInput()[0],
+                                                   adaptor.getInput()[0]);
+      auto highSquared = b.create<mod_arith::MulOp>(adaptor.getInput()[1],
+                                                    adaptor.getInput()[1]);
+      auto betaTimesHighSquared = b.create<mod_arith::MulOp>(beta, highSquared);
+      auto denominator =
+          b.create<mod_arith::SubOp>(lowSquared, betaTimesHighSquared);
+      auto denominatorInv = b.create<mod_arith::InverseOp>(denominator);
+
+      // c₀ = a₀ / denominator
+      auto c0 =
+          b.create<mod_arith::MulOp>(adaptor.getInput()[0], denominatorInv);
+      // c₁ = -a₁ / denominator
+      auto highNegated = b.create<mod_arith::NegateOp>(adaptor.getInput()[1]);
+      auto c1 = b.create<mod_arith::MulOp>(highNegated, denominatorInv);
+      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      return success();
+    }
+    return failure();
   }
 };
 
@@ -217,13 +248,23 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      NegateOp op, OpAdaptor adaptor,
+      NegateOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto neg = b.create<mod_arith::NegateOp>(adaptor.getOperands()[0]);
-    rewriter.replaceOp(op, neg);
-    return success();
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
+    if (isa<PrimeFieldType>(fieldType)) {
+      auto neg = b.create<mod_arith::NegateOp>(adaptor.getInput()[0]);
+      rewriter.replaceOp(op, neg);
+      return success();
+    }
+    if (isa<QuadraticExtFieldType>(fieldType)) {
+      auto c0 = b.create<mod_arith::NegateOp>(adaptor.getInput()[0]);
+      auto c1 = b.create<mod_arith::NegateOp>(adaptor.getInput()[1]);
+      rewriter.replaceOp(op, {{c0, c1}});
+      return success();
+    }
+    return failure();
   }
 };
 
@@ -234,13 +275,28 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      AddOp op, OpAdaptor adaptor,
+      AddOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto add = b.create<mod_arith::AddOp>(adaptor.getLhs(), adaptor.getRhs());
-    rewriter.replaceOp(op, add);
-    return success();
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
+    if (isa<PrimeFieldType>(fieldType)) {
+      auto add =
+          b.create<mod_arith::AddOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      rewriter.replaceOp(op, add);
+      return success();
+    }
+    if (isa<QuadraticExtFieldType>(fieldType)) {
+      // c₀ = a₀ + b₀
+      // c₁ = a₁ + b₁
+      auto c0 =
+          b.create<mod_arith::AddOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      auto c1 =
+          b.create<mod_arith::AddOp>(adaptor.getLhs()[1], adaptor.getRhs()[1]);
+      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      return success();
+    }
+    return failure();
   }
 };
 
@@ -251,14 +307,29 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      DoubleOp op, OpAdaptor adaptor,
+      DoubleOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto doubled =
-        b.create<mod_arith::AddOp>(adaptor.getInput(), adaptor.getInput());
-    rewriter.replaceOp(op, doubled);
-    return success();
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
+    if (isa<PrimeFieldType>(fieldType)) {
+      auto doubled = b.create<mod_arith::AddOp>(adaptor.getInput()[0],
+                                                adaptor.getInput()[0]);
+      rewriter.replaceOp(op, doubled);
+      return success();
+    }
+    if (isa<QuadraticExtFieldType>(fieldType)) {
+      // c₀ = a₀ + a₀
+      // c₁ = a₁ + a₁
+      // TODO(batzor): Use double op instead of add
+      auto c0 = b.create<mod_arith::AddOp>(adaptor.getInput()[0],
+                                           adaptor.getInput()[0]);
+      auto c1 = b.create<mod_arith::AddOp>(adaptor.getInput()[1],
+                                           adaptor.getInput()[1]);
+      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      return success();
+    }
+    return failure();
   }
 };
 
@@ -269,13 +340,26 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      SubOp op, OpAdaptor adaptor,
+      SubOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto sub = b.create<mod_arith::SubOp>(adaptor.getLhs(), adaptor.getRhs());
-    rewriter.replaceOp(op, sub);
-    return success();
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
+    if (isa<PrimeFieldType>(fieldType)) {
+      auto sub =
+          b.create<mod_arith::SubOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      rewriter.replaceOp(op, sub);
+      return success();
+    }
+    if (isa<QuadraticExtFieldType>(fieldType)) {
+      auto c0 =
+          b.create<mod_arith::SubOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      auto c1 =
+          b.create<mod_arith::SubOp>(adaptor.getLhs()[1], adaptor.getRhs()[1]);
+      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      return success();
+    }
+    return failure();
   }
 };
 
@@ -286,13 +370,48 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      MulOp op, OpAdaptor adaptor,
+      MulOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto mul = b.create<mod_arith::MulOp>(adaptor.getLhs(), adaptor.getRhs());
-    rewriter.replaceOp(op, mul);
-    return success();
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
+    if (isa<PrimeFieldType>(fieldType)) {
+      auto mul =
+          b.create<mod_arith::MulOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      rewriter.replaceOp(op, mul);
+      return success();
+    }
+    if (isa<QuadraticExtFieldType>(fieldType)) {
+      // construct beta as a mod arith constant
+      auto extFieldType = cast<QuadraticExtFieldType>(fieldType);
+      auto beta = b.create<mod_arith::ConstantOp>(
+          convertPrimeFieldType(extFieldType.getBaseField()),
+          extFieldType.getBeta().getValue());
+
+      // v₀ = a₀ * b₀
+      // v₁ = a₁ * b₁
+      auto v0 =
+          b.create<mod_arith::MulOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      auto v1 =
+          b.create<mod_arith::MulOp>(adaptor.getLhs()[1], adaptor.getRhs()[1]);
+
+      // c₀ = v₀ + βv₁
+      auto betaTimesV1 = b.create<mod_arith::MulOp>(beta, v1);
+      auto c0 = b.create<mod_arith::AddOp>(v0, betaTimesV1);
+
+      // c₁ = (a₀ + a₁)(b₀ + b₁) - v₀ - v₁
+      auto sumLhs =
+          b.create<mod_arith::AddOp>(adaptor.getLhs()[0], adaptor.getLhs()[1]);
+      auto sumRhs =
+          b.create<mod_arith::AddOp>(adaptor.getRhs()[0], adaptor.getRhs()[1]);
+      auto sumProduct = b.create<mod_arith::MulOp>(sumLhs, sumRhs);
+      Value c1 = b.create<mod_arith::SubOp>(sumProduct, v0);
+      c1 = b.create<mod_arith::SubOp>(c1, v1);
+
+      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      return success();
+    }
+    return failure();
   }
 };
 
@@ -303,14 +422,51 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      SquareOp op, OpAdaptor adaptor,
+      SquareOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto square =
-        b.create<mod_arith::MulOp>(adaptor.getInput(), adaptor.getInput());
-    rewriter.replaceOp(op, square);
-    return success();
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
+    if (isa<PrimeFieldType>(fieldType)) {
+      auto square = b.create<mod_arith::MulOp>(adaptor.getInput()[0],
+                                               adaptor.getInput()[0]);
+
+      rewriter.replaceOp(op, square);
+      return success();
+    }
+    if (isa<QuadraticExtFieldType>(fieldType)) {
+      // construct beta as a mod arith constant
+      auto extFieldType = cast<QuadraticExtFieldType>(fieldType);
+      auto beta = b.create<mod_arith::ConstantOp>(
+          convertPrimeFieldType(extFieldType.getBaseField()),
+          extFieldType.getBeta().getValue());
+
+      // v₀ = a₀ - a₁
+      Value v0 = b.create<mod_arith::SubOp>(adaptor.getInput()[0],
+                                            adaptor.getInput()[1]);
+
+      // v₁ = a₀ - βa₁
+      auto betaA1 = b.create<mod_arith::MulOp>(beta, adaptor.getInput()[1]);
+      auto v1 = b.create<mod_arith::SubOp>(adaptor.getInput()[0], betaA1);
+
+      // v₂ = a₀ * a₁
+      auto v2 = b.create<mod_arith::MulOp>(adaptor.getInput()[0],
+                                           adaptor.getInput()[1]);
+
+      // v₀ = v₀ * v₁ + v₂
+      auto v0TimesV1 = b.create<mod_arith::MulOp>(v0, v1);
+      v0 = b.create<mod_arith::AddOp>(v0TimesV1, v2);
+
+      // c₁ = v₂ + v₂
+      // TODO(batzor): Use double op instead of add
+      auto c1 = b.create<mod_arith::AddOp>(v2, v2);
+      // c₀ = v₀ + βv₂
+      auto betaV2 = b.create<mod_arith::MulOp>(beta, v2);
+      auto c0 = b.create<mod_arith::AddOp>(v0, betaV2);
+      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      return success();
+    }
+    return failure();
   }
 };
 

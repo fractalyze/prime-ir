@@ -139,93 +139,98 @@ def Field_FromMontOp : Field_UnaryOp<"pf.from_mont"> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-// Prime field multiplicative inverse
-def Field_InverseOp : Field_UnaryOp<"pf.inverse", [Involution]> {
-  let summary = "Prime field multiplicative inverse";
+// Field multiplicative inverse
+def Field_InverseOp : Field_UnaryOp<"inverse", [Involution]> {
+  let summary = "Field multiplicative inverse";
   let description = [{
     Computes the multiplicative inverse of a field element.
 
     Example:
     ```
-    %inv_a = field.pf.inverse %a : field.pf<primeModulus>
+    %inv_a = field.inverse %a : field.pf<primeModulus>
     ```
   }];
+  let hasVerifier = 1;
 }
 
-// Prime field negation
-def Field_NegateOp : Field_UnaryOp<"pf.negate", [Involution]> {
-  let summary = "Prime field negation";
+// Field negation
+def Field_NegateOp : Field_UnaryOp<"negate", [Involution]> {
+  let summary = "Field negation";
   let description = [{
     Computes the negation of a field element.
 
     Example:
     ```
-    %negation = field.pf.negate %a : field.pf<primeModulus>
+    %negation = field.negate %a : field.pf<primeModulus>
     ```
   }];
+  let hasVerifier = 1;
 }
 
-// Prime field addition.
-def Field_AddOp : Field_BinaryOp<"pf.add", [Commutative]> {
-  let summary = "Prime field addition";
+// Field addition.
+def Field_AddOp : Field_BinaryOp<"add", [Commutative]> {
+  let summary = "Field addition";
   let description = [{
-    Computes the sum of two prime field elements.
+    Computes the sum of two field elements.
 
     Example:
     ```
-    %r = field.pf.add %a, %b : field.pf<primeModulus>
+    %r = field.add %a, %b : field.pf<primeModulus>
     ```
   }];
+  let hasVerifier = 1;
 }
 
-// Prime field double.
-def Field_DoubleOp : Field_UnaryOp<"pf.double"> {
-  let summary = "Prime field double";
+// Field double.
+def Field_DoubleOp : Field_UnaryOp<"double"> {
+  let summary = "Field double";
   let description = [{
     Computes the double of a field element.
 
     Example:
     ```
-    %double = field.pf.double %a : field.pf<primeModulus>
+    %double = field.double %a : field.pf<primeModulus>
     ```
   }];
 }
 
-// Prime field subtraction.
-def Field_SubOp : Field_BinaryOp<"pf.sub"> {
-  let summary = "Prime field subtraction";
+// Field subtraction.
+def Field_SubOp : Field_BinaryOp<"sub"> {
+  let summary = "Field subtraction";
   let description = [{
-    Computes the difference between two prime field elements.
+    Computes the difference between two field elements.
 
     Example:
     ```
-    %r = field.pf.sub %a, %b : field.pf<primeModulus>
+    %r = field.sub %a, %b : field.pf<primeModulus>
     ```
   }];
+  let hasVerifier = 1;
 }
 
-// Prime field multiplication.
-def Field_MulOp : Field_BinaryOp<"pf.mul", [Commutative]> {
-  let summary = "Prime field multiplication";
+// Field multiplication.
+def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
+  let summary = "Field multiplication";
   let description = [{
-    Computes the product of two prime field elements.
+    Computes the product of two field elements.
 
     Example:
     ```
     %r = field.mul %a, %b : field.pf<primeModulus>
     ```
   }];
+  let hasVerifier = 1;
 }
 
-// Prime field square.
-def Field_SquareOp : Field_UnaryOp<"pf.square"> {
-  let summary = "Prime field square";
+// Field square.
+def Field_SquareOp : Field_UnaryOp<"square"> {
+  let summary = "Field square";
   let description = [{
     Computes the square of a field element.
 
     Example:
     ```
-    %square = field.pf.square %a : field.pf<primeModulus>
+    %square = field.square %a : field.pf<primeModulus>
     ```
   }];
 }

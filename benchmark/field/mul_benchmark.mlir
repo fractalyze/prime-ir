@@ -4,8 +4,8 @@
 
 func.func @mul(%arg0 : i256) -> i256 attributes { llvm.emit_c_interface } {
   %0 = field.pf.encapsulate %arg0 : i256 -> !F
-  %1 = field.pf.mul %0, %0 : !F
-  %2 = field.pf.mul %0, %1 : !F
+  %1 = field.mul %0, %0 : !F
+  %2 = field.mul %0, %1 : !F
   %3 = field.pf.extract %2 : !F -> i256
   return %3 : i256
 }
