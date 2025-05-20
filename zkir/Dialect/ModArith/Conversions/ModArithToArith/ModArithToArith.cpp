@@ -546,6 +546,167 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
   }
 };
 
+struct ConvertSquare : public OpConversionPattern<SquareOp> {
+  explicit ConvertSquare(mlir::MLIRContext *context)
+      : OpConversionPattern<SquareOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      SquareOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    const unsigned limbWidth = APInt::APINT_BITS_PER_WORD;
+
+    Value input = adaptor.getInput();
+    Type intType = modulusType(op, false);
+    Type resultType = modulusType(op, true);
+    Type limbType = IntegerType::get(op.getContext(), limbWidth);
+    Type mulResultLimbType = IntegerType::get(op.getContext(), 2 * limbWidth);
+
+    const unsigned modBitWidth = cast<IntegerType>(intType).getWidth();
+    const unsigned mulResultBitWidth = cast<IntegerType>(resultType).getWidth();
+    const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+
+    Value zeroLimb = b.create<arith::ConstantOp>(IntegerAttr::get(limbType, 0));
+
+    // Divide input into vector of size numLimbs / type limbType
+    SmallVector<Value> limbs(numLimbs);
+    for (unsigned i = 0; i < numLimbs; ++i) {
+      Value limb = b.create<arith::ShRUIOp>(
+          input, b.create<arith::ConstantOp>(
+                     IntegerAttr::get(intType, i * limbWidth)));
+      limbs[i] = b.create<arith::TruncIOp>(limbType, limb);
+    }
+    // Result buffer of size 2 * numLimbs / type limbType
+    SmallVector<Value> resultVec(2 * numLimbs, zeroLimb);
+    Value temp = zeroLimb;
+
+    // add offdiagonal entries to result buffer
+    for (unsigned i = 0; i < numLimbs; ++i) {
+      // get a[i]
+      Value a_i = limbs[i];
+      for (unsigned j = i + 1; j < numLimbs; ++j) {
+        // get r[i+j]
+        Value r_ij = resultVec[i + j];
+        // get a[j]
+        Value a_j = limbs[j];
+
+        // (temp, sum) = MulAddWithCarry r[i+j] + a[i] * a[j] + temp
+        auto ai_aj = b.create<arith::MulUIExtendedOp>(a_i, a_j);
+        Value hi = ai_aj.getHigh();
+        Value lo = ai_aj.getLow();
+        auto addResult = b.create<arith::AddUIExtendedOp>(r_ij, lo);
+        Value carry1 = addResult.getOverflow();
+        auto addResult2 =
+            b.create<arith::AddUIExtendedOp>(addResult.getSum(), temp);
+        Value carry2 = addResult2.getOverflow();
+        Value sum = addResult2.getSum();
+        temp = b.create<arith::AddIOp>(
+            hi, b.create<arith::ExtUIOp>(limbType, carry1));
+        temp = b.create<arith::AddIOp>(
+            temp, b.create<arith::ExtUIOp>(limbType, carry2));
+
+        // set r[i+j] to sum
+        resultVec[i + j] = sum;
+      }
+      // set r[i+N] to temp
+      resultVec[i + numLimbs] = temp;
+      // Reset temp
+      temp = zeroLimb;
+    }
+
+    // Build the result from the buffer vector
+    Value result = b.create<arith::ConstantOp>(IntegerAttr::get(resultType, 0));
+    for (unsigned i = 0; i < 2 * numLimbs; ++i) {
+      // get r[i]
+      Value r_i = b.create<arith::ExtUIOp>(resultType, resultVec[i]);
+      // shift r[i] to the correct position
+      Value shifted = b.create<arith::ShLIOp>(
+          r_i, b.create<arith::ConstantOp>(
+                   IntegerAttr::get(resultType, i * limbWidth)));
+      // add it to the result
+      result = b.create<arith::OrIOp>(result, shifted);
+    }
+
+    // Multiply result by 2. It's safe to assume no overflow
+    result = b.create<arith::ShLIOp>(
+        result, b.create<arith::ConstantOp>(IntegerAttr::get(resultType, 1)));
+
+    // Store result in the result buffer again
+    for (unsigned i = 0; i < 2 * numLimbs; ++i) {
+      Value shifted = b.create<arith::ShRUIOp>(
+          result, b.create<arith::ConstantOp>(
+                      IntegerAttr::get(resultType, i * limbWidth)));
+      resultVec[i] = b.create<arith::TruncIOp>(limbType, shifted);
+    }
+
+    // add diagonal entries to result buffer
+    for (unsigned i = 0; i < numLimbs; ++i) {
+      // get r[2*i]
+      Value r_2i = resultVec[2 * i];
+
+      // (temp, r[2*i]) = r[2*i] + a[i] * a[i] + temp
+      Value a_i = limbs[i];
+      auto aiSquared = b.create<arith::MulUIExtendedOp>(a_i, a_i);
+      Value hi = aiSquared.getHigh();
+      Value lo = aiSquared.getLow();
+      auto addResult = b.create<arith::AddUIExtendedOp>(r_2i, lo);
+      Value carry1 = addResult.getOverflow();
+      auto addResult2 =
+          b.create<arith::AddUIExtendedOp>(addResult.getSum(), temp);
+      Value carry2 = addResult2.getOverflow();
+      Value sum = addResult2.getSum();
+      temp = b.create<arith::AddIOp>(
+          hi, b.create<arith::ExtUIOp>(limbType, carry1));
+      temp = b.create<arith::AddIOp>(
+          temp, b.create<arith::ExtUIOp>(limbType, carry2));
+
+      // set r[2*i] to sum
+      resultVec[2 * i] = sum;
+
+      // get r[2*i+1]
+      Value r_2i1 = resultVec[2 * i + 1];
+
+      // AddWithCarry r[2*i+1] + temp
+      addResult = b.create<arith::AddUIExtendedOp>(r_2i1, temp);
+      sum = addResult.getSum();
+
+      // set r[2*i+1] to sum
+      resultVec[2 * i + 1] = sum;
+
+      // set temp to the carry
+      temp = b.create<arith::ExtUIOp>(limbType, addResult.getOverflow());
+    }
+
+    // build the resultLow and resultHigh from the limbs
+    Value resultLow = b.create<arith::ConstantOp>(IntegerAttr::get(intType, 0));
+    Value resultHigh =
+        b.create<arith::ConstantOp>(IntegerAttr::get(intType, 0));
+    for (unsigned i = 0; i < 2 * numLimbs; ++i) {
+      Value r_i = b.create<arith::ExtUIOp>(intType, resultVec[i]);
+      if (i < numLimbs) {
+        auto shifted = b.create<arith::ShLIOp>(
+            r_i, b.create<arith::ConstantOp>(
+                     IntegerAttr::get(intType, i * limbWidth)));
+        resultLow = b.create<arith::OrIOp>(resultLow, shifted);
+      } else {
+        auto shifted = b.create<arith::ShLIOp>(
+            r_i, b.create<arith::ConstantOp>(
+                     IntegerAttr::get(intType, (i - numLimbs) * limbWidth)));
+        resultHigh = b.create<arith::OrIOp>(resultHigh, shifted);
+      }
+    }
+
+    // Montgomery reduction
+    auto reduced = b.create<mod_arith::MontReduceOp>(
+        getResultModArithType(op), resultLow, resultHigh, op.getMontgomery());
+
+    rewriter.replaceOp(op, reduced);
+    return success();
+  };
+};
+
 struct ConvertDouble : public OpConversionPattern<DoubleOp> {
   explicit ConvertDouble(mlir::MLIRContext *context)
       : OpConversionPattern<DoubleOp>(context) {}
@@ -600,7 +761,7 @@ void ModArithToArith::runOnOperation() {
       .add<ConvertNegate, ConvertEncapsulate, ConvertExtract, ConvertReduce,
            ConvertMontReduce, ConvertToMont, ConvertFromMont, ConvertAdd,
            ConvertSub, ConvertMul, ConvertMontMul, ConvertMac, ConvertConstant,
-           ConvertInverse, ConvertDouble, affine::AffineForOp>,
+           ConvertInverse, ConvertSquare, ConvertDouble, affine::AffineForOp>,
       ConvertAny<affine::AffineParallelOp>, ConvertAny<affine::AffineLoadOp>,
       ConvertAny<affine::AffineApplyOp>, ConvertAny<affine::AffineStoreOp>,
       ConvertAny<affine::AffineYieldOp>, ConvertAny<bufferization::ToMemrefOp>,

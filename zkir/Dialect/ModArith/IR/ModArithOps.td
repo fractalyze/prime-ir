@@ -254,6 +254,20 @@ def ModArith_MontMulOp : ModArith_Op<"mont_mul", [Pure, ElementwiseMappable, Sam
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
+def ModArith_SquareOp : ModArith_Op<"square", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "Modular squaring operation";
+  let description = [{
+    Computes the square of a modular type integer.
+  }];
+  let arguments = (ins
+    ModArithLike:$input,
+    ModArith_MontgomeryAttr:$montgomery
+  );
+  let results = (outs ModArithLike:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
 def ModArith_DoubleOp : ModArith_Op<"double", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
   let summary = "Modular doubling operation";
   let description = [{

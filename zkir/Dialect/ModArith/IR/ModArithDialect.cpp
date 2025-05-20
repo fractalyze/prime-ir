@@ -151,6 +151,10 @@ LogicalResult MacOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }
 
+LogicalResult SquareOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
 LogicalResult DoubleOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }
