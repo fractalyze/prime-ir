@@ -254,6 +254,16 @@ def ModArith_MontMulOp : ModArith_Op<"mont_mul", [Pure, ElementwiseMappable, Sam
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
+def ModArith_DoubleOp : ModArith_Op<"double", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+  let summary = "Modular doubling operation";
+  let description = [{
+    Computes the double of a modular type integer.
+  }];
+  let arguments = (ins ModArithLike:$input);
+  let results = (outs ModArithLike:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
 
 def ModArith_MacOp : ModArith_Op<"mac", [SameOperandsAndResultType, Pure, ElementwiseMappable]> {
   let summary = "Modular multiplication-and-accumulation operation";

@@ -546,6 +546,34 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
   }
 };
 
+struct ConvertDouble : public OpConversionPattern<DoubleOp> {
+  explicit ConvertDouble(mlir::MLIRContext *context)
+      : OpConversionPattern<DoubleOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      DoubleOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    ModArithType modType = getResultModArithType(op);
+    auto intType = modType.getModulus().getType();
+
+    Value cmod = b.create<arith::ConstantOp>(modulusAttr(op));
+    Value one = b.create<arith::ConstantOp>(IntegerAttr::get(intType, 1));
+    adaptor.getInput();
+    auto shifted = b.create<arith::ShLIOp>(adaptor.getInput(), one);
+    auto ifge =
+        b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, shifted, cmod);
+    auto sub = b.create<arith::SubIOp>(shifted, cmod);
+    auto select = b.create<arith::SelectOp>(ifge, sub, shifted);
+
+    rewriter.replaceOp(op, select);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.cpp.inc"
@@ -568,19 +596,18 @@ void ModArithToArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns.add<
-      ConvertNegate, ConvertEncapsulate, ConvertExtract, ConvertReduce,
-      ConvertMontReduce, ConvertToMont, ConvertFromMont, ConvertAdd, ConvertSub,
-      ConvertMul, ConvertMontMul, ConvertMac, ConvertConstant, ConvertInverse,
-      ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineParallelOp>,
-      ConvertAny<affine::AffineLoadOp>, ConvertAny<affine::AffineApplyOp>,
-      ConvertAny<affine::AffineStoreOp>, ConvertAny<affine::AffineYieldOp>,
-      ConvertAny<bufferization::ToMemrefOp>,
+  patterns
+      .add<ConvertNegate, ConvertEncapsulate, ConvertExtract, ConvertReduce,
+           ConvertMontReduce, ConvertToMont, ConvertFromMont, ConvertAdd,
+           ConvertSub, ConvertMul, ConvertMontMul, ConvertMac, ConvertConstant,
+           ConvertInverse, ConvertDouble, affine::AffineForOp>,
+      ConvertAny<affine::AffineParallelOp>, ConvertAny<affine::AffineLoadOp>,
+      ConvertAny<affine::AffineApplyOp>, ConvertAny<affine::AffineStoreOp>,
+      ConvertAny<affine::AffineYieldOp>, ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>, ConvertAny<linalg::GenericOp>,
       ConvertAny<linalg::YieldOp>, ConvertAny<tensor::CastOp>,
       ConvertAny<tensor::ExtractOp>, ConvertAny<tensor::FromElementsOp>,
-      ConvertAny<tensor::InsertOp>>(typeConverter, context);
-
+      ConvertAny < tensor::InsertOp >> (typeConverter, context);
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
   target.addDynamicallyLegalOp<

@@ -151,6 +151,10 @@ LogicalResult MacOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }
 
+LogicalResult DoubleOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt parsedInt;
   Type parsedType;
