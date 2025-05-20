@@ -136,7 +136,7 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
 // `point` must be from a tensor::from_elements op
 static Value convertConvertPointTypeImpl(Value point, Type inputType,
                                          Type outputType,
-                                         ImplicitLocOpBuilder b) {
+                                         ImplicitLocOpBuilder &b) {
   auto zero = b.create<arith::ConstantIndexOp>(0);
   auto one = b.create<arith::ConstantIndexOp>(1);
   auto x = b.create<tensor::ExtractOp>(point, ValueRange{zero});
@@ -311,7 +311,7 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 
 // `point` must be from a tensor::from_elements op
 static Value convertDoubleImpl(Value point, Type inputType, Type outputType,
-                               ImplicitLocOpBuilder b) {
+                               ImplicitLocOpBuilder &b) {
   if (isa<XYZZType>(outputType)) {
     return xyzzDouble(point, outputType, b);
   } else if (isa<JacobianType>(outputType)) {
@@ -405,7 +405,7 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 // Currently implements Double-and-Add algorithm
 // TODO(ashjeong): implement GLV
 static Value convertScalarMulImpl(Value point, Value scalarPF, Type pointType,
-                                  Type outputType, ImplicitLocOpBuilder b) {
+                                  Type outputType, ImplicitLocOpBuilder &b) {
   auto baseFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
   unsigned outputBitWidth = baseFieldType.getModulus().getValue().getBitWidth();
   auto signlessIntType =
