@@ -59,9 +59,9 @@ func.func @test_lower_extract_vec(%lhs : tensor<4x!PF1>) -> tensor<4xi32> {
 // CHECK-LABEL: @test_lower_to_mont
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_to_mont(%lhs : !PF1) -> !PF1 {
-  // CHECK-NOT: field.pf.to_mont
+  // CHECK-NOT: field.to_mont
   // CHECK: %[[RES:.*]] = mod_arith.to_mont %[[LHS]] {montgomery = #mod_arith.montgomery<[[T]]>} : [[T]]
-  %res = field.pf.to_mont %lhs {montgomery=#mont} : !PF1
+  %res = field.to_mont %lhs {montgomery=#mont} : !PF1
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PF1
 }
@@ -69,9 +69,9 @@ func.func @test_lower_to_mont(%lhs : !PF1) -> !PF1 {
 // CHECK-LABEL: @test_lower_to_mont_vec
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_to_mont_vec(%lhs : !PFv) -> !PFv {
-  // CHECK-NOT: field.pf.to_mont
+  // CHECK-NOT: field.to_mont
   // CHECK: %[[RES:.*]] = mod_arith.to_mont %[[LHS]] {montgomery = #mod_arith.montgomery<[[E:.*]]>} : [[T]]
-  %res = field.pf.to_mont %lhs {montgomery=#mont} : !PFv
+  %res = field.to_mont %lhs {montgomery=#mont} : !PFv
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PFv
 }
@@ -79,9 +79,9 @@ func.func @test_lower_to_mont_vec(%lhs : !PFv) -> !PFv {
 // CHECK-LABEL: @test_lower_from_mont
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_from_mont(%lhs : !PF1) -> !PF1 {
-  // CHECK-NOT: field.pf.from_mont
+  // CHECK-NOT: field.from_mont
   // CHECK: %[[RES:.*]] = mod_arith.from_mont %[[LHS]] {montgomery = #mod_arith.montgomery<[[T]]>} : [[T]]
-  %res = field.pf.from_mont %lhs {montgomery=#mont} : !PF1
+  %res = field.from_mont %lhs {montgomery=#mont} : !PF1
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PF1
 }
@@ -89,9 +89,9 @@ func.func @test_lower_from_mont(%lhs : !PF1) -> !PF1 {
 // CHECK-LABEL: @test_lower_from_mont_vec
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_from_mont_vec(%lhs : !PFv) -> !PFv {
-  // CHECK-NOT: field.pf.from_mont
+  // CHECK-NOT: field.from_mont
   // CHECK: %[[RES:.*]] = mod_arith.from_mont %[[LHS]] {montgomery = #mod_arith.montgomery<[[E:.*]]>} : [[T]]
-  %res = field.pf.from_mont %lhs {montgomery=#mont} : !PFv
+  %res = field.from_mont %lhs {montgomery=#mont} : !PFv
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PFv
 }
@@ -245,7 +245,7 @@ func.func @test_lower_mont_mul() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 2 : [[T]]
   %c0 = field.pf.constant 2 : !PF1
   // CHECK: %[[RES:.*]] = mod_arith.mont_mul %[[C0]], %[[C0]] {montgomery = #mod_arith.montgomery<[[T]]>} : [[T]]
-  %res = field.pf.mont_mul %c0, %c0 {montgomery = #mont} : !PF1
+  %res = field.mont_mul %c0, %c0 {montgomery = #mont} : !PF1
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PF1
 }
@@ -253,9 +253,9 @@ func.func @test_lower_mont_mul() -> !PF1 {
 // CHECK-LABEL: @test_lower_mont_mul_vec
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_mont_mul_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
-  // CHECK-NOT: field.pf.mont_mul
+  // CHECK-NOT: field.mont_mul
   // CHECK: %[[RES:.*]] = mod_arith.mont_mul %[[LHS]], %[[RHS]] {montgomery = #mod_arith.montgomery<[[E:.*]]>}  : [[T]]
-  %res = field.pf.mont_mul %lhs, %rhs {montgomery = #mont} : !PFv
+  %res = field.mont_mul %lhs, %rhs {montgomery = #mont} : !PFv
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PFv
 }

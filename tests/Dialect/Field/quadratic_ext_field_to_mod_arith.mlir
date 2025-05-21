@@ -1,4 +1,6 @@
 // RUN: zkir-opt -field-to-mod-arith --split-input-file %s | FileCheck %s --enable-var-scope
+!mod = !mod_arith.int<7:i32>
+#mont = #mod_arith.montgomery<!mod>
 !PF = !field.pf<7:i32>
 #beta = #field.pf_elem<6:i32> : !PF
 !QF = !field.f2<!PF, #beta>
@@ -65,6 +67,27 @@ func.func @test_lower_from_elements(%arg0: !PF, %arg1: !PF) -> tensor<2x!QF> {
     %2 = tensor.from_elements %0, %1 : tensor<2x!QF>
     // CHECK: return %[[TENSOR]] : tensor<2x2x[[T]]>
     return %2 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_lower_from_mont
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
+func.func @test_lower_from_mont(%arg0: !QF) -> !QF {
+    %0 = field.from_mont %arg0 {montgomery=#mont} : !QF
+    return %0 : !QF
+}
+
+// CHECK-LABEL: @test_lower_to_mont
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
+func.func @test_lower_to_mont(%arg0: !QF) -> !QF {
+    %0 = field.to_mont %arg0 {montgomery=#mont} : !QF
+    return %0 : !QF
+}
+
+// CHECK-LABEL: @test_lower_mont_mul
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]], %[[ARG2:.*]]: [[T]], %[[ARG3:.*]]: [[T]]) -> ([[T]], [[T]]) {
+func.func @test_lower_mont_mul(%arg0: !QF, %arg1: !QF) -> !QF {
+    %0 = field.mont_mul %arg0, %arg1 {montgomery=#mont} : !QF
+    return %0 : !QF
 }
 
 // CHECK-LABEL: @test_lower_tensor_extract

@@ -139,5 +139,8 @@ LogicalResult AddOp::verify() { return disallowTensorOfExtField(*this); }
 LogicalResult SubOp::verify() { return disallowTensorOfExtField(*this); }
 LogicalResult MulOp::verify() { return disallowTensorOfExtField(*this); }
 LogicalResult InverseOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult FromMontOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult ToMontOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult MontMulOp::verify() { return disallowTensorOfExtField(*this); }
 
 }  // namespace mlir::zkir::field

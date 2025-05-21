@@ -109,34 +109,36 @@ def Field_ExtractOp : Field_Op<"pf.extract"> {
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
-def Field_ToMontOp : Field_UnaryOp<"pf.to_mont"> {
+def Field_ToMontOp : Field_UnaryOp<"to_mont"> {
   let summary = "Convert from standard form to montgomery representation";
   let description = [{
-    Computes x * R mod q, where `R` is the montgomery factor.
+    Computes x * R, where `R` is the montgomery factor.
 
     Example:
     ```
-    %m0 = field.pf.to_mont %c0 {montgomery=#mont} : !PF
+    %m0 = field.to_mont %c0 {montgomery=#mont} : !PF
     ```
   }];
-  let arguments = (ins PrimeFieldLike:$input, ModArith_MontgomeryAttr:$montgomery);
-  let results = (outs PrimeFieldLike:$output);
+  let arguments = (ins FieldLike:$input, ModArith_MontgomeryAttr:$montgomery);
+  let results = (outs FieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($output)";
+  let hasVerifier = 1;
 }
 
-def Field_FromMontOp : Field_UnaryOp<"pf.from_mont"> {
+def Field_FromMontOp : Field_UnaryOp<"from_mont"> {
   let summary = "Convert from montgomery representation to standard form";
   let description = [{
-    Computes x * R⁻¹ mod q, where `R` is the montgomery factor.
+    Computes x * R⁻¹, where `R` is the montgomery factor.
 
     Example:
     ```
-    %m0 = field.pf.from_mont %c0 {montgomery=#mont} : !PF
+    %m0 = field.from_mont %c0 {montgomery=#mont} : !PF
     ```
   }];
-  let arguments = (ins PrimeFieldLike:$input, ModArith_MontgomeryAttr:$montgomery);
-  let results = (outs PrimeFieldLike:$output);
+  let arguments = (ins FieldLike:$input, ModArith_MontgomeryAttr:$montgomery);
+  let results = (outs FieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($output)";
+  let hasVerifier = 1;
 }
 
 // Field multiplicative inverse
@@ -235,23 +237,24 @@ def Field_SquareOp : Field_UnaryOp<"square"> {
   }];
 }
 
-def Field_MontMulOp : Field_BinaryOp<"pf.mont_mul"> {
+def Field_MontMulOp : Field_BinaryOp<"mont_mul"> {
   let summary = "Montgomery multiplication";
   let description = [{
-    Computes a * b * R⁻¹ mod q, where `R` is the montgomery factor.
+    Computes a * b * R⁻¹, where `R` is the montgomery factor.
 
     Example:
     ```
-    %m0 = field.pf.mont_mul %a, %b {montgomery=#mont} : !PF
+    %m0 = field.mont_mul %a, %b {montgomery=#mont} : !PF
     ```
   }];
   let arguments = (ins
-    PrimeFieldLike:$lhs,
-    PrimeFieldLike:$rhs,
+    FieldLike:$lhs,
+    FieldLike:$rhs,
     ModArith_MontgomeryAttr:$montgomery
   );
-  let results = (outs PrimeFieldLike:$output);
+  let results = (outs FieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($output)";
+  let hasVerifier = 1;
 }
 
 def Field_CmpOp : Field_Op<"pf.cmp", [SameTypeOperands, TypesMatchWith<
