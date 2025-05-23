@@ -157,7 +157,7 @@ LogicalResult PointOp::verify() {
   Type outputType = getOutput().getType();
   uint8_t numCoords = getNumOperands();
   auto operands = getOperands();
-  field::PrimeFieldType baseField =
+  field::PrimeFieldType baseFieldType =
       cast<field::PrimeFieldType>(operands[0].getType());
 
   if (isa<AffineType>(outputType) && numCoords != 2) {
@@ -169,7 +169,7 @@ LogicalResult PointOp::verify() {
   }
 
   for (int i = 1; i < operands.size(); ++i) {
-    if (baseField != cast<field::PrimeFieldType>(operands[i].getType())) {
+    if (baseFieldType != cast<field::PrimeFieldType>(operands[i].getType())) {
       return emitError() << "All coordinates are not of the same prime field";
     }
   }
@@ -225,6 +225,27 @@ LogicalResult ScalarMulOp::verify() {
     return success();
   // TODO(ashjeong): check curves/fields are the same
   return emitError() << "wrong output type given point type";
+}
+
+LogicalResult MSMOp::verify() {
+  TensorType scalarsType = cast<TensorType>(getScalars().getType());
+  TensorType pointsType = cast<TensorType>(getPoints().getType());
+  Type pointType = pointsType.getElementType();
+  if (scalarsType.getRank() != pointsType.getRank()) {
+    return emitError() << "scalars and points must have the same rank";
+  }
+  Type outputType = getOutput().getType();
+  if ((isa<AffineType>(pointType) || isa<JacobianType>(pointType)) &&
+      !isa<JacobianType>(outputType)) {
+    return emitError() << "affine or jacobian point inputs for msm must result "
+                          "in jacobian output";
+  } else if (isa<XYZZType>(pointType) && !isa<XYZZType>(outputType)) {
+    return emitError()
+           << "xyzz point inputs for msm must result in xyzz output";
+  } else {
+    return success();
+  }
+  // TODO(ashjeong): check curves/fields are the same
 }
 
 //////////////// VERIFY POINT CONVERSIONS ////////////////

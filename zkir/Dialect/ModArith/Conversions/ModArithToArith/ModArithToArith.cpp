@@ -38,7 +38,7 @@ static IntegerType convertModArithType(ModArithType type) {
 }
 
 static Type convertModArithLikeType(ShapedType type) {
-  if (auto modArithType = llvm::dyn_cast<ModArithType>(type.getElementType())) {
+  if (auto modArithType = dyn_cast<ModArithType>(type.getElementType())) {
     return type.cloneWith(type.getShape(), convertModArithType(modArithType));
   }
   return type;
@@ -638,7 +638,10 @@ void ModArithToArith::runOnOperation() {
            ConvertAny<linalg::MapOp>, ConvertAny<linalg::YieldOp>,
            ConvertAny<memref::LoadOp>, ConvertAny<memref::StoreOp>,
            ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
-           ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::InsertOp>>(
+           ConvertAny<tensor::ExtractSliceOp>,
+           ConvertAny<tensor::InsertSliceOp>, ConvertAny<tensor::EmptyOp>,
+           ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::ConcatOp>,
+           ConvertAny<tensor::ReshapeOp>, ConvertAny<tensor::InsertOp>>(
           typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
@@ -649,7 +652,9 @@ void ModArithToArith::runOnOperation() {
       bufferization::MaterializeInDestinationOp, bufferization::ToMemrefOp,
       bufferization::ToTensorOp, linalg::GenericOp, linalg::MapOp,
       linalg::YieldOp, memref::LoadOp, memref::StoreOp, tensor::CastOp,
-      tensor::ExtractOp, tensor::FromElementsOp, tensor::InsertOp>(
+      tensor::ExtractOp, tensor::ExtractSliceOp, tensor::InsertSliceOp,
+      tensor::EmptyOp, tensor::FromElementsOp, tensor::ConcatOp,
+      tensor::ReshapeOp, tensor::InsertOp>(
       [&](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {

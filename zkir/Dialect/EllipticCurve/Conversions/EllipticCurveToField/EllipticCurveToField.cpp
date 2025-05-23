@@ -29,37 +29,48 @@ namespace mlir::zkir::elliptic_curve {
 //////////////// TYPE CONVERSION ////////////////
 
 static RankedTensorType convertAffineType(AffineType type) {
-  field::PrimeFieldType baseField = type.getCurve().getA().getType();
-  return RankedTensorType::get({2}, baseField);
+  field::PrimeFieldType baseFieldType = type.getCurve().getA().getType();
+  return RankedTensorType::get({2}, baseFieldType);
 }
 
 static RankedTensorType convertJacobianType(JacobianType type) {
-  field::PrimeFieldType baseField = type.getCurve().getA().getType();
-  return RankedTensorType::get({3}, baseField);
+  field::PrimeFieldType baseFieldType = type.getCurve().getA().getType();
+  return RankedTensorType::get({3}, baseFieldType);
 }
 
 static RankedTensorType convertXYZZType(XYZZType type) {
-  field::PrimeFieldType baseField = type.getCurve().getA().getType();
-  return RankedTensorType::get({4}, baseField);
+  field::PrimeFieldType baseFieldType = type.getCurve().getA().getType();
+  return RankedTensorType::get({4}, baseFieldType);
 }
 
 static Type convertAffineLikeType(ShapedType type) {
   if (auto affineType = dyn_cast<AffineType>(type.getElementType())) {
-    return type.cloneWith(type.getShape(), convertAffineType(affineType));
+    field::PrimeFieldType baseFieldType =
+        affineType.getCurve().getA().getType();
+    SmallVector<int64_t> newShape(type.getShape());
+    newShape.push_back(2);
+    return type.cloneWith(newShape, baseFieldType);
   }
   return type;
 }
 
 static Type convertJacobianLikeType(ShapedType type) {
   if (auto jacobianType = dyn_cast<JacobianType>(type.getElementType())) {
-    return type.cloneWith(type.getShape(), convertJacobianType(jacobianType));
+    field::PrimeFieldType baseFieldType =
+        jacobianType.getCurve().getA().getType();
+    SmallVector<int64_t> newShape(type.getShape());
+    newShape.push_back(3);
+    return type.cloneWith(newShape, baseFieldType);
   }
   return type;
 }
 
 static Type convertXYZZLikeType(ShapedType type) {
   if (auto xyzzType = dyn_cast<XYZZType>(type.getElementType())) {
-    return type.cloneWith(type.getShape(), convertXYZZType(xyzzType));
+    field::PrimeFieldType baseFieldType = xyzzType.getCurve().getA().getType();
+    SmallVector<int64_t> newShape(type.getShape());
+    newShape.push_back(4);
+    return type.cloneWith(newShape, baseFieldType);
   }
   return type;
 }
@@ -108,6 +119,104 @@ struct ConvertPoint : public OpConversionPattern<PointOp> {
   }
 };
 
+/// In lowered form, a point is a tensor of prime field values. Creating a
+/// set of lowered form points therefore requires a 2D tensor.
+struct ConvertPointSet : public OpConversionPattern<PointSetOp> {
+  explicit ConvertPointSet(MLIRContext *context)
+      : OpConversionPattern<PointSetOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      PointSetOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // Lowered point (e.g. tensor<3x!PF> [Jacobian])
+    Value loweredPoint = adaptor.getOperands()[0];
+    RankedTensorType loweredPointType =
+        cast<RankedTensorType>(loweredPoint.getType());
+    field::PrimeFieldType baseFieldType =
+        cast<field::PrimeFieldType>(loweredPointType.getElementType());
+    unsigned numCoords =
+        cast<RankedTensorType>(adaptor.getPoints()[0].getType()).getShape()[0];
+
+    // Reshape point tensors to 2D (e.g. tensor<3x!PF> -> tensor<1x3x!PF>)
+    RankedTensorType outputType =
+        RankedTensorType::get({1, numCoords}, baseFieldType);
+    SmallVector<Value> _outputShape(2);
+
+    _outputShape[0] = b.create<arith::ConstantIndexOp>(1);
+    _outputShape[1] = b.create<arith::ConstantIndexOp>(numCoords);
+    auto outputShape = b.create<tensor::FromElementsOp>(_outputShape);
+
+    size_t numPoints = op.getNumOperands();
+    SmallVector<Value> expandedPoints(numPoints);
+    for (size_t i = 0; i < numPoints; ++i) {
+      expandedPoints[i] = b.create<tensor::ReshapeOp>(
+          outputType,                // Result type of the operation
+          adaptor.getOperands()[i],  // The input lowered point tensor
+          outputShape);              // The output 2D tensor shape
+    }
+
+    // Concat all 2D point tensors together for final 2D set of point tensors
+    RankedTensorType totalOutputType =
+        RankedTensorType::get({op.getNumOperands(), numCoords}, baseFieldType);
+
+    auto pointSet =
+        b.create<tensor::ConcatOp>(totalOutputType, 0, expandedPoints);
+    rewriter.replaceOp(op, pointSet);
+    return success();
+  }
+};
+
+/// The lowered form of point set is a 2D tensor of prime field values, while
+/// the ec form is a 1D tensor. Extracting the value must be done specially for
+/// the lowered version.
+struct ConvertPointSetExtract : public OpConversionPattern<PointSetExtractOp> {
+  explicit ConvertPointSetExtract(MLIRContext *context)
+      : OpConversionPattern<PointSetExtractOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      PointSetExtractOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // 2D tensor of prime field values, e.g.:
+    // |x1, y1, z1|
+    // |x2, y2, z2|
+    Value loweredPointSet = adaptor.getPointSet();
+    Value index = adaptor.getIndex();
+    // e.g. tensor<2x3x!PF> (set of jacobian points)
+    auto loweredPointSetType =
+        cast<RankedTensorType>(loweredPointSet.getType());
+    unsigned numCoords = loweredPointSetType.getShape()[1];
+
+    auto zero = b.create<arith::ConstantIndexOp>(0);
+    auto one = b.create<arith::ConstantIndexOp>(1);
+    auto sz = b.create<arith::ConstantIndexOp>(numCoords);
+    SmallVector<Value> offsets{index, zero};
+    SmallVector<Value> sizes{one, sz};
+    SmallVector<Value> strides{one, one};
+    // e.g. tensor<1x3x!PF> (jacobian point in 2D)
+    auto higherRankedLoweredPoint = b.create<tensor::ExtractSliceOp>(
+        loweredPointSet, offsets, sizes, strides);
+
+    SmallVector<Value> _outputShape{sz};
+    auto outputShape = b.create<tensor::FromElementsOp>(_outputShape);
+
+    // e.g. tensor<3x!PF> (jacobian point in 1D)
+    auto point = b.create<tensor::ReshapeOp>(
+        RankedTensorType::get({numCoords},
+                              loweredPointSetType.getElementType()),
+        higherRankedLoweredPoint, outputShape);
+    rewriter.replaceOp(op, point);
+    return success();
+  }
+};
+
 struct ConvertExtract : public OpConversionPattern<ExtractOp> {
   explicit ConvertExtract(MLIRContext *context)
       : OpConversionPattern<ExtractOp>(context) {}
@@ -117,8 +226,6 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
   LogicalResult matchAndRewrite(
       ExtractOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }
@@ -127,17 +234,17 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
 // `point` must be from a tensor::from_elements op
 static Value convertConvertPointTypeImpl(Value point, Type inputType,
                                          Type outputType,
-                                         ImplicitLocOpBuilder b) {
+                                         ImplicitLocOpBuilder &b) {
   auto zero = b.create<arith::ConstantIndexOp>(0);
   auto one = b.create<arith::ConstantIndexOp>(1);
   auto x = b.create<tensor::ExtractOp>(point, ValueRange{zero});
   auto y = b.create<tensor::ExtractOp>(point, ValueRange{one});
-  auto pfType = cast<field::PrimeFieldType>(x.getType());
+  auto baseFieldType = cast<field::PrimeFieldType>(x.getType());
 
   SmallVector<Value> outputCoords;
 
   if (isa<AffineType>(inputType)) {
-    auto onePF = b.create<field::ConstantOp>(pfType, 1);
+    auto onePF = b.create<field::ConstantOp>(baseFieldType, 1);
 
     // affine to jacobian
     // (x, y) -> (x, y, 1)
@@ -156,14 +263,15 @@ static Value convertConvertPointTypeImpl(Value point, Type inputType,
     if (isa<AffineType>(outputType)) {
       // jacobian to affine
       // (x, y, z) -> (x/z², y/z³)
-      auto zero = b.create<field::ConstantOp>(pfType, 0);
+      auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
       auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, z, zero);
       // if z == 0, then x/z² -> 1, y/z³ -> 1
       auto output = b.create<scf::IfOp>(
           cmpEq,
           /*thenBuilder=*/
           [&](OpBuilder &builder, Location loc) {
-            auto onePF = builder.create<field::ConstantOp>(loc, pfType, 1);
+            auto onePF =
+                builder.create<field::ConstantOp>(loc, baseFieldType, 1);
             builder.create<scf::YieldOp>(loc, ValueRange{onePF, onePF});
           },
           /*elseBuilder=*/
@@ -191,14 +299,15 @@ static Value convertConvertPointTypeImpl(Value point, Type inputType,
     if (isa<AffineType>(outputType)) {
       // xyzz to affine
       // (x, y, z², z³) -> (x/z², y/z³)
-      auto zero = b.create<field::ConstantOp>(pfType, 0);
+      auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
       auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, zz, zero);
       // if z == 0, then x/z² -> 1, y/z³ -> 1
       auto ifOp = b.create<scf::IfOp>(
           cmpEq,
           /*thenBuilder=*/
           [&](OpBuilder &builder, Location loc) {
-            auto onePF = builder.create<field::ConstantOp>(loc, pfType, 1);
+            auto onePF =
+                builder.create<field::ConstantOp>(loc, baseFieldType, 1);
             builder.create<scf::YieldOp>(loc, ValueRange{onePF, onePF});
           },
           /*elseBuilder=*/
@@ -216,13 +325,14 @@ static Value convertConvertPointTypeImpl(Value point, Type inputType,
       // (x, y, z², z³) -> (x, y, z)
       outputCoords = {x, y};
 
-      auto zero = b.create<field::ConstantOp>(pfType, 0);
+      auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
       auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, zz, zero);
       auto output = b.create<scf::IfOp>(
           cmpEq,
           /*thenBuilder=*/
           [&](OpBuilder &builder, Location loc) {
-            auto zeroPF = builder.create<field::ConstantOp>(loc, pfType, 0);
+            auto zeroPF =
+                builder.create<field::ConstantOp>(loc, baseFieldType, 0);
             builder.create<scf::YieldOp>(loc, ValueRange{zeroPF});
           },
           /*elseBuilder=*/
@@ -299,7 +409,7 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 
 // `point` must be from a tensor::from_elements op
 static Value convertDoubleImpl(Value point, Type inputType, Type outputType,
-                               ImplicitLocOpBuilder b) {
+                               ImplicitLocOpBuilder &b) {
   if (isa<XYZZType>(outputType)) {
     return xyzzDouble(point, outputType, b);
   } else if (isa<JacobianType>(outputType)) {
@@ -329,32 +439,6 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
   }
 };
 
-// `point` must be from a tensor::from_elements op
-static Value convertNegateImpl(Value point, Type inputType,
-                               ImplicitLocOpBuilder b) {
-  auto zero = b.create<arith::ConstantIndexOp>(0);
-  auto one = b.create<arith::ConstantIndexOp>(1);
-  auto x = b.create<tensor::ExtractOp>(point, ValueRange{zero});
-  auto y = b.create<tensor::ExtractOp>(point, ValueRange{one});
-
-  auto negatedY = b.create<field::NegateOp>(y);
-  SmallVector<Value> outputCoords{x, negatedY};
-
-  if (isa<JacobianType>(inputType)) {
-    auto two = b.create<arith::ConstantIndexOp>(2);
-    auto z = b.create<tensor::ExtractOp>(point, ValueRange{two});
-    outputCoords.push_back(z);
-  } else if (isa<XYZZType>(inputType)) {
-    auto two = b.create<arith::ConstantIndexOp>(2);
-    auto three = b.create<arith::ConstantIndexOp>(3);
-    auto zz = b.create<tensor::ExtractOp>(point, ValueRange{two});
-    auto zzz = b.create<tensor::ExtractOp>(point, ValueRange{three});
-    outputCoords.push_back(zz);
-    outputCoords.push_back(zzz);
-  }
-  return b.create<tensor::FromElementsOp>(outputCoords);
-}
-
 struct ConvertNegate : public OpConversionPattern<NegateOp> {
   explicit ConvertNegate(MLIRContext *context)
       : OpConversionPattern<NegateOp>(context) {}
@@ -369,7 +453,29 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
     Value point = adaptor.getInput();
     Type inputType = op.getInput().getType();
 
-    rewriter.replaceOp(op, convertNegateImpl(point, inputType, b));
+    auto zero = b.create<arith::ConstantIndexOp>(0);
+    auto one = b.create<arith::ConstantIndexOp>(1);
+    auto x = b.create<tensor::ExtractOp>(point, ValueRange{zero});
+    auto y = b.create<tensor::ExtractOp>(point, ValueRange{one});
+
+    auto negatedY = b.create<field::NegateOp>(y);
+    SmallVector<Value> outputCoords{x, negatedY};
+
+    if (isa<JacobianType>(inputType)) {
+      auto two = b.create<arith::ConstantIndexOp>(2);
+      auto z = b.create<tensor::ExtractOp>(point, ValueRange{two});
+      outputCoords.push_back(z);
+    } else if (isa<XYZZType>(inputType)) {
+      auto two = b.create<arith::ConstantIndexOp>(2);
+      auto three = b.create<arith::ConstantIndexOp>(3);
+      auto zz = b.create<tensor::ExtractOp>(point, ValueRange{two});
+      auto zzz = b.create<tensor::ExtractOp>(point, ValueRange{three});
+      outputCoords.push_back(zz);
+      outputCoords.push_back(zzz);
+    }
+    Value makePoint = b.create<tensor::FromElementsOp>(outputCoords);
+
+    rewriter.replaceOp(op, makePoint);
     return success();
   }
 };
@@ -385,14 +491,9 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Value p1 = adaptor.getLhs();
-    Value p2 = adaptor.getRhs();
-    Type p1Type = op.getLhs().getType();
-    Type p2Type = op.getRhs().getType();
-    Type outputType = op.getOutput().getType();
-
-    Value negP2 = convertNegateImpl(p2, p2Type, b);
-    Value result = convertAddImpl(p1, negP2, p1Type, p2Type, outputType, b);
+    Value negP2 = b.create<elliptic_curve::NegateOp>(op.getRhs());
+    Value result = b.create<elliptic_curve::AddOp>(op.getOutput().getType(),
+                                                   op.getLhs(), negP2);
 
     rewriter.replaceOp(op, result);
     return success();
@@ -401,6 +502,93 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 
 // Currently implements Double-and-Add algorithm
 // TODO(ashjeong): implement GLV
+static Value convertScalarMulImpl(Value point, Value scalarPF, Type pointType,
+                                  Type outputType, ImplicitLocOpBuilder &b) {
+  auto baseFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
+  unsigned outputBitWidth = baseFieldType.getModulus().getValue().getBitWidth();
+  auto signlessIntType =
+      IntegerType::get(b.getContext(), outputBitWidth, IntegerType::Signless);
+  auto scalar = b.create<field::ExtractOp>(signlessIntType, scalarPF);
+
+  auto zeroPF = b.create<field::ConstantOp>(baseFieldType, 0);
+  SmallVector<Value> zeroes{zeroPF, zeroPF, zeroPF};
+  Value initalPoint;
+
+  if (isa<XYZZType>(outputType)) {
+    zeroes.push_back(zeroPF);
+    initalPoint = point;
+  } else if (isa<AffineType>(pointType)) {
+    initalPoint = convertConvertPointTypeImpl(point, pointType, outputType, b);
+  } else {
+    initalPoint = point;
+  }
+  Value zeroPoint = b.create<tensor::FromElementsOp>(zeroes);
+
+  // `decreasingScalar` set to `scalar` and `result` set to zero point.
+  auto whileOp = b.create<scf::WhileOp>(
+      /*resultTypes=*/
+      TypeRange({signlessIntType, initalPoint.getType(), zeroPoint.getType()}),
+      /*operands=*/
+      ValueRange({scalar, initalPoint, zeroPoint}),
+      /*beforeBuilder=*/
+      [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
+        ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
+        auto arithZero = b.create<arith::ConstantIntOp>(0, signlessIntType);
+        // if `decreasingScalar` > 0, continue
+        Value decreasingScalar = args[0];
+        auto cmpGt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt,
+                                             decreasingScalar, arithZero);
+        b.create<scf::ConditionOp>(cmpGt, args);
+      },
+      /*afterBuilder=*/
+      [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
+        ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
+        auto arithOne = b.create<arith::ConstantIntOp>(1, signlessIntType);
+        Value decreasingScalar = args[0];
+        Value multiplyingPoint = args[1];
+        Value result = args[2];
+
+        // if `decreasingScalar` % 1 == 1...
+        auto bitAdd = b.create<arith::AndIOp>(decreasingScalar, arithOne);
+        auto cmpEq =
+            b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, bitAdd, arithOne);
+        auto ifOp = b.create<scf::IfOp>(
+            cmpEq,
+            // ...then add `multiplyingPoint` to `result`
+            /*thenBuilder=*/
+            [&](OpBuilder &builder, Location loc) {
+              ImplicitLocOpBuilder b(loc, builder);
+              Value innerResult =
+                  convertAddImpl(result, multiplyingPoint, outputType,
+                                 outputType, outputType, b);
+              b.create<scf::YieldOp>(innerResult);
+            },
+            /*elseBuilder=*/
+            [&](OpBuilder &builder, Location loc) {
+              b.create<scf::YieldOp>(result);
+            });
+        // double `multiplyingPoint`
+        Value doubledPoint =
+            convertDoubleImpl(multiplyingPoint, outputType, outputType, b);
+        // right shift `decreasingScalar` by 1
+        decreasingScalar = b.create<arith::ShRUIOp>(decreasingScalar, arithOne);
+
+        // See here for more info:
+        // https://github.com/iree-org/iree/issues/16956
+        auto multPointBufferOp =
+            b.create<bufferization::MaterializeInDestinationOp>(
+                doubledPoint, multiplyingPoint);
+        auto resultBufferOp =
+            b.create<bufferization::MaterializeInDestinationOp>(
+                ifOp.getResult(0), result);
+
+        b.create<scf::YieldOp>(
+            ValueRange({decreasingScalar, multPointBufferOp.getResult(),
+                        resultBufferOp.getResult()}));
+      });
+  return whileOp.getResult(2);
+}
+
 struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
   explicit ConvertScalarMul(MLIRContext *context)
       : OpConversionPattern<ScalarMulOp>(context) {}
@@ -412,98 +600,83 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Type inputType = op.getPoint().getType();
+    Value point = adaptor.getPoint();
+    Value scalarPF = op.getScalar();
+
+    Type pointType = op.getPoint().getType();
     Type outputType = op.getOutput().getType();
 
-    Value scalarPF = op.getScalar();
-    auto pfType = cast<field::PrimeFieldType>(scalarPF.getType());
-    unsigned outputBitWidth = pfType.getModulus().getValue().getBitWidth();
-    auto signlessIntType = IntegerType::get(op.getContext(), outputBitWidth,
-                                            IntegerType::Signless);
-    auto scalar = b.create<field::ExtractOp>(signlessIntType, scalarPF);
+    Value scalarMul =
+        convertScalarMulImpl(point, scalarPF, pointType, outputType, b);
+    rewriter.replaceOp(op, scalarMul);
+    return success();
+  }
+};
 
-    Value point = adaptor.getPoint();
-    auto zeroPF = b.create<field::ConstantOp>(pfType, 0);
-    SmallVector<Value> zeroes{zeroPF, zeroPF, zeroPF};
-    Value initalPoint;
+struct ConvertMSM : public OpConversionPattern<MSMOp> {
+  explicit ConvertMSM(mlir::MLIRContext *context)
+      : OpConversionPattern<MSMOp>(context) {}
 
-    if (isa<XYZZType>(outputType)) {
-      zeroes.push_back(zeroPF);
-      initalPoint = point;
-    } else if (isa<AffineType>(inputType)) {
-      initalPoint =
-          convertConvertPointTypeImpl(point, inputType, outputType, b);
-    } else {
-      initalPoint = point;
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      MSMOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // 2D tensor of prime field values, e.g.:
+    // |x1, y1, z1|
+    // |x2, y2, z2|
+    Value loweredPointSet = adaptor.getPoints();
+    // 1d tensor of PF, e.g.:
+    // | s1 , s2 |
+    Value scalars = op.getScalars();
+    RankedTensorType loweredPointSetType =
+        cast<RankedTensorType>(loweredPointSet.getType());
+    field::PrimeFieldType baseFieldType =
+        cast<field::PrimeFieldType>(loweredPointSetType.getElementType());
+    unsigned numScalarMuls = loweredPointSetType.getShape()[0];
+    unsigned numCoords = loweredPointSetType.getShape()[1];
+
+    Type inputPointType =
+        cast<RankedTensorType>(op.getPoints().getType()).getElementType();
+    Type outputPointType = op.getOutput().getType();
+    RankedTensorType loweredOutputPointType =
+        RankedTensorType::get({numCoords}, baseFieldType);
+
+    Value accumulator;
+    auto zero = b.create<arith::ConstantIndexOp>(0);
+    auto one = b.create<arith::ConstantIndexOp>(1);
+    auto sz = b.create<arith::ConstantIndexOp>(numCoords);
+    SmallVector<Value> sizes{one, sz};
+    SmallVector<Value> strides{one, one};
+    for (size_t i = 0; i < numScalarMuls; ++i) {
+      auto idx = b.create<arith::ConstantIndexOp>(i);
+
+      // scalar
+      auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{idx});
+
+      // point
+      //  - extract point = tensor<2x3x!PF> -> tensor<1x3x!PF>
+      SmallVector<Value> offsets{idx, zero};
+      auto higherRankedPoint = b.create<tensor::ExtractSliceOp>(
+          loweredPointSet, offsets, sizes, strides);
+      // - reshape point = tensor<1x3x!PF> -> tensor<3x!PF>
+      SmallVector<Value> _outputShape{sz};
+      auto outputShape = b.create<tensor::FromElementsOp>(_outputShape);
+      auto point = b.create<tensor::ReshapeOp>(loweredOutputPointType,
+                                               higherRankedPoint, outputShape);
+
+      Value adder = convertScalarMulImpl(point, scalar, inputPointType,
+                                         outputPointType, b);
+      if (i != 0) {
+        accumulator = convertAddImpl(accumulator, adder, outputPointType,
+                                     outputPointType, outputPointType, b);
+      } else {
+        accumulator = adder;
+      }
     }
-    Value zeroPoint = b.create<tensor::FromElementsOp>(zeroes);
-
-    // `decreasingScalar` set to `scalar` and `result` set to zero point.
-    auto whileOp = b.create<scf::WhileOp>(
-        /*resultTypes=*/
-        TypeRange(
-            {signlessIntType, initalPoint.getType(), zeroPoint.getType()}),
-        /*operands=*/
-        ValueRange({scalar, initalPoint, zeroPoint}),
-        /*beforeBuilder=*/
-        [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
-          ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
-          auto arithZero = b.create<arith::ConstantIntOp>(0, signlessIntType);
-          // if `decreasingScalar` > 0, continue
-          Value decreasingScalar = args[0];
-          auto cmpGt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt,
-                                               decreasingScalar, arithZero);
-          b.create<scf::ConditionOp>(cmpGt, args);
-        },
-        /*afterBuilder=*/
-        [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
-          ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
-          auto arithOne = b.create<arith::ConstantIntOp>(1, signlessIntType);
-          Value decreasingScalar = args[0];
-          Value multiplyingPoint = args[1];
-          Value result = args[2];
-
-          // if `decreasingScalar` % 1 == 1...
-          auto bitAdd = b.create<arith::AndIOp>(decreasingScalar, arithOne);
-          auto cmpEq = b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, bitAdd,
-                                               arithOne);
-          auto ifOp = b.create<scf::IfOp>(
-              cmpEq,
-              // ...then add `multiplyingPoint` to `result`
-              /*thenBuilder=*/
-              [&](OpBuilder &builder, Location loc) {
-                ImplicitLocOpBuilder b(loc, builder);
-                Value innerResult =
-                    convertAddImpl(result, multiplyingPoint, outputType,
-                                   outputType, outputType, b);
-                b.create<scf::YieldOp>(innerResult);
-              },
-              /*elseBuilder=*/
-              [&](OpBuilder &builder, Location loc) {
-                b.create<scf::YieldOp>(result);
-              });
-          // double `multiplyingPoint`
-          Value doubledPoint =
-              convertDoubleImpl(multiplyingPoint, outputType, outputType, b);
-          // right shift `decreasingScalar` by 1
-          decreasingScalar =
-              b.create<arith::ShRUIOp>(decreasingScalar, arithOne);
-
-          // See here for more info:
-          // https://github.com/iree-org/iree/issues/16956
-          auto multPointBufferOp =
-              b.create<bufferization::MaterializeInDestinationOp>(
-                  doubledPoint, multiplyingPoint);
-          auto resultBufferOp =
-              b.create<bufferization::MaterializeInDestinationOp>(
-                  ifOp.getResult(0), result);
-
-          b.create<scf::YieldOp>(
-              ValueRange({decreasingScalar, multPointBufferOp.getResult(),
-                          resultBufferOp.getResult()}));
-        });
-
-    rewriter.replaceOp(op, whileOp.getResult(2));
+    rewriter.replaceOp(op, accumulator);
     return success();
   }
 };
@@ -532,8 +705,9 @@ void EllipticCurveToField::runOnOperation() {
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
   patterns
-      .add<ConvertPoint, ConvertExtract, ConvertConvertPointType, ConvertAdd,
-           ConvertDouble, ConvertNegate, ConvertSub, ConvertScalarMul>(
+      .add<ConvertPoint, ConvertPointSet, ConvertPointSetExtract,
+           ConvertExtract, ConvertConvertPointType, ConvertAdd, ConvertDouble,
+           ConvertNegate, ConvertSub, ConvertScalarMul, ConvertMSM>(
           typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);

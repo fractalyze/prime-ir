@@ -3,6 +3,12 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s --check-prefix=CHECK_TEST_OPS_IN_ORDER < %t
 
+// RUN: zkir-opt %s -elliptic-curve-to-llvm \
+// RUN:   | mlir-runner -e test_msm  -entry-point-result=void \
+// RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
+// RUN: FileCheck %s --check-prefix=CHECK_TEST_MSM < %t
+
+
 !PF = !field.pf<11:i32>
 
 #1 = #field.pf_elem<1:i32> : !PF
@@ -102,3 +108,50 @@ func.func @test_ops_in_order() {
 // CHECK_TEST_OPS_IN_ORDER: [0, 0, 0]
 // CHECK_TEST_OPS_IN_ORDER: [1, 1]
 // CHECK_TEST_OPS_IN_ORDER: [4, 3, 0, 0]
+
+
+// CHECK-LABEL: @test_msm
+func.func @test_msm() {
+  // 5*(5,3,2) + 7*(1,2,2) + 3*(7,5,1) + 2*(3,2,7)
+  %var1 = field.pf.constant 1 : !PF
+  %var2 = field.pf.constant 2 : !PF
+  %var3 = field.pf.constant 3 : !PF
+  %var5 = field.pf.constant 5 : !PF
+  %var7 = field.pf.constant 7 : !PF
+
+  %jacobian1 = elliptic_curve.point %var5, %var3, %var2 : !PF -> !jacobian
+  %jacobian2 = elliptic_curve.point %var1, %var2, %var2 : !PF -> !jacobian
+  %jacobian3 = elliptic_curve.point %var7, %var5, %var1 : !PF -> !jacobian
+  %jacobian4 = elliptic_curve.point %var3, %var2, %var7 : !PF -> !jacobian
+
+  // CALCULATING TRUE VALUE OF MSM
+  %scalar_mul1 = elliptic_curve.scalar_mul %var5, %jacobian1 : !PF, !jacobian -> !jacobian
+  %scalar_mul2 = elliptic_curve.scalar_mul %var7, %jacobian2 : !PF, !jacobian -> !jacobian
+  %scalar_mul3 = elliptic_curve.scalar_mul %var3, %jacobian3 : !PF, !jacobian -> !jacobian
+  %scalar_mul4 = elliptic_curve.scalar_mul %var2, %jacobian4 : !PF, !jacobian -> !jacobian
+
+  %add1 = elliptic_curve.add %scalar_mul1, %scalar_mul2 : !jacobian, !jacobian -> !jacobian
+  %add2 = elliptic_curve.add %scalar_mul3, %scalar_mul4 : !jacobian, !jacobian -> !jacobian
+  %msm_true = elliptic_curve.add %add1, %add2 : !jacobian, !jacobian -> !jacobian
+
+  %extract_point = elliptic_curve.extract %msm_true : !jacobian -> tensor<3x!PF>
+  %extract = field.pf.extract %extract_point : tensor<3x!PF> -> tensor<3xi32>
+  %mem = bufferization.to_memref %extract : tensor<3xi32> to memref<3xi32>
+  %U = memref.cast %mem : memref<3xi32> to memref<*xi32>
+  func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
+
+  // RUNNING MSM
+  %scalars = tensor.from_elements %var5, %var7, %var3, %var2 : tensor<4x!PF>
+  %points = elliptic_curve.point_set.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
+  %msm_test = elliptic_curve.msm %scalars , %points: tensor<4x!PF>, tensor<4x!jacobian> -> !jacobian
+
+  %extract_point1 = elliptic_curve.extract %msm_test : !jacobian -> tensor<3x!PF>
+  %extract1 = field.pf.extract %extract_point1 : tensor<3x!PF> -> tensor<3xi32>
+  %mem1 = bufferization.to_memref %extract1 : tensor<3xi32> to memref<3xi32>
+  %U1 = memref.cast %mem1 : memref<3xi32> to memref<*xi32>
+  func.call @printMemrefI32(%U1) : (memref<*xi32>) -> ()
+  return
+}
+
+// CHECK_TEST_MSM: [0, 0, 0]
+// CHECK_TEST_MSM: [0, 0, 0]

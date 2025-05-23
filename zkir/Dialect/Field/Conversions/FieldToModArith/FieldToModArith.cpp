@@ -8,6 +8,7 @@
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Tensor/Transforms/Transforms.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -39,8 +40,7 @@ static mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
 }
 
 static Type convertPrimeFieldLikeType(ShapedType type) {
-  if (auto primeFieldType =
-          llvm::dyn_cast<PrimeFieldType>(type.getElementType())) {
+  if (auto primeFieldType = dyn_cast<PrimeFieldType>(type.getElementType())) {
     return type.cloneWith(type.getShape(),
                           convertPrimeFieldType(primeFieldType));
   }
@@ -59,7 +59,7 @@ class PrimeFieldToModArithTypeConverter : public TypeConverter {
     });
     addConversion([](MemRefType type) -> Type {
       if (auto primeFieldType =
-              llvm::dyn_cast<PrimeFieldType>(type.getElementType())) {
+              dyn_cast<PrimeFieldType>(type.getElementType())) {
         return type.cloneWith(type.getShape(),
                               convertPrimeFieldType(primeFieldType));
       }
@@ -345,6 +345,10 @@ void PrimeFieldToModArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
+  // NOTE(ashjeong): ConvertPointSetOp from the elliptic curve to field pass
+  // introduces a tensor::concat op. As tensor::concat op is not supported by
+  // the OneShotBufferize pass, we must decompose them with this pattern.
+  tensor::populateDecomposeTensorConcatPatterns(patterns);
   patterns.add<
       ConvertConstant, ConvertEncapsulate, ConvertExtract, ConvertToMont,
       ConvertFromMont, ConvertInverse, ConvertNegate, ConvertAdd, ConvertDouble,
@@ -355,7 +359,9 @@ void PrimeFieldToModArith::runOnOperation() {
       ConvertAny<linalg::MapOp>, ConvertAny<memref::LoadOp>,
       ConvertAny<memref::StoreOp>, ConvertAny<linalg::YieldOp>,
       ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
-      ConvertAny<tensor::FromElementsOp>,
+      ConvertAny<tensor::ExtractSliceOp>, ConvertAny<tensor::InsertSliceOp>,
+      ConvertAny<tensor::EmptyOp>, ConvertAny<tensor::FromElementsOp>,
+      ConvertAny<tensor::ConcatOp>, ConvertAny<tensor::ReshapeOp>,
       ConvertAny<bufferization::MaterializeInDestinationOp>,
       ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>, ConvertAny<tensor::InsertOp>>(
@@ -369,7 +375,9 @@ void PrimeFieldToModArith::runOnOperation() {
       bufferization::MaterializeInDestinationOp, bufferization::ToMemrefOp,
       bufferization::ToTensorOp, linalg::GenericOp, linalg::MapOp,
       linalg::YieldOp, memref::LoadOp, memref::StoreOp, tensor::CastOp,
-      tensor::ExtractOp, tensor::FromElementsOp, tensor::InsertOp>(
+      tensor::ExtractOp, tensor::ExtractSliceOp, tensor::InsertSliceOp,
+      tensor::EmptyOp, tensor::FromElementsOp, tensor::InsertOp,
+      tensor::ConcatOp, tensor::ReshapeOp>(
       [&](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {

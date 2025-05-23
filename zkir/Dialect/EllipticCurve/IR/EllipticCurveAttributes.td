@@ -25,7 +25,7 @@ def EllipticCurve_ShortWeierstrassAttr : EllipticCurve_Attr<"ShortWeierstrass", 
     ```
   }];
   let parameters = (ins Field_PrimeFieldAttr:$a, Field_PrimeFieldAttr:$b, Field_PrimeFieldAttr:$Gx, Field_PrimeFieldAttr:$Gy);
-  // TODO(ashjeong): add `Field_PrimeFieldType: $BaseField` for `getBaseField()`
+  // TODO(ashjeong): add `Field_PrimeFieldType: $baseFieldType` for `getbaseFieldType()`
   let assemblyFormat = "`<` $a`,`$b`,``(`$Gx`,`$Gy`)``>`";
 }
 #endif  // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEATTRIBUTES_TD_

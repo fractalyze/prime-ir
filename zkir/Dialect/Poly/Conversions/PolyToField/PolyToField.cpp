@@ -57,8 +57,7 @@ static FailureOr<CommonConversionInfo> getCommonConversionInfo(
 
   CommonConversionInfo info;
   info.polyType = polyTy;
-  info.coefficientType =
-      llvm::dyn_cast<field::PrimeFieldType>(polyTy.getBaseField());
+  info.coefficientType = dyn_cast<field::PrimeFieldType>(polyTy.getBaseField());
   if (!info.coefficientType) {
     op->emitError("Polynomial base field must be of field type");
     return failure();
@@ -141,7 +140,7 @@ struct ConvertPolyBinOp : public OpConversionPattern<SourceOp> {
   LogicalResult matchAndRewrite(
       SourceOp op, typename SourceOp::Adaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
-    if (PolyType poly_ty = llvm::dyn_cast<PolyType>(op.getResult().getType())) {
+    if (PolyType poly_ty = dyn_cast<PolyType>(op.getResult().getType())) {
       ImplicitLocOpBuilder b(op.getLoc(), rewriter);
       auto result = b.create<TargetFieldOp>(adaptor.getLhs(), adaptor.getRhs());
       rewriter.replaceOp(op, result);

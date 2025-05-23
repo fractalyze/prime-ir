@@ -75,7 +75,8 @@ Value xyzzDouble(const Value &point, Type xyzzType, ImplicitLocOpBuilder &b) {
   auto zz = b.create<tensor::ExtractOp>(point, two);
   auto zzz = b.create<tensor::ExtractOp>(point, three);
 
-  field::PrimeFieldType basefield = cast<field::PrimeFieldType>(x.getType());
+  field::PrimeFieldType baseFieldType =
+      cast<field::PrimeFieldType>(x.getType());
   field::PrimeFieldAttr aAttr;
 
   // U = 2*Y
@@ -92,7 +93,7 @@ Value xyzzDouble(const Value &point, Type xyzzType, ImplicitLocOpBuilder &b) {
   auto mTmp3 = b.create<field::AddOp>(mTmp2, mTmp1);
   auto mTmp4 = b.create<field::SquareOp>(zz);
   aAttr = cast<XYZZType>(xyzzType).getCurve().getA();
-  auto a = b.create<field::ConstantOp>(basefield, aAttr.getValue());
+  auto a = b.create<field::ConstantOp>(baseFieldType, aAttr.getValue());
   auto mTmp5 = b.create<field::MulOp>(a, mTmp4);
   auto m = b.create<field::AddOp>(mTmp3, mTmp5);
   // X3 = M²-2*S

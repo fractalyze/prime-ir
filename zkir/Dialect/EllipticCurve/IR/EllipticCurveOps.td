@@ -51,6 +51,41 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
   let hasVerifier = 1;
 }
 
+def EllipticCurve_PointSetOp : EllipticCurve_Op<"point_set.from_elements",
+              [SameTypeOperands,
+               TypesMatchWith<"operand types match result element type",
+                   "output", "points", "SmallVector<Type, 2>("
+                   "::llvm::cast<RankedTensorType>($_self).getNumElements(), "
+                   "::llvm::cast<RankedTensorType>($_self).getElementType())">]> {
+  let summary = "A set of elliptic curve points";
+  let description = [{
+    Defines a set of elliptic curve points in Affine(x, y), Jacobian(x, y, z), or XYZZ(x, y, z², z³) form.
+
+    Example:
+    ```
+    %0 = elliptic_curve.point_set.from_elements %a, %b : tensor<2x!affine>
+    ```
+  }];
+  let arguments = (ins Variadic<PointType>:$points);
+  let results = (outs RankedTensorOf<[PointType]>:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
+def EllipticCurve_PointSetExtractOp : EllipticCurve_Op<"point_set.extract"> {
+  let summary = "Extracts a point from a point set";
+  let description = [{
+   Extracts a point from a point set. Allows for Affine(x, y), Jacobian(x, y, z), or XYZZ(x, y, z², z³) points.
+
+    Example:
+    ```
+    %0 = elliptic_curve.point_set.extract %point_set, %idx : tensor<3x!affine> -> !affine
+    ```
+  }];
+  let arguments = (ins RankedTensorOf<[PointType]>:$point_set, Index:$index);
+  let results = (outs PointType:$output);
+  let assemblyFormat = "operands attr-dict `:` type($point_set) `->` type($output)";
+}
+
 /////////// POINT EXTRACTION //////////////
 
 def EllipticCurve_ExtractOp : EllipticCurve_Op<"extract"> {
@@ -166,6 +201,27 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutativ
   let results = (outs PointLike:$output);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($scalar) `,` type($point) `->` type($output)";
+}
+
+// Elliptic curve point scalar multiplication.
+def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
+  let summary = "Elliptic curve multi-scalar multiplication";
+  let description = [{
+    Computes multi-scalar multiplication (MSM) of elliptic curve points and scalars.
+
+    affine -> Jacobian
+    Jacobian -> Jacobian
+    XYZZ -> XYZZ
+
+    Example:
+    ```
+    %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PF>, tensor<3x!affine> -> !jacobian
+    ```
+  }];
+  let arguments = (ins RankedTensorOf<[Field_PrimeFieldType]>:$scalars, RankedTensorOf<[PointType]>:$points);
+  let results = (outs PointType:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($scalars) `,` type($points) `->` type($output)";
 }
 
 ////////////// POINT CONVERSIONS //////////////
