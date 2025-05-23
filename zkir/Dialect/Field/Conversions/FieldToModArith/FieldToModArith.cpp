@@ -42,7 +42,13 @@ static mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
 template <typename T>
 static T convertPrimeFieldLike(T type) {
   auto primeFieldType = cast<PrimeFieldType>(type.getElementType());
-  return type.cloneWith(type.getShape(), convertPrimeFieldType(primeFieldType));
+  if constexpr (std::is_same_v<T, MemRefType>) {
+    return MemRefType::get(type.getShape(),
+                           convertPrimeFieldType(primeFieldType));
+  } else {
+    return type.cloneWith(type.getShape(),
+                          convertPrimeFieldType(primeFieldType));
+  }
 }
 
 static LogicalResult convertQuadraticExtFieldType(
@@ -63,7 +69,11 @@ static T convertQuadraticExtFieldLike(T type) {
 
   SmallVector<int64_t> newShape(type.getShape());
   newShape.push_back(2);
-  return type.cloneWith(newShape, modArithType);
+  if constexpr (std::is_same_v<T, MemRefType>) {
+    return MemRefType::get(newShape, modArithType);
+  } else {
+    return type.cloneWith(newShape, modArithType);
+  }
 }
 
 class FieldToModArithTypeConverter : public TypeConverter {
@@ -88,10 +98,10 @@ class FieldToModArithTypeConverter : public TypeConverter {
     });
     addConversion([](MemRefType type) -> Type {
       if (isa<PrimeFieldType>(type.getElementType())) {
-        return convertPrimeFieldLike(cast<BaseMemRefType>(type));
+        return convertPrimeFieldLike(type);
       }
       if (isa<QuadraticExtFieldType>(type.getElementType())) {
-        return convertQuadraticExtFieldLike(cast<BaseMemRefType>(type));
+        return convertQuadraticExtFieldLike(type);
       }
       return type;
     });

@@ -104,3 +104,12 @@ func.func @test_lower_tensor_extract(%arg0: tensor<3x2x!QF>) -> !QF {
     // CHECK: return %[[VALUE0]], %[[VALUE1]] : [[T]], [[T]]
     return %1 : !QF
 }
+
+// CHECK-LABEL: @test_lower_memref
+// CHECK-SAME: (%[[ARG0:.*]]: memref<3x2x2x[[T:.*]]>) -> ([[T]], [[T]]) {
+func.func @test_lower_memref(%arg0: memref<3x2x!QF>) -> !QF {
+    %t = bufferization.to_tensor %arg0 : memref<3x2x!QF> to tensor<3x2x!QF>
+    %i1 = arith.constant 1 : index
+    %1 = tensor.extract %t[%i1, %i1] : tensor<3x2x!QF>
+    return %1 : !QF
+}
