@@ -592,61 +592,33 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      MSMOp op, OpAdaptor adaptor,
+      MSMOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // 2D tensor of prime field values, e.g.:
-    // |x1, y1, z1|
-    // |x2, y2, z2|
-    Value loweredPointSet = adaptor.getPoints();
-    // 1d tensor of PF, e.g.:
+    // point set
+    // |(x1, y1, z1), (x2, y2, z2)|
+    Value pointSet = op.getPoints();
+    // tensor of PF, e.g.:
     // | s1 , s2 |
     Value scalars = op.getScalars();
-    RankedTensorType loweredPointSetType =
-        cast<RankedTensorType>(loweredPointSet.getType());
-    field::PrimeFieldType baseFieldType =
-        cast<field::PrimeFieldType>(loweredPointSetType.getElementType());
-    unsigned numScalarMuls = loweredPointSetType.getShape()[0];
-    unsigned numCoords = loweredPointSetType.getShape()[1];
-
-    Type inputPointType =
-        cast<RankedTensorType>(op.getPoints().getType()).getElementType();
+    RankedTensorType pointSetType = cast<RankedTensorType>(pointSet.getType());
+    unsigned numScalarMuls = pointSetType.getShape()[0];
     Type outputPointType = op.getOutput().getType();
-    RankedTensorType loweredOutputPointType =
-        RankedTensorType::get({numCoords}, baseFieldType);
 
-    Value accumulator;
-    auto zero = b.create<arith::ConstantIndexOp>(0);
-    auto one = b.create<arith::ConstantIndexOp>(1);
-    auto sz = b.create<arith::ConstantIndexOp>(numCoords);
-    SmallVector<Value> sizes{one, sz};
-    SmallVector<Value> strides{one, one};
-    for (size_t i = 0; i < numScalarMuls; ++i) {
-      auto idx = b.create<arith::ConstantIndexOp>(i);
-
-      // scalar
-      auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{idx});
-
-      // point
-      //  - extract point = tensor<2x3x!PF> -> tensor<1x3x!PF>
-      SmallVector<Value> offsets{idx, zero};
-      auto higherRankedPoint = b.create<tensor::ExtractSliceOp>(
-          loweredPointSet, offsets, sizes, strides);
-      // - reshape point = tensor<1x3x!PF> -> tensor<3x!PF>
-      SmallVector<Value> _outputShape{sz};
-      auto outputShape = b.create<tensor::FromElementsOp>(_outputShape);
-      auto point = b.create<tensor::ReshapeOp>(loweredOutputPointType,
-                                               higherRankedPoint, outputShape);
-
-      Value adder = convertScalarMulImpl(point, scalar, inputPointType,
-                                         outputPointType, b);
-      if (i != 0) {
-        accumulator = convertAddImpl(accumulator, adder, outputPointType,
-                                     outputPointType, outputPointType, b);
-      } else {
-        accumulator = adder;
-      }
+    auto idx = b.create<arith::ConstantIndexOp>(0);
+    auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{idx});
+    auto point = b.create<tensor::ExtractOp>(pointSet, ValueRange{idx});
+    Value accumulator =
+        b.create<elliptic_curve::ScalarMulOp>(outputPointType, scalar, point);
+    for (size_t i = 1; i < numScalarMuls; ++i) {
+      idx = b.create<arith::ConstantIndexOp>(i);
+      scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{idx});
+      point = b.create<tensor::ExtractOp>(pointSet, ValueRange{idx});
+      auto adder =
+          b.create<elliptic_curve::ScalarMulOp>(outputPointType, scalar, point);
+      accumulator =
+          b.create<elliptic_curve::AddOp>(outputPointType, accumulator, adder);
     }
     rewriter.replaceOp(op, accumulator);
     return success();
@@ -679,8 +651,11 @@ void EllipticCurveToField::runOnOperation() {
   patterns
       .add<ConvertPoint, ConvertPointSet, ConvertPointSetExtract,
            ConvertExtract, ConvertConvertPointType, ConvertAdd, ConvertDouble,
-           ConvertNegate, ConvertSub, ConvertScalarMul, ConvertMSM>(
+           ConvertNegate, ConvertSub, ConvertScalarMul, ConvertMSM,
+           ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::ExtractOp>>(
           typeConverter, context);
+  target.addDynamicallyLegalOp<tensor::FromElementsOp, tensor::ExtractOp>(
+      [&](auto op) { return typeConverter.isLegal(op); });
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
