@@ -2,7 +2,6 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
@@ -14,13 +13,11 @@ namespace mlir::zkir::elliptic_curve {
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-mdbl-2007-bl
 // Cost: 1M + 5S
 // Assumption: Z == 1
-static Value affineToJacobianDouble(const Value &point, const Value &a,
-                                    ImplicitLocOpBuilder &b) {
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-
-  auto x = b.create<tensor::ExtractOp>(point, zero);
-  auto y = b.create<tensor::ExtractOp>(point, one);
+static SmallVector<Value> affineToJacobianDouble(const ValueRange point,
+                                                 const Value a,
+                                                 ImplicitLocOpBuilder &b) {
+  auto x = point[0];
+  auto y = point[1];
 
   // XX = X²
   auto xx = b.create<field::SquareOp>(x);
@@ -52,20 +49,17 @@ static Value affineToJacobianDouble(const Value &point, const Value &a,
   // Z3 = 2*Y
   auto z3 = b.create<field::DoubleOp>(y);
 
-  return b.create<tensor::FromElementsOp>(SmallVector<Value>({x3, y3, z3}));
+  return {x3, y3, z3};
 }
 
 // dbl-2009-l
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
 // Cost: 2M + 5S
-static Value jacobianA0Double(const Value &point, ImplicitLocOpBuilder &b) {
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-  Value two = b.create<arith::ConstantIndexOp>(2);
-
-  auto x = b.create<tensor::ExtractOp>(point, zero);
-  auto y = b.create<tensor::ExtractOp>(point, one);
-  auto z = b.create<tensor::ExtractOp>(point, two);
+static SmallVector<Value> jacobianA0Double(const ValueRange point,
+                                           ImplicitLocOpBuilder &b) {
+  Value x = point[0];
+  Value y = point[1];
+  Value z = point[2];
 
   // A = X²
   auto a = b.create<field::SquareOp>(x);
@@ -98,21 +92,18 @@ static Value jacobianA0Double(const Value &point, ImplicitLocOpBuilder &b) {
   auto z3Tmp1 = b.create<field::DoubleOp>(y);
   auto z3 = b.create<field::MulOp>(z3Tmp1, z);
 
-  return b.create<tensor::FromElementsOp>(SmallVector<Value>({x3, y3, z3}));
+  return {x3, y3, z3};
 }
 
 // dbl-2007-bl
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-dbl-2007-bl
 // Cost: 1M + 8S + 1*a
-static Value jacobianDefaultDouble(const Value &point, const Value &a,
-                                   ImplicitLocOpBuilder &b) {
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-  Value two = b.create<arith::ConstantIndexOp>(2);
-
-  auto x = b.create<tensor::ExtractOp>(point, zero);
-  auto y = b.create<tensor::ExtractOp>(point, one);
-  auto z = b.create<tensor::ExtractOp>(point, two);
+static SmallVector<Value> jacobianDefaultDouble(const ValueRange point,
+                                                const Value a,
+                                                ImplicitLocOpBuilder &b) {
+  Value x = point[0];
+  Value y = point[1];
+  Value z = point[2];
 
   // XX = X²
   auto xx = b.create<field::SquareOp>(x);
@@ -151,22 +142,19 @@ static Value jacobianDefaultDouble(const Value &point, const Value &a,
   auto z3Tmp3 = b.create<field::SubOp>(z3Tmp2, yy);
   auto z3 = b.create<field::SubOp>(z3Tmp3, zz);
 
-  return b.create<tensor::FromElementsOp>(SmallVector<Value>({x3, y3, z3}));
+  return {x3, y3, z3};
 }
 
-Value jacobianDouble(const Value &point, Type inputType,
-                     ImplicitLocOpBuilder &b) {
-  auto baseField = cast<field::PrimeFieldType>(
-      cast<RankedTensorType>(point.getType()).getElementType());
-  field::PrimeFieldAttr aAttr;
+SmallVector<Value> jacobianDouble(const ValueRange point,
+                                  ShortWeierstrassAttr curve,
+                                  ImplicitLocOpBuilder &b) {
+  auto baseField = cast<field::PrimeFieldType>(point[0].getType());
 
-  if (auto affineType = dyn_cast<AffineType>(inputType)) {
-    aAttr = affineType.getCurve().getA();
-    auto a = b.create<field::ConstantOp>(baseField, aAttr.getValue());
+  if (point.size() == 2) {
+    auto a = b.create<field::ConstantOp>(baseField, curve.getA().getValue());
     return affineToJacobianDouble(point, a, b);
-  } else if (auto jacobianType = dyn_cast<JacobianType>(inputType)) {
-    aAttr = jacobianType.getCurve().getA();
-    auto a = b.create<field::ConstantOp>(baseField, aAttr.getValue());
+  } else if (point.size() == 3) {
+    auto a = b.create<field::ConstantOp>(baseField, curve.getA().getValue());
     auto zero = b.create<field::ConstantOp>(baseField, 0);
 
     auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, a, zero);
@@ -182,7 +170,7 @@ Value jacobianDouble(const Value &point, Type inputType,
           ImplicitLocOpBuilder b(loc, builder);
           b.create<scf::YieldOp>(jacobianDefaultDouble(point, a, b));
         });
-    return ifOp.getResult(0);
+    return ifOp.getResults();
   } else {
     assert(false && "Unsupported point type for Jacobian doubling");
   }

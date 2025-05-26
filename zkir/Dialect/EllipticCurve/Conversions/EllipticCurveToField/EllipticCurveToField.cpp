@@ -423,14 +423,15 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 };
 
 // `point` must be from a tensor::from_elements op
-static Value convertDoubleImpl(Value point, Type inputType, Type outputType,
-                               ImplicitLocOpBuilder &b) {
-  if (isa<XYZZType>(outputType)) {
-    return xyzzDouble(point, outputType, b);
-  } else if (isa<JacobianType>(outputType)) {
-    return jacobianDouble(point, outputType, b);
+static SmallVector<Value> convertDoubleImpl(const ValueRange coords,
+                                            Type outputType,
+                                            ImplicitLocOpBuilder &b) {
+  if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
+    return xyzzDouble(coords, xyzzType.getCurve(), b);
+  } else if (auto jacobianType = dyn_cast<JacobianType>(outputType)) {
+    return jacobianDouble(coords, jacobianType.getCurve(), b);
   } else {
-    assert(false && "Unsupported point types for doubling");
+    assert(false && "Unsupported point type for doubling");
   }
 }
 
@@ -441,15 +442,13 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      DoubleOp op, OpAdaptor adaptor,
+      DoubleOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Value point = adaptor.getInput();
-    Type inputType = op.getInput().getType();
     Type outputType = op.getOutput().getType();
-
-    rewriter.replaceOp(op, convertDoubleImpl(point, inputType, outputType, b));
+    rewriter.replaceOpWithMultiple(
+        op, {convertDoubleImpl(adaptor.getInput(), outputType, b)});
     return success();
   }
 };
