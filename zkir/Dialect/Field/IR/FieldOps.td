@@ -12,16 +12,27 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-// Base class for Prime Field operations.
-class PrimeField_Op<string mnemonic, list<Trait> traits = [Pure]> :
-  Op<Field_Dialect, mnemonic, traits> {
-  let cppNamespace = "::mlir::zkir::field";
-  let assemblyFormat = "$operand attr-dict `:` type($result)";
+// Base class for prime field operations.
+class PrimeField_Op<string mnemonic, list<Trait> traits = []> :
+  Op<Field_Dialect, mnemonic, traits #
+   [NoMemoryEffect, Pure] # ElementwiseMappable.traits>;
+
+// Base class for prime field arithmetic ops. All ops have one result,
+// and the result type is the same as the operand type.
+class PrimeField_ArithOp<string mnemonic, list<Trait> traits = []> :
+    PrimeField_Op<mnemonic, traits # [SameOperandsAndResultType]>;
+
+// Base class for unary prime field arithmetic.
+class PrimeField_UnaryOp<string mnemonic, list<Trait> traits = []> :
+    PrimeField_ArithOp<mnemonic, traits>,
+  Arguments<(ins PrimeFieldLike:$input)>,
+  Results<(outs PrimeFieldLike:$output)> {
+  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-// A helper class for binary prime field operations.
+// Base class for binary prime field arithmetic.
 class PrimeField_BinaryOp<string mnemonic, list<Trait> traits = []> :
-  PrimeField_Op<mnemonic, traits # [SameOperandsAndResultType, Pure, ElementwiseMappable]>,
+  PrimeField_ArithOp<mnemonic, traits>,
   Arguments<(ins PrimeFieldLike:$lhs, PrimeFieldLike:$rhs)>,
   Results<(outs PrimeFieldLike:$output)> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
@@ -48,7 +59,7 @@ def PrimeField_ConstantOp : Op<Field_Dialect, "pf.constant", [Pure]> {
   ];
 }
 
-def PrimeField_EncapsulateOp : PrimeField_Op<"pf.encapsulate", [Pure, ElementwiseMappable]> {
+def PrimeField_EncapsulateOp : PrimeField_Op<"pf.encapsulate"> {
   let summary = "Encapsulate an integer into a field type";
   let description = [{
     Converts the integer to be of field type.
@@ -64,7 +75,7 @@ def PrimeField_EncapsulateOp : PrimeField_Op<"pf.encapsulate", [Pure, Elementwis
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
-def PrimeField_ExtractOp : PrimeField_Op<"pf.extract", [Pure, ElementwiseMappable]> {
+def PrimeField_ExtractOp : PrimeField_Op<"pf.extract"> {
   let summary = "Extract the integer stored inside field type";
   let description = [{
     Extracts the integer inside the field type.
@@ -82,7 +93,7 @@ def PrimeField_ExtractOp : PrimeField_Op<"pf.extract", [Pure, ElementwiseMappabl
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
-def PrimeField_ToMontOp : PrimeField_Op<"pf.to_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+def PrimeField_ToMontOp : PrimeField_UnaryOp<"pf.to_mont"> {
   let summary = "Convert from standard form to montgomery representation";
   let description = [{
     Computes x * R mod q, where `R` is the montgomery factor.
@@ -97,7 +108,7 @@ def PrimeField_ToMontOp : PrimeField_Op<"pf.to_mont", [Pure, ElementwiseMappable
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def PrimeField_FromMontOp : PrimeField_Op<"pf.from_mont", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+def PrimeField_FromMontOp : PrimeField_UnaryOp<"pf.from_mont"> {
   let summary = "Convert from montgomery representation to standard form";
   let description = [{
     Computes x * R⁻¹ mod q, where `R` is the montgomery factor.
@@ -113,7 +124,7 @@ def PrimeField_FromMontOp : PrimeField_Op<"pf.from_mont", [Pure, ElementwiseMapp
 }
 
 // Prime field multiplicative inverse
-def PrimeField_InverseOp : PrimeField_Op<"pf.inverse", [Involution, SameOperandsAndResultType]> {
+def PrimeField_InverseOp : PrimeField_UnaryOp<"pf.inverse", [Involution]> {
   let summary = "Prime field multiplicative inverse";
   let description = [{
     Computes the multiplicative inverse of a field element.
@@ -123,13 +134,10 @@ def PrimeField_InverseOp : PrimeField_Op<"pf.inverse", [Involution, SameOperands
     %inv_a = field.pf.inverse %a : field.pf<primeModulus>
     ```
   }];
-  let arguments = (ins PrimeFieldLike:$input);
-  let results = (outs PrimeFieldLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
 // Prime field negation
-def PrimeField_NegateOp : PrimeField_Op<"pf.negate", [Pure, ElementwiseMappable, SameOperandsAndResultType, Involution]> {
+def PrimeField_NegateOp : PrimeField_UnaryOp<"pf.negate", [Involution]> {
   let summary = "Prime field negation";
   let description = [{
     Computes the negation of a field element.
@@ -139,9 +147,6 @@ def PrimeField_NegateOp : PrimeField_Op<"pf.negate", [Pure, ElementwiseMappable,
     %negation = field.pf.negate %a : field.pf<primeModulus>
     ```
   }];
-  let arguments = (ins PrimeFieldLike:$input);
-  let results = (outs PrimeFieldLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
 // Prime field addition.
@@ -158,7 +163,7 @@ def PrimeField_AddOp : PrimeField_BinaryOp<"pf.add", [Commutative]> {
 }
 
 // Prime field double.
-def PrimeField_DoubleOp : PrimeField_Op<"pf.double", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+def PrimeField_DoubleOp : PrimeField_UnaryOp<"pf.double"> {
   let summary = "Prime field double";
   let description = [{
     Computes the double of a field element.
@@ -168,9 +173,6 @@ def PrimeField_DoubleOp : PrimeField_Op<"pf.double", [Pure, ElementwiseMappable,
     %double = field.pf.double %a : field.pf<primeModulus>
     ```
   }];
-  let arguments = (ins PrimeFieldLike:$input);
-  let results = (outs PrimeFieldLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
 // Prime field subtraction.
@@ -200,7 +202,7 @@ def PrimeField_MulOp : PrimeField_BinaryOp<"pf.mul", [Commutative]> {
 }
 
 // Prime field square.
-def PrimeField_SquareOp : PrimeField_Op<"pf.square", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+def PrimeField_SquareOp : PrimeField_UnaryOp<"pf.square"> {
   let summary = "Prime field square";
   let description = [{
     Computes the square of a field element.
@@ -210,13 +212,9 @@ def PrimeField_SquareOp : PrimeField_Op<"pf.square", [Pure, ElementwiseMappable,
     %square = field.pf.square %a : field.pf<primeModulus>
     ```
   }];
-
-  let arguments = (ins PrimeFieldLike:$input);
-  let results = (outs PrimeFieldLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def PrimeField_MontMulOp : PrimeField_BinaryOp<"pf.mont_mul", [Pure, ElementwiseMappable, SameOperandsAndResultType]> {
+def PrimeField_MontMulOp : PrimeField_BinaryOp<"pf.mont_mul"> {
   let summary = "Montgomery multiplication";
   let description = [{
     Computes a * b * R⁻¹ mod q, where `R` is the montgomery factor.
