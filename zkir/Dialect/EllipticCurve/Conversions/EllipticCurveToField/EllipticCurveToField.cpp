@@ -391,13 +391,13 @@ struct ConvertConvertPointType
 
 ///////////// POINT ARITHMETIC OPERATIONS //////////////
 
-// `p1` and `p2` must be tensor::from_elements ops
-static Value convertAddImpl(Value p1, Value p2, Type p1Type, Type p2Type,
-                            Type outputType, ImplicitLocOpBuilder &b) {
-  if (isa<XYZZType>(outputType)) {
-    return xyzzAdd(p1, p2, p1Type, p2Type, b);
-  } else if (isa<JacobianType>(outputType)) {
-    return jacobianAdd(p1, p2, p1Type, p2Type, b);
+static SmallVector<Value> convertAddImpl(ValueRange p1, ValueRange p2,
+                                         Type outputType,
+                                         ImplicitLocOpBuilder &b) {
+  if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
+    return xyzzAdd(p1, p2, xyzzType.getCurve(), b);
+  } else if (auto jacobianType = dyn_cast<JacobianType>(outputType)) {
+    return jacobianAdd(p1, p2, jacobianType.getCurve(), b);
   } else {
     assert(false && "Unsupported point types for addition");
   }
@@ -410,19 +410,14 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      AddOp op, OpAdaptor adaptor,
+      AddOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // `p1` and `p2` are tensor::from_elements ops
-    Value p1 = adaptor.getLhs();
-    Value p2 = adaptor.getRhs();
-    Type p1Type = op.getLhs().getType();
-    Type p2Type = op.getRhs().getType();
     Type outputType = op.getOutput().getType();
-
-    rewriter.replaceOp(op,
-                       convertAddImpl(p1, p2, p1Type, p2Type, outputType, b));
+    rewriter.replaceOpWithMultiple(
+        op,
+        {convertAddImpl(adaptor.getLhs(), adaptor.getRhs(), outputType, b)});
     return success();
   }
 };

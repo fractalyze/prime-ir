@@ -2,7 +2,6 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Double.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
@@ -14,16 +13,15 @@ namespace mlir::zkir::elliptic_curve {
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-mmadd-2007-bl
 // Cost: 4M + 2S
 // Assumption: Z1 == Z2 == 1
-static Value affineAndAffine(const Value &p1, const Value &p2, Type affineType,
-                             ImplicitLocOpBuilder &b) {
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
+static SmallVector<Value> affineAndAffine(const ValueRange &p1,
+                                          const ValueRange &p2,
+                                          ShortWeierstrassAttr curve,
+                                          ImplicitLocOpBuilder &b) {
+  Value x1 = p1[0];
+  Value y1 = p1[1];
 
-  auto x1 = b.create<tensor::ExtractOp>(p1, zero);
-  auto y1 = b.create<tensor::ExtractOp>(p1, one);
-
-  auto x2 = b.create<tensor::ExtractOp>(p2, zero);
-  auto y2 = b.create<tensor::ExtractOp>(p2, one);
+  Value x2 = p2[0];
+  Value y2 = p2[1];
 
   // if x1 == x2 && y1 == y2
   auto cmpEq1 = b.create<field::CmpOp>(arith::CmpIPredicate::eq, x1, x2);
@@ -34,7 +32,7 @@ static Value affineAndAffine(const Value &p1, const Value &p2, Type affineType,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(jacobianDouble(p1, affineType, b));
+        b.create<scf::YieldOp>(jacobianDouble(p1, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
@@ -67,29 +65,25 @@ static Value affineAndAffine(const Value &p1, const Value &p2, Type affineType,
         // Z3 = 2*H
         auto z3 = b.create<field::DoubleOp>(h);
 
-        auto makePoint =
-            b.create<tensor::FromElementsOp>(SmallVector<Value>({x3, y3, z3}));
-        b.create<scf::YieldOp>(ValueRange{makePoint});
+        b.create<scf::YieldOp>(ValueRange{x3, y3, z3});
       });
-  return ifOp.getResult(0);
+  return ifOp.getResults();
 }
 
 // madd-2007-bl
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-madd-2007-bl
 // Cost: 7M + 4S
 // Assumption: Z2 == 1
-static Value jacobianAndAffine(const Value &p1, const Value &p2,
-                               Type affineType, ImplicitLocOpBuilder &b) {
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-  Value two = b.create<arith::ConstantIndexOp>(2);
+static SmallVector<Value> jacobianAndAffine(const ValueRange &p1,
+                                            const ValueRange &p2,
+                                            ShortWeierstrassAttr curve,
+                                            ImplicitLocOpBuilder &b) {
+  auto x1 = p1[0];
+  auto y1 = p1[1];
+  auto z1 = p1[2];
 
-  auto x1 = b.create<tensor::ExtractOp>(p1, zero);
-  auto y1 = b.create<tensor::ExtractOp>(p1, one);
-  auto z1 = b.create<tensor::ExtractOp>(p1, two);
-
-  auto x2 = b.create<tensor::ExtractOp>(p2, zero);
-  auto y2 = b.create<tensor::ExtractOp>(p2, one);
+  auto x2 = p2[0];
+  auto y2 = p2[1];
 
   // Z1Z1 = Z1²
   auto z1z1 = b.create<field::SquareOp>(z1);
@@ -108,7 +102,7 @@ static Value jacobianAndAffine(const Value &p1, const Value &p2,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(jacobianDouble(p2, affineType, b));
+        b.create<scf::YieldOp>(jacobianDouble(p2, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
@@ -144,29 +138,25 @@ static Value jacobianAndAffine(const Value &p1, const Value &p2,
         auto z3Tmp3 = b.create<field::SubOp>(z3Tmp2, z1z1);
         auto z3 = b.create<field::SubOp>(z3Tmp3, hh);
 
-        auto makePoint =
-            b.create<tensor::FromElementsOp>(SmallVector<Value>({x3, y3, z3}));
-        b.create<scf::YieldOp>(ValueRange{makePoint});
+        b.create<scf::YieldOp>(ValueRange{x3, y3, z3});
       });
-  return ifOp.getResult(0);
+  return ifOp.getResults();
 }
 
 // add-2007-bl
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-2007-bl
 // Cost: 11M + 5S
-static Value jacobianAndJacobian(const Value &p1, const Value &p2,
-                                 Type jacobianType, ImplicitLocOpBuilder &b) {
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-  Value two = b.create<arith::ConstantIndexOp>(2);
+static SmallVector<Value> jacobianAndJacobian(const ValueRange &p1,
+                                              const ValueRange &p2,
+                                              ShortWeierstrassAttr curve,
+                                              ImplicitLocOpBuilder &b) {
+  Value x1 = p1[0];
+  Value y1 = p1[1];
+  Value z1 = p1[2];
 
-  auto x1 = b.create<tensor::ExtractOp>(p1, zero);
-  auto y1 = b.create<tensor::ExtractOp>(p1, one);
-  auto z1 = b.create<tensor::ExtractOp>(p1, two);
-
-  auto x2 = b.create<tensor::ExtractOp>(p2, zero);
-  auto y2 = b.create<tensor::ExtractOp>(p2, one);
-  auto z2 = b.create<tensor::ExtractOp>(p2, two);
+  Value x2 = p2[0];
+  Value y2 = p2[1];
+  Value z2 = p2[2];
 
   // Z1Z1 = Z1²
   auto z1z1 = b.create<field::SquareOp>(z1);
@@ -192,7 +182,7 @@ static Value jacobianAndJacobian(const Value &p1, const Value &p2,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(jacobianDouble(p1, jacobianType, b));
+        b.create<scf::YieldOp>(jacobianDouble(p1, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
@@ -228,24 +218,23 @@ static Value jacobianAndJacobian(const Value &p1, const Value &p2,
         auto z3Tmp4 = b.create<field::SubOp>(z3Tmp3, z2z2);
         auto z3 = b.create<field::MulOp>(z3Tmp4, h);
 
-        auto makePoint =
-            b.create<tensor::FromElementsOp>(SmallVector<Value>({x3, y3, z3}));
-        b.create<scf::YieldOp>(ValueRange{makePoint});
+        b.create<scf::YieldOp>(ValueRange{x3, y3, z3});
       });
-  return ifOp.getResult(0);
+  return ifOp.getResults();
 }
 
-Value jacobianAdd(const Value &p1, const Value &p2, Type p1Type, Type p2Type,
-                  ImplicitLocOpBuilder &b) {
-  if (isa<AffineType>(p1Type)) {
-    if (isa<AffineType>(p2Type)) {
-      return affineAndAffine(p1, p2, p1Type, b);
+SmallVector<Value> jacobianAdd(const ValueRange &p1, const ValueRange &p2,
+                               ShortWeierstrassAttr curve,
+                               ImplicitLocOpBuilder &b) {
+  if (p1.size() == 2) {
+    if (p2.size() == 2) {
+      return affineAndAffine(p1, p2, curve, b);
     }
-    return jacobianAndAffine(p2, p1, p1Type, b);
-  } else if (isa<AffineType>(p2Type)) {
-    return jacobianAndAffine(p1, p2, p2Type, b);
-  } else if (isa<JacobianType>(p1Type) && isa<JacobianType>(p2Type)) {
-    return jacobianAndJacobian(p1, p2, p1Type, b);
+    return jacobianAndAffine(p2, p1, curve, b);
+  } else if (p2.size() == 2) {
+    return jacobianAndAffine(p1, p2, curve, b);
+  } else if (p1.size() == 3 && p2.size() == 3) {
+    return jacobianAndJacobian(p1, p2, curve, b);
   } else {
     assert(false && "Unsupported point types for Jacobian addition");
   }
