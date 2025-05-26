@@ -482,7 +482,7 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      SubOp op, OpAdaptor adaptor,
+      SubOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
