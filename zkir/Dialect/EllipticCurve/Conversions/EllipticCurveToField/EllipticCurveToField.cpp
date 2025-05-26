@@ -252,9 +252,21 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      ExtractOp op, OpAdaptor adaptor,
+      ExtractOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.getInput());
+    ValueRange coordsTmp = adaptor.getInput();
+
+    // NOTE(ashjeong): Here we attempt to restructure the input coordinates like
+    // so: [[x,y,z]] to [[x],[y],[z]] (i.e. for Jacobian). A naive copy of the
+    // coordinate values into a `SmallVector<ValueRange>` does not work given
+    // `ValueRange's` nature, so a deep copy is needed beforehand.
+    SmallVector<SmallVector<Value>> coords_copy(coordsTmp.size());
+    for (size_t i = 0; i < coordsTmp.size(); ++i) {
+      coords_copy[i].push_back(coordsTmp[i]);
+    }
+    SmallVector<ValueRange> coords(coords_copy.begin(), coords_copy.end());
+
+    rewriter.replaceOpWithMultiple(op, coords);
     return success();
   }
 };
