@@ -142,9 +142,7 @@ struct ConvertPoint : public OpConversionPattern<PointOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto makePoint =
-        b.create<tensor::FromElementsOp>(op.getLoc(), op.getOperands());
-    rewriter.replaceOp(op, makePoint);
+    rewriter.replaceOpWithMultiple(op, {adaptor.getCoords()});
     return success();
   }
 };

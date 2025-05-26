@@ -26,13 +26,8 @@ func.func @test_intialization_and_conversion() {
   %var8 = field.pf.constant 8 : !PF
 
   // CHECK-NOT: elliptic_curve.point
-  // CHECK: %[[AFFINE1:.*]] = tensor.from_elements %[[VAR1]], %[[VAR5]] : tensor<2x![[PF]]>
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
-  // CHECK-NOT: elliptic_curve.point
-  // CHECK: %[[JACOBIAN1:.*]] = tensor.from_elements %[[VAR1]], %[[VAR5]], %[[VAR2]] : tensor<3x![[PF]]>
   %jacobian1 = elliptic_curve.point %var1, %var5, %var2 : !PF -> !jacobian
-  // CHECK-NOT: elliptic_curve.point
-  // CHECK: %[[XYZZ1:.*]] = tensor.from_elements %[[VAR1]], %[[VAR5]], %[[VAR4]], %[[VAR8]] : tensor<4x![[PF]]>
   %xyzz1 = elliptic_curve.point %var1, %var5, %var4, %var8 : !PF -> !xyzz
 
   // CHECK-NOT: elliptic_curve.convert_point_type
