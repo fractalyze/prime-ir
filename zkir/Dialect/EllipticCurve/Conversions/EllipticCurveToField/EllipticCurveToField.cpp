@@ -28,54 +28,75 @@ namespace mlir::zkir::elliptic_curve {
 
 //////////////// TYPE CONVERSION ////////////////
 
-static RankedTensorType convertAffineType(AffineType type) {
+static LogicalResult convertAffineType(AffineType type,
+                                       SmallVectorImpl<Type> &converted) {
   field::PrimeFieldType baseFieldType = type.getCurve().getA().getType();
-  return RankedTensorType::get({2}, baseFieldType);
+  converted.push_back(baseFieldType);
+  converted.push_back(baseFieldType);
+  return success();
 }
 
-static RankedTensorType convertJacobianType(JacobianType type) {
+static LogicalResult convertJacobianType(JacobianType type,
+                                         SmallVectorImpl<Type> &converted) {
   field::PrimeFieldType baseFieldType = type.getCurve().getA().getType();
-  return RankedTensorType::get({3}, baseFieldType);
+  converted.push_back(baseFieldType);
+  converted.push_back(baseFieldType);
+  converted.push_back(baseFieldType);
+  return success();
 }
 
-static RankedTensorType convertXYZZType(XYZZType type) {
+static LogicalResult convertXYZZType(XYZZType type,
+                                     SmallVectorImpl<Type> &converted) {
   field::PrimeFieldType baseFieldType = type.getCurve().getA().getType();
-  return RankedTensorType::get({4}, baseFieldType);
+  converted.push_back(baseFieldType);
+  converted.push_back(baseFieldType);
+  converted.push_back(baseFieldType);
+  converted.push_back(baseFieldType);
+  return success();
 }
 
-static Type convertAffineLikeType(ShapedType type) {
-  if (auto affineType = dyn_cast<AffineType>(type.getElementType())) {
-    field::PrimeFieldType baseFieldType =
-        affineType.getCurve().getA().getType();
-    SmallVector<int64_t> newShape(type.getShape());
-    newShape.push_back(2);
+template <typename T>
+static T convertAffineLikeType(T type) {
+  auto affineType = cast<AffineType>(type.getElementType());
+  field::PrimeFieldType baseFieldType = affineType.getCurve().getA().getType();
+  SmallVector<int64_t> newShape(type.getShape());
+  newShape.push_back(2);
+  if constexpr (std::is_same_v<T, MemRefType>) {
+    return MemRefType::get(newShape, baseFieldType);
+  } else {
     return type.cloneWith(newShape, baseFieldType);
   }
-  return type;
 }
 
-static Type convertJacobianLikeType(ShapedType type) {
-  if (auto jacobianType = dyn_cast<JacobianType>(type.getElementType())) {
-    field::PrimeFieldType baseFieldType =
-        jacobianType.getCurve().getA().getType();
-    SmallVector<int64_t> newShape(type.getShape());
-    newShape.push_back(3);
+template <typename T>
+static T convertJacobianLikeType(T type) {
+  auto jacobianType = cast<JacobianType>(type.getElementType());
+  field::PrimeFieldType baseFieldType =
+      jacobianType.getCurve().getA().getType();
+  SmallVector<int64_t> newShape(type.getShape());
+  newShape.push_back(3);
+  if constexpr (std::is_same_v<T, MemRefType>) {
+    return MemRefType::get(newShape, baseFieldType);
+  } else {
     return type.cloneWith(newShape, baseFieldType);
   }
-  return type;
 }
 
-static Type convertXYZZLikeType(ShapedType type) {
-  if (auto xyzzType = dyn_cast<XYZZType>(type.getElementType())) {
-    field::PrimeFieldType baseFieldType = xyzzType.getCurve().getA().getType();
-    SmallVector<int64_t> newShape(type.getShape());
-    newShape.push_back(4);
+template <typename T>
+static T convertXYZZLikeType(T type) {
+  auto xyzzType = cast<XYZZType>(type.getElementType());
+  field::PrimeFieldType baseFieldType = xyzzType.getCurve().getA().getType();
+  SmallVector<int64_t> newShape(type.getShape());
+  newShape.push_back(4);
+  if constexpr (std::is_same_v<T, MemRefType>) {
+    return MemRefType::get(newShape, baseFieldType);
+  } else {
     return type.cloneWith(newShape, baseFieldType);
   }
-  return type;
 }
 
-static Type convertPointLikeType(ShapedType type) {
+template <typename T>
+static T convertPointLikeType(T type) {
   Type elementType = type.getElementType();
   if (isa<AffineType>(elementType)) {
     return convertAffineLikeType(type);
@@ -92,12 +113,21 @@ class EllipticCurveToFieldTypeConverter : public TypeConverter {
   explicit EllipticCurveToFieldTypeConverter(MLIRContext *ctx) {
     addConversion([](Type type) { return type; });
     addConversion(
-        [](AffineType type) -> Type { return convertAffineType(type); });
+        [](AffineType type, SmallVectorImpl<Type> &converted) -> LogicalResult {
+          return convertAffineType(type, converted);
+        });
+    addConversion([](JacobianType type,
+                     SmallVectorImpl<Type> &converted) -> LogicalResult {
+      return convertJacobianType(type, converted);
+    });
     addConversion(
-        [](JacobianType type) -> Type { return convertJacobianType(type); });
-    addConversion([](XYZZType type) -> Type { return convertXYZZType(type); });
+        [](XYZZType type, SmallVectorImpl<Type> &converted) -> LogicalResult {
+          return convertXYZZType(type, converted);
+        });
     addConversion(
         [](ShapedType type) -> Type { return convertPointLikeType(type); });
+    addConversion(
+        [](MemRefType type) -> Type { return convertPointLikeType(type); });
   }
 };
 
