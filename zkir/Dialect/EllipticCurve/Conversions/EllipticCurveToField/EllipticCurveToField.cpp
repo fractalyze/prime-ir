@@ -460,36 +460,17 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      NegateOp op, OpAdaptor adaptor,
+      NegateOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Value point = adaptor.getInput();
-    Type inputType = op.getInput().getType();
+    ValueRange coords = adaptor.getInput();
 
-    auto zero = b.create<arith::ConstantIndexOp>(0);
-    auto one = b.create<arith::ConstantIndexOp>(1);
-    auto x = b.create<tensor::ExtractOp>(point, ValueRange{zero});
-    auto y = b.create<tensor::ExtractOp>(point, ValueRange{one});
+    auto negatedY = b.create<field::NegateOp>(coords[1]);
+    SmallVector<Value> outputCoords(coords);
+    outputCoords[1] = negatedY;
 
-    auto negatedY = b.create<field::NegateOp>(y);
-    SmallVector<Value> outputCoords{x, negatedY};
-
-    if (isa<JacobianType>(inputType)) {
-      auto two = b.create<arith::ConstantIndexOp>(2);
-      auto z = b.create<tensor::ExtractOp>(point, ValueRange{two});
-      outputCoords.push_back(z);
-    } else if (isa<XYZZType>(inputType)) {
-      auto two = b.create<arith::ConstantIndexOp>(2);
-      auto three = b.create<arith::ConstantIndexOp>(3);
-      auto zz = b.create<tensor::ExtractOp>(point, ValueRange{two});
-      auto zzz = b.create<tensor::ExtractOp>(point, ValueRange{three});
-      outputCoords.push_back(zz);
-      outputCoords.push_back(zzz);
-    }
-    Value makePoint = b.create<tensor::FromElementsOp>(outputCoords);
-
-    rewriter.replaceOp(op, makePoint);
+    rewriter.replaceOpWithMultiple(op, {outputCoords});
     return success();
   }
 };
