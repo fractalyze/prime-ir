@@ -107,10 +107,6 @@ LogicalResult ExtractOp::verify() {
   return verifyModArithType(*this, modArithType);
 }
 
-LogicalResult ReduceOp::verify() {
-  return verifyModArithType(*this, getResultModArithType(*this));
-}
-
 LogicalResult MontReduceOp::verify() {
   IntegerType integerType =
       cast<IntegerType>(getElementTypeOrSelf(this->getLow().getType()));

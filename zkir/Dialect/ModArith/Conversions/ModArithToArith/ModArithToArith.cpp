@@ -148,32 +148,6 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
   }
 };
 
-struct ConvertReduce : public OpConversionPattern<ReduceOp> {
-  explicit ConvertReduce(MLIRContext *context)
-      : OpConversionPattern<ReduceOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult matchAndRewrite(
-      ReduceOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
-                                             arith::IntegerOverflowFlags::nsw);
-    auto noOverflow =
-        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
-
-    auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
-    // ModArithType ensures cmod can be correctly interpreted as a signed number
-    auto rems = b.create<arith::RemSIOp>(adaptor.getOperands()[0], cmod);
-    auto add = b.create<arith::AddIOp>(rems, cmod, noOverflow);
-    // TODO(google/heir #710): better with a subifge
-    auto remu = b.create<arith::RemUIOp>(add, cmod);
-    rewriter.replaceOp(op, remu);
-    return success();
-  }
-};
-
 struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
   explicit ConvertMontReduce(MLIRContext *context)
       : OpConversionPattern<MontReduceOp>(context) {}
@@ -624,25 +598,23 @@ void ModArithToArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  patterns
-      .add<ConvertNegate, ConvertEncapsulate, ConvertExtract, ConvertReduce,
-           ConvertMontReduce, ConvertToMont, ConvertFromMont, ConvertAdd,
-           ConvertSub, ConvertMul, ConvertMontMul, ConvertMac, ConvertCmp,
-           ConvertConstant, ConvertInverse, ConvertAny<affine::AffineForOp>,
-           ConvertAny<affine::AffineParallelOp>,
-           ConvertAny<affine::AffineLoadOp>, ConvertAny<affine::AffineApplyOp>,
-           ConvertAny<affine::AffineStoreOp>, ConvertAny<affine::AffineYieldOp>,
-           ConvertAny<bufferization::MaterializeInDestinationOp>,
-           ConvertAny<bufferization::ToMemrefOp>,
-           ConvertAny<bufferization::ToTensorOp>, ConvertAny<linalg::GenericOp>,
-           ConvertAny<linalg::MapOp>, ConvertAny<linalg::YieldOp>,
-           ConvertAny<memref::LoadOp>, ConvertAny<memref::StoreOp>,
-           ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
-           ConvertAny<tensor::ExtractSliceOp>,
-           ConvertAny<tensor::InsertSliceOp>, ConvertAny<tensor::EmptyOp>,
-           ConvertAny<tensor::FromElementsOp>, ConvertAny<tensor::ConcatOp>,
-           ConvertAny<tensor::ReshapeOp>, ConvertAny<tensor::InsertOp>>(
-          typeConverter, context);
+  patterns.add<
+      ConvertNegate, ConvertEncapsulate, ConvertExtract, ConvertMontReduce,
+      ConvertToMont, ConvertFromMont, ConvertAdd, ConvertSub, ConvertMul,
+      ConvertMontMul, ConvertMac, ConvertCmp, ConvertConstant, ConvertInverse,
+      ConvertAny<affine::AffineForOp>, ConvertAny<affine::AffineParallelOp>,
+      ConvertAny<affine::AffineLoadOp>, ConvertAny<affine::AffineApplyOp>,
+      ConvertAny<affine::AffineStoreOp>, ConvertAny<affine::AffineYieldOp>,
+      ConvertAny<bufferization::MaterializeInDestinationOp>,
+      ConvertAny<bufferization::ToMemrefOp>,
+      ConvertAny<bufferization::ToTensorOp>, ConvertAny<linalg::GenericOp>,
+      ConvertAny<linalg::MapOp>, ConvertAny<linalg::YieldOp>,
+      ConvertAny<memref::LoadOp>, ConvertAny<memref::StoreOp>,
+      ConvertAny<tensor::CastOp>, ConvertAny<tensor::ExtractOp>,
+      ConvertAny<tensor::ExtractSliceOp>, ConvertAny<tensor::InsertSliceOp>,
+      ConvertAny<tensor::EmptyOp>, ConvertAny<tensor::FromElementsOp>,
+      ConvertAny<tensor::ConcatOp>, ConvertAny<tensor::ReshapeOp>,
+      ConvertAny<tensor::InsertOp>>(typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 

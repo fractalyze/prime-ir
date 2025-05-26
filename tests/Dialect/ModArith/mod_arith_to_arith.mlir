@@ -71,32 +71,6 @@ func.func @test_lower_extract_vec(%lhs : !Zpv) -> tensor<4xi32> {
   return %res : tensor<4xi32>
 }
 
-// CHECK-LABEL: @test_lower_reduce
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_reduce(%lhs : !Zp) -> !Zp {
-  // CHECK-NOT: mod_arith.reduce
-  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
-  // CHECK: %[[REMS:.*]] = arith.remsi %[[LHS]], %[[CMOD]] : [[T]]
-  // CHECK: %[[ADD:.*]] = arith.addi %[[REMS]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.remui %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: return %[[REM]] : [[T]]
-  %res = mod_arith.reduce %lhs: !Zp
-  return %res : !Zp
-}
-
-// CHECK-LABEL: @test_lower_reduce_vec
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_reduce_vec(%lhs : !Zpv) -> !Zpv {
-  // CHECK-NOT: mod_arith.reduce
-  // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[T]]
-  // CHECK: %[[REMS:.*]] = arith.remsi %[[LHS]], %[[CMOD]] : [[T]]
-  // CHECK: %[[ADD:.*]] = arith.addi %[[REMS]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.remui %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: return %[[REM]] : [[T]]
-  %res = mod_arith.reduce %lhs: !Zpv
-  return %res : !Zpv
-}
-
 // CHECK-LABEL: @test_lower_inverse
 // CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_inverse(%lhs : !Zp) -> !Zp {

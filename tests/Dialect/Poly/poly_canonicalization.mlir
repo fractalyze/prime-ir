@@ -27,10 +27,10 @@ func.func @test_canonicalize_intt_after_ntt(%p0 : !poly_ty) -> !poly_ty {
 func.func @test_canonicalize_ntt_after_intt(%t0 : !tensor_ty) -> !tensor_ty {
   // CHECK-NOT: poly.intt
   // CHECK-NOT: poly.ntt
-  // CHECK: %[[RESULT:.*]] = field.pf.add %[[X]], %[[X]] : [[T]]
+  // CHECK: %[[RESULT:.*]] = field.add %[[X]], %[[X]] : [[T]]
   %coeffs = poly.intt %t0 {root=#root} : !tensor_ty
   %evals = poly.ntt %coeffs {root=#root} : !tensor_ty
-  %evals2 = field.pf.add %evals, %evals : !tensor_ty
+  %evals2 = field.add %evals, %evals : !tensor_ty
   // CHECK: return %[[RESULT]] : [[T]]
   return %evals2 : !tensor_ty
 }

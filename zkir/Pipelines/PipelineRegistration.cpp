@@ -46,7 +46,7 @@ void oneShotBufferize(OpPassManager &manager) {
 
 void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(elliptic_curve::createEllipticCurveToField());
-  manager.addPass(field::createPrimeFieldToModArith());
+  manager.addPass(field::createFieldToModArith());
   manager.addPass(mod_arith::createModArithToArith());
   manager.addPass(createCanonicalizerPass());
 
@@ -96,7 +96,7 @@ void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
 template <bool allowOpenMP>
 void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(poly::createPolyToField());
-  manager.addPass(field::createPrimeFieldToModArith());
+  manager.addPass(field::createFieldToModArith());
   manager.addPass(mod_arith::createModArithToArith());
   // FIXME(batzor): With this, some memref loads are canonicalized even though
   // it was modified in the middle, causing `poly_ntt_runner` test to fail.

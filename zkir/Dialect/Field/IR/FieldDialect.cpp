@@ -117,4 +117,30 @@ void ConstantOp::print(OpAsmPrinter &p) {
   p.printType(getOutput().getType());
 }
 
+template <typename OpType>
+static LogicalResult disallowTensorOfExtField(OpType op) {
+  // FIXME(batzor): In the prime field case, we rely on elementwise trait but in
+  // the quadratic extension case, `linalg.generic` introduced by the
+  // elementwise pass will be ill-formed due to the 1:N conversion.
+  auto resultType = op.getResult().getType();
+  if (isa<ShapedType>(resultType)) {
+    auto elementType = cast<ShapedType>(resultType).getElementType();
+    if (isa<QuadraticExtFieldType>(elementType)) {
+      return op->emitOpError(
+          "tensor operation is not supported for quadratic "
+          "extension field type");
+    }
+  }
+  return success();
+}
+
+LogicalResult NegateOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult AddOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult SubOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult MulOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult InverseOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult FromMontOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult ToMontOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult MontMulOp::verify() { return disallowTensorOfExtField(*this); }
+
 }  // namespace mlir::zkir::field

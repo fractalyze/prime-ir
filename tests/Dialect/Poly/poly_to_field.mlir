@@ -26,7 +26,7 @@ func.func @test_lower_constant() -> !poly_ty1 {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_add(%lhs : !poly_ty1, %rhs : !poly_ty1) -> !poly_ty1 {
   // CHECK-NOT: poly.add
-  // CHECK: %[[RES:.*]] = field.pf.add %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.add %[[LHS]], %[[RHS]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   %res = poly.add %lhs, %rhs : !poly_ty1
   return %res : !poly_ty1
@@ -36,7 +36,7 @@ func.func @test_lower_add(%lhs : !poly_ty1, %rhs : !poly_ty1) -> !poly_ty1 {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_sub(%lhs : !poly_ty1, %rhs : !poly_ty1) -> !poly_ty1 {
   // CHECK-NOT: poly.sub
-  // CHECK: %[[RES:.*]] = field.pf.sub %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.sub %[[LHS]], %[[RHS]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   %res = poly.sub %lhs, %rhs : !poly_ty1
   return %res : !poly_ty1
@@ -51,10 +51,10 @@ func.func @test_lower_to_tensor() -> tensor<4x!PF1> {
   // CHECK: %[[TVAL:.*]] = field.pf.encapsulate %[[CVAL]] : [[TINT]] -> [[T]]
   %0 = poly.constant<x**3 + 1> : !poly_ty1
   // CHECK-NOT: poly.to_tensor
-  // CHECK: %[[RES:.*]] = field.pf.add %[[TVAL]], %[[TVAL]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.add %[[TVAL]], %[[TVAL]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   %1 = poly.to_tensor %0 : !poly_ty1 -> tensor<4x!PF1>
-  %res = field.pf.add %1, %1 : tensor<4x!PF1>
+  %res = field.add %1, %1 : tensor<4x!PF1>
   return %res : tensor<4x!PF1>
 }
 

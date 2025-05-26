@@ -5,10 +5,10 @@ include "zkir/Dialect/ModArith/IR/ModArithOps.td"
 include "mlir/IR/PatternBase.td"
 include "mlir/Pass/PassBase.td"
 
-def PrimeFieldToModArith : Pass<"prime-field-to-mod-arith", "ModuleOp"> {
-  let summary = "Lower `field.pf` to `mod_arith` dialect.";
+def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
+  let summary = "Lower `field` dialect to `mod_arith` dialect.";
   let description = [{
-    This pass lowers the `field.pf` dialect to their `mod_arith` equivalents.
+    This pass lowers the `field` dialect to their `mod_arith` equivalents.
   }];
   let dependentDialects = [
     "mlir::zkir::mod_arith::ModArithDialect",
