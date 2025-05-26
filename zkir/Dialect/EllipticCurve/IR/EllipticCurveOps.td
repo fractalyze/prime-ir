@@ -51,41 +51,6 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
   let hasVerifier = 1;
 }
 
-def EllipticCurve_PointSetOp : EllipticCurve_Op<"point_set.from_elements",
-              [SameTypeOperands,
-               TypesMatchWith<"operand types match result element type",
-                   "output", "points", "SmallVector<Type, 2>("
-                   "::llvm::cast<RankedTensorType>($_self).getNumElements(), "
-                   "::llvm::cast<RankedTensorType>($_self).getElementType())">]> {
-  let summary = "A set of elliptic curve points";
-  let description = [{
-    Defines a set of elliptic curve points in Affine(x, y), Jacobian(x, y, z), or XYZZ(x, y, z², z³) form.
-
-    Example:
-    ```
-    %0 = elliptic_curve.point_set.from_elements %a, %b : tensor<2x!affine>
-    ```
-  }];
-  let arguments = (ins Variadic<PointType>:$points);
-  let results = (outs RankedTensorOf<[PointType]>:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
-}
-
-def EllipticCurve_PointSetExtractOp : EllipticCurve_Op<"point_set.extract"> {
-  let summary = "Extracts a point from a point set";
-  let description = [{
-   Extracts a point from a point set. Allows for Affine(x, y), Jacobian(x, y, z), or XYZZ(x, y, z², z³) points.
-
-    Example:
-    ```
-    %0 = elliptic_curve.point_set.extract %point_set, %idx : tensor<3x!affine> -> !affine
-    ```
-  }];
-  let arguments = (ins RankedTensorOf<[PointType]>:$point_set, Index:$index);
-  let results = (outs PointType:$output);
-  let assemblyFormat = "operands attr-dict `:` type($point_set) `->` type($output)";
-}
-
 /////////// POINT EXTRACTION //////////////
 
 def EllipticCurve_ExtractOp : EllipticCurve_Op<"extract"> {
@@ -100,7 +65,7 @@ def EllipticCurve_ExtractOp : EllipticCurve_Op<"extract"> {
   }];
 
   let arguments = (ins PointLike:$input);
-  let results = (outs TensorOf<[Field_PrimeFieldType]>:$output);
+  let results = (outs Variadic<Field_PrimeFieldType>:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
