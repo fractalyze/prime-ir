@@ -260,15 +260,11 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
 };
 
 // `point` must be from a tensor::from_elements op
-static Value convertConvertPointTypeImpl(Value point, Type inputType,
-                                         Type outputType,
-                                         ImplicitLocOpBuilder &b) {
-  auto zero = b.create<arith::ConstantIndexOp>(0);
-  auto one = b.create<arith::ConstantIndexOp>(1);
-  auto x = b.create<tensor::ExtractOp>(point, ValueRange{zero});
-  auto y = b.create<tensor::ExtractOp>(point, ValueRange{one});
-  auto baseFieldType = cast<field::PrimeFieldType>(x.getType());
-
+static SmallVector<Value> convertConvertPointTypeImpl(ValueRange coords,
+                                                      Type inputType,
+                                                      Type outputType,
+                                                      ImplicitLocOpBuilder &b) {
+  auto baseFieldType = cast<field::PrimeFieldType>(coords[0].getType());
   SmallVector<Value> outputCoords;
 
   if (isa<AffineType>(inputType)) {
@@ -276,23 +272,22 @@ static Value convertConvertPointTypeImpl(Value point, Type inputType,
 
     // affine to jacobian
     // (x, y) -> (x, y, 1)
-    outputCoords = {x, y, onePF};
+    outputCoords = {coords[0], coords[1], onePF};
     if (isa<XYZZType>(outputType)) {
       outputCoords.push_back(onePF);
       // affine to xyzz
       // (x, y) -> (x, y, 1, 1)
     }
   } else if (isa<JacobianType>(inputType)) {
-    auto two = b.create<arith::ConstantIndexOp>(2);
-    auto z = b.create<tensor::ExtractOp>(point, ValueRange{two});
-    auto zz = b.create<field::SquareOp>(z);
-    auto zzz = b.create<field::MulOp>(zz, z);
+    auto zz = b.create<field::SquareOp>(coords[2]);
+    auto zzz = b.create<field::MulOp>(zz, coords[2]);
 
     if (isa<AffineType>(outputType)) {
       // jacobian to affine
       // (x, y, z) -> (x/z², y/z³)
       auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
-      auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, z, zero);
+      auto cmpEq =
+          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zero);
       // if z == 0, then x/z² -> 1, y/z³ -> 1
       auto output = b.create<scf::IfOp>(
           cmpEq,
@@ -307,8 +302,8 @@ static Value convertConvertPointTypeImpl(Value point, Type inputType,
             // TODO(ashjeong): use Batch Inverse
             auto zzInv = builder.create<field::InverseOp>(loc, zz);
             auto zzzInv = builder.create<field::InverseOp>(loc, zzz);
-            auto newX = builder.create<field::MulOp>(loc, x, zzInv);
-            auto newY = builder.create<field::MulOp>(loc, y, zzzInv);
+            auto newX = builder.create<field::MulOp>(loc, coords[0], zzInv);
+            auto newY = builder.create<field::MulOp>(loc, coords[1], zzzInv);
             builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
           });
 
@@ -316,19 +311,15 @@ static Value convertConvertPointTypeImpl(Value point, Type inputType,
     } else {
       // jacobian to xyzz
       // (x, y, z) -> (x, y, z², z³)
-      outputCoords = {x, y, zz, zzz};
+      outputCoords = {coords[0], coords[1], zz, zzz};
     }
   } else {
-    auto two = b.create<arith::ConstantIndexOp>(2);
-    auto three = b.create<arith::ConstantIndexOp>(3);
-    auto zz = b.create<tensor::ExtractOp>(point, ValueRange{two});
-    auto zzz = b.create<tensor::ExtractOp>(point, ValueRange{three});
-
     if (isa<AffineType>(outputType)) {
       // xyzz to affine
       // (x, y, z², z³) -> (x/z², y/z³)
       auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
-      auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, zz, zero);
+      auto cmpEq =
+          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zero);
       // if z == 0, then x/z² -> 1, y/z³ -> 1
       auto ifOp = b.create<scf::IfOp>(
           cmpEq,
@@ -341,20 +332,21 @@ static Value convertConvertPointTypeImpl(Value point, Type inputType,
           /*elseBuilder=*/
           [&](OpBuilder &builder, Location loc) {
             // TODO(ashjeong): use Batch Inverse
-            auto zzInv = builder.create<field::InverseOp>(loc, zz);
-            auto zzzInv = builder.create<field::InverseOp>(loc, zzz);
-            auto newX = builder.create<field::MulOp>(loc, x, zzInv);
-            auto newY = builder.create<field::MulOp>(loc, y, zzzInv);
+            auto zzInv = builder.create<field::InverseOp>(loc, coords[2]);
+            auto zzzInv = builder.create<field::InverseOp>(loc, coords[3]);
+            auto newX = builder.create<field::MulOp>(loc, coords[0], zzInv);
+            auto newY = builder.create<field::MulOp>(loc, coords[1], zzzInv);
             builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
           });
       outputCoords = {ifOp.getResult(0), ifOp.getResult(1)};
     } else {
       // xyzz to jacobian
       // (x, y, z², z³) -> (x, y, z)
-      outputCoords = {x, y};
+      outputCoords = {coords[0], coords[1]};
 
       auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
-      auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, zz, zero);
+      auto cmpEq =
+          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zero);
       auto output = b.create<scf::IfOp>(
           cmpEq,
           /*thenBuilder=*/
@@ -365,14 +357,14 @@ static Value convertConvertPointTypeImpl(Value point, Type inputType,
           },
           /*elseBuilder=*/
           [&](OpBuilder &builder, Location loc) {
-            auto zzInv = builder.create<field::InverseOp>(loc, zz);
-            auto z = builder.create<field::MulOp>(loc, zzz, zzInv);
+            auto zzInv = builder.create<field::InverseOp>(loc, coords[2]);
+            auto z = builder.create<field::MulOp>(loc, coords[3], zzInv);
             builder.create<scf::YieldOp>(loc, ValueRange{z});
           });
       outputCoords.push_back(output.getResult(0));
     }
   }
-  return b.create<tensor::FromElementsOp>(outputCoords);
+  return outputCoords;
 }
 
 struct ConvertConvertPointType
@@ -383,16 +375,16 @@ struct ConvertConvertPointType
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      ConvertPointTypeOp op, OpAdaptor adaptor,
+      ConvertPointTypeOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Value point = adaptor.getInput();
+    ValueRange points = adaptor.getInput();
     Type inputType = op.getInput().getType();
     Type outputType = op.getOutput().getType();
 
-    rewriter.replaceOp(
-        op, convertConvertPointTypeImpl(point, inputType, outputType, b));
+    rewriter.replaceOpWithMultiple(
+        op, {convertConvertPointTypeImpl(points, inputType, outputType, b)});
     return success();
   }
 };
