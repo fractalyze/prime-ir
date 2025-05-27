@@ -173,114 +173,6 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
   }
 };
 
-// `point` must be from a tensor::from_elements op
-static SmallVector<Value> convertConvertPointTypeImpl(ValueRange coords,
-                                                      Type inputType,
-                                                      Type outputType,
-                                                      ImplicitLocOpBuilder &b) {
-  auto baseFieldType = cast<field::PrimeFieldType>(coords[0].getType());
-  SmallVector<Value> outputCoords;
-
-  if (isa<AffineType>(inputType)) {
-    auto onePF = b.create<field::ConstantOp>(baseFieldType, 1);
-
-    // affine to jacobian
-    // (x, y) -> (x, y, 1)
-    outputCoords = {coords[0], coords[1], onePF};
-    if (isa<XYZZType>(outputType)) {
-      outputCoords.push_back(onePF);
-      // affine to xyzz
-      // (x, y) -> (x, y, 1, 1)
-    }
-  } else if (isa<JacobianType>(inputType)) {
-    auto zz = b.create<field::SquareOp>(coords[2]);
-    auto zzz = b.create<field::MulOp>(zz, coords[2]);
-
-    if (isa<AffineType>(outputType)) {
-      // jacobian to affine
-      // (x, y, z) -> (x/z², y/z³)
-      auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
-      auto cmpEq =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zero);
-      // if z == 0, then x/z² -> 1, y/z³ -> 1
-      auto output = b.create<scf::IfOp>(
-          cmpEq,
-          /*thenBuilder=*/
-          [&](OpBuilder &builder, Location loc) {
-            auto onePF =
-                builder.create<field::ConstantOp>(loc, baseFieldType, 1);
-            builder.create<scf::YieldOp>(loc, ValueRange{onePF, onePF});
-          },
-          /*elseBuilder=*/
-          [&](OpBuilder &builder, Location loc) {
-            // TODO(ashjeong): use Batch Inverse
-            auto zzInv = builder.create<field::InverseOp>(loc, zz);
-            auto zzzInv = builder.create<field::InverseOp>(loc, zzz);
-            auto newX = builder.create<field::MulOp>(loc, coords[0], zzInv);
-            auto newY = builder.create<field::MulOp>(loc, coords[1], zzzInv);
-            builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
-          });
-
-      outputCoords = {output.getResult(0), output.getResult(1)};
-    } else {
-      // jacobian to xyzz
-      // (x, y, z) -> (x, y, z², z³)
-      outputCoords = {coords[0], coords[1], zz, zzz};
-    }
-  } else {
-    if (isa<AffineType>(outputType)) {
-      // xyzz to affine
-      // (x, y, z², z³) -> (x/z², y/z³)
-      auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
-      auto cmpEq =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zero);
-      // if z == 0, then x/z² -> 1, y/z³ -> 1
-      auto ifOp = b.create<scf::IfOp>(
-          cmpEq,
-          /*thenBuilder=*/
-          [&](OpBuilder &builder, Location loc) {
-            auto onePF =
-                builder.create<field::ConstantOp>(loc, baseFieldType, 1);
-            builder.create<scf::YieldOp>(loc, ValueRange{onePF, onePF});
-          },
-          /*elseBuilder=*/
-          [&](OpBuilder &builder, Location loc) {
-            // TODO(ashjeong): use Batch Inverse
-            auto zzInv = builder.create<field::InverseOp>(loc, coords[2]);
-            auto zzzInv = builder.create<field::InverseOp>(loc, coords[3]);
-            auto newX = builder.create<field::MulOp>(loc, coords[0], zzInv);
-            auto newY = builder.create<field::MulOp>(loc, coords[1], zzzInv);
-            builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
-          });
-      outputCoords = {ifOp.getResult(0), ifOp.getResult(1)};
-    } else {
-      // xyzz to jacobian
-      // (x, y, z², z³) -> (x, y, z)
-      outputCoords = {coords[0], coords[1]};
-
-      auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
-      auto cmpEq =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zero);
-      auto output = b.create<scf::IfOp>(
-          cmpEq,
-          /*thenBuilder=*/
-          [&](OpBuilder &builder, Location loc) {
-            auto zeroPF =
-                builder.create<field::ConstantOp>(loc, baseFieldType, 0);
-            builder.create<scf::YieldOp>(loc, ValueRange{zeroPF});
-          },
-          /*elseBuilder=*/
-          [&](OpBuilder &builder, Location loc) {
-            auto zzInv = builder.create<field::InverseOp>(loc, coords[2]);
-            auto z = builder.create<field::MulOp>(loc, coords[3], zzInv);
-            builder.create<scf::YieldOp>(loc, ValueRange{z});
-          });
-      outputCoords.push_back(output.getResult(0));
-    }
-  }
-  return outputCoords;
-}
-
 struct ConvertConvertPointType
     : public OpConversionPattern<ConvertPointTypeOp> {
   explicit ConvertConvertPointType(MLIRContext *context)
@@ -293,29 +185,122 @@ struct ConvertConvertPointType
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    ValueRange points = adaptor.getInput();
+    ValueRange coords = adaptor.getInput();
+    auto baseFieldType = cast<field::PrimeFieldType>(coords[0].getType());
     Type inputType = op.getInput().getType();
     Type outputType = op.getOutput().getType();
 
-    rewriter.replaceOpWithMultiple(
-        op, {convertConvertPointTypeImpl(points, inputType, outputType, b)});
+    SmallVector<Value> outputCoords;
+
+    if (isa<AffineType>(inputType)) {
+      auto onePF = b.create<field::ConstantOp>(baseFieldType, 1);
+      // affine to jacobian
+      // (x, y) -> (x, y, 1)
+      outputCoords = {/* x */ coords[0], /* y */ coords[1], onePF};
+      if (isa<XYZZType>(outputType)) {
+        outputCoords.push_back(onePF);
+        // affine to xyzz
+        // (x, y) -> (x, y, 1, 1)
+      }
+    } else if (isa<JacobianType>(inputType)) {
+      auto zz = b.create<field::SquareOp>(/* z */ coords[2]);
+      auto zzz = b.create<field::MulOp>(zz, /* z */ coords[2]);
+
+      if (isa<AffineType>(outputType)) {
+        // jacobian to affine
+        // (x, y, z) -> (x/z², y/z³)
+        auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
+        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
+                                            /* z */ coords[2], zero);
+        // if z == 0, then x/z² -> 1, y/z³ -> 1
+        auto output = b.create<scf::IfOp>(
+            cmpEq,
+            /*thenBuilder=*/
+            [&](OpBuilder &builder, Location loc) {
+              auto onePF =
+                  builder.create<field::ConstantOp>(loc, baseFieldType, 1);
+              builder.create<scf::YieldOp>(loc, ValueRange{onePF, onePF});
+            },
+            /*elseBuilder=*/
+            [&](OpBuilder &builder, Location loc) {
+              // TODO(ashjeong): use Batch Inverse
+              auto zzInv = builder.create<field::InverseOp>(loc, zz);
+              auto zzzInv = builder.create<field::InverseOp>(loc, zzz);
+              auto newX =
+                  builder.create<field::MulOp>(loc, /* x */ coords[0], zzInv);
+              auto newY =
+                  builder.create<field::MulOp>(loc, /* y */ coords[1], zzzInv);
+              builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
+            });
+
+        outputCoords = {output.getResult(0), output.getResult(1)};
+      } else {
+        // jacobian to xyzz
+        // (x, y, z) -> (x, y, z², z³)
+        outputCoords = {/* x */ coords[0], /* y */ coords[1], zz, zzz};
+      }
+    } else {
+      if (isa<AffineType>(outputType)) {
+        // xyzz to affine
+        // (x, y, z², z³) -> (x/z², y/z³)
+        auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
+        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
+                                            /* zz */ coords[2], zero);
+        // if z == 0, then x/z² -> 1, y/z³ -> 1
+        auto ifOp = b.create<scf::IfOp>(
+            cmpEq,
+            /*thenBuilder=*/
+            [&](OpBuilder &builder, Location loc) {
+              auto onePF =
+                  builder.create<field::ConstantOp>(loc, baseFieldType, 1);
+              builder.create<scf::YieldOp>(loc, ValueRange{onePF, onePF});
+            },
+            /*elseBuilder=*/
+            [&](OpBuilder &builder, Location loc) {
+              // TODO(ashjeong): use Batch Inverse
+              auto zzInv =
+                  builder.create<field::InverseOp>(loc, /* zz */ coords[2]);
+              auto zzzInv =
+                  builder.create<field::InverseOp>(loc, /* zzz */ coords[3]);
+              auto newX =
+                  builder.create<field::MulOp>(loc, /* x */ coords[0], zzInv);
+              auto newY =
+                  builder.create<field::MulOp>(loc, /* y */ coords[1], zzzInv);
+              builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
+            });
+        outputCoords = {ifOp.getResult(0), ifOp.getResult(1)};
+      } else {
+        // xyzz to jacobian
+        // (x, y, z², z³) -> (x, y, z)
+        outputCoords = {/* x */ coords[0], /* y */ coords[1]};
+
+        auto zero = b.create<field::ConstantOp>(baseFieldType, 0);
+        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
+                                            /* zz */ coords[2], zero);
+        auto output = b.create<scf::IfOp>(
+            cmpEq,
+            /*thenBuilder=*/
+            [&](OpBuilder &builder, Location loc) {
+              auto zeroPF =
+                  builder.create<field::ConstantOp>(loc, baseFieldType, 0);
+              builder.create<scf::YieldOp>(loc, ValueRange{zeroPF});
+            },
+            /*elseBuilder=*/
+            [&](OpBuilder &builder, Location loc) {
+              auto zzInv = builder.create<field::InverseOp>(loc, coords[2]);
+              auto z =
+                  builder.create<field::MulOp>(loc, /* zzz */ coords[3], zzInv);
+              builder.create<scf::YieldOp>(loc, ValueRange{z});
+            });
+        outputCoords.push_back(output.getResult(0));
+      }
+    }
+    rewriter.replaceOpWithMultiple(op, {outputCoords});
     return success();
   }
 };
 
 ///////////// POINT ARITHMETIC OPERATIONS //////////////
-
-static SmallVector<Value> convertAddImpl(ValueRange p1, ValueRange p2,
-                                         Type outputType,
-                                         ImplicitLocOpBuilder &b) {
-  if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
-    return xyzzAdd(p1, p2, xyzzType.getCurve(), b);
-  } else if (auto jacobianType = dyn_cast<JacobianType>(outputType)) {
-    return jacobianAdd(p1, p2, jacobianType.getCurve(), b);
-  } else {
-    assert(false && "Unsupported point types for addition");
-  }
-}
 
 struct ConvertAdd : public OpConversionPattern<AddOp> {
   explicit ConvertAdd(MLIRContext *context)
@@ -329,25 +314,22 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type outputType = op.getOutput().getType();
-    rewriter.replaceOpWithMultiple(
-        op,
-        {convertAddImpl(adaptor.getLhs(), adaptor.getRhs(), outputType, b)});
+    ValueRange p1 = adaptor.getLhs();
+    ValueRange p2 = adaptor.getRhs();
+    SmallVector<Value> sum;
+
+    if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
+      sum = xyzzAdd(p1, p2, xyzzType.getCurve(), b);
+    } else if (auto jacobianType = dyn_cast<JacobianType>(outputType)) {
+      sum = jacobianAdd(p1, p2, jacobianType.getCurve(), b);
+    } else {
+      assert(false && "Unsupported point types for addition");
+    }
+
+    rewriter.replaceOpWithMultiple(op, {sum});
     return success();
   }
 };
-
-// `point` must be from a tensor::from_elements op
-static SmallVector<Value> convertDoubleImpl(const ValueRange coords,
-                                            Type outputType,
-                                            ImplicitLocOpBuilder &b) {
-  if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
-    return xyzzDouble(coords, xyzzType.getCurve(), b);
-  } else if (auto jacobianType = dyn_cast<JacobianType>(outputType)) {
-    return jacobianDouble(coords, jacobianType.getCurve(), b);
-  } else {
-    assert(false && "Unsupported point type for doubling");
-  }
-}
 
 struct ConvertDouble : public OpConversionPattern<DoubleOp> {
   explicit ConvertDouble(MLIRContext *context)
@@ -361,8 +343,18 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type outputType = op.getOutput().getType();
-    rewriter.replaceOpWithMultiple(
-        op, {convertDoubleImpl(adaptor.getInput(), outputType, b)});
+    ValueRange coords = adaptor.getInput();
+    SmallVector<Value> sum;
+
+    if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
+      sum = xyzzDouble(coords, xyzzType.getCurve(), b);
+    } else if (auto jacobianType = dyn_cast<JacobianType>(outputType)) {
+      sum = jacobianDouble(coords, jacobianType.getCurve(), b);
+    } else {
+      assert(false && "Unsupported point type for doubling");
+    }
+
+    rewriter.replaceOpWithMultiple(op, {sum});
     return success();
   }
 };
