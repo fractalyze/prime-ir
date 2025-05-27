@@ -1,7 +1,7 @@
 // RUN: zkir-opt --arith-to-mod-arith --split-input-file %s | FileCheck %s --enable-var-scope
 
 // CHECK-LABEL: @test_lower_add
-// CHECK-SAME: (%[[LHS:.*]]: !z2147483648_i33_, %[[RHS:.*]]: !z2147483648_i33_) -> [[T:.*]] {
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_add(%lhs : i32, %rhs : i32) -> i32 {
   // CHECK: %[[ADD:.*]] = mod_arith.add %[[LHS]], %[[RHS]] : [[T]]
   // CHECK: return %[[ADD:.*]] : [[T]]
@@ -10,7 +10,7 @@ func.func @test_lower_add(%lhs : i32, %rhs : i32) -> i32 {
 }
 
 // CHECK-LABEL: @test_lower_add_vec
-// CHECK-SAME: (%[[LHS:.*]]: tensor<4x!z2147483648_i33_>, %[[RHS:.*]]: tensor<4x!z2147483648_i33_>) -> [[T:.*]] {
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_add_vec(%lhs : tensor<4xi32>, %rhs : tensor<4xi32>) -> tensor<4xi32> {
   // CHECK: %[[ADD:.*]] = mod_arith.add %[[LHS]], %[[RHS]] : [[T]]
   // CHECK: return %[[ADD:.*]] : [[T]]
