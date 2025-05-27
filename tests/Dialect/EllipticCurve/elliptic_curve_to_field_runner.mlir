@@ -114,9 +114,9 @@ func.func @test_ops_in_order() {
 // CHECK_TEST_OPS_IN_ORDER: [1, 10, 1]
 // CHECK_TEST_OPS_IN_ORDER: [1, 10, 1, 1]
 // CHECK_TEST_OPS_IN_ORDER: [1, 10]
-// CHECK_TEST_OPS_IN_ORDER: [0, 0, 0]
-// CHECK_TEST_OPS_IN_ORDER: [1, 1]
-// CHECK_TEST_OPS_IN_ORDER: [4, 3, 0, 0]
+// CHECK_TEST_OPS_IN_ORDER: [10, 5, 4]
+// CHECK_TEST_OPS_IN_ORDER: [2, 3]
+// CHECK_TEST_OPS_IN_ORDER: [2, 8, 1, 1]
 
 
 // CHECK-LABEL: @test_msm
@@ -164,5 +164,5 @@ func.func @test_msm() {
   return
 }
 
-// CHECK_TEST_MSM: [0, 0, 0]
-// CHECK_TEST_MSM: [0, 0, 0]
+// CHECK_TEST_MSM: [0, 3, 7]
+// CHECK_TEST_MSM: [0, 3, 7]
