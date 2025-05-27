@@ -20,16 +20,13 @@ zkir_deps()
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-LLVM_COMMIT = "f8287f6c373fcf993643dd6f0e30dde304c1be73"
+LLVM_COMMIT = "9ae3bce17543f92ce0237597cc66503d58cce317"
 
-LLVM_SHA256 = "add2841174abc79c45aa309bdf0cf631aa8f97e7a4df57dcfca57c60df27527f"
+LLVM_SHA256 = "19a170bb0931bcf3e698f37fef24b2c52871525987731b5d56be6a4afc705b22"
 
 http_archive(
     name = "llvm-raw",
     build_file_content = "# empty",
-    patches = [
-        "//third_party/llvm:mlir_runner.patch",
-    ],
     sha256 = LLVM_SHA256,
     strip_prefix = "llvm-project-" + LLVM_COMMIT,
     urls = ["https://github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT)],

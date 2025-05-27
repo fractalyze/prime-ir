@@ -30,7 +30,7 @@ void oneShotBufferize(OpPassManager &manager) {
   // NOTE: One-shot bufferize does not deallocate buffers. This is done by the
   // ownership-based buffer deallocation pass.
   // https://mlir.llvm.org/docs/OwnershipBasedBufferDeallocation/
-  bufferization::OneShotBufferizationOptions bufferizationOptions;
+  bufferization::OneShotBufferizePassOptions bufferizationOptions;
   bufferizationOptions.bufferizeFunctionBoundaries = true;
   manager.addPass(
       bufferization::createOneShotBufferizePass(bufferizationOptions));
@@ -40,7 +40,7 @@ void oneShotBufferize(OpPassManager &manager) {
   manager.addPass(bufferization::createBufferDeallocationSimplificationPass());
   manager.addPass(bufferization::createLowerDeallocationsPass());
   manager.addPass(createCSEPass());
-  manager.addPass(createBufferizationToMemRefPass());
+  manager.addPass(createConvertBufferizationToMemRefPass());
   manager.addPass(createCanonicalizerPass());
 }
 
@@ -66,7 +66,7 @@ void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
   // But lowering to loops also re-introduces affine.apply, so re-lower that
   manager.addNestedPass<FuncOp>(createConvertLinalgToLoopsPass());
   manager.addPass(createLowerAffinePass());
-  manager.addPass(createBufferizationToMemRefPass());
+  manager.addPass(createConvertBufferizationToMemRefPass());
 
   // Cleanup
   manager.addPass(createCanonicalizerPass());
@@ -76,7 +76,7 @@ void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
 
   // ToLLVM
   manager.addPass(arith::createArithExpandOpsPass());
-  manager.addPass(createConvertSCFToCFPass());
+  manager.addPass(createSCFToControlFlowPass());
   manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
 
   // expand strided metadata will create affine map. Needed to lower affine.map
@@ -120,7 +120,7 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   // But lowering to loops also re-introduces affine.apply, so re-lower that
   manager.addNestedPass<FuncOp>(createConvertLinalgToParallelLoopsPass());
   manager.addPass(createLowerAffinePass());
-  manager.addPass(createBufferizationToMemRefPass());
+  manager.addPass(createConvertBufferizationToMemRefPass());
 
   // Cleanup
   manager.addPass(createCanonicalizerPass());
@@ -133,7 +133,7 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   if constexpr (allowOpenMP) {
     manager.addPass(createConvertSCFToOpenMPPass());
   }
-  manager.addPass(createConvertSCFToCFPass());
+  manager.addPass(createSCFToControlFlowPass());
   manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
 
   // expand strided metadata will create affine map. Needed to lower affine.map
