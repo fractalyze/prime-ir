@@ -506,12 +506,13 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     auto scalar = b.create<field::ExtractOp>(signlessIntType, scalarPF);
 
     auto zeroPF = b.create<field::ConstantOp>(baseFieldType, 0);
+    auto onePF = b.create<field::ConstantOp>(baseFieldType, 1);
     Value zeroPoint =
         isa<XYZZType>(outputType)
             ? b.create<elliptic_curve::PointOp>(
-                  outputType, ValueRange{zeroPF, zeroPF, zeroPF, zeroPF})
+                  outputType, ValueRange{onePF, onePF, zeroPF, zeroPF})
             : b.create<elliptic_curve::PointOp>(
-                  outputType, ValueRange{zeroPF, zeroPF, zeroPF});
+                  outputType, ValueRange{onePF, onePF, zeroPF});
 
     Value intialPoint =
         isa<AffineType>(pointType)
