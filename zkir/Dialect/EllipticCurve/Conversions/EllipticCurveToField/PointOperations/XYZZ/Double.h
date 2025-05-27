@@ -10,11 +10,10 @@
 
 namespace mlir::zkir::elliptic_curve {
 
-SmallVector<Value> affineToXYZZDouble(const ValueRange &point,
+SmallVector<Value> affineToXYZZDouble(ValueRange point,
                                       ShortWeierstrassAttr curve,
                                       ImplicitLocOpBuilder &b);
-SmallVector<Value> xyzzDouble(const ValueRange &point,
-                              ShortWeierstrassAttr curve,
+SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
                               ImplicitLocOpBuilder &b);
 
 }  // namespace mlir::zkir::elliptic_curve

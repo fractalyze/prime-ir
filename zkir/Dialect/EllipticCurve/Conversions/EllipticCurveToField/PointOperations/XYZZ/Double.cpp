@@ -12,7 +12,7 @@ namespace mlir::zkir::elliptic_curve {
 // mdbl-2008-s-1
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-mdbl-2008-s-1
 // Cost: 4M + 3S
-SmallVector<Value> affineToXYZZDouble(const ValueRange &point,
+SmallVector<Value> affineToXYZZDouble(ValueRange point,
                                       ShortWeierstrassAttr curve,
                                       ImplicitLocOpBuilder &b) {
   Value x = point[0];
@@ -52,8 +52,7 @@ SmallVector<Value> affineToXYZZDouble(const ValueRange &point,
 // dbl-2008-s-1
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-dbl-2008-s-1
 // Cost: 6M + 4S + 1*a
-SmallVector<Value> xyzzDouble(const ValueRange &point,
-                              ShortWeierstrassAttr curve,
+SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
                               ImplicitLocOpBuilder &b) {
   Value x = point[0];
   Value y = point[1];

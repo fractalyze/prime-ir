@@ -13,8 +13,7 @@ namespace mlir::zkir::elliptic_curve {
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-mdbl-2007-bl
 // Cost: 1M + 5S
 // Assumption: Z == 1
-static SmallVector<Value> affineToJacobianDouble(const ValueRange point,
-                                                 const Value a,
+static SmallVector<Value> affineToJacobianDouble(ValueRange point, Value a,
                                                  ImplicitLocOpBuilder &b) {
   auto x = point[0];
   auto y = point[1];
@@ -55,7 +54,7 @@ static SmallVector<Value> affineToJacobianDouble(const ValueRange point,
 // dbl-2009-l
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#doubling-dbl-2009-l
 // Cost: 2M + 5S
-static SmallVector<Value> jacobianA0Double(const ValueRange point,
+static SmallVector<Value> jacobianA0Double(ValueRange point,
                                            ImplicitLocOpBuilder &b) {
   Value x = point[0];
   Value y = point[1];
@@ -98,8 +97,7 @@ static SmallVector<Value> jacobianA0Double(const ValueRange point,
 // dbl-2007-bl
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-dbl-2007-bl
 // Cost: 1M + 8S + 1*a
-static SmallVector<Value> jacobianDefaultDouble(const ValueRange point,
-                                                const Value a,
+static SmallVector<Value> jacobianDefaultDouble(ValueRange point, Value a,
                                                 ImplicitLocOpBuilder &b) {
   Value x = point[0];
   Value y = point[1];
@@ -145,8 +143,7 @@ static SmallVector<Value> jacobianDefaultDouble(const ValueRange point,
   return {x3, y3, z3};
 }
 
-SmallVector<Value> jacobianDouble(const ValueRange point,
-                                  ShortWeierstrassAttr curve,
+SmallVector<Value> jacobianDouble(ValueRange point, ShortWeierstrassAttr curve,
                                   ImplicitLocOpBuilder &b) {
   auto baseField = cast<field::PrimeFieldType>(point[0].getType());
 

@@ -13,8 +13,7 @@ namespace mlir::zkir::elliptic_curve {
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-mmadd-2007-bl
 // Cost: 4M + 2S
 // Assumption: Z1 == Z2 == 1
-static SmallVector<Value> affineAndAffine(const ValueRange &p1,
-                                          const ValueRange &p2,
+static SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
                                           ShortWeierstrassAttr curve,
                                           ImplicitLocOpBuilder &b) {
   Value x1 = p1[0];
@@ -74,8 +73,7 @@ static SmallVector<Value> affineAndAffine(const ValueRange &p1,
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-madd-2007-bl
 // Cost: 7M + 4S
 // Assumption: Z2 == 1
-static SmallVector<Value> jacobianAndAffine(const ValueRange &p1,
-                                            const ValueRange &p2,
+static SmallVector<Value> jacobianAndAffine(ValueRange p1, ValueRange p2,
                                             ShortWeierstrassAttr curve,
                                             ImplicitLocOpBuilder &b) {
   auto x1 = p1[0];
@@ -146,8 +144,7 @@ static SmallVector<Value> jacobianAndAffine(const ValueRange &p1,
 // add-2007-bl
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-2007-bl
 // Cost: 11M + 5S
-static SmallVector<Value> jacobianAndJacobian(const ValueRange &p1,
-                                              const ValueRange &p2,
+static SmallVector<Value> jacobianAndJacobian(ValueRange p1, ValueRange p2,
                                               ShortWeierstrassAttr curve,
                                               ImplicitLocOpBuilder &b) {
   Value x1 = p1[0];
@@ -223,7 +220,7 @@ static SmallVector<Value> jacobianAndJacobian(const ValueRange &p1,
   return ifOp.getResults();
 }
 
-SmallVector<Value> jacobianAdd(const ValueRange &p1, const ValueRange &p2,
+SmallVector<Value> jacobianAdd(ValueRange p1, ValueRange p2,
                                ShortWeierstrassAttr curve,
                                ImplicitLocOpBuilder &b) {
   if (p1.size() == 2) {

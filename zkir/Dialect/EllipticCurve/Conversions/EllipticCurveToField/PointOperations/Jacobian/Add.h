@@ -8,7 +8,7 @@
 
 namespace mlir::zkir::elliptic_curve {
 
-SmallVector<Value> jacobianAdd(const ValueRange &p1, const ValueRange &p2,
+SmallVector<Value> jacobianAdd(ValueRange p1, ValueRange p2,
                                ShortWeierstrassAttr curve,
                                ImplicitLocOpBuilder &b);
 
