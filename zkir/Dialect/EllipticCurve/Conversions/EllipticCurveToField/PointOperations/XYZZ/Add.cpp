@@ -14,20 +14,16 @@ namespace mlir::zkir::elliptic_curve {
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-madd-2008-s
 // Cost: 8M + 2S
 // Assumption: ZZ2 == ZZZ2 == 1
-static Value xyzzAndAffine(const Value &p1, const Value &p2, Type affineType,
-                           ImplicitLocOpBuilder &b) {
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-  Value two = b.create<arith::ConstantIndexOp>(2);
-  Value three = b.create<arith::ConstantIndexOp>(3);
+static SmallVector<Value> xyzzAndAffine(ValueRange p1, ValueRange p2,
+                                        ShortWeierstrassAttr curve,
+                                        ImplicitLocOpBuilder &b) {
+  auto x1 = p1[0];
+  auto y1 = p1[1];
+  auto zz1 = p1[2];
+  auto zzz1 = p1[3];
 
-  auto x1 = b.create<tensor::ExtractOp>(p1, zero);
-  auto y1 = b.create<tensor::ExtractOp>(p1, one);
-  auto zz1 = b.create<tensor::ExtractOp>(p1, two);
-  auto zzz1 = b.create<tensor::ExtractOp>(p1, three);
-
-  auto x2 = b.create<tensor::ExtractOp>(p2, zero);
-  auto y2 = b.create<tensor::ExtractOp>(p2, one);
+  auto x2 = p2[0];
+  auto y2 = p2[1];
 
   // U2 = X2*ZZ1
   auto u2 = b.create<field::MulOp>(x2, zz1);
@@ -43,7 +39,7 @@ static Value xyzzAndAffine(const Value &p1, const Value &p2, Type affineType,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(affineToXYZZDouble(p2, affineType, b));
+        b.create<scf::YieldOp>(affineToXYZZDouble(p2, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
@@ -73,32 +69,26 @@ static Value xyzzAndAffine(const Value &p1, const Value &p2, Type affineType,
         // ZZZ3 = ZZZ1*PPP
         auto zzz3 = b.create<field::MulOp>(zzz1, ppp);
 
-        auto makePoint = b.create<tensor::FromElementsOp>(
-            SmallVector<Value>({x3, y3, zz3, zzz3}));
-        b.create<scf::YieldOp>(ValueRange{makePoint});
+        b.create<scf::YieldOp>(ValueRange{x3, y3, zz3, zzz3});
       });
-  return ifOp.getResult(0);
+  return ifOp.getResults();
 }
 
 // add-2008-s
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-add-2008-s
 // Cost: 12M + 2S
-static Value xyzzAndXyzz(const Value &p1, const Value &p2, Type xyzzType,
-                         ImplicitLocOpBuilder &b) {
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-  Value two = b.create<arith::ConstantIndexOp>(2);
-  Value three = b.create<arith::ConstantIndexOp>(3);
+static SmallVector<Value> xyzzAndXyzz(ValueRange p1, ValueRange p2,
+                                      ShortWeierstrassAttr curve,
+                                      ImplicitLocOpBuilder &b) {
+  auto x1 = p1[0];
+  auto y1 = p1[1];
+  auto zz1 = p1[2];
+  auto zzz1 = p1[3];
 
-  auto x1 = b.create<tensor::ExtractOp>(p1, zero);
-  auto y1 = b.create<tensor::ExtractOp>(p1, one);
-  auto zz1 = b.create<tensor::ExtractOp>(p1, two);
-  auto zzz1 = b.create<tensor::ExtractOp>(p1, three);
-
-  auto x2 = b.create<tensor::ExtractOp>(p2, zero);
-  auto y2 = b.create<tensor::ExtractOp>(p2, one);
-  auto zz2 = b.create<tensor::ExtractOp>(p2, two);
-  auto zzz2 = b.create<tensor::ExtractOp>(p2, three);
+  auto x2 = p2[0];
+  auto y2 = p2[1];
+  auto zz2 = p2[2];
+  auto zzz2 = p2[3];
 
   // U1 = X1*ZZ2
   auto u1 = b.create<field::MulOp>(x1, zz2);
@@ -118,7 +108,7 @@ static Value xyzzAndXyzz(const Value &p1, const Value &p2, Type xyzzType,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(xyzzDouble(p1, xyzzType, b));
+        b.create<scf::YieldOp>(xyzzDouble(p1, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
@@ -149,21 +139,20 @@ static Value xyzzAndXyzz(const Value &p1, const Value &p2, Type xyzzType,
         // ZZZ3 = ZZZ1*ZZZ2*PPP
         auto zzz3Tmp = b.create<field::MulOp>(zzz1, zzz2);
         auto zzz3 = b.create<field::MulOp>(zzz3Tmp, ppp);
-        auto makePoint = b.create<tensor::FromElementsOp>(
-            SmallVector<Value>({x3, y3, zz3, zzz3}));
-        b.create<scf::YieldOp>(ValueRange{makePoint});
+        b.create<scf::YieldOp>(ValueRange{x3, y3, zz3, zzz3});
       });
-  return ifOp.getResult(0);
+  return ifOp.getResults();
 }
 
-Value xyzzAdd(const Value &p1, const Value &p2, Type p1Type, Type p2Type,
-              ImplicitLocOpBuilder &b) {
-  if (isa<AffineType>(p1Type)) {
-    return xyzzAndAffine(p2, p1, p1Type, b);
-  } else if (isa<AffineType>(p2Type)) {
-    return xyzzAndAffine(p1, p2, p2Type, b);
-  } else if (isa<XYZZType>(p1Type) && isa<XYZZType>(p2Type)) {
-    return xyzzAndXyzz(p1, p2, p1Type, b);
+SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
+                           ShortWeierstrassAttr curve,
+                           ImplicitLocOpBuilder &b) {
+  if (p1.size() == 2) {
+    return xyzzAndAffine(p2, p1, curve, b);
+  } else if (p2.size() == 2) {
+    return xyzzAndAffine(p1, p2, curve, b);
+  } else if (p1.size() == 4 && p2.size() == 4) {
+    return xyzzAndXyzz(p1, p2, curve, b);
   } else {
     assert(false && "Unsupported point types for XYZZ addition");
   }

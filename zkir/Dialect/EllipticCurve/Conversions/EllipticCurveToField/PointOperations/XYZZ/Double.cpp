@@ -12,20 +12,13 @@ namespace mlir::zkir::elliptic_curve {
 // mdbl-2008-s-1
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-mdbl-2008-s-1
 // Cost: 4M + 3S
-Value affineToXYZZDouble(const Value &point, Type affineType,
-                         ImplicitLocOpBuilder &b) {
-  if (!isa<AffineType>(affineType)) {
-    assert(false && "input type must be affine");
-  }
-
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-
-  auto x = b.create<tensor::ExtractOp>(point, zero);
-  auto y = b.create<tensor::ExtractOp>(point, one);
+SmallVector<Value> affineToXYZZDouble(ValueRange point,
+                                      ShortWeierstrassAttr curve,
+                                      ImplicitLocOpBuilder &b) {
+  Value x = point[0];
+  Value y = point[1];
 
   field::PrimeFieldType basefield = cast<field::PrimeFieldType>(x.getType());
-  field::PrimeFieldAttr aAttr;
 
   // U = 2*Y
   auto u = b.create<field::DoubleOp>(y);
@@ -39,8 +32,7 @@ Value affineToXYZZDouble(const Value &point, Type affineType,
   auto mTmp1 = b.create<field::SquareOp>(x);
   auto mTmp2 = b.create<field::DoubleOp>(mTmp1);
   auto mTmp3 = b.create<field::AddOp>(mTmp2, mTmp1);
-  aAttr = cast<AffineType>(affineType).getCurve().getA();
-  auto a = b.create<field::ConstantOp>(basefield, aAttr.getValue());
+  auto a = b.create<field::ConstantOp>(basefield, curve.getA().getValue());
   auto m = b.create<field::AddOp>(mTmp3, a);
   // X3 = M²-2*S
   auto x3Tmp1 = b.create<field::SquareOp>(m);
@@ -54,30 +46,21 @@ Value affineToXYZZDouble(const Value &point, Type affineType,
   // ZZ3 = V
   // ZZZ3 = W
 
-  return b.create<tensor::FromElementsOp>(SmallVector<Value>({x3, y3, v, w}));
+  return {x3, y3, v, w};
 }
 
 // dbl-2008-s-1
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-dbl-2008-s-1
 // Cost: 6M + 4S + 1*a
-Value xyzzDouble(const Value &point, Type xyzzType, ImplicitLocOpBuilder &b) {
-  if (!isa<XYZZType>(xyzzType)) {
-    assert(false && "input type must be xyzz");
-  }
-
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value one = b.create<arith::ConstantIndexOp>(1);
-  Value two = b.create<arith::ConstantIndexOp>(2);
-  Value three = b.create<arith::ConstantIndexOp>(3);
-
-  auto x = b.create<tensor::ExtractOp>(point, zero);
-  auto y = b.create<tensor::ExtractOp>(point, one);
-  auto zz = b.create<tensor::ExtractOp>(point, two);
-  auto zzz = b.create<tensor::ExtractOp>(point, three);
+SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
+                              ImplicitLocOpBuilder &b) {
+  Value x = point[0];
+  Value y = point[1];
+  Value zz = point[2];
+  Value zzz = point[3];
 
   field::PrimeFieldType baseFieldType =
       cast<field::PrimeFieldType>(x.getType());
-  field::PrimeFieldAttr aAttr;
 
   // U = 2*Y
   auto u = b.create<field::DoubleOp>(y);
@@ -92,8 +75,7 @@ Value xyzzDouble(const Value &point, Type xyzzType, ImplicitLocOpBuilder &b) {
   auto mTmp2 = b.create<field::DoubleOp>(mTmp1);
   auto mTmp3 = b.create<field::AddOp>(mTmp2, mTmp1);
   auto mTmp4 = b.create<field::SquareOp>(zz);
-  aAttr = cast<XYZZType>(xyzzType).getCurve().getA();
-  auto a = b.create<field::ConstantOp>(baseFieldType, aAttr.getValue());
+  auto a = b.create<field::ConstantOp>(baseFieldType, curve.getA().getValue());
   auto mTmp5 = b.create<field::MulOp>(a, mTmp4);
   auto m = b.create<field::AddOp>(mTmp3, mTmp5);
   // X3 = M²-2*S
@@ -110,8 +92,7 @@ Value xyzzDouble(const Value &point, Type xyzzType, ImplicitLocOpBuilder &b) {
   // ZZZ3 = W*ZZZ
   auto zzz3 = b.create<field::MulOp>(w, zzz);
 
-  return b.create<tensor::FromElementsOp>(
-      SmallVector<Value>({x3, y3, zz3, zzz3}));
+  return {x3, y3, zz3, zzz3};
 }
 
 }  // namespace mlir::zkir::elliptic_curve

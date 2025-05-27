@@ -4,12 +4,13 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
 namespace mlir::zkir::elliptic_curve {
 
-Value xyzzAdd(const Value &p1, const Value &p2, Type p1Type, Type p2Type,
-              ImplicitLocOpBuilder &b);
+SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
+                           ShortWeierstrassAttr curve, ImplicitLocOpBuilder &b);
 
 }  // namespace mlir::zkir::elliptic_curve
 

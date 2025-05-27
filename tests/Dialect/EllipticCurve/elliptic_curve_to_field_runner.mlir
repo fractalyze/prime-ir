@@ -35,63 +35,72 @@ func.func @test_ops_in_order() {
   %jacobian1 = elliptic_curve.point %var5, %var3, %var2 : !PF -> !jacobian
 
   %jacobian2 = elliptic_curve.add %affine1, %jacobian1 : !affine, !jacobian -> !jacobian
-  %extract_point1 = elliptic_curve.extract %jacobian2 : !jacobian -> tensor<3x!PF>
+  %extract_point1x, %extract_point1y, %extract_point1z = elliptic_curve.extract %jacobian2 : !jacobian -> !PF, !PF, !PF
+  %extract_point1 = tensor.from_elements %extract_point1x, %extract_point1y, %extract_point1z : tensor<3x!PF>
   %extract1 = field.pf.extract %extract_point1 : tensor<3x!PF> -> tensor<3xi32>
   %1 = bufferization.to_memref %extract1 : tensor<3xi32> to memref<3xi32>
   %U1 = memref.cast %1 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U1) : (memref<*xi32>) -> ()
 
   %jacobian3 = elliptic_curve.sub %affine1, %jacobian2 : !affine, !jacobian -> !jacobian
-  %extract_point2 = elliptic_curve.extract %jacobian3 : !jacobian -> tensor<3x!PF>
+  %extract_point2x, %extract_point2y, %extract_point2z = elliptic_curve.extract %jacobian3 : !jacobian -> !PF, !PF, !PF
+  %extract_point2 = tensor.from_elements %extract_point2x, %extract_point2y, %extract_point2z : tensor<3x!PF>
   %extract2 = field.pf.extract %extract_point2 : tensor<3x!PF> -> tensor<3xi32>
   %2 = bufferization.to_memref %extract2 : tensor<3xi32> to memref<3xi32>
   %U2 = memref.cast %2 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
 
   %jacobian4 = elliptic_curve.negate %jacobian3 : !jacobian
-  %extract_point3 = elliptic_curve.extract %jacobian4 : !jacobian -> tensor<3x!PF>
+  %extract_point3x, %extract_point3y, %extract_point3z = elliptic_curve.extract %jacobian4 : !jacobian -> !PF, !PF, !PF
+  %extract_point3 = tensor.from_elements %extract_point3x, %extract_point3y, %extract_point3z : tensor<3x!PF>
   %extract3 = field.pf.extract %extract_point3 : tensor<3x!PF> -> tensor<3xi32>
   %3 = bufferization.to_memref %extract3 : tensor<3xi32> to memref<3xi32>
   %U3 = memref.cast %3 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U3) : (memref<*xi32>) -> ()
 
   %jacobian5 = elliptic_curve.double %jacobian4 : !jacobian -> !jacobian
-  %extract_point4 = elliptic_curve.extract %jacobian5 : !jacobian -> tensor<3x!PF>
+  %extract_point4x, %extract_point4y, %extract_point4z = elliptic_curve.extract %jacobian5 : !jacobian -> !PF, !PF, !PF
+  %extract_point4 = tensor.from_elements %extract_point4x, %extract_point4y, %extract_point4z : tensor<3x!PF>
   %extract4 = field.pf.extract %extract_point4 : tensor<3x!PF> -> tensor<3xi32>
   %4 = bufferization.to_memref %extract4 : tensor<3xi32> to memref<3xi32>
   %U4 = memref.cast %4 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U4) : (memref<*xi32>) -> ()
 
   %xyzz1 = elliptic_curve.convert_point_type %jacobian5 : !jacobian -> !xyzz
-  %extract_point5 = elliptic_curve.extract %xyzz1 : !xyzz -> tensor<4x!PF>
+  %extract_point5x, %extract_point5y, %extract_point5zz, %extract_point5zzz = elliptic_curve.extract %xyzz1 : !xyzz -> !PF, !PF, !PF, !PF
+  %extract_point5 = tensor.from_elements %extract_point5x, %extract_point5y, %extract_point5zz, %extract_point5zzz : tensor<4x!PF>
   %extract5 = field.pf.extract %extract_point5 : tensor<4x!PF> -> tensor<4xi32>
   %5 = bufferization.to_memref %extract5 : tensor<4xi32> to memref<4xi32>
   %U5 = memref.cast %5 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U5) : (memref<*xi32>) -> ()
 
   %affine2 = elliptic_curve.convert_point_type %xyzz1 : !xyzz -> !affine
-  %extract_point6 = elliptic_curve.extract %affine2 : !affine -> tensor<2x!PF>
+  %extract_point6x, %extract_point6y = elliptic_curve.extract %affine2 : !affine -> !PF, !PF
+  %extract_point6 = tensor.from_elements %extract_point6x, %extract_point6y : tensor<2x!PF>
   %extract6 = field.pf.extract %extract_point6 : tensor<2x!PF> -> tensor<2xi32>
   %6 = bufferization.to_memref %extract6 : tensor<2xi32> to memref<2xi32>
   %U6 = memref.cast %6 : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U6) : (memref<*xi32>) -> ()
 
   %jacobian6 = elliptic_curve.scalar_mul %var7, %affine2 : !PF, !affine -> !jacobian
-  %extract_point7 = elliptic_curve.extract %jacobian6 : !jacobian -> tensor<3x!PF>
+  %extract_point7x, %extract_point7y, %extract_point7z = elliptic_curve.extract %jacobian6 : !jacobian -> !PF, !PF, !PF
+  %extract_point7 = tensor.from_elements %extract_point7x, %extract_point7y, %extract_point7z : tensor<3x!PF>
   %extract7 = field.pf.extract %extract_point7 : tensor<3x!PF> -> tensor<3xi32>
   %7 = bufferization.to_memref %extract7 : tensor<3xi32> to memref<3xi32>
   %U7 = memref.cast %7 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U7) : (memref<*xi32>) -> ()
 
   %affine3 = elliptic_curve.convert_point_type %jacobian6 : !jacobian -> !affine
-  %extract_point8 = elliptic_curve.extract %affine3 : !affine -> tensor<2x!PF>
+  %extract_point8x, %extract_point8y = elliptic_curve.extract %affine3 : !affine -> !PF, !PF
+  %extract_point8 = tensor.from_elements %extract_point8x, %extract_point8y : tensor<2x!PF>
   %extract8 = field.pf.extract %extract_point8 : tensor<2x!PF> -> tensor<2xi32>
   %8 = bufferization.to_memref %extract8 : tensor<2xi32> to memref<2xi32>
   %U8 = memref.cast %8 : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U8) : (memref<*xi32>) -> ()
 
   %xyzz2 = elliptic_curve.add %affine3, %xyzz1 : !affine, !xyzz -> !xyzz
-  %extract_point9 = elliptic_curve.extract %xyzz2 : !xyzz -> tensor<4x!PF>
+  %extract_point9x, %extract_point9y, %extract_point9zz, %extract_point9zzz = elliptic_curve.extract %xyzz2 : !xyzz -> !PF, !PF, !PF, !PF
+  %extract_point9 = tensor.from_elements %extract_point9x, %extract_point9y, %extract_point9zz, %extract_point9zzz : tensor<4x!PF>
   %extract9 = field.pf.extract %extract_point9 : tensor<4x!PF> -> tensor<4xi32>
   %9 = bufferization.to_memref %extract9 : tensor<4xi32> to memref<4xi32>
   %U9 = memref.cast %9 : memref<4xi32> to memref<*xi32>
@@ -134,7 +143,8 @@ func.func @test_msm() {
   %add2 = elliptic_curve.add %scalar_mul3, %scalar_mul4 : !jacobian, !jacobian -> !jacobian
   %msm_true = elliptic_curve.add %add1, %add2 : !jacobian, !jacobian -> !jacobian
 
-  %extract_point = elliptic_curve.extract %msm_true : !jacobian -> tensor<3x!PF>
+  %extract_point_x, %extract_point_y, %extract_point_z = elliptic_curve.extract %msm_true : !jacobian -> !PF, !PF, !PF
+  %extract_point = tensor.from_elements %extract_point_x, %extract_point_y, %extract_point_z : tensor<3x!PF>
   %extract = field.pf.extract %extract_point : tensor<3x!PF> -> tensor<3xi32>
   %mem = bufferization.to_memref %extract : tensor<3xi32> to memref<3xi32>
   %U = memref.cast %mem : memref<3xi32> to memref<*xi32>
@@ -142,11 +152,12 @@ func.func @test_msm() {
 
   // RUNNING MSM
   %scalars = tensor.from_elements %var5, %var7, %var3, %var2 : tensor<4x!PF>
-  %points = elliptic_curve.point_set.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
+  %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
   %msm_test = elliptic_curve.msm %scalars , %points: tensor<4x!PF>, tensor<4x!jacobian> -> !jacobian
 
-  %extract_point1 = elliptic_curve.extract %msm_test : !jacobian -> tensor<3x!PF>
-  %extract1 = field.pf.extract %extract_point1 : tensor<3x!PF> -> tensor<3xi32>
+  %extract_point1x, %extract_point1y, %extract_point1z = elliptic_curve.extract %msm_test : !jacobian -> !PF, !PF, !PF
+  %extract_point1 = tensor.from_elements %extract_point1x, %extract_point1y, %extract_point1z : tensor<3x!PF>
+  %extract1 = field.pf.extract %extract_point : tensor<3x!PF> -> tensor<3xi32>
   %mem1 = bufferization.to_memref %extract1 : tensor<3xi32> to memref<3xi32>
   %U1 = memref.cast %mem1 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U1) : (memref<*xi32>) -> ()

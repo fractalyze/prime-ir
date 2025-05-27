@@ -26,13 +26,8 @@ func.func @test_intialization_and_conversion() {
   %var8 = field.pf.constant 8 : !PF
 
   // CHECK-NOT: elliptic_curve.point
-  // CHECK: %[[AFFINE1:.*]] = tensor.from_elements %[[VAR1]], %[[VAR5]] : tensor<2x![[PF]]>
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
-  // CHECK-NOT: elliptic_curve.point
-  // CHECK: %[[JACOBIAN1:.*]] = tensor.from_elements %[[VAR1]], %[[VAR5]], %[[VAR2]] : tensor<3x![[PF]]>
   %jacobian1 = elliptic_curve.point %var1, %var5, %var2 : !PF -> !jacobian
-  // CHECK-NOT: elliptic_curve.point
-  // CHECK: %[[XYZZ1:.*]] = tensor.from_elements %[[VAR1]], %[[VAR5]], %[[VAR4]], %[[VAR8]] : tensor<4x![[PF]]>
   %xyzz1 = elliptic_curve.point %var1, %var5, %var4, %var8 : !PF -> !xyzz
 
   // CHECK-NOT: elliptic_curve.convert_point_type
@@ -177,29 +172,13 @@ func.func @test_scalar_mul() {
   return
 }
 
-// CHECK-LABEL: @test_point_set
-func.func @test_point_set() {
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var4 = field.pf.constant 4 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var8 = field.pf.constant 8 : !PF
-
-  %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
-  %points = elliptic_curve.point_set.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
-  %idx1 = arith.constant 1 : index
-  %point1 = elliptic_curve.point_set.extract %points, %idx1 : tensor<3x!affine> -> !affine
-  %doubled = elliptic_curve.double %point1 : !affine -> !jacobian
-  return
-}
-
 func.func @test_msm() {
   %var1 = field.pf.constant 1 : !PF
   %var5 = field.pf.constant 5 : !PF
 
   %scalars = tensor.from_elements %var1, %var5, %var5 : tensor<3x!PF>
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
-  %points = elliptic_curve.point_set.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
+  %points = tensor.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
   %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PF>, tensor<3x!affine> -> !jacobian
   return
 }
