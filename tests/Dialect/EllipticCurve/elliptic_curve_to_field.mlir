@@ -1,6 +1,6 @@
 // RUN: zkir-opt -elliptic-curve-to-field --split-input-file %s | FileCheck %s --enable-var-scope
 
-!PF = !field.pf<35:i32>
+!PF = !field.pf<97:i32>
 
 #1 = #field.pf.elem<1:i32> : !PF
 #2 = #field.pf.elem<2:i32> : !PF
