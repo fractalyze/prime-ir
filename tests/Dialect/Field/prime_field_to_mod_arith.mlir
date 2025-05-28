@@ -1,10 +1,10 @@
 // RUN: zkir-opt -field-to-mod-arith --split-input-file %s | FileCheck %s --enable-var-scope
-!PF1 = !field.pf<3:i32>
+!PF1 = !field.pf<97:i32>
 !PFv = tensor<4x!PF1>
-#root_elem = #field.pf.elem<2:i32> : !PF1
+#root_elem = #field.pf.elem<96:i32> : !PF1
 #root = #field.root_of_unity<#root_elem, 2>
 
-!mod = !mod_arith.int<3 : i32>
+!mod = !mod_arith.int<97 : i32>
 #mont = #mod_arith.montgomery<!mod>
 
 // CHECK-LABEL: @test_lower_constant
