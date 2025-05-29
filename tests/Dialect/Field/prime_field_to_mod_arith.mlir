@@ -11,7 +11,7 @@
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_constant() -> !PF1 {
   // CHECK: %[[RES:.*]] = mod_arith.constant 4 : [[T]]
-  %res = field.pf.constant 4 : !PF1
+  %res = field.constant 4 : !PF1
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PF1
 }
@@ -136,7 +136,7 @@ func.func @test_lower_negate_vec(%lhs : !PF1) -> !PF1 {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_add() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
-  %c0 = field.pf.constant 4 : !PF1
+  %c0 = field.constant 4 : !PF1
   // CHECK: %[[RES:.*]] = mod_arith.add %[[C0]], %[[C0]] : [[T]]
   %res = field.add %c0, %c0 : !PF1
   // CHECK: return %[[RES]] : [[T]]
@@ -157,7 +157,7 @@ func.func @test_lower_add_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_double() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
-  %c0 = field.pf.constant 4 : !PF1
+  %c0 = field.constant 4 : !PF1
   // CHECK: %[[RES:.*]] = mod_arith.add %[[C0]], %[[C0]] : [[T]]
   %res = field.double %c0 : !PF1
   // CHECK: return %[[RES]] : [[T]]
@@ -178,9 +178,9 @@ func.func @test_lower_double_vec(%val : !PFv) -> !PFv {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_sub() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
-  %c0 = field.pf.constant 4 : !PF1
+  %c0 = field.constant 4 : !PF1
   // CHECK: %[[C1:.*]] = mod_arith.constant 5 : [[T]]
-  %c1 = field.pf.constant 5 : !PF1
+  %c1 = field.constant 5 : !PF1
   // CHECK: %[[RES:.*]] = mod_arith.sub %[[C0]], %[[C1]] : [[T]]
   %res = field.sub %c0, %c1 : !PF1
   // CHECK: return %[[RES]] : [[T]]
@@ -201,7 +201,7 @@ func.func @test_lower_sub_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_mul() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
-  %c0 = field.pf.constant 4 : !PF1
+  %c0 = field.constant 4 : !PF1
   // CHECK: %[[RES:.*]] = mod_arith.mul %[[C0]], %[[C0]] : [[T]]
   %res = field.mul %c0, %c0 : !PF1
   // CHECK: return %[[RES]] : [[T]]
@@ -222,7 +222,7 @@ func.func @test_lower_mul_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_square() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
-  %c0 = field.pf.constant 4 : !PF1
+  %c0 = field.constant 4 : !PF1
   // CHECK: %[[RES:.*]] = mod_arith.mul %[[C0]], %[[C0]] : [[T]]
   %res = field.square %c0 : !PF1
   // CHECK: return %[[RES]] : [[T]]
@@ -243,7 +243,7 @@ func.func @test_lower_square_vec(%val : !PFv) -> !PFv {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_mont_mul() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 2 : [[T]]
-  %c0 = field.pf.constant 2 : !PF1
+  %c0 = field.constant 2 : !PF1
   // CHECK: %[[RES:.*]] = mod_arith.mont_mul %[[C0]], %[[C0]] {montgomery = #mod_arith.montgomery<[[T]]>} : [[T]]
   %res = field.mont_mul %c0, %c0 {montgomery = #mont} : !PF1
   // CHECK: return %[[RES]] : [[T]]
@@ -263,9 +263,9 @@ func.func @test_lower_mont_mul_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
 // CHECK-LABEL: @test_lower_constant_tensor
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_constant_tensor() -> !PFv {
-  // CHECK-NOT: field.pf.constant
+  // CHECK-NOT: field.constant
   // CHECK: %[[C0:.*]] = mod_arith.constant 5 : [[C:.*]]
-  %c0 = field.pf.constant 5:  !PF1
+  %c0 = field.constant 5:  !PF1
   // CHECK: %[[RES:.*]] = tensor.from_elements %[[C0]], %[[C0]], %[[C0]], %[[C0]] : [[T]]
   %res = tensor.from_elements %c0, %c0, %c0, %c0 : !PFv
   // CHECK: return %[[RES]] : [[T]]
@@ -276,7 +276,7 @@ func.func @test_lower_constant_tensor() -> !PFv {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) {
 func.func @test_lower_cmp(%lhs : !PF1) {
   // CHECK: %[[RHS:.*]] = mod_arith.constant 5 : [[T]]
-  %rhs = field.pf.constant 5:  !PF1
+  %rhs = field.constant 5:  !PF1
   // CHECK-NOT: field.pf.cmp
   // %[[EQUAL:.*]] = arith.cmpi [[eq:.*]], %[[LHS]], %[[RHS]] : [[i32]]
   // %[[NOTEQUAL:.*]] = arith.cmpi [[ne:.*]], %[[LHS]], %[[RHS]] : [[i32]]

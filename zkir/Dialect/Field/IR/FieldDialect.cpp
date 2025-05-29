@@ -66,48 +66,79 @@ void FieldDialect::initialize() {
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  APInt parsedInt;
+  SmallVector<APInt> parsedInt;
   Type parsedType;
 
-  if (failed(parser.parseInteger(parsedInt)) ||
+  if (failed(parser.parseCommaSeparatedList(
+          [&]() { return parser.parseInteger(parsedInt.emplace_back()); })) ||
       failed(parser.parseColonType(parsedType)))
     return failure();
 
-  if (parsedInt.isNegative()) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "negative value is not allowed");
-    return failure();
+  if (auto pfType = dyn_cast<PrimeFieldType>(parsedType)) {
+    if (parsedInt.size() != 1) {
+      parser.emitError(parser.getCurrentLocation(),
+                       "prime field constant must have exactly one value");
+      return failure();
+    }
+
+    auto modulus = pfType.getModulus().getValue();
+
+    // TODO(batzor): Check if the modulus is a prime number.
+    if (modulus.isNegative() || modulus.isZero()) {
+      parser.emitError(parser.getCurrentLocation(), "modulus must be positive");
+      return failure();
+    }
+
+    auto outputBitWidth = pfType.getModulus().getValue().getBitWidth();
+    if (parsedInt[0].getActiveBits() > outputBitWidth)
+      return parser.emitError(
+          parser.getCurrentLocation(),
+          "constant value is too large for the underlying type");
+
+    // zero-extend or truncate to the correct bitwidth
+    parsedInt[0] = parsedInt[0].zextOrTrunc(outputBitWidth);
+    result.addAttribute("value", PrimeFieldAttr::get(pfType, parsedInt[0]));
+    result.addTypes(pfType);
+    return success();
+  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(parsedType)) {
+    if (parsedInt.size() != 2) {
+      parser.emitError(parser.getCurrentLocation(),
+                       "quadratic extension field constant must have exactly "
+                       "two values");
+      return failure();
+    }
+
+    auto modulus = f2Type.getBaseField().getModulus().getValue();
+
+    // TODO(batzor): Check if the modulus is a prime number.
+    if (modulus.isNegative() || modulus.isZero()) {
+      parser.emitError(parser.getCurrentLocation(), "modulus must be positive");
+      return failure();
+    }
+
+    auto outputBitWidth =
+        f2Type.getBaseField().getModulus().getValue().getBitWidth();
+    for (const auto &value : parsedInt) {
+      if (value.getActiveBits() > outputBitWidth)
+        return parser.emitError(
+            parser.getCurrentLocation(),
+            "constant value is too large for the underlying type");
+    }
+
+    // zero-extend or truncate to the correct bitwidth
+    parsedInt[0] = parsedInt[0].zextOrTrunc(outputBitWidth);
+    parsedInt[1] = parsedInt[1].zextOrTrunc(outputBitWidth);
+    result.addAttribute(
+        "value", QuadraticExtFieldAttr::get(
+                     parser.getContext(), f2Type,
+                     PrimeFieldAttr::get(f2Type.getBaseField(), parsedInt[0]),
+                     PrimeFieldAttr::get(f2Type.getBaseField(), parsedInt[1])));
+    result.addTypes(f2Type);
+    return success();
   }
-
-  auto pfType = dyn_cast<PrimeFieldType>(parsedType);
-  if (!pfType) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "type must be of prime field type");
-    return failure();
-  }
-
-  auto modulus = pfType.getModulus().getValue();
-
-  // TODO(batzor): Check if the modulus is a prime number.
-  if (modulus.isNegative() || modulus.isZero()) {
-    parser.emitError(parser.getCurrentLocation(), "modulus must be positive");
-    return failure();
-  }
-
-  auto outputBitWidth = pfType.getModulus().getValue().getBitWidth();
-  if (parsedInt.getActiveBits() > outputBitWidth)
-    return parser.emitError(
-        parser.getCurrentLocation(),
-        "constant value is too large for the underlying type");
-
-  // zero-extend or truncate to the correct bitwidth
-  parsedInt = parsedInt.zextOrTrunc(outputBitWidth);
-  result.addAttribute(
-      "value",
-      IntegerAttr::get(IntegerType::get(parser.getContext(), outputBitWidth),
-                       parsedInt));
-  result.addTypes(pfType);
-  return success();
+  parser.emitError(parser.getCurrentLocation(),
+                   "invalid constant type: expected prime or quadratic");
+  return failure();
 }
 
 void ConstantOp::print(OpAsmPrinter &p) {

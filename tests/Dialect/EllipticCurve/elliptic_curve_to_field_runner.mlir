@@ -25,11 +25,11 @@ func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interf
 
 // CHECK-LABEL: @test_ops_in_order
 func.func @test_ops_in_order() {
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var3 = field.pf.constant 3 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var7 = field.pf.constant 7 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var3 = field.constant 3 : !PF
+  %var5 = field.constant 5 : !PF
+  %var7 = field.constant 7 : !PF
 
   %affine1 = elliptic_curve.point %var1, %var2 : !PF -> !affine
   %jacobian1 = elliptic_curve.point %var5, %var3, %var2 : !PF -> !jacobian
@@ -122,11 +122,11 @@ func.func @test_ops_in_order() {
 // CHECK-LABEL: @test_msm
 func.func @test_msm() {
   // 5*(5,3,2) + 7*(1,2,2) + 3*(7,5,1) + 2*(3,2,7)
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var3 = field.pf.constant 3 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var7 = field.pf.constant 7 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var3 = field.constant 3 : !PF
+  %var5 = field.constant 5 : !PF
+  %var7 = field.constant 7 : !PF
 
   %jacobian1 = elliptic_curve.point %var5, %var3, %var2 : !PF -> !jacobian
   %jacobian2 = elliptic_curve.point %var1, %var2, %var2 : !PF -> !jacobian

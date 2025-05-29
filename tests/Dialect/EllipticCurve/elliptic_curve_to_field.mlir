@@ -14,16 +14,16 @@
 
 // CHECK-LABEL: @test_intialization_and_conversion
 func.func @test_intialization_and_conversion() {
-  // CHECK: %[[VAR1:.*]] = field.pf.constant 1 : ![[PF:.*]]
-  %var1 = field.pf.constant 1 : !PF
-  // CHECK: %[[VAR2:.*]] = field.pf.constant 2 : ![[PF]]
-  %var2 = field.pf.constant 2 : !PF
-  // CHECK: %[[VAR4:.*]] = field.pf.constant 4 : ![[PF]]
-  %var4 = field.pf.constant 4 : !PF
-  // CHECK: %[[VAR5:.*]] = field.pf.constant 5 : ![[PF]]
-  %var5 = field.pf.constant 5 : !PF
-  // CHECK: %[[VAR8:.*]] = field.pf.constant 8 : ![[PF]]
-  %var8 = field.pf.constant 8 : !PF
+  // CHECK: %[[VAR1:.*]] = field.constant #[[ATTR1:.*]] : ![[PF:.*]]
+  %var1 = field.constant 1 : !PF
+  // CHECK: %[[VAR2:.*]] = field.constant #[[ATTR2:.*]] : ![[PF]]
+  %var2 = field.constant 2 : !PF
+  // CHECK: %[[VAR4:.*]] = field.constant #[[ATTR4:.*]] : ![[PF]]
+  %var4 = field.constant 4 : !PF
+  // CHECK: %[[VAR5:.*]] = field.constant #[[ATTR5:.*]] : ![[PF]]
+  %var5 = field.constant 5 : !PF
+  // CHECK: %[[VAR8:.*]] = field.constant #[[ATTR8:.*]] : ![[PF]]
+  %var8 = field.constant 8 : !PF
 
   // CHECK-NOT: elliptic_curve.point
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
@@ -42,13 +42,13 @@ func.func @test_intialization_and_conversion() {
 
 // CHECK-LABEL: @test_addition
 func.func @test_addition() {
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var3 = field.pf.constant 3 : !PF
-  %var4 = field.pf.constant 4 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var6 = field.pf.constant 6 : !PF
-  %var8 = field.pf.constant 8 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var3 = field.constant 3 : !PF
+  %var4 = field.constant 4 : !PF
+  %var5 = field.constant 5 : !PF
+  %var6 = field.constant 6 : !PF
+  %var8 = field.constant 8 : !PF
 
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
   %affine2 = elliptic_curve.point %var3, %var6 : !PF -> !affine
@@ -77,11 +77,11 @@ func.func @test_addition() {
 
 // CHECK-LABEL: @test_double
 func.func @test_double() {
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var4 = field.pf.constant 4 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var8 = field.pf.constant 8 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var4 = field.constant 4 : !PF
+  %var5 = field.constant 5 : !PF
+  %var8 = field.constant 8 : !PF
 
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
   %jacobian1 = elliptic_curve.point %var1, %var5, %var2 : !PF -> !jacobian
@@ -96,11 +96,11 @@ func.func @test_double() {
 
 // CHECK-LABEL: @test_negation
 func.func @test_negation() {
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var4 = field.pf.constant 4 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var8 = field.pf.constant 8 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var4 = field.constant 4 : !PF
+  %var5 = field.constant 5 : !PF
+  %var8 = field.constant 8 : !PF
 
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
   %jacobian1 = elliptic_curve.point %var1, %var5, %var2 : !PF -> !jacobian
@@ -115,13 +115,13 @@ func.func @test_negation() {
 
 // CHECK-LABEL: @test_subtraction
 func.func @test_subtraction() {
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var3 = field.pf.constant 3 : !PF
-  %var4 = field.pf.constant 4 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var6 = field.pf.constant 6 : !PF
-  %var8 = field.pf.constant 8 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var3 = field.constant 3 : !PF
+  %var4 = field.constant 4 : !PF
+  %var5 = field.constant 5 : !PF
+  %var6 = field.constant 6 : !PF
+  %var8 = field.constant 8 : !PF
 
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
   %affine2 = elliptic_curve.point %var3, %var6 : !PF -> !affine
@@ -150,11 +150,11 @@ func.func @test_subtraction() {
 
 // CHECK-LABEL: @test_scalar_mul
 func.func @test_scalar_mul() {
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var4 = field.pf.constant 4 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var8 = field.pf.constant 8 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var4 = field.constant 4 : !PF
+  %var5 = field.constant 5 : !PF
+  %var8 = field.constant 8 : !PF
 
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
   %jacobian1 = elliptic_curve.point %var1, %var5, %var2 : !PF -> !jacobian
@@ -173,8 +173,8 @@ func.func @test_scalar_mul() {
 }
 
 func.func @test_msm() {
-  %var1 = field.pf.constant 1 : !PF
-  %var5 = field.pf.constant 5 : !PF
+  %var1 = field.constant 1 : !PF
+  %var5 = field.constant 5 : !PF
 
   %scalars = tensor.from_elements %var1, %var5, %var5 : tensor<3x!PF>
   %affine1 = elliptic_curve.point %var1, %var5 : !PF -> !affine
