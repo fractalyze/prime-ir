@@ -119,11 +119,31 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto pftype = getResultPrimeFieldType(op);
-    auto modType = convertPrimeFieldType(pftype);
-    auto cval = b.create<mod_arith::ConstantOp>(modType, op.getValue());
-    rewriter.replaceOp(op, cval);
-    return success();
+    mod_arith::ModArithType modType;
+    if (auto pfType = dyn_cast<PrimeFieldType>(op.getOutput().getType())) {
+      modType = convertPrimeFieldType(pfType);
+    } else if (auto f2Type =
+                   dyn_cast<QuadraticExtFieldType>(op.getOutput().getType())) {
+      modType = convertPrimeFieldType(f2Type.getBaseField());
+    } else {
+      op.emitOpError("unsupported output type");
+      return failure();
+    }
+
+    if (auto pfAttr = dyn_cast<PrimeFieldAttr>(op.getValueAttr())) {
+      auto cval = b.create<mod_arith::ConstantOp>(modType, pfAttr.getValue());
+      rewriter.replaceOp(op, cval);
+      return success();
+    } else if (auto f2Attr =
+                   dyn_cast<QuadraticExtFieldAttr>(op.getValueAttr())) {
+      auto low = b.create<mod_arith::ConstantOp>(modType, f2Attr.getLow());
+      auto high = b.create<mod_arith::ConstantOp>(modType, f2Attr.getHigh());
+      rewriter.replaceOpWithMultiple(op, {{low, high}});
+      return success();
+    } else {
+      op.emitOpError("unsupported attribute type");
+      return failure();
+    }
   }
 };
 
@@ -571,14 +591,28 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult matchAndRewrite(
-      CmpOp op, OpAdaptor adaptor,
+      CmpOp op, OneToNOpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto cmpOp = b.create<mod_arith::CmpOp>(op.getPredicate(), adaptor.getLhs(),
-                                            adaptor.getRhs());
-    rewriter.replaceOp(op, cmpOp);
-    return success();
+    Type fieldType = getElementTypeOrSelf(op.getLhs());
+    if (isa<PrimeFieldType>(fieldType)) {
+      auto cmpOp = b.create<mod_arith::CmpOp>(
+          op.getPredicate(), adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      rewriter.replaceOp(op, cmpOp);
+      return success();
+    } else if (isa<QuadraticExtFieldType>(fieldType)) {
+      // For quadratic extension fields, we compare the low and high parts
+      // separately.
+      auto cmpLow = b.create<mod_arith::CmpOp>(
+          op.getPredicate(), adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      auto cmpHigh = b.create<mod_arith::CmpOp>(
+          op.getPredicate(), adaptor.getLhs()[1], adaptor.getRhs()[1]);
+      auto result = b.create<arith::AndIOp>(cmpLow, cmpHigh);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+    return failure();
   }
 };
 

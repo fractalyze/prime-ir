@@ -24,7 +24,7 @@ def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [MemRefEle
     Example:
     ```
     !PF = !field.pf<35:i32>
-    #3 = #field.pf_elem<3> : !PF
+    #3 = #field.pf.elem<3> : !PF
     #curve = #elliptic_curve.sw<#3, #3, (#3, #3)>
 
     !affine = !elliptic_curve.affine<#curve>
@@ -44,7 +44,7 @@ def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [Mem
     Example:
     ```
     !PF = !field.pf<35:i32>
-    #3 = #field.pf_elem<3> : !PF
+    #3 = #field.pf.elem<3> : !PF
     #curve = #elliptic_curve.sw<#3, #3, (#3, #3)>
 
     !jacobian = !elliptic_curve.affine<#curve> AKA AffineType
@@ -65,7 +65,7 @@ def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [MemRefElementTy
     Example:
     ```
     !PF = !field.pf<35:i32>
-    #3 = #field.pf_elem<3> : !PF
+    #3 = #field.pf.elem<3> : !PF
     #curve = #elliptic_curve.sw<#3, #3, (#3, #3)>
 
     !xyzz = !elliptic_curve.xyzz<#curve>

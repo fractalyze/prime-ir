@@ -5,7 +5,7 @@
 !poly_ty1 = !poly.polynomial<!PF1, 32>
 !poly_ty2 = !poly.polynomial<!PF2, 32>
 #uni_poly = #poly.univariate_polynomial<x**6 + 1> : !poly_ty2
-#elem = #field.pf_elem<2:i32>  : !PF1
+#elem = #field.pf.elem<2:i32>  : !PF1
 #root_of_unity = #field.root_of_unity<#elem, 3:i32>
 #root = #poly.primitive_root<root_of_unity=#root_of_unity>
 

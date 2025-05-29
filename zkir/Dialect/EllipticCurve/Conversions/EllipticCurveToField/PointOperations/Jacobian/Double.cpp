@@ -145,16 +145,14 @@ static SmallVector<Value> jacobianDefaultDouble(ValueRange point, Value a,
 
 SmallVector<Value> jacobianDouble(ValueRange point, ShortWeierstrassAttr curve,
                                   ImplicitLocOpBuilder &b) {
-  auto baseField = cast<field::PrimeFieldType>(point[0].getType());
+  Type baseField = curve.getBaseField();
+  auto a = b.create<field::ConstantOp>(baseField, curve.getA());
+  auto zeroBF = b.create<field::ConstantOp>(baseField, 0);
 
   if (point.size() == 2) {
-    auto a = b.create<field::ConstantOp>(baseField, curve.getA().getValue());
     return affineToJacobianDouble(point, a, b);
   } else if (point.size() == 3) {
-    auto a = b.create<field::ConstantOp>(baseField, curve.getA().getValue());
-    auto zero = b.create<field::ConstantOp>(baseField, 0);
-
-    auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, a, zero);
+    auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq, a, zeroBF);
     auto ifOp = b.create<scf::IfOp>(
         cmpEq,
         /*thenBuilder=*/

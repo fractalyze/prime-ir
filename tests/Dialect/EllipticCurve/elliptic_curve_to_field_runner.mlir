@@ -11,10 +11,10 @@
 
 !PF = !field.pf<11:i32>
 
-#1 = #field.pf_elem<1:i32> : !PF
-#2 = #field.pf_elem<2:i32> : !PF
-#3 = #field.pf_elem<3:i32> : !PF
-#4 = #field.pf_elem<4:i32> : !PF
+#1 = #field.pf.elem<1:i32> : !PF
+#2 = #field.pf.elem<2:i32> : !PF
+#3 = #field.pf.elem<3:i32> : !PF
+#4 = #field.pf.elem<4:i32> : !PF
 
 #curve = #elliptic_curve.sw<#1, #2, (#3, #4)>
 !affine = !elliptic_curve.affine<#curve>
@@ -25,14 +25,14 @@ func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interf
 
 // CHECK-LABEL: @test_ops_in_order
 func.func @test_ops_in_order() {
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var3 = field.pf.constant 3 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var7 = field.pf.constant 7 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var3 = field.constant 3 : !PF
+  %var5 = field.constant 5 : !PF
+  %var7 = field.constant 7 : !PF
 
-  %affine1 = elliptic_curve.point %var1, %var2 : !PF -> !affine
-  %jacobian1 = elliptic_curve.point %var5, %var3, %var2 : !PF -> !jacobian
+  %affine1 = elliptic_curve.point %var1, %var2 : !affine
+  %jacobian1 = elliptic_curve.point %var5, %var3, %var2 : !jacobian
 
   %jacobian2 = elliptic_curve.add %affine1, %jacobian1 : !affine, !jacobian -> !jacobian
   %extract_point1x, %extract_point1y, %extract_point1z = elliptic_curve.extract %jacobian2 : !jacobian -> !PF, !PF, !PF
@@ -122,16 +122,16 @@ func.func @test_ops_in_order() {
 // CHECK-LABEL: @test_msm
 func.func @test_msm() {
   // 5*(5,3,2) + 7*(1,2,2) + 3*(7,5,1) + 2*(3,2,7)
-  %var1 = field.pf.constant 1 : !PF
-  %var2 = field.pf.constant 2 : !PF
-  %var3 = field.pf.constant 3 : !PF
-  %var5 = field.pf.constant 5 : !PF
-  %var7 = field.pf.constant 7 : !PF
+  %var1 = field.constant 1 : !PF
+  %var2 = field.constant 2 : !PF
+  %var3 = field.constant 3 : !PF
+  %var5 = field.constant 5 : !PF
+  %var7 = field.constant 7 : !PF
 
-  %jacobian1 = elliptic_curve.point %var5, %var3, %var2 : !PF -> !jacobian
-  %jacobian2 = elliptic_curve.point %var1, %var2, %var2 : !PF -> !jacobian
-  %jacobian3 = elliptic_curve.point %var7, %var5, %var1 : !PF -> !jacobian
-  %jacobian4 = elliptic_curve.point %var3, %var2, %var7 : !PF -> !jacobian
+  %jacobian1 = elliptic_curve.point %var5, %var3, %var2 : !jacobian
+  %jacobian2 = elliptic_curve.point %var1, %var2, %var2 : !jacobian
+  %jacobian3 = elliptic_curve.point %var7, %var5, %var1 : !jacobian
+  %jacobian4 = elliptic_curve.point %var3, %var2, %var7 : !jacobian
 
   // CALCULATING TRUE VALUE OF MSM
   %scalar_mul1 = elliptic_curve.scalar_mul %var5, %jacobian1 : !PF, !jacobian -> !jacobian

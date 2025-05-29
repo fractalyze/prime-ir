@@ -44,7 +44,7 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
     Example:
     ```
     !PF = !field.pf<7:i32>
-    #beta = #field.pf_elem<6:i32> : !PF
+    #beta = #field.pf.elem<6:i32> : !PF
     !QF = !field.f2<!PF, #beta>
     ```
   }];
@@ -54,6 +54,8 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
   );
   let assemblyFormat = "`<` $base_field `,` $beta `>`";
 }
+
+def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType], "any-field-type">;
 
 def PrimeFieldLike: TypeOrValueSemanticsContainer<Field_PrimeFieldType, "prime-field-like">;
 def QuadraticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuadraticExtFieldType, "quadratic-ext-field-like">;

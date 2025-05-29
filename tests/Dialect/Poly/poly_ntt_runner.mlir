@@ -4,8 +4,8 @@
 // RUN: FileCheck %s --check-prefix=CHECK_TEST_POLY_NTT < %t
 
 !coeff_ty = !field.pf<7681:i32>
-#elem = #field.pf_elem<3383:i32>  : !coeff_ty
-#inv_elem = #field.pf_elem<4298:i32>  : !coeff_ty
+#elem = #field.pf.elem<3383:i32>  : !coeff_ty
+#inv_elem = #field.pf.elem<4298:i32>  : !coeff_ty
 #root_of_unity = #field.root_of_unity<#elem, 4:i32>
 #root = #poly.primitive_root<root_of_unity=#root_of_unity>
 !poly_ty = !poly.polynomial<!coeff_ty, 3>

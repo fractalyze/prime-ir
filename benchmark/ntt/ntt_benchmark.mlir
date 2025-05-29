@@ -2,7 +2,7 @@
 !coefft_ty = tensor<1048576x!coeff_ty>
 !memref_ty = memref<1048576x!coeff_ty>
 
-#root_elem = #field.pf_elem<17220337697351015657950521176323262483320249231368149235373741788599650842711:i256> : !coeff_ty
+#root_elem = #field.pf.elem<17220337697351015657950521176323262483320249231368149235373741788599650842711:i256> : !coeff_ty
 #root_of_unity = #field.root_of_unity<#root_elem, 1048576:i256>
 #root = #poly.primitive_root<root_of_unity=#root_of_unity>
 

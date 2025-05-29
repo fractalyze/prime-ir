@@ -3,7 +3,7 @@
 !PF1 = !field.pf<7:i255>
 !poly_ty1 = !poly.polynomial<!PF1, 3>
 !poly_ty2 = !poly.polynomial<!PF1, 4>
-#elem = #field.pf_elem<6:i255>  : !PF1
+#elem = #field.pf.elem<6:i255>  : !PF1
 #root_of_unity = #field.root_of_unity<#elem, 2:i255>
 #root = #poly.primitive_root<root_of_unity=#root_of_unity>
 

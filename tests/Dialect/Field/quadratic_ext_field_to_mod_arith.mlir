@@ -2,8 +2,9 @@
 !mod = !mod_arith.int<7:i32>
 #mont = #mod_arith.montgomery<!mod>
 !PF = !field.pf<7:i32>
-#beta = #field.pf_elem<6:i32> : !PF
+#beta = #field.pf.elem<6:i32> : !PF
 !QF = !field.f2<!PF, #beta>
+#ef = #field.f2.elem<#beta, #beta> : !QF
 
 // CHECK-LABEL: @test_lower_inverse
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {

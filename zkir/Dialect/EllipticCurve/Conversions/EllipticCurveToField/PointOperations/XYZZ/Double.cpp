@@ -18,8 +18,6 @@ SmallVector<Value> affineToXYZZDouble(ValueRange point,
   Value x = point[0];
   Value y = point[1];
 
-  field::PrimeFieldType basefield = cast<field::PrimeFieldType>(x.getType());
-
   // U = 2*Y
   auto u = b.create<field::DoubleOp>(y);
   // V = U²
@@ -32,7 +30,7 @@ SmallVector<Value> affineToXYZZDouble(ValueRange point,
   auto mTmp1 = b.create<field::SquareOp>(x);
   auto mTmp2 = b.create<field::DoubleOp>(mTmp1);
   auto mTmp3 = b.create<field::AddOp>(mTmp2, mTmp1);
-  auto a = b.create<field::ConstantOp>(basefield, curve.getA().getValue());
+  auto a = b.create<field::ConstantOp>(curve.getBaseField(), curve.getA());
   auto m = b.create<field::AddOp>(mTmp3, a);
   // X3 = M²-2*S
   auto x3Tmp1 = b.create<field::SquareOp>(m);
@@ -59,9 +57,6 @@ SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
   Value zz = point[2];
   Value zzz = point[3];
 
-  field::PrimeFieldType baseFieldType =
-      cast<field::PrimeFieldType>(x.getType());
-
   // U = 2*Y
   auto u = b.create<field::DoubleOp>(y);
   // V = U²
@@ -75,7 +70,7 @@ SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
   auto mTmp2 = b.create<field::DoubleOp>(mTmp1);
   auto mTmp3 = b.create<field::AddOp>(mTmp2, mTmp1);
   auto mTmp4 = b.create<field::SquareOp>(zz);
-  auto a = b.create<field::ConstantOp>(baseFieldType, curve.getA().getValue());
+  auto a = b.create<field::ConstantOp>(curve.getBaseField(), curve.getA());
   auto mTmp5 = b.create<field::MulOp>(a, mTmp4);
   auto m = b.create<field::AddOp>(mTmp3, mTmp5);
   // X3 = M²-2*S
