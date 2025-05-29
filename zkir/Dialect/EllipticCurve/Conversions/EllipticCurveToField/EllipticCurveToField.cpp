@@ -514,14 +514,14 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
             : b.create<elliptic_curve::PointOp>(
                   outputType, ValueRange{oneBF, oneBF, zeroBF});
 
-    Value intialPoint =
+    Value initialPoint =
         isa<AffineType>(pointType)
             ? b.create<elliptic_curve::ConvertPointTypeOp>(outputType, point)
             : point;
 
     auto whileOp = b.create<scf::WhileOp>(
         /*resultTypes=*/TypeRange{scalarIntType, outputType, outputType},
-        /*operands=*/ValueRange{scalarInt, intialPoint, zeroPoint},
+        /*operands=*/ValueRange{scalarInt, initialPoint, zeroPoint},
         /*beforeBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
           auto arithZero = b.create<arith::ConstantIntOp>(0, scalarIntType);
