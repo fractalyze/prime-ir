@@ -194,6 +194,11 @@ func.func @test_msm() {
   return
 }
 
+func.func @test_g2_msm(%scalars: tensor<3x!PF>, %points: tensor<3x!g2affine>) {
+  %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PF>, tensor<3x!g2affine> -> !g2jacobian
+  return
+}
+
 func.func @test_memref(%arg0: memref<3x!affine>, %arg1: memref<3x!affine>) {
   %c0 = arith.constant 0 : index
   %p0 = memref.load %arg0[%c0] : memref<3x!affine>

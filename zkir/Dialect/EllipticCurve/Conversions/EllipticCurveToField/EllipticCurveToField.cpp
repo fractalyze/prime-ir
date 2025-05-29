@@ -490,21 +490,24 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     Type pointType = op.getPoint().getType();
     Type outputType = op.getOutput().getType();
 
-    auto baseFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
-    unsigned outputBitWidth =
-        baseFieldType.getModulus().getValue().getBitWidth();
+    auto scalarFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
+    unsigned scalarBitWidth =
+        scalarFieldType.getModulus().getValue().getBitWidth();
     auto signlessIntType =
-        IntegerType::get(b.getContext(), outputBitWidth, IntegerType::Signless);
+        IntegerType::get(b.getContext(), scalarBitWidth, IntegerType::Signless);
     auto scalar = b.create<field::ExtractOp>(signlessIntType, scalarPF);
 
-    auto zeroPF = b.create<field::ConstantOp>(baseFieldType, 0);
-    auto onePF = b.create<field::ConstantOp>(baseFieldType, 1);
+    Type baseFieldType =
+        getCurveFromPointLike(op.getPoint().getType()).getBaseField();
+    auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
+    auto oneBF = b.create<field::ConstantOp>(baseFieldType, 1);
+
     Value zeroPoint =
         isa<XYZZType>(outputType)
             ? b.create<elliptic_curve::PointOp>(
-                  outputType, ValueRange{onePF, onePF, zeroPF, zeroPF})
+                  outputType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
             : b.create<elliptic_curve::PointOp>(
-                  outputType, ValueRange{onePF, onePF, zeroPF});
+                  outputType, ValueRange{oneBF, oneBF, zeroBF});
 
     Value intialPoint =
         isa<AffineType>(pointType)
