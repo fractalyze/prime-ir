@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -648,6 +649,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertAny<bufferization::MaterializeInDestinationOp>,
       ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>,
+      ConvertAny<linalg::BroadcastOp>,
       ConvertAny<memref::LoadOp>,
       ConvertAny<memref::StoreOp>,
       ConvertAny<tensor::ExtractOp>,
@@ -659,6 +661,7 @@ void EllipticCurveToField::runOnOperation() {
       bufferization::MaterializeInDestinationOp,
       bufferization::ToMemrefOp,
       bufferization::ToTensorOp,
+      linalg::BroadcastOp,
       memref::LoadOp,
       memref::StoreOp,
       tensor::ExtractOp,
