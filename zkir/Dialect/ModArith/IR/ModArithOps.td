@@ -262,6 +262,19 @@ def ModArith_InverseOp : ModArith_UnaryOp<"inverse"> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
+def ModArith_MontInverseOp : ModArith_UnaryOp<"mont_inverse"> {
+  let summary = "Montgomery modular inverse operation";
+  let description = [{
+    Computes the Montgomery modular inverse of a given modular type integer.
+
+    Example:
+    ```
+    %0 = mod_arith.constant 5 : !mod_arith.int<7:i4>
+    %c0 = mod_arith.mont_inverse %0 : !mod_arith.int<7:i4>
+    ```
+  }];
+}
+
 def ModArith_AddOp : ModArith_BinaryOp<"add", [Commutative]> {
   let summary = "Modular addition operation";
   let description = [{

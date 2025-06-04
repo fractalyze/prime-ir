@@ -432,6 +432,35 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
   }
 };
 
+struct ConvertMontInverse : public OpConversionPattern<MontInverseOp> {
+  explicit ConvertMontInverse(MLIRContext *context)
+      : OpConversionPattern<MontInverseOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      MontInverseOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    // TODO(batzor): Support tensor input.
+    if (isa<ShapedType>(op.getOperand().getType())) {
+      return op->emitError("tensor input not supported");
+    }
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto inversed = b.create<InverseOp>(op.getOperand());
+
+    MontgomeryAttr montAttr = MontgomeryAttr::get(
+        op.getContext(), cast<ModArithType>(op.getOutput().getType()));
+    auto rSquared =
+        b.create<ConstantOp>(op.getOutput().getType(), montAttr.getRSquared());
+    auto result = b.create<MulOp>(inversed, rSquared);
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 // It is assumed inputs are canonical representatives
 // ModArithType ensures add/sub result can not overflow
 struct ConvertAdd : public OpConversionPattern<AddOp> {
@@ -632,6 +661,7 @@ void ModArithToArith::runOnOperation() {
       ConvertFromMont,
       ConvertInverse,
       ConvertMac,
+      ConvertMontInverse,
       ConvertMontMul,
       ConvertMontReduce,
       ConvertMul,
