@@ -496,9 +496,10 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     auto scalarFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
     unsigned scalarBitWidth =
         scalarFieldType.getModulus().getValue().getBitWidth();
-    auto signlessIntType =
+    auto scalarIntType =
         IntegerType::get(b.getContext(), scalarBitWidth, IntegerType::Signless);
-    auto scalar = b.create<field::ExtractOp>(signlessIntType, scalarPF);
+    auto scalarReduced = b.create<field::FromMontOp>(scalarPF);
+    auto scalarInt = b.create<field::ExtractOp>(scalarIntType, scalarReduced);
 
     Type baseFieldType =
         getCurveFromPointLike(op.getPoint().getType()).getBaseField();
@@ -519,11 +520,11 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
             : point;
 
     auto whileOp = b.create<scf::WhileOp>(
-        /*resultTypes=*/TypeRange{signlessIntType, outputType, outputType},
-        /*operands=*/ValueRange{scalar, intialPoint, zeroPoint},
+        /*resultTypes=*/TypeRange{scalarIntType, outputType, outputType},
+        /*operands=*/ValueRange{scalarInt, intialPoint, zeroPoint},
         /*beforeBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
-          auto arithZero = b.create<arith::ConstantIntOp>(0, signlessIntType);
+          auto arithZero = b.create<arith::ConstantIntOp>(0, scalarIntType);
           // if `decreasingScalar` > 0, continue
           Value decreasingScalar = args[0];
           auto cmpGt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt,
@@ -532,7 +533,7 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
         },
         /*afterBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
-          auto arithOne = b.create<arith::ConstantIntOp>(1, signlessIntType);
+          auto arithOne = b.create<arith::ConstantIntOp>(1, scalarIntType);
           Value decreasingScalar = args[0];
           Value multiplyingPoint = args[1];
           Value result = args[2];
