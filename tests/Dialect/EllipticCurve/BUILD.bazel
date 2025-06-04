@@ -8,9 +8,8 @@ glob_lit_tests(
     name = "all_tests",
     data = ["//tests:test_utilities"],
     driver = "//tests:run_lit.sh",
-    # TODO(quanxi1): Temporarily comment out this test as the inverse op
-    # now expects a montgomery form inputs. The test will be revised in the
-    # last commit.
-    exclude = ["elliptic_curve_to_field_runner.mlir"],
     test_file_exts = ["mlir"],
+    timeout_override = {
+        "elliptic_curve_msm_runner.mlir": "moderate",
+    },
 )

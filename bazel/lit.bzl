@@ -5,7 +5,7 @@ load("@rules_python//python:py_test.bzl", "py_test")
 
 _DEFAULT_FILE_EXTS = ["mlir"]
 
-def lit_test(name = None, src = None, size = "small", tags = None, data = None):
+def lit_test(name = None, src = None, size = "small", timeout = "short", tags = None, data = None):
     """Define a lit test.
 
     In its simplest form, a manually defined lit test would look like this:
@@ -16,6 +16,7 @@ def lit_test(name = None, src = None, size = "small", tags = None, data = None):
           args = ["-v", "tests/ops.mlir"],
           data = [":test_utilities", ":ops.mlir"],
           size = "small",
+          timeout = "short",
           main = "lit.py",
       )
 
@@ -31,6 +32,7 @@ def lit_test(name = None, src = None, size = "small", tags = None, data = None):
       name: the name of the test.
       src: the source file for the test.
       size: the size of the test.
+      timeout: the timeout of the test.
       tags: tags to pass to the target.
       data: the data to pass to the target.
     """
@@ -51,6 +53,7 @@ def lit_test(name = None, src = None, size = "small", tags = None, data = None):
     py_test(
         name = name,
         size = size,
+        timeout = timeout,
         # -v ensures lit outputs useful info during test failures
         args = ["-v", paths.join(native.package_name(), src)],
         data = data,
@@ -67,6 +70,7 @@ def glob_lit_tests(
         driver = None,  # buildifier: disable=unused-variable
         exclude = None,
         size_override = None,
+        timeout_override = None,
         test_file_exts = None,
         default_tags = None,
         tags_override = None):
@@ -79,6 +83,7 @@ def glob_lit_tests(
       driver: unused
       exclude: a list of glob patterns to exclude
       size_override: a dictionary giving per-source-file test size overrides
+      timeout_override: a dictionary giving per-source-file test timeout overrides
       test_file_exts: a list of file extensions to use for globbing for files
         that should be defined as tests.
       default_tags: [str] tags to add to each test
@@ -87,6 +92,7 @@ def glob_lit_tests(
     exclude = exclude or []
     test_file_exts = test_file_exts or _DEFAULT_FILE_EXTS
     size_override = size_override or dict()
+    timeout_override = timeout_override or dict()
     tags_override = tags_override or dict()
     default_tags = default_tags or []
     tests = native.glob(["*." + ext for ext in test_file_exts], exclude = exclude)
@@ -95,6 +101,7 @@ def glob_lit_tests(
         lit_test(
             src = curr_test,
             size = size_override.get(curr_test, "small"),
+            timeout = timeout_override.get(curr_test, "short"),
             tags = default_tags + tags_override.get(curr_test, []),
             data = data,
         )
