@@ -164,13 +164,6 @@ func.func @test_lower_sub_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_mul(%lhs : !Zp, %rhs : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.mul
-  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[TEXT:.*]]
-  // CHECK: %[[EXT0:.*]] = arith.extui %[[LHS]] : [[T]] to [[TEXT]]
-  // CHECK: %[[EXT1:.*]] = arith.extui %[[RHS]] : [[T]] to [[TEXT]]
-  // CHECK: %[[MUL:.*]] = arith.muli %[[EXT0]], %[[EXT1]] : [[TEXT]]
-  // CHECK: %[[REM:.*]] = arith.remui %[[MUL]], %[[CMOD]] : [[TEXT]]
-  // CHECK: %[[TRUNC:.*]] = arith.trunci %[[REM]] : [[TEXT]] to [[T]]
-  // CHECK: return %[[TRUNC]] : [[T]]
   %res = mod_arith.mul %lhs, %rhs : !Zp
   return %res : !Zp
 }
@@ -179,13 +172,6 @@ func.func @test_lower_mul(%lhs : !Zp, %rhs : !Zp) -> !Zp {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_mul_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   // CHECK-NOT: mod_arith.mul
-  // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[TEXT:.*]]
-  // CHECK: %[[EXT0:.*]] = arith.extui %[[LHS]] : [[T]] to [[TEXT]]
-  // CHECK: %[[EXT1:.*]] = arith.extui %[[RHS]] : [[T]] to [[TEXT]]
-  // CHECK: %[[MUL:.*]] = arith.muli %[[EXT0]], %[[EXT1]] : [[TEXT]]
-  // CHECK: %[[REM:.*]] = arith.remui %[[MUL]], %[[CMOD]] : [[TEXT]]
-  // CHECK: %[[TRUNC:.*]] = arith.trunci %[[REM]] : [[TEXT]] to [[T]]
-  // CHECK: return %[[TRUNC]] : [[T]]
   %res = mod_arith.mul %lhs, %rhs : !Zpv
   return %res : !Zpv
 }

@@ -165,7 +165,9 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     Value tHigh = adaptor.getOperands()[1];
 
     // Extract Montgomery constants: `nPrime` and `modulus`.
-    TypedAttr nPrimeAttr = op.getMontgomeryAttr().getNPrime();
+    MontgomeryAttr montAttr = MontgomeryAttr::get(
+        op.getContext(), cast<ModArithType>(op.getOutput().getType()));
+    TypedAttr nPrimeAttr = montAttr.getNPrime();
     TypedAttr modAttr = modulusAttr(op);
 
     // Retrieve the modulus bitwidth.
@@ -283,8 +285,8 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
     auto rSquared = b.create<arith::ConstantOp>(rSquaredAttr);
     auto product =
         b.create<arith::MulUIExtendedOp>(adaptor.getOperands()[0], rSquared);
-    auto reduced = b.create<MontReduceOp>(
-        resultType, product.getLow(), product.getHigh(), op.getMontgomery());
+    auto reduced =
+        b.create<MontReduceOp>(resultType, product.getLow(), product.getHigh());
     rewriter.replaceOp(op, reduced);
     return success();
   }
@@ -312,7 +314,7 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
     // x * R⁻¹ = REDC(x)
     auto zeroHighConst = b.create<arith::ConstantOp>(zeroAttr);
     auto reduced = b.create<MontReduceOp>(resultType, adaptor.getOperands()[0],
-                                          zeroHighConst, op.getMontgomery());
+                                          zeroHighConst);
     rewriter.replaceOp(op, reduced);
     return success();
   }
@@ -590,8 +592,7 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
     auto mul =
         b.create<arith::MulUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
     auto reduced = b.create<mod_arith::MontReduceOp>(
-        getResultModArithType(op), mul.getLow(), mul.getHigh(),
-        op.getMontgomery());
+        getResultModArithType(op), mul.getLow(), mul.getHigh());
 
     rewriter.replaceOp(op, reduced);
     return success();

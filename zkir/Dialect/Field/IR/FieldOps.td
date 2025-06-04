@@ -171,12 +171,9 @@ def Field_ToMontOp : Field_UnaryOp<"to_mont"> {
 
     Example:
     ```
-    %m0 = field.to_mont %c0 {montgomery=#mont} : !PF
+    %m0 = field.to_mont %c0 : !PF
     ```
   }];
-  let arguments = (ins FieldLike:$input, ModArith_MontgomeryAttr:$montgomery);
-  let results = (outs FieldLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
   let hasVerifier = 1;
 }
 
@@ -187,12 +184,9 @@ def Field_FromMontOp : Field_UnaryOp<"from_mont"> {
 
     Example:
     ```
-    %m0 = field.from_mont %c0 {montgomery=#mont} : !PF
+    %m0 = field.from_mont %c0 : !PF
     ```
   }];
-  let arguments = (ins FieldLike:$input, ModArith_MontgomeryAttr:$montgomery);
-  let results = (outs FieldLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
   let hasVerifier = 1;
 }
 
@@ -289,26 +283,6 @@ def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
     %r = field.mul %a, %b : field.pf<primeModulus>
     ```
   }];
-  let hasVerifier = 1;
-}
-
-def Field_MontMulOp : Field_BinaryOp<"mont_mul"> {
-  let summary = "Montgomery multiplication";
-  let description = [{
-    Computes a * b * R⁻¹, where `R` is the montgomery factor.
-
-    Example:
-    ```
-    %m0 = field.mont_mul %a, %b {montgomery=#mont} : !PF
-    ```
-  }];
-  let arguments = (ins
-    FieldLike:$lhs,
-    FieldLike:$rhs,
-    ModArith_MontgomeryAttr:$montgomery
-  );
-  let results = (outs FieldLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
   let hasVerifier = 1;
 }
 

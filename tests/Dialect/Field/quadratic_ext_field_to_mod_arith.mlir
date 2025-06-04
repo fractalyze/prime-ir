@@ -44,13 +44,13 @@ func.func @test_lower_add(%arg0: !QF, %arg1: !QF) -> !QF {
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]], %[[ARG2:.*]]: [[T]], %[[ARG3:.*]]: [[T]]) -> ([[T]], [[T]]) {
 func.func @test_lower_mul(%arg0: !QF, %arg1: !QF) -> !QF {
     // CHECK: %[[BETA:.*]] = mod_arith.constant 6 : [[T]]
-    // CHECK: %[[V0:.*]] = mod_arith.mul %[[ARG0]], %[[ARG2]] : [[T]]
-    // CHECK: %[[V1:.*]] = mod_arith.mul %[[ARG1]], %[[ARG3]] : [[T]]
-    // CHECK: %[[BETATIMESV1:.*]] = mod_arith.mul %[[BETA]], %[[V1]] : [[T]]
+    // CHECK: %[[V0:.*]] = mod_arith.mont_mul %[[ARG0]], %[[ARG2]] : [[T]]
+    // CHECK: %[[V1:.*]] = mod_arith.mont_mul %[[ARG1]], %[[ARG3]] : [[T]]
+    // CHECK: %[[BETATIMESV1:.*]] = mod_arith.mont_mul %[[BETA]], %[[V1]] : [[T]]
     // CHECK: %[[C0:.*]] = mod_arith.add %[[V0]], %[[BETATIMESV1]] : [[T]]
     // CHECK: %[[SUMLHS:.*]] = mod_arith.add %[[ARG0]], %[[ARG1]] : [[T]]
     // CHECK: %[[SUMRHS:.*]] = mod_arith.add %[[ARG2]], %[[ARG3]] : [[T]]
-    // CHECK: %[[SUMPRODUCT:.*]] = mod_arith.mul %[[SUMLHS]], %[[SUMRHS]] : [[T]]
+    // CHECK: %[[SUMPRODUCT:.*]] = mod_arith.mont_mul %[[SUMLHS]], %[[SUMRHS]] : [[T]]
     // CHECK: %[[TMP:.*]] = mod_arith.sub %[[SUMPRODUCT]], %[[V0]] : [[T]]
     // CHECK: %[[C1:.*]] = mod_arith.sub %[[TMP]], %[[V1]] : [[T]]
     // CHECK: return %[[C0]], %[[C1]] : [[T]], [[T]]
@@ -73,21 +73,14 @@ func.func @test_lower_from_elements(%arg0: !PF, %arg1: !PF) -> tensor<2x!QF> {
 // CHECK-LABEL: @test_lower_from_mont
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
 func.func @test_lower_from_mont(%arg0: !QF) -> !QF {
-    %0 = field.from_mont %arg0 {montgomery=#mont} : !QF
+    %0 = field.from_mont %arg0 : !QF
     return %0 : !QF
 }
 
 // CHECK-LABEL: @test_lower_to_mont
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
 func.func @test_lower_to_mont(%arg0: !QF) -> !QF {
-    %0 = field.to_mont %arg0 {montgomery=#mont} : !QF
-    return %0 : !QF
-}
-
-// CHECK-LABEL: @test_lower_mont_mul
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]], %[[ARG2:.*]]: [[T]], %[[ARG3:.*]]: [[T]]) -> ([[T]], [[T]]) {
-func.func @test_lower_mont_mul(%arg0: !QF, %arg1: !QF) -> !QF {
-    %0 = field.mont_mul %arg0, %arg1 {montgomery=#mont} : !QF
+    %0 = field.to_mont %arg0 : !QF
     return %0 : !QF
 }
 

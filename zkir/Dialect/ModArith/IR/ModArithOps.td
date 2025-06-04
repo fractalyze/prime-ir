@@ -119,20 +119,19 @@ def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [SameTypeOperands]> {
     Example:
     ```
     %c0 = arith.constant 65538231231312311 : i512
-    %m0 = mod_arith.mont_reduce %c0 {montgomery=#mont} : i512 -> mod_arith.int<65537 : i256>
+    %m0 = mod_arith.mont_reduce %c0 : i512 -> mod_arith.int<65537 : i256>
     ```
   }];
   let arguments = (ins
     SignlessIntegerLike:$low,
-    SignlessIntegerLike:$high,
-    ModArith_MontgomeryAttr:$montgomery
+    SignlessIntegerLike:$high
   );
   let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($low) `->` type($output)";
 }
 
-def ModArith_ToMontOp : ModArith_Op<"to_mont", [SameOperandsAndResultType]> {
+def ModArith_ToMontOp : ModArith_UnaryOp<"to_mont"> {
   let summary = "Convert from standard form to montgomery representation";
   let description = [{
     Transforms modular type integer to the Montgomery domain.
@@ -140,19 +139,13 @@ def ModArith_ToMontOp : ModArith_Op<"to_mont", [SameOperandsAndResultType]> {
 
     Example:
     ```
-    %m0 = mod_arith.to_mont %c0 {montgomery=#mont} : mod_arith.int<65537 : i256>
+    %m0 = mod_arith.to_mont %c0 : mod_arith.int<65537 : i256>
     ```
   }];
-  let arguments = (ins
-    ModArithLike:$input,
-    ModArith_MontgomeryAttr:$montgomery
-  );
-  let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
-  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def ModArith_FromMontOp : ModArith_Op<"from_mont", [SameOperandsAndResultType]> {
+def ModArith_FromMontOp : ModArith_UnaryOp<"from_mont"> {
   let summary = "Convert from montgomery representation to standard form";
   let description = [{
     Transforms modular type integer back from the Montgomery domain.
@@ -160,16 +153,10 @@ def ModArith_FromMontOp : ModArith_Op<"from_mont", [SameOperandsAndResultType]> 
 
     Example:
     ```
-    %m0 = mod_arith.from_mont %c0 {montgomery=#mont} : mod_arith.int<65537 : i256>
+    %m0 = mod_arith.from_mont %c0 : mod_arith.int<65537 : i256>
     ```
   }];
-  let arguments = (ins
-    ModArithLike:$input,
-    ModArith_MontgomeryAttr:$montgomery
-  );
-  let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
-  let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
 def ModArith_CmpOp : ModArith_Op<"cmp", [SameTypeOperands, TypesMatchWith<
@@ -308,12 +295,6 @@ def ModArith_MontMulOp : ModArith_BinaryOp<"mont_mul", [Commutative]> {
     %m0 = mod_arith.mont_mul %a, %b : mod_arith.int<65537 : i256>
     ```
   }];
-  let arguments = (ins
-    ModArithLike:$lhs,
-    ModArithLike:$rhs,
-    ModArith_MontgomeryAttr:$montgomery
-  );
-  let results = (outs ModArithLike:$output);
 }
 
 #endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_TD_
