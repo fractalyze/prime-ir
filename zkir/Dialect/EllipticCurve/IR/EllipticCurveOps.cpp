@@ -64,18 +64,12 @@ LogicalResult ScalarMulOp::verify() {
 LogicalResult MSMOp::verify() {
   TensorType scalarsType = cast<TensorType>(getScalars().getType());
   TensorType pointsType = cast<TensorType>(getPoints().getType());
-  Type pointType = pointsType.getElementType();
   if (scalarsType.getRank() != pointsType.getRank()) {
     return emitError() << "scalars and points must have the same rank";
   }
   Type outputType = getOutput().getType();
-  if ((isa<AffineType>(pointType) || isa<JacobianType>(pointType)) &&
-      !isa<JacobianType>(outputType)) {
-    return emitError() << "affine or jacobian point inputs for msm must result "
-                          "in jacobian output";
-  } else if (isa<XYZZType>(pointType) && !isa<XYZZType>(outputType)) {
-    return emitError()
-           << "xyzz point inputs for msm must result in xyzz output";
+  if (isa<AffineType>(outputType)) {
+    return emitError() << "output type cannot be affine";
   } else {
     return success();
   }

@@ -11,6 +11,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Generic.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Add.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Double.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/XYZZ/Add.h"
@@ -598,6 +599,7 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
   }
 };
 
+// Currently implements Pippenger's
 struct ConvertMSM : public OpConversionPattern<MSMOp> {
   explicit ConvertMSM(mlir::MLIRContext *context)
       : OpConversionPattern<MSMOp>(context) {}
@@ -609,45 +611,18 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // point set
-    // |(x1, y1, z1), (x2, y2, z2)|
-    Value pointSet = op.getPoints();
-    // tensor of PF, e.g.:
-    // | s1 , s2 |
     Value scalars = op.getScalars();
-    RankedTensorType pointSetType = cast<RankedTensorType>(pointSet.getType());
-    unsigned numScalarMuls = pointSetType.getShape()[0];
-    Type outputPointType = op.getOutput().getType();
+    Value points = op.getPoints();
 
-    auto zero = b.create<arith::ConstantIndexOp>(0);
-    auto one = b.create<arith::ConstantIndexOp>(1);
-    auto count = b.create<arith::ConstantIndexOp>(numScalarMuls);
+    Type baseFieldType =
+        cast<RankedTensorType>(adaptor.getPoints()[0].getType())
+            .getElementType();
 
-    auto scalar0 = b.create<tensor::ExtractOp>(scalars, ValueRange{zero});
-    auto point0 = b.create<tensor::ExtractOp>(pointSet, ValueRange{zero});
-    Value initial =
-        b.create<elliptic_curve::ScalarMulOp>(outputPointType, scalar0, point0);
+    Type outputType = op.getOutput().getType();
 
-    auto forOp = b.create<scf::ForOp>(
-        one, count, one,  // induction variable: 1 to numScalarMuls
-        ValueRange{initial},
-        [&](OpBuilder &nestedBuilder, Location nestedLoc, Value iv,
-            ValueRange args) {
-          ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
-          Value acc = args.front();
+    PippengersGeneric pippengers(scalars, points, baseFieldType, outputType, b);
 
-          auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{iv});
-          auto point = b.create<tensor::ExtractOp>(pointSet, ValueRange{iv});
-
-          auto mul = b.create<elliptic_curve::ScalarMulOp>(outputPointType,
-                                                           scalar, point);
-
-          auto sum = b.create<elliptic_curve::AddOp>(outputPointType, acc, mul);
-
-          b.create<scf::YieldOp>(ValueRange{sum});
-        });
-
-    rewriter.replaceOp(op, forOp.getResult(0));
+    rewriter.replaceOp(op, pippengers.generate());
     return success();
   }
 };
@@ -691,6 +666,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>,
       ConvertAny<linalg::BroadcastOp>,
+      ConvertAny<memref::AllocOp>,
       ConvertAny<memref::LoadOp>,
       ConvertAny<memref::StoreOp>,
       ConvertAny<tensor::ExtractOp>,
@@ -703,6 +679,7 @@ void EllipticCurveToField::runOnOperation() {
       bufferization::ToMemrefOp,
       bufferization::ToTensorOp,
       linalg::BroadcastOp,
+      memref::AllocOp,
       memref::LoadOp,
       memref::StoreOp,
       tensor::ExtractOp,

@@ -195,9 +195,8 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
   let description = [{
     Computes multi-scalar multiplication (MSM) of elliptic curve points and scalars.
 
-    affine -> Jacobian
-    Jacobian -> Jacobian
-    XYZZ -> XYZZ
+    Output type determines internal computation type of buckets and window sums.
+    XYZZ is recommended for best performance.
 
     Example:
     ```

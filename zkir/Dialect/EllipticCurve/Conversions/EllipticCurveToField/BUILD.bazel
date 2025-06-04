@@ -13,6 +13,7 @@ cc_library(
     ],
     deps = [
         ":pass_inc_gen",
+        "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers:Generic",
         "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian:Add",
         "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian:Double",
         "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/XYZZ:Add",
