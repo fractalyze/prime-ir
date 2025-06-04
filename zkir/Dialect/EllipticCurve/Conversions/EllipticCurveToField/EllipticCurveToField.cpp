@@ -253,19 +253,19 @@ struct ConvertConvertPointType
               // affine to jacobian
               // (x, y) -> (x, y, 1)
               builder.create<scf::YieldOp>(
-                  loc, ValueRange{/* x */ coords[0], /* y */ coords[1], oneBF});
+                  loc, ValueRange{/*x=*/coords[0], /*y=*/coords[1], oneBF});
             } else {
               // affine to xyzz
               // (x, y) -> (x, y, 1, 1)
               builder.create<scf::YieldOp>(
-                  loc, ValueRange{/* x */ coords[0], /* y */ coords[1], oneBF,
-                                  oneBF});
+                  loc,
+                  ValueRange{/*x=*/coords[0], /*y=*/coords[1], oneBF, oneBF});
             }
           });
       outputCoords = output.getResults();
     } else if (isa<JacobianType>(inputType)) {
-      auto zz = b.create<field::SquareOp>(/* z */ coords[2]);
-      auto zzz = b.create<field::MulOp>(zz, /* z */ coords[2]);
+      auto zz = b.create<field::SquareOp>(/*z=*/coords[2]);
+      auto zzz = b.create<field::MulOp>(zz, /*z=*/coords[2]);
 
       if (isa<AffineType>(outputType)) {
         auto output = b.create<scf::IfOp>(
@@ -284,9 +284,9 @@ struct ConvertConvertPointType
               auto zzInv = builder.create<field::InverseOp>(loc, zz);
               auto zzzInv = builder.create<field::InverseOp>(loc, zzz);
               auto newX =
-                  builder.create<field::MulOp>(loc, /* x */ coords[0], zzInv);
+                  builder.create<field::MulOp>(loc, /*x=*/coords[0], zzInv);
               auto newY =
-                  builder.create<field::MulOp>(loc, /* y */ coords[1], zzzInv);
+                  builder.create<field::MulOp>(loc, /*y=*/coords[1], zzzInv);
               builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
             });
 
@@ -294,7 +294,7 @@ struct ConvertConvertPointType
       } else {
         // jacobian to xyzz
         // (x, y, z) -> (x, y, z², z³)
-        outputCoords = {/* x */ coords[0], /* y */ coords[1], zz, zzz};
+        outputCoords = {/*x=*/coords[0], /*y=*/coords[1], zz, zzz};
       }
     } else {
       if (isa<AffineType>(outputType)) {
@@ -312,18 +312,18 @@ struct ConvertConvertPointType
               // (x, y, z², z³) -> (x/z², y/z³)
               // TODO(ashjeong): use Batch Inverse
               auto zzInv =
-                  builder.create<field::InverseOp>(loc, /* zz */ coords[2]);
+                  builder.create<field::InverseOp>(loc, /*zz=*/coords[2]);
               auto zzzInv =
-                  builder.create<field::InverseOp>(loc, /* zzz */ coords[3]);
+                  builder.create<field::InverseOp>(loc, /*zzz=*/coords[3]);
               auto newX =
-                  builder.create<field::MulOp>(loc, /* x */ coords[0], zzInv);
+                  builder.create<field::MulOp>(loc, /*x=*/coords[0], zzInv);
               auto newY =
-                  builder.create<field::MulOp>(loc, /* y */ coords[1], zzzInv);
+                  builder.create<field::MulOp>(loc, /*y=*/coords[1], zzzInv);
               builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
             });
         outputCoords = {ifOp.getResult(0), ifOp.getResult(1)};
       } else {
-        outputCoords = {/* x */ coords[0], /* y */ coords[1]};
+        outputCoords = {/*x=*/coords[0], /*y=*/coords[1]};
 
         auto output = b.create<scf::IfOp>(
             isZero,
@@ -339,7 +339,7 @@ struct ConvertConvertPointType
               // (x, y, z², z³) -> (x, y, z)
               auto zzInv = builder.create<field::InverseOp>(loc, coords[2]);
               auto z =
-                  builder.create<field::MulOp>(loc, /* zzz */ coords[3], zzInv);
+                  builder.create<field::MulOp>(loc, /*zzz=*/coords[3], zzInv);
               builder.create<scf::YieldOp>(loc, ValueRange{z});
             });
         outputCoords.push_back(output.getResult(0));
