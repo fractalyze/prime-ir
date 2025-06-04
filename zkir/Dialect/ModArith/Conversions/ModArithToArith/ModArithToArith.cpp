@@ -271,14 +271,20 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    ModArithType resultType = getResultModArithType(op);
+    MontgomeryAttr montAttr = MontgomeryAttr::get(op.getContext(), resultType);
+    TypedAttr rSquaredAttr = montAttr.getRSquared();
+    if (auto shapedType = dyn_cast<ShapedType>(op.getOutput().getType())) {
+      auto intShapedType =
+          shapedType.cloneWith(std::nullopt, convertModArithType(resultType));
+      rSquaredAttr = SplatElementsAttr::get(intShapedType, rSquaredAttr);
+    }
     // x * R = REDC(x * rSquared)
-    auto rSquared =
-        b.create<arith::ConstantOp>(op.getMontgomery().getRSquared());
+    auto rSquared = b.create<arith::ConstantOp>(rSquaredAttr);
     auto product =
         b.create<arith::MulUIExtendedOp>(adaptor.getOperands()[0], rSquared);
-    auto reduced =
-        b.create<MontReduceOp>(op.getResult().getType(), product.getLow(),
-                               product.getHigh(), op.getMontgomery());
+    auto reduced = b.create<MontReduceOp>(
+        resultType, product.getLow(), product.getHigh(), op.getMontgomery());
     rewriter.replaceOp(op, reduced);
     return success();
   }
@@ -295,11 +301,17 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    ModArithType resultType = getResultModArithType(op);
+    TypedAttr zeroAttr = b.getIntegerAttr(convertModArithType(resultType), 0);
+    if (auto shapedType = dyn_cast<ShapedType>(op.getOutput().getType())) {
+      auto intShapedType =
+          shapedType.cloneWith(std::nullopt, convertModArithType(resultType));
+      zeroAttr = SplatElementsAttr::get(intShapedType, zeroAttr);
+    }
+
     // x * R⁻¹ = REDC(x)
-    auto zeroHighConst = b.create<arith::ConstantOp>(
-        IntegerAttr::get(op.getMontgomery().getRSquared().getType(), 0));
-    auto reduced = b.create<MontReduceOp>(op.getResult().getType(),
-                                          adaptor.getOperands()[0],
+    auto zeroHighConst = b.create<arith::ConstantOp>(zeroAttr);
+    auto reduced = b.create<MontReduceOp>(resultType, adaptor.getOperands()[0],
                                           zeroHighConst, op.getMontgomery());
     rewriter.replaceOp(op, reduced);
     return success();
