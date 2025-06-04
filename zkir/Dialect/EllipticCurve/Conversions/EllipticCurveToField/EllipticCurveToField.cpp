@@ -160,9 +160,9 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ValueRange coords = adaptor.getInput();
-    Type baseField =
+    Type baseFieldType =
         getCurveFromPointLike(op.getInput().getType()).getBaseField();
-    Value zeroBF = b.create<field::ConstantOp>(baseField, 0);
+    Value zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
 
     Value isZero;
     if (isa<AffineType>(op.getInput().getType())) {
