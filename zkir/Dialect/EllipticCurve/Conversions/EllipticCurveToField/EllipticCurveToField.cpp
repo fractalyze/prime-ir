@@ -268,10 +268,8 @@ struct ConvertConvertPointType
       auto zzz = b.create<field::MulOp>(zz, /* z */ coords[2]);
 
       if (isa<AffineType>(outputType)) {
-        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
-                                            /* z */ coords[2], zeroBF);
         auto output = b.create<scf::IfOp>(
-            cmpEq,
+            isZero,
             /*thenBuilder=*/
             [&](OpBuilder &builder, Location loc) {
               // jacobian to affine
@@ -300,10 +298,8 @@ struct ConvertConvertPointType
       }
     } else {
       if (isa<AffineType>(outputType)) {
-        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
-                                            /* zz */ coords[2], zeroBF);
         auto ifOp = b.create<scf::IfOp>(
-            cmpEq,
+            isZero,
             /*thenBuilder=*/
             [&](OpBuilder &builder, Location loc) {
               // xyzz to affine
@@ -329,10 +325,8 @@ struct ConvertConvertPointType
       } else {
         outputCoords = {/* x */ coords[0], /* y */ coords[1]};
 
-        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
-                                            /* zz */ coords[2], zeroBF);
         auto output = b.create<scf::IfOp>(
-            cmpEq,
+            isZero,
             /*thenBuilder=*/
             [&](OpBuilder &builder, Location loc) {
               // xyzz to jacobian
