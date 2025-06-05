@@ -320,7 +320,7 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
     if (isa<QuadraticExtFieldType>(fieldType)) {
       auto c0 = b.create<mod_arith::NegateOp>(adaptor.getInput()[0]);
       auto c1 = b.create<mod_arith::NegateOp>(adaptor.getInput()[1]);
-      rewriter.replaceOp(op, {{c0, c1}});
+      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
       return success();
     }
     return failure();
