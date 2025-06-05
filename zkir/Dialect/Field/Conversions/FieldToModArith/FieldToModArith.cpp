@@ -596,10 +596,6 @@ void FieldToModArith::runOnOperation() {
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
-  // NOTE(ashjeong): ConvertPointSetOp from the elliptic curve to field pass
-  // introduces a tensor::concat op. As tensor::concat op is not supported by
-  // the OneShotBufferize pass, we must decompose them with this pattern.
-  tensor::populateDecomposeTensorConcatPatterns(patterns);
   patterns.add<
       // clang-format off
       ConvertAdd,
