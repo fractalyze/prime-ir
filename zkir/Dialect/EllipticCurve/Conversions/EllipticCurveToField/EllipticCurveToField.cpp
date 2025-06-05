@@ -290,7 +290,7 @@ struct ConvertConvertPointType
               builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
             });
 
-        outputCoords = {output.getResult(0), output.getResult(1)};
+        outputCoords = output.getResults();
       } else {
         // jacobian to xyzz
         // (x, y, z) -> (x, y, z², z³)
@@ -321,7 +321,7 @@ struct ConvertConvertPointType
                   builder.create<field::MulOp>(loc, /*y=*/coords[1], zzzInv);
               builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
             });
-        outputCoords = {output.getResult(0), output.getResult(1)};
+        outputCoords = output.getResults();
       } else {
         outputCoords = {/*x=*/coords[0], /*y=*/coords[1]};
 
