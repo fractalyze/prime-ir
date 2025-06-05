@@ -26,27 +26,27 @@ MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
   // 1 to have `b` with the same bitwidth as the `modulus`. This is fine since
   // we already use 1 extra bit for the `modulus` storage to handle overflows
   // in addition operation.
-  size_t w = modulus.getBitWidth() - 1;
-  if (modulus.getNumWords() > 1) {
-    w = APInt::APINT_BITS_PER_WORD;
-  }
+  size_t numWords = modulus.getNumWords();
+  size_t w = numWords > 1 ? APInt::APINT_BITS_PER_WORD : modulus.getBitWidth();
 
   // `b` = 2^`w`
-  APInt b = APInt::getOneBitSet(modulus.getBitWidth(), w);
+  APInt b = APInt::getOneBitSet(w + 1, w);
+
+  // bReduced = `b` (mod `modulus`)
+  APInt modExt = modulus.zextOrTrunc(b.getBitWidth());
+  APInt bReduced = b.urem(modExt);
+  bReduced = bReduced.zextOrTrunc(modulus.getBitWidth());
 
   // Compute `r` = `b^l` (mod `modulus`) where `l` is the number of limbs
-  APInt r = expMod(b, modulus.getNumWords(), modulus);
+  APInt r = expMod(bReduced, numWords, modulus);
   APInt rInv = multiplicativeInverse(r, modulus);
   APInt rSquared = mulMod(r, r, modulus);
 
-  // Now, we can truncate and do operations in `w + 1` bits for the `nPrime`
-  // calculation
-  b = b.trunc(w + 1);
-
   // `modulusModB` = `modulus` (mod `b`)
-  APInt modulusModB = modulus.trunc(w + 1);
-  modulusModB.clearHighBits(modulusModB.getBitWidth() - w);
-
+  APInt modulusModB = modulus.zextOrTrunc(b.getBitWidth());
+  if (modulus.getBitWidth() > w) {
+    modulusModB.clearBit(w);
+  }
   // Compute the multiplicative inverse of `modulus` (mod `b`)
   APInt invN = multiplicativeInverse(modulusModB, b);
 

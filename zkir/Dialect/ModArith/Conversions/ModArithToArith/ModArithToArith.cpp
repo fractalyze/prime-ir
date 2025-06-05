@@ -165,15 +165,18 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     Value tHigh = adaptor.getOperands()[1];
 
     // Extract Montgomery constants: `nPrime` and `modulus`.
-    TypedAttr nPrimeAttr = op.getMontgomeryAttr().getNPrime();
+    MontgomeryAttr montAttr = MontgomeryAttr::get(
+        op.getContext(), cast<ModArithType>(op.getOutput().getType()));
+    TypedAttr nPrimeAttr = montAttr.getNPrime();
     TypedAttr modAttr = modulusAttr(op);
 
     // Retrieve the modulus bitwidth.
-    unsigned modBitWidth = cast<IntegerType>(modAttr.getType()).getWidth();
+    const unsigned modBitWidth =
+        cast<IntegerType>(modAttr.getType()).getWidth();
 
     // Compute number of limbs.
-    const unsigned limbWidth = APInt::APINT_BITS_PER_WORD;
-    unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+    const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
+    const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
 
     // Prepare constants for limb operations.
     Type limbType = nPrimeAttr.getType();
@@ -212,11 +215,17 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     // unroll the loop as a straight-line chain of operations.
     for (unsigned i = 0; i < numLimbs; ++i) {
       // Extract the current lowest limb: `tLow` (mod `base`)
-      auto lowerLimb = b.create<arith::TruncIOp>(limbType, tLow);
+      Value lowerLimb = tLow;
+      if (numLimbs > 1) {
+        lowerLimb = b.create<arith::TruncIOp>(limbType, tLow);
+      }
       // Compute `m` = `lowerLimb` * `nPrime` (mod `base`)
       auto m = b.create<arith::MulIOp>(lowerLimb, nPrimeConst);
       // Compute `m` * `N` , where `N` is modulus
-      auto mExt = b.create<arith::ExtUIOp>(tLow.getType(), m);
+      Value mExt = m;
+      if (numLimbs > 1) {
+        mExt = b.create<arith::ExtUIOp>(tLow.getType(), m);
+      }
       auto mN = b.create<arith::MulUIExtendedOp>(modConst, mExt);
       // Add the product to `T`.
       auto sum = b.create<arith::AddUIExtendedOp>(tLow, mN.getLow());
@@ -226,6 +235,11 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
       auto carryExt =
           b.create<arith::ExtUIOp>(tHigh.getType(), sum.getOverflow());
       tHigh = b.create<arith::AddIOp>(tHigh, carryExt, noOverflow);
+      if (numLimbs == 1) {
+        // For a single-precision case, skip shifting and break.
+        tLow = tHigh;
+        break;
+      }
       // Shift right by `limbWidth` to discard the zeroed limb.
       tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
       // copy the lowest limb of `tHigh` to the highest limb of `tLow`
@@ -259,14 +273,20 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    ModArithType resultType = getResultModArithType(op);
+    MontgomeryAttr montAttr = MontgomeryAttr::get(op.getContext(), resultType);
+    TypedAttr rSquaredAttr = montAttr.getRSquared();
+    if (auto shapedType = dyn_cast<ShapedType>(op.getOutput().getType())) {
+      auto intShapedType =
+          shapedType.cloneWith(std::nullopt, convertModArithType(resultType));
+      rSquaredAttr = SplatElementsAttr::get(intShapedType, rSquaredAttr);
+    }
     // x * R = REDC(x * rSquared)
-    auto rSquared =
-        b.create<arith::ConstantOp>(op.getMontgomery().getRSquared());
+    auto rSquared = b.create<arith::ConstantOp>(rSquaredAttr);
     auto product =
         b.create<arith::MulUIExtendedOp>(adaptor.getOperands()[0], rSquared);
     auto reduced =
-        b.create<MontReduceOp>(op.getResult().getType(), product.getLow(),
-                               product.getHigh(), op.getMontgomery());
+        b.create<MontReduceOp>(resultType, product.getLow(), product.getHigh());
     rewriter.replaceOp(op, reduced);
     return success();
   }
@@ -283,12 +303,18 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    ModArithType resultType = getResultModArithType(op);
+    TypedAttr zeroAttr = b.getIntegerAttr(convertModArithType(resultType), 0);
+    if (auto shapedType = dyn_cast<ShapedType>(op.getOutput().getType())) {
+      auto intShapedType =
+          shapedType.cloneWith(std::nullopt, convertModArithType(resultType));
+      zeroAttr = SplatElementsAttr::get(intShapedType, zeroAttr);
+    }
+
     // x * R⁻¹ = REDC(x)
-    auto zeroHighConst = b.create<arith::ConstantOp>(
-        IntegerAttr::get(op.getMontgomery().getRSquared().getType(), 0));
-    auto reduced = b.create<MontReduceOp>(op.getResult().getType(),
-                                          adaptor.getOperands()[0],
-                                          zeroHighConst, op.getMontgomery());
+    auto zeroHighConst = b.create<arith::ConstantOp>(zeroAttr);
+    auto reduced = b.create<MontReduceOp>(resultType, adaptor.getOperands()[0],
+                                          zeroHighConst);
     rewriter.replaceOp(op, reduced);
     return success();
   }
@@ -404,6 +430,35 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
     }
 
     rewriter.replaceOp(op, ifOp.getResult(0));
+    return success();
+  }
+};
+
+struct ConvertMontInverse : public OpConversionPattern<MontInverseOp> {
+  explicit ConvertMontInverse(MLIRContext *context)
+      : OpConversionPattern<MontInverseOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      MontInverseOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    // TODO(batzor): Support tensor input.
+    if (isa<ShapedType>(op.getOperand().getType())) {
+      return op->emitError("tensor input not supported");
+    }
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto inversed = b.create<InverseOp>(op.getOperand());
+
+    MontgomeryAttr montAttr = MontgomeryAttr::get(
+        op.getContext(), cast<ModArithType>(op.getOutput().getType()));
+    auto rSquared =
+        b.create<ConstantOp>(op.getOutput().getType(), montAttr.getRSquared());
+    auto result = b.create<MulOp>(inversed, rSquared);
+
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -537,8 +592,7 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
     auto mul =
         b.create<arith::MulUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
     auto reduced = b.create<mod_arith::MontReduceOp>(
-        getResultModArithType(op), mul.getLow(), mul.getHigh(),
-        op.getMontgomery());
+        getResultModArithType(op), mul.getLow(), mul.getHigh());
 
     rewriter.replaceOp(op, reduced);
     return success();
@@ -608,6 +662,7 @@ void ModArithToArith::runOnOperation() {
       ConvertFromMont,
       ConvertInverse,
       ConvertMac,
+      ConvertMontInverse,
       ConvertMontMul,
       ConvertMontReduce,
       ConvertMul,

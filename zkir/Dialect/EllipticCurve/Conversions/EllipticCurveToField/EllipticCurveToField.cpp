@@ -221,7 +221,10 @@ struct ConvertConvertPointType
     Type outputType = op.getOutput().getType();
     Type baseFieldType = getCurveFromPointLike(inputType).getBaseField();
     Value zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
-    Value oneBF = b.create<field::ConstantOp>(baseFieldType, 1);
+    // TODO(chokobole): Fix below after attaching montgomery information to
+    // the field type.
+    Value oneBF = b.create<field::ToMontOp>(
+        baseFieldType, b.create<field::ConstantOp>(baseFieldType, 1));
 
     SmallVector<Value> outputCoords;
 
@@ -493,14 +496,16 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     auto scalarFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
     unsigned scalarBitWidth =
         scalarFieldType.getModulus().getValue().getBitWidth();
-    auto signlessIntType =
+    auto scalarIntType =
         IntegerType::get(b.getContext(), scalarBitWidth, IntegerType::Signless);
-    auto scalar = b.create<field::ExtractOp>(signlessIntType, scalarPF);
+    auto scalarReduced = b.create<field::FromMontOp>(scalarPF);
+    auto scalarInt = b.create<field::ExtractOp>(scalarIntType, scalarReduced);
 
     Type baseFieldType =
         getCurveFromPointLike(op.getPoint().getType()).getBaseField();
     auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
-    auto oneBF = b.create<field::ConstantOp>(baseFieldType, 1);
+    auto oneBF = b.create<field::ToMontOp>(
+        baseFieldType, b.create<field::ConstantOp>(baseFieldType, 1));
 
     Value zeroPoint =
         isa<XYZZType>(outputType)
@@ -509,17 +514,17 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
             : b.create<elliptic_curve::PointOp>(
                   outputType, ValueRange{oneBF, oneBF, zeroBF});
 
-    Value intialPoint =
+    Value initialPoint =
         isa<AffineType>(pointType)
             ? b.create<elliptic_curve::ConvertPointTypeOp>(outputType, point)
             : point;
 
     auto whileOp = b.create<scf::WhileOp>(
-        /*resultTypes=*/TypeRange{signlessIntType, outputType, outputType},
-        /*operands=*/ValueRange{scalar, intialPoint, zeroPoint},
+        /*resultTypes=*/TypeRange{scalarIntType, outputType, outputType},
+        /*operands=*/ValueRange{scalarInt, initialPoint, zeroPoint},
         /*beforeBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
-          auto arithZero = b.create<arith::ConstantIntOp>(0, signlessIntType);
+          auto arithZero = b.create<arith::ConstantIntOp>(0, scalarIntType);
           // if `decreasingScalar` > 0, continue
           Value decreasingScalar = args[0];
           auto cmpGt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt,
@@ -528,7 +533,7 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
         },
         /*afterBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
-          auto arithOne = b.create<arith::ConstantIntOp>(1, signlessIntType);
+          auto arithOne = b.create<arith::ConstantIntOp>(1, scalarIntType);
           Value decreasingScalar = args[0];
           Value multiplyingPoint = args[1];
           Value result = args[2];

@@ -206,12 +206,7 @@ struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
 static std::pair<Value, Value> bflyCT(ImplicitLocOpBuilder &b, Value A, Value B,
                                       Value root,
                                       mod_arith::MontgomeryAttr montAttr) {
-  Value rootB;
-  if (montAttr != mod_arith::MontgomeryAttr()) {
-    rootB = b.create<field::MontMulOp>(B, root, montAttr);
-  } else {
-    rootB = b.create<field::MulOp>(B, root);
-  }
+  Value rootB = b.create<field::MulOp>(B, root);
   auto ctPlus = b.create<field::AddOp>(A, rootB);
   auto ctMinus = b.create<field::SubOp>(A, rootB);
   return {std::move(ctPlus), std::move(ctMinus)};
@@ -223,12 +218,7 @@ static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
                                       mod_arith::MontgomeryAttr montAttr) {
   auto gsPlus = b.create<field::AddOp>(A, B);
   auto gsMinus = b.create<field::SubOp>(A, B);
-  Value gsMinusRoot;
-  if (montAttr != mod_arith::MontgomeryAttr()) {
-    gsMinusRoot = b.create<field::MontMulOp>(gsMinus, root, montAttr);
-  } else {
-    gsMinusRoot = b.create<field::MulOp>(gsMinus, root);
-  }
+  Value gsMinusRoot = b.create<field::MulOp>(gsMinus, root);
   return {std::move(gsPlus), std::move(gsMinusRoot)};
 }
 
@@ -519,12 +509,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
           ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
           Value mulResult;
-          if (rootAttr.getMontgomery() != mod_arith::MontgomeryAttr()) {
-            mulResult = b.create<field::MontMulOp>(args[0], invDegree,
-                                                   rootAttr.getMontgomery());
-          } else {
-            mulResult = b.create<field::MulOp>(args[0], invDegree);
-          }
+          mulResult = b.create<field::MulOp>(args[0], invDegree);
           b.create<linalg::YieldOp>(mulResult);
         });
   }

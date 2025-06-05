@@ -58,9 +58,9 @@ func.func @test_lower_mont_reduce() {
 
 func.func @test_lower_mont_mul() {
   %p = mod_arith.constant 17221657567640823606390383439573883756117969501024189775361 : !Fq
-  %p_mont = mod_arith.to_mont %p {montgomery=#Fq_mont} : !Fq
-  %p_mont_sq = mod_arith.mont_mul %p_mont, %p_mont {montgomery=#Fq_mont} : !Fq
-  %p_sq = mod_arith.from_mont %p_mont_sq {montgomery=#Fq_mont} : !Fq
+  %p_mont = mod_arith.to_mont %p : !Fq
+  %p_mont_sq = mod_arith.mont_mul %p_mont, %p_mont : !Fq
+  %p_sq = mod_arith.from_mont %p_mont_sq : !Fq
 
   %2 = mod_arith.extract %p_sq : !Fq -> i256
   %3 = vector.from_elements %2 : vector<1xi256>
