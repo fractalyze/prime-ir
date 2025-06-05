@@ -36,7 +36,8 @@ namespace mlir::zkir::field {
 
 static mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
   IntegerAttr modulus = type.getModulus();
-  return mod_arith::ModArithType::get(type.getContext(), modulus);
+  bool isMontgomery = type.isMontgomery();
+  return mod_arith::ModArithType::get(type.getContext(), modulus, isMontgomery);
 }
 
 template <typename T>
@@ -53,8 +54,8 @@ static T convertPrimeFieldLike(T type) {
 
 static LogicalResult convertQuadraticExtFieldType(
     QuadraticExtFieldType type, SmallVectorImpl<Type> &converted) {
-  IntegerAttr modulus = type.getBaseField().getModulus();
-  auto modArithType = mod_arith::ModArithType::get(type.getContext(), modulus);
+  mod_arith::ModArithType modArithType =
+      convertPrimeFieldType(type.getBaseField());
   converted.push_back(modArithType);
   converted.push_back(modArithType);
   return success();
@@ -64,8 +65,8 @@ template <typename T>
 static T convertQuadraticExtFieldLike(T type) {
   auto quadraticExtFieldType =
       cast<QuadraticExtFieldType>(type.getElementType());
-  IntegerAttr modulus = quadraticExtFieldType.getBaseField().getModulus();
-  auto modArithType = mod_arith::ModArithType::get(type.getContext(), modulus);
+  PrimeFieldType baseFieldType = quadraticExtFieldType.getBaseField();
+  mod_arith::ModArithType modArithType = convertPrimeFieldType(baseFieldType);
 
   SmallVector<int64_t> newShape(type.getShape());
   newShape.push_back(2);
