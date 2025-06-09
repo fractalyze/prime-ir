@@ -132,6 +132,21 @@ func.func @test_lower_add_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   return %res : !Zpv
 }
 
+// CHECK-LABEL: @test_lower_double
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_double(%input : !Zp) -> !Zp {
+  // CHECK-NOT: mod_arith.double
+  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
+  // CHECK: %[[ONE:.*]] = arith.constant 1 : [[T]]
+  // CHECK: %[[SHL:.*]] = arith.shli %[[INPUT]], %[[ONE]] : [[T]]
+  // CHECK: %[[IFGE:.*]] = arith.cmpi uge, %[[SHL]], %[[CMOD]] : [[T]]
+  // CHECK: %[[SUB:.*]] = arith.subi %[[SHL]], %[[CMOD]] : [[T]]
+  // CHECK: %[[REM:.*]] = arith.select %[[IFGE]], %[[SUB]], %[[SHL]] : [[T]]
+  // CHECK: return %[[REM]] : [[T]]
+  %res = mod_arith.double %input : !Zp
+  return %res : !Zp
+}
+
 // CHECK-LABEL: @test_lower_sub
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_sub(%lhs : !Zp, %rhs : !Zp) -> !Zp {

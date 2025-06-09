@@ -143,6 +143,10 @@ LogicalResult AddOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }
 
+LogicalResult DoubleOp::verify() {
+  return verifyModArithType(*this, getResultModArithType(*this));
+}
+
 LogicalResult SubOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }

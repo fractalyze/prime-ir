@@ -257,6 +257,19 @@ def ModArith_InverseOp : ModArith_UnaryOp<"inverse"> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
+def ModArith_DoubleOp : ModArith_UnaryOp<"double"> {
+  let summary = "Modular doubling operation";
+  let description = [{
+    Computes the double of a modular type integer.
+
+    Example:
+    ```
+    %c0 = mod_arith.double %0 : !mod_arith.int<7:i4>
+    ```
+  }];
+  let hasVerifier = 1;
+}
+
 def ModArith_MontInverseOp : ModArith_UnaryOp<"mont_inverse"> {
   let summary = "Montgomery modular inverse operation";
   let description = [{

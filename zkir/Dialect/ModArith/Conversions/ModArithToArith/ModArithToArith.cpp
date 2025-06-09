@@ -506,6 +506,33 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
   }
 };
 
+struct ConvertDouble : public OpConversionPattern<DoubleOp> {
+  explicit ConvertDouble(mlir::MLIRContext *context)
+      : OpConversionPattern<DoubleOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult matchAndRewrite(
+      DoubleOp op, OpAdaptor adaptor,
+      ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    ModArithType modType = getResultModArithType(op);
+    auto intType = modType.getModulus().getType();
+
+    Value cmod = b.create<arith::ConstantOp>(modulusAttr(op));
+    Value one = b.create<arith::ConstantOp>(IntegerAttr::get(intType, 1));
+    auto shifted = b.create<arith::ShLIOp>(adaptor.getInput(), one);
+    auto ifge =
+        b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, shifted, cmod);
+    auto sub = b.create<arith::SubIOp>(shifted, cmod);
+    auto select = b.create<arith::SelectOp>(ifge, sub, shifted);
+
+    rewriter.replaceOp(op, select);
+    return success();
+  }
+};
+
 struct ConvertSub : public OpConversionPattern<SubOp> {
   explicit ConvertSub(MLIRContext *context)
       : OpConversionPattern<SubOp>(context) {}
@@ -680,6 +707,7 @@ void ModArithToArith::runOnOperation() {
       ConvertAdd,
       ConvertCmp,
       ConvertConstant,
+      ConvertDouble,
       ConvertEncapsulate,
       ConvertExtract,
       ConvertFromMont,
