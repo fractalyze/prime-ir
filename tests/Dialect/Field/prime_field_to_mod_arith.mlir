@@ -1,6 +1,8 @@
 // RUN: zkir-opt -field-to-mod-arith --split-input-file %s | FileCheck %s --enable-var-scope
 !PF1 = !field.pf<97:i32>
+!PF1m = !field.pf<97:i32, true>
 !PFv = tensor<4x!PF1>
+!PFmv = tensor<4x!PF1m>
 #root_elem = #field.pf.elem<96:i32> : !PF1
 #root = #field.root_of_unity<#root_elem, 2>
 
@@ -57,28 +59,28 @@ func.func @test_lower_extract_vec(%lhs : tensor<4x!PF1>) -> tensor<4xi32> {
 }
 
 // CHECK-LABEL: @test_lower_to_mont
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_to_mont(%lhs : !PF1) -> !PF1 {
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[Tm:.*]] {
+func.func @test_lower_to_mont(%lhs : !PF1) -> !PF1m {
   // CHECK-NOT: field.to_mont
-  // CHECK: %[[RES:.*]] = mod_arith.to_mont %[[LHS]] : [[T]]
-  %res = field.to_mont %lhs : !PF1
-  // CHECK: return %[[RES]] : [[T]]
-  return %res : !PF1
+  // CHECK: %[[RES:.*]] = mod_arith.to_mont %[[LHS]] : [[Tm]]
+  %res = field.to_mont %lhs : !PF1m
+  // CHECK: return %[[RES]] : [[Tm]]
+  return %res : !PF1m
 }
 
 // CHECK-LABEL: @test_lower_to_mont_vec
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_to_mont_vec(%lhs : !PFv) -> !PFv {
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[Tm:.*]] {
+func.func @test_lower_to_mont_vec(%lhs : !PFv) -> !PFmv {
   // CHECK-NOT: field.to_mont
-  // CHECK: %[[RES:.*]] = mod_arith.to_mont %[[LHS]] : [[T]]
-  %res = field.to_mont %lhs : !PFv
-  // CHECK: return %[[RES]] : [[T]]
-  return %res : !PFv
+  // CHECK: %[[RES:.*]] = mod_arith.to_mont %[[LHS]] : [[Tm]]
+  %res = field.to_mont %lhs : !PFmv
+  // CHECK: return %[[RES]] : [[Tm]]
+  return %res : !PFmv
 }
 
 // CHECK-LABEL: @test_lower_from_mont
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_from_mont(%lhs : !PF1) -> !PF1 {
+// CHECK-SAME: (%[[LHS:.*]]: [[Tm:.*]]) -> [[T:.*]] {
+func.func @test_lower_from_mont(%lhs : !PF1m) -> !PF1 {
   // CHECK-NOT: field.from_mont
   // CHECK: %[[RES:.*]] = mod_arith.from_mont %[[LHS]] : [[T]]
   %res = field.from_mont %lhs : !PF1
@@ -87,8 +89,8 @@ func.func @test_lower_from_mont(%lhs : !PF1) -> !PF1 {
 }
 
 // CHECK-LABEL: @test_lower_from_mont_vec
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_from_mont_vec(%lhs : !PFv) -> !PFv {
+// CHECK-SAME: (%[[LHS:.*]]: [[Tm:.*]]) -> [[T:.*]] {
+func.func @test_lower_from_mont_vec(%lhs : !PFmv) -> !PFv {
   // CHECK-NOT: field.from_mont
   // CHECK: %[[RES:.*]] = mod_arith.from_mont %[[LHS]] : [[T]]
   %res = field.from_mont %lhs : !PFv
@@ -202,7 +204,7 @@ func.func @test_lower_sub_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
 func.func @test_lower_mul() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
   %c0 = field.constant 4 : !PF1
-  // CHECK: %[[RES:.*]] = mod_arith.mont_mul %[[C0]], %[[C0]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[C0]], %[[C0]] : [[T]]
   %res = field.mul %c0, %c0 : !PF1
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PF1
@@ -212,7 +214,7 @@ func.func @test_lower_mul() -> !PF1 {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_mul_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
   // CHECK-NOT: field.mul
-  // CHECK: %[[RES:.*]] = mod_arith.mont_mul %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[LHS]], %[[RHS]] : [[T]]
   %res = field.mul %lhs, %rhs : !PFv
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PFv
@@ -223,7 +225,7 @@ func.func @test_lower_mul_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
 func.func @test_lower_square() -> !PF1 {
   // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
   %c0 = field.constant 4 : !PF1
-  // CHECK: %[[RES:.*]] = mod_arith.mont_mul %[[C0]], %[[C0]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[C0]], %[[C0]] : [[T]]
   %res = field.square %c0 : !PF1
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PF1
@@ -233,7 +235,7 @@ func.func @test_lower_square() -> !PF1 {
 // CHECK-SAME: (%[[VAL:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_square_vec(%val : !PFv) -> !PFv {
   // CHECK-NOT: field.square
-  // CHECK: %[[RES:.*]] = mod_arith.mont_mul %[[VAL]], %[[VAL]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[VAL]], %[[VAL]] : [[T]]
   %res = field.square %val : !PFv
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PFv

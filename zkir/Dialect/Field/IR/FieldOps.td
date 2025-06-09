@@ -164,7 +164,9 @@ def Field_CmpOp : Field_Op<"cmp", [SameTypeOperands, TypesMatchWith<
   let assemblyFormat = "$predicate `,` $lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
-def Field_ToMontOp : Field_UnaryOp<"to_mont"> {
+def Field_ToMontOp : Field_Op<"to_mont", [TypesMatchWith<
+  "input type is standard form of output type", "output", "input",
+  "getStandardFormType($_self)">]> {
   let summary = "Convert from standard form to montgomery representation";
   let description = [{
     Computes x * R, where `R` is the montgomery factor.
@@ -174,10 +176,15 @@ def Field_ToMontOp : Field_UnaryOp<"to_mont"> {
     %m0 = field.to_mont %c0 : !PF
     ```
   }];
+  let arguments = (ins FieldLike:$input);
+  let results = (outs FieldLike:$output);
   let hasVerifier = 1;
+  let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
-def Field_FromMontOp : Field_UnaryOp<"from_mont"> {
+def Field_FromMontOp : Field_Op<"from_mont", [TypesMatchWith<
+  "input type is montgomery form of output type", "output", "input",
+  "getMontgomeryFormType($_self)">]> {
   let summary = "Convert from montgomery representation to standard form";
   let description = [{
     Computes x * R⁻¹, where `R` is the montgomery factor.
@@ -187,7 +194,10 @@ def Field_FromMontOp : Field_UnaryOp<"from_mont"> {
     %m0 = field.from_mont %c0 : !PF
     ```
   }];
+  let arguments = (ins FieldLike:$input);
+  let results = (outs FieldLike:$output);
   let hasVerifier = 1;
+  let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
 // Field multiplicative inverse

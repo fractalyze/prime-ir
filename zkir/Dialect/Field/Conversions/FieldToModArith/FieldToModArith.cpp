@@ -280,22 +280,21 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
 
       // denominator = a₀² - a₁²β
       // TODO(batzor): Use square op instead of mul
-      auto lowSquared = b.create<mod_arith::MontMulOp>(adaptor.getInput()[0],
-                                                       adaptor.getInput()[0]);
-      auto highSquared = b.create<mod_arith::MontMulOp>(adaptor.getInput()[1],
-                                                        adaptor.getInput()[1]);
-      auto betaTimesHighSquared =
-          b.create<mod_arith::MontMulOp>(beta, highSquared);
+      auto lowSquared = b.create<mod_arith::MulOp>(adaptor.getInput()[0],
+                                                   adaptor.getInput()[0]);
+      auto highSquared = b.create<mod_arith::MulOp>(adaptor.getInput()[1],
+                                                    adaptor.getInput()[1]);
+      auto betaTimesHighSquared = b.create<mod_arith::MulOp>(beta, highSquared);
       auto denominator =
           b.create<mod_arith::SubOp>(lowSquared, betaTimesHighSquared);
       auto denominatorInv = b.create<mod_arith::MontInverseOp>(denominator);
 
       // c₀ = a₀ / denominator
       auto c0 =
-          b.create<mod_arith::MontMulOp>(adaptor.getInput()[0], denominatorInv);
+          b.create<mod_arith::MulOp>(adaptor.getInput()[0], denominatorInv);
       // c₁ = -a₁ / denominator
       auto highNegated = b.create<mod_arith::NegateOp>(adaptor.getInput()[1]);
-      auto c1 = b.create<mod_arith::MontMulOp>(highNegated, denominatorInv);
+      auto c1 = b.create<mod_arith::MulOp>(highNegated, denominatorInv);
       rewriter.replaceOpWithMultiple(op, {{c0, c1}});
       return success();
     }
@@ -438,8 +437,8 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto mul = b.create<mod_arith::MontMulOp>(adaptor.getLhs()[0],
-                                                adaptor.getRhs()[0]);
+      auto mul =
+          b.create<mod_arith::MulOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
       rewriter.replaceOp(op, mul);
       return success();
     }
@@ -452,13 +451,13 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 
       // v₀ = a₀ * b₀
       // v₁ = a₁ * b₁
-      auto v0 = b.create<mod_arith::MontMulOp>(adaptor.getLhs()[0],
-                                               adaptor.getRhs()[0]);
-      auto v1 = b.create<mod_arith::MontMulOp>(adaptor.getLhs()[1],
-                                               adaptor.getRhs()[1]);
+      auto v0 =
+          b.create<mod_arith::MulOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      auto v1 =
+          b.create<mod_arith::MulOp>(adaptor.getLhs()[1], adaptor.getRhs()[1]);
 
       // c₀ = v₀ + βv₁
-      auto betaTimesV1 = b.create<mod_arith::MontMulOp>(beta, v1);
+      auto betaTimesV1 = b.create<mod_arith::MulOp>(beta, v1);
       auto c0 = b.create<mod_arith::AddOp>(v0, betaTimesV1);
 
       // c₁ = (a₀ + a₁)(b₀ + b₁) - v₀ - v₁
@@ -466,7 +465,7 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
           b.create<mod_arith::AddOp>(adaptor.getLhs()[0], adaptor.getLhs()[1]);
       auto sumRhs =
           b.create<mod_arith::AddOp>(adaptor.getRhs()[0], adaptor.getRhs()[1]);
-      auto sumProduct = b.create<mod_arith::MontMulOp>(sumLhs, sumRhs);
+      auto sumProduct = b.create<mod_arith::MulOp>(sumLhs, sumRhs);
       Value c1 = b.create<mod_arith::SubOp>(sumProduct, v0);
       c1 = b.create<mod_arith::SubOp>(c1, v1);
 
@@ -490,8 +489,8 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto square = b.create<mod_arith::MontMulOp>(adaptor.getInput()[0],
-                                                   adaptor.getInput()[0]);
+      auto square = b.create<mod_arith::MulOp>(adaptor.getInput()[0],
+                                               adaptor.getInput()[0]);
 
       rewriter.replaceOp(op, square);
       return success();
@@ -508,22 +507,22 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
                                             adaptor.getInput()[1]);
 
       // v₁ = a₀ - βa₁
-      auto betaA1 = b.create<mod_arith::MontMulOp>(beta, adaptor.getInput()[1]);
+      auto betaA1 = b.create<mod_arith::MulOp>(beta, adaptor.getInput()[1]);
       auto v1 = b.create<mod_arith::SubOp>(adaptor.getInput()[0], betaA1);
 
       // v₂ = a₀ * a₁
-      auto v2 = b.create<mod_arith::MontMulOp>(adaptor.getInput()[0],
-                                               adaptor.getInput()[1]);
+      auto v2 = b.create<mod_arith::MulOp>(adaptor.getInput()[0],
+                                           adaptor.getInput()[1]);
 
       // v₀ = v₀ * v₁ + v₂
-      auto v0TimesV1 = b.create<mod_arith::MontMulOp>(v0, v1);
+      auto v0TimesV1 = b.create<mod_arith::MulOp>(v0, v1);
       v0 = b.create<mod_arith::AddOp>(v0TimesV1, v2);
 
       // c₁ = v₂ + v₂
       // TODO(batzor): Use double op instead of add
       auto c1 = b.create<mod_arith::AddOp>(v2, v2);
       // c₀ = v₀ + βv₂
-      auto betaV2 = b.create<mod_arith::MontMulOp>(beta, v2);
+      auto betaV2 = b.create<mod_arith::MulOp>(beta, v2);
       auto c0 = b.create<mod_arith::AddOp>(v0, betaV2);
       rewriter.replaceOpWithMultiple(op, {{c0, c1}});
       return success();
