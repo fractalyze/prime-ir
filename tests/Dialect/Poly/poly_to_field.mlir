@@ -5,7 +5,7 @@
 !poly_ty2 = !poly.polynomial<!PF1, 4>
 #elem = #field.pf.elem<6:i255>  : !PF1
 #root_of_unity = #field.root_of_unity<#elem, 2:i255>
-#root = #poly.primitive_root<root_of_unity=#root_of_unity>
+#root = #poly.primitive_root<#root_of_unity>
 
 // FIXME(batzor): without this line, the test will fail with the following error:
 // LLVM ERROR: can't create Attribute 'mlir::polynomial::IntPolynomialAttr' because storage uniquer isn't initialized: the dialect was likely not loaded, or the attribute wasn't added with addAttributes<...>() in the Dialect::initialize() method.

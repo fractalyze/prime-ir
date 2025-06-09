@@ -24,7 +24,7 @@ class ModArith_ArithOp<string mnemonic, list<Trait> traits = []> :
 // Base class for unary modular arithmetic.
 class ModArith_UnaryOp<string mnemonic, list<Trait> traits = []> :
     ModArith_ArithOp<mnemonic, traits>,
-  Arguments<(ins ModArithLike:$operand)>,
+  Arguments<(ins ModArithLike:$input)>,
   Results<(outs ModArithLike:$output)> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
@@ -131,7 +131,8 @@ def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [SameTypeOperands]> {
   let assemblyFormat = "operands attr-dict `:` type($low) `->` type($output)";
 }
 
-def ModArith_ToMontOp : ModArith_UnaryOp<"to_mont"> {
+def ModArith_ToMontOp : ModArith_Op<"to_mont", [TypesMatchWith<
+  "input type is standard form of output type", "output", "input", "getStandardFormType($_self)">]> {
   let summary = "Convert from standard form to montgomery representation";
   let description = [{
     Transforms modular type integer to the Montgomery domain.
@@ -142,10 +143,14 @@ def ModArith_ToMontOp : ModArith_UnaryOp<"to_mont"> {
     %m0 = mod_arith.to_mont %c0 : mod_arith.int<65537 : i256>
     ```
   }];
+  let arguments = (ins ModArithLike:$input);
+  let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
+  let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
-def ModArith_FromMontOp : ModArith_UnaryOp<"from_mont"> {
+def ModArith_FromMontOp : ModArith_Op<"from_mont", [TypesMatchWith<
+  "input type is montgomery form of output type", "output", "input", "getMontgomeryFormType($_self)">]> {
   let summary = "Convert from montgomery representation to standard form";
   let description = [{
     Transforms modular type integer back from the Montgomery domain.
@@ -156,7 +161,10 @@ def ModArith_FromMontOp : ModArith_UnaryOp<"from_mont"> {
     %m0 = mod_arith.from_mont %c0 : mod_arith.int<65537 : i256>
     ```
   }];
+  let arguments = (ins ModArithLike:$input);
+  let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
+  let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
 def ModArith_CmpOp : ModArith_Op<"cmp", [SameTypeOperands, TypesMatchWith<

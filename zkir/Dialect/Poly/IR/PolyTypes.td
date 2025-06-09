@@ -14,8 +14,8 @@ def Poly_PolyType : Poly_Type<"Poly", "polynomial", [MemRefElementTypeInterface]
   let description = [{
     A type for polynomials over a polynomial ring or quotient ring.
   }];
-  let parameters = (ins Field_PrimeFieldType:$base_field, "IntegerAttr":$max_degree);
-  let assemblyFormat = "`<` $base_field `,` $max_degree `>`";
+  let parameters = (ins Field_PrimeFieldType:$baseField, "IntegerAttr":$maxDegree);
+  let assemblyFormat = "`<` $baseField `,` $maxDegree `>`";
 }
 
 def PolyLike: TypeOrValueSemanticsContainer<Poly_PolyType, "poly-like">;

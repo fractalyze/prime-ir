@@ -120,11 +120,19 @@ LogicalResult MontReduceOp::verify() {
 }
 
 LogicalResult ToMontOp::verify() {
-  return verifyModArithType(*this, getResultModArithType(*this));
+  ModArithType resultType = getResultModArithType(*this);
+  if (!resultType.isMontgomery())
+    return emitOpError() << "ToMontOp result should be a Montgomery type, "
+                         << "but got " << resultType << ".";
+  return verifyModArithType(*this, resultType);
 }
 
 LogicalResult FromMontOp::verify() {
-  return verifyModArithType(*this, getResultModArithType(*this));
+  ModArithType resultType = getResultModArithType(*this);
+  if (resultType.isMontgomery())
+    return emitOpError() << "FromMontOp result should be a standard type, "
+                         << "but got " << resultType << ".";
+  return verifyModArithType(*this, resultType);
 }
 
 LogicalResult MontMulOp::verify() {

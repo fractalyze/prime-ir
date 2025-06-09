@@ -3,6 +3,7 @@
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/Dialect.h"
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 
 // Generated headers (block clang-format from messing up order)
 #include "zkir/Dialect/Field/IR/FieldDialect.h.inc"

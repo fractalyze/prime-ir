@@ -46,8 +46,21 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [MemRefElementTypeI
     !Zp3 = !mod_arith.int<536903681 : i64>
     ```
   }];
-  let parameters = (ins "IntegerAttr":$modulus);
-  let assemblyFormat = "`<` $modulus `>`";
+  let parameters = (ins
+   "IntegerAttr":$modulus,
+    DefaultValuedParameter<"bool", "false">:$isMontgomery
+  );
+  let assemblyFormat = "`<` params `>`";
+  let builders = [
+    TypeBuilder<(ins "IntegerAttr":$modulus), [{
+      return $_get(context, modulus, false);
+    }]>,
+  ];
+  let extraClassDeclaration = [{
+    bool isMontgomery() {
+      return getIsMontgomery();
+    }
+  }];
 }
 
 def ModArithLike: TypeOrValueSemanticsContainer<ModArith_ModArithType, "mod_arith-like">;

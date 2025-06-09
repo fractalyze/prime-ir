@@ -7,7 +7,7 @@
 #uni_poly = #poly.univariate_polynomial<x**6 + 1> : !poly_ty2
 #elem = #field.pf.elem<2:i32>  : !PF1
 #root_of_unity = #field.root_of_unity<#elem, 3:i32>
-#root = #poly.primitive_root<root_of_unity=#root_of_unity>
+#root = #poly.primitive_root<#root_of_unity>
 
 // CHECK-LABEL: @test_poly_syntax
 func.func @test_poly_syntax() {

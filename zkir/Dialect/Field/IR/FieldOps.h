@@ -20,6 +20,12 @@ PrimeFieldType getResultPrimeFieldType(OpType op) {
   return cast<PrimeFieldType>(getElementTypeOrSelf(op.getResult().getType()));
 }
 
+PrimeFieldAttr getAttrAsStandardForm(PrimeFieldAttr attr);
+PrimeFieldAttr getAttrAsMontgomeryForm(PrimeFieldAttr attr);
+
+Type getStandardFormType(Type type);
+Type getMontgomeryFormType(Type type);
+
 }  // namespace mlir::zkir::field
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDOPS_H_

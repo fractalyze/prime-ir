@@ -226,7 +226,8 @@ struct ConvertConvertPointType
     // TODO(chokobole): Fix below after attaching montgomery information to
     // the field type.
     Value oneBF = b.create<field::ToMontOp>(
-        baseFieldType, b.create<field::ConstantOp>(baseFieldType, 1));
+        baseFieldType, b.create<field::ConstantOp>(
+                           field::getStandardFormType(baseFieldType), 1));
 
     SmallVector<Value> outputCoords;
 
@@ -523,14 +524,16 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
         scalarFieldType.getModulus().getValue().getBitWidth();
     auto scalarIntType =
         IntegerType::get(b.getContext(), scalarBitWidth, IntegerType::Signless);
-    auto scalarReduced = b.create<field::FromMontOp>(scalarPF);
+    auto scalarReduced = b.create<field::FromMontOp>(
+        field::getStandardFormType(scalarFieldType), scalarPF);
     auto scalarInt = b.create<field::ExtractOp>(scalarIntType, scalarReduced);
 
     Type baseFieldType =
         getCurveFromPointLike(op.getPoint().getType()).getBaseField();
     auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
-    auto oneBF = b.create<field::ToMontOp>(
-        baseFieldType, b.create<field::ConstantOp>(baseFieldType, 1));
+    Value oneBF = b.create<field::ToMontOp>(
+        baseFieldType, b.create<field::ConstantOp>(
+                           field::getStandardFormType(baseFieldType), 1));
 
     Value zeroPoint =
         isa<XYZZType>(outputType)

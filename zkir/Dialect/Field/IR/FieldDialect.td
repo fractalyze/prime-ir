@@ -9,6 +9,7 @@ def Field_Dialect : Dialect {
   let cppNamespace = "::mlir::zkir::field";
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
+  let dependentDialects = ["::mlir::zkir::mod_arith::ModArithDialect"];
 }
 
 #endif // ZKIR_DIALECT_FIELD_IR_FIELDDIALECT_TD_

@@ -27,8 +27,21 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInte
     !PF1 = !field.pf<7>
     ```
   }];
-  let parameters = (ins "IntegerAttr": $modulus);
-  let assemblyFormat = "`<` $modulus `>`";
+  let parameters = (ins
+   "IntegerAttr": $modulus,
+   DefaultValuedParameter<"bool", "false">: $isMontgomery
+  );
+  let assemblyFormat = "`<` params `>`";
+  let builders = [
+    TypeBuilder<(ins "IntegerAttr":$modulus), [{
+      return $_get(context, modulus, false);
+    }]>,
+  ];
+  let extraClassDeclaration = [{
+    bool isMontgomery() {
+      return getIsMontgomery();
+    }
+  }];
 }
 
 // Quadratic extension field type definition.
@@ -39,7 +52,7 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
   let summary = "Quadratic extension field element type";
   let description = [{
     Represents an element in a quadratic extension field defined by the given
-    prime field `base_field` and the irreducible binomial `beta`.
+    prime field `baseField` and the irreducible binomial `beta`.
 
     Example:
     ```
@@ -49,10 +62,16 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
     ```
   }];
   let parameters = (ins
-   Field_PrimeFieldType: $base_field,
+   Field_PrimeFieldType: $baseField,
    "PrimeFieldAttr": $beta
   );
-  let assemblyFormat = "`<` $base_field `,` $beta `>`";
+  let assemblyFormat = "`<` $baseField `,` $beta `>`";
+  let extraClassDeclaration = [{
+    // Check if the field is in Montgomery form.
+    bool isMontgomery() {
+      return getBaseField().getIsMontgomery();
+    }
+  }];
 }
 
 def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType], "any-field-type">;

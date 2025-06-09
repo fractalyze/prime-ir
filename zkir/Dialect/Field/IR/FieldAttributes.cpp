@@ -33,6 +33,14 @@ LogicalResult PrimeFieldAttr::verify(
 LogicalResult RootOfUnityAttr::verify(
     ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
     PrimeFieldAttr root, IntegerAttr degree) {
+  if (root.getType().isMontgomery()) {
+    // NOTE(batzor): Montgomery form is not supported for root of unity because
+    // verification logic assumes standard form. Also, `PrimitiveRootAttr` in
+    // the `Poly` dialect should also handle it if we want to allow this in the
+    // future.
+    emitError() << "root of unity must be in standard form";
+    return failure();
+  }
   APInt modulus = root.getType().getModulus().getValue();
   APInt rootOfUnity = root.getValue().getValue();
   unsigned degreeValue = degree.getValue().getZExtValue();

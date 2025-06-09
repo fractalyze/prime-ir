@@ -32,6 +32,7 @@ func.func @test_lower_inverse() {
 // CHECK_TEST_INVERSE: [1324944920]
 
 !Fq = !mod_arith.int<21888242871839275222246405745257275088548364400416034343698204186575808495617 : i256>
+!Fqm = !mod_arith.int<21888242871839275222246405745257275088548364400416034343698204186575808495617 : i256, true>
 #Fq_mont = #mod_arith.montgomery<!Fq>
 
 func.func @test_lower_mont_reduce() {
@@ -58,8 +59,8 @@ func.func @test_lower_mont_reduce() {
 
 func.func @test_lower_mont_mul() {
   %p = mod_arith.constant 17221657567640823606390383439573883756117969501024189775361 : !Fq
-  %p_mont = mod_arith.to_mont %p : !Fq
-  %p_mont_sq = mod_arith.mont_mul %p_mont, %p_mont : !Fq
+  %p_mont = mod_arith.to_mont %p : !Fqm
+  %p_mont_sq = mod_arith.mont_mul %p_mont, %p_mont : !Fqm
   %p_sq = mod_arith.from_mont %p_mont_sq : !Fq
 
   %2 = mod_arith.extract %p_sq : !Fq -> i256

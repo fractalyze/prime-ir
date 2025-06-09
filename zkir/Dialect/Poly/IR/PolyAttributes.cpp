@@ -5,6 +5,7 @@
 #include "llvm/Support/ThreadPool.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::poly {
@@ -64,7 +65,7 @@ field::RootOfUnityAttr PrimitiveRootAttr::getRootOfUnity() const {
 }
 
 field::PrimeFieldAttr PrimitiveRootAttr::getRoot() const {
-  return getImpl()->rootOfUnity.getRoot();
+  return getImpl()->root;
 }
 
 field::PrimeFieldAttr PrimitiveRootAttr::getInvRoot() const {
@@ -116,6 +117,14 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
     invDegreeVal = mulMod(invDegreeVal, montgomeryR->getValue(), mod);
   }
 
+  if (montgomery != mod_arith::MontgomeryAttr()) {
+    APInt rootMontVal =
+        mulMod(root.getValue().getValue(), montgomery.getR().getValue(), mod);
+    root = field::PrimeFieldAttr::get(
+        cast<field::PrimeFieldType>(
+            field::getMontgomeryFormType(root.getType())),
+        rootMontVal);
+  }
   field::PrimeFieldAttr invDegree =
       field::PrimeFieldAttr::get(root.getType(), invDegreeVal);
   field::PrimeFieldAttr invRoot =
@@ -132,9 +141,10 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
   DenseElementsAttr rootsAttr = DenseElementsAttr::get(tensorType, roots);
   DenseElementsAttr invRootsAttr = DenseElementsAttr::get(tensorType, invRoots);
   return new (allocator.allocate<PrimitiveRootAttrStorage>())
-      PrimitiveRootAttrStorage(std::move(rootOfUnity), std::move(invDegree),
-                               std::move(invRoot), std::move(rootsAttr),
-                               std::move(invRootsAttr), std::move(montgomery));
+      PrimitiveRootAttrStorage(std::move(rootOfUnity), std::move(root),
+                               std::move(invDegree), std::move(invRoot),
+                               std::move(rootsAttr), std::move(invRootsAttr),
+                               std::move(montgomery));
 }
 
 }  // namespace detail

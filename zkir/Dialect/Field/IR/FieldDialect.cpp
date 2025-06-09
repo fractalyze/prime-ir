@@ -170,7 +170,35 @@ LogicalResult AddOp::verify() { return disallowTensorOfExtField(*this); }
 LogicalResult SubOp::verify() { return disallowTensorOfExtField(*this); }
 LogicalResult MulOp::verify() { return disallowTensorOfExtField(*this); }
 LogicalResult InverseOp::verify() { return disallowTensorOfExtField(*this); }
-LogicalResult FromMontOp::verify() { return disallowTensorOfExtField(*this); }
-LogicalResult ToMontOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult FromMontOp::verify() {
+  Type resultType = getElementTypeOrSelf(this->getOutput().getType());
+  bool isMontgomery = true;
+  if (auto pfType = dyn_cast<PrimeFieldType>(resultType)) {
+    isMontgomery = pfType.isMontgomery();
+  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(resultType)) {
+    isMontgomery = f2Type.isMontgomery();
+  }
+  if (isMontgomery) {
+    return emitOpError()
+           << "FromMontOp result should be a standard type, but got "
+           << resultType << ".";
+  }
+  return disallowTensorOfExtField(*this);
+}
+LogicalResult ToMontOp::verify() {
+  Type resultType = getElementTypeOrSelf(this->getOutput().getType());
+  bool isMontgomery = false;
+  if (auto pfType = dyn_cast<PrimeFieldType>(resultType)) {
+    isMontgomery = pfType.isMontgomery();
+  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(resultType)) {
+    isMontgomery = f2Type.isMontgomery();
+  }
+  if (!isMontgomery) {
+    return emitOpError()
+           << "ToMontOp result should be a Montgomery type, but got "
+           << resultType << ".";
+  }
+  return disallowTensorOfExtField(*this);
+}
 
 }  // namespace mlir::zkir::field
