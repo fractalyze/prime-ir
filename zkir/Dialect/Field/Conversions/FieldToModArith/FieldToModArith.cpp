@@ -136,8 +136,10 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       return success();
     } else if (auto f2Attr =
                    dyn_cast<QuadraticExtFieldAttr>(op.getValueAttr())) {
-      auto low = b.create<mod_arith::ConstantOp>(modType, f2Attr.getLow());
-      auto high = b.create<mod_arith::ConstantOp>(modType, f2Attr.getHigh());
+      auto low =
+          b.create<mod_arith::ConstantOp>(modType, f2Attr.getLow().getValue());
+      auto high =
+          b.create<mod_arith::ConstantOp>(modType, f2Attr.getHigh().getValue());
       rewriter.replaceOpWithMultiple(op, {{low, high}});
       return success();
     } else {
@@ -320,7 +322,7 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
     if (isa<QuadraticExtFieldType>(fieldType)) {
       auto c0 = b.create<mod_arith::NegateOp>(adaptor.getInput()[0]);
       auto c1 = b.create<mod_arith::NegateOp>(adaptor.getInput()[1]);
-      rewriter.replaceOp(op, {{c0, c1}});
+      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
       return success();
     }
     return failure();
@@ -632,6 +634,7 @@ void FieldToModArith::runOnOperation() {
       ConvertAny<bufferization::MaterializeInDestinationOp>,
       ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>,
+      ConvertAny<linalg::BroadcastOp>,
       ConvertAny<linalg::GenericOp>,
       ConvertAny<linalg::MapOp>,
       ConvertAny<linalg::YieldOp>,
@@ -661,6 +664,7 @@ void FieldToModArith::runOnOperation() {
       bufferization::MaterializeInDestinationOp,
       bufferization::ToMemrefOp,
       bufferization::ToTensorOp,
+      linalg::BroadcastOp,
       linalg::GenericOp,
       linalg::MapOp,
       linalg::YieldOp,

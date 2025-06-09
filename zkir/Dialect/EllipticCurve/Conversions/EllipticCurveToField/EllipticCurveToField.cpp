@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -163,17 +164,18 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
         getCurveFromPointLike(op.getInput().getType()).getBaseField();
     Value zeroBF = b.create<field::ConstantOp>(baseField, 0);
 
-    Value cmp;
+    Value isZero;
     if (isa<AffineType>(op.getInput().getType())) {
       Value xIsZero =
           b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[0], zeroBF);
       Value yIsZero =
           b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[1], zeroBF);
-      cmp = b.create<arith::AndIOp>(xIsZero, yIsZero);
+      isZero = b.create<arith::AndIOp>(xIsZero, yIsZero);
     } else {
-      cmp = b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zeroBF);
+      isZero =
+          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zeroBF);
     }
-    rewriter.replaceOp(op, cmp);
+    rewriter.replaceOp(op, isZero);
     return success();
   }
 };
@@ -228,94 +230,117 @@ struct ConvertConvertPointType
 
     SmallVector<Value> outputCoords;
 
+    auto isZero = b.create<IsZeroOp>(op.getInput());
     if (isa<AffineType>(inputType)) {
-      // affine to jacobian
-      // (x, y) -> (x, y, 1)
-      outputCoords = {/* x */ coords[0], /* y */ coords[1], oneBF};
-      if (isa<XYZZType>(outputType)) {
-        outputCoords.push_back(oneBF);
-        // affine to xyzz
-        // (x, y) -> (x, y, 1, 1)
-      }
+      auto output = b.create<scf::IfOp>(
+          isZero,
+          /*thenBuilder=*/
+          [&](OpBuilder &builder, Location loc) {
+            if (isa<JacobianType>(outputType)) {
+              // affine to jacobian
+              // (0, 0) -> (1, 1, 0)
+              builder.create<scf::YieldOp>(loc,
+                                           ValueRange{oneBF, oneBF, zeroBF});
+            } else {
+              // affine to xyzz
+              // (0, 0) -> (1, 1, 0, 0)
+              builder.create<scf::YieldOp>(
+                  loc, ValueRange{oneBF, oneBF, zeroBF, zeroBF});
+            }
+          },
+          /*elseBuilder=*/
+          [&](OpBuilder &builder, Location loc) {
+            if (isa<JacobianType>(outputType)) {
+              // affine to jacobian
+              // (x, y) -> (x, y, 1)
+              builder.create<scf::YieldOp>(
+                  loc, ValueRange{/*x=*/coords[0], /*y=*/coords[1], oneBF});
+            } else {
+              // affine to xyzz
+              // (x, y) -> (x, y, 1, 1)
+              builder.create<scf::YieldOp>(
+                  loc,
+                  ValueRange{/*x=*/coords[0], /*y=*/coords[1], oneBF, oneBF});
+            }
+          });
+      outputCoords = output.getResults();
     } else if (isa<JacobianType>(inputType)) {
-      auto zz = b.create<field::SquareOp>(/* z */ coords[2]);
-      auto zzz = b.create<field::MulOp>(zz, /* z */ coords[2]);
+      auto zz = b.create<field::SquareOp>(/*z=*/coords[2]);
+      auto zzz = b.create<field::MulOp>(zz, /*z=*/coords[2]);
 
       if (isa<AffineType>(outputType)) {
-        // jacobian to affine
-        // (x, y, z) -> (x/z², y/z³)
-        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
-                                            /* z */ coords[2], zeroBF);
-        // if z == 0, then x/z² -> 1, y/z³ -> 1
         auto output = b.create<scf::IfOp>(
-            cmpEq,
+            isZero,
             /*thenBuilder=*/
             [&](OpBuilder &builder, Location loc) {
-              builder.create<scf::YieldOp>(loc, ValueRange{oneBF, oneBF});
+              // jacobian to affine
+              // (x, y, 0) -> (0, 0)
+              builder.create<scf::YieldOp>(loc, ValueRange{zeroBF, zeroBF});
             },
             /*elseBuilder=*/
             [&](OpBuilder &builder, Location loc) {
+              // jacobian to affine
+              // (x, y, z) -> (x/z², y/z³)
               // TODO(ashjeong): use Batch Inverse
               auto zzInv = builder.create<field::InverseOp>(loc, zz);
               auto zzzInv = builder.create<field::InverseOp>(loc, zzz);
               auto newX =
-                  builder.create<field::MulOp>(loc, /* x */ coords[0], zzInv);
+                  builder.create<field::MulOp>(loc, /*x=*/coords[0], zzInv);
               auto newY =
-                  builder.create<field::MulOp>(loc, /* y */ coords[1], zzzInv);
+                  builder.create<field::MulOp>(loc, /*y=*/coords[1], zzzInv);
               builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
             });
 
-        outputCoords = {output.getResult(0), output.getResult(1)};
+        outputCoords = output.getResults();
       } else {
         // jacobian to xyzz
         // (x, y, z) -> (x, y, z², z³)
-        outputCoords = {/* x */ coords[0], /* y */ coords[1], zz, zzz};
+        outputCoords = {/*x=*/coords[0], /*y=*/coords[1], zz, zzz};
       }
     } else {
       if (isa<AffineType>(outputType)) {
-        // xyzz to affine
-        // (x, y, z², z³) -> (x/z², y/z³)
-        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
-                                            /* zz */ coords[2], zeroBF);
-        // if z == 0, then x/z² -> 1, y/z³ -> 1
-        auto ifOp = b.create<scf::IfOp>(
-            cmpEq,
+        auto output = b.create<scf::IfOp>(
+            isZero,
             /*thenBuilder=*/
             [&](OpBuilder &builder, Location loc) {
-              builder.create<scf::YieldOp>(loc, ValueRange{oneBF, oneBF});
+              // xyzz to affine
+              // (x, y, 0, 0) -> (0, 0)
+              builder.create<scf::YieldOp>(loc, ValueRange{zeroBF, zeroBF});
             },
             /*elseBuilder=*/
             [&](OpBuilder &builder, Location loc) {
+              // xyzz to affine
+              // (x, y, z², z³) -> (x/z², y/z³)
               // TODO(ashjeong): use Batch Inverse
               auto zzInv =
-                  builder.create<field::InverseOp>(loc, /* zz */ coords[2]);
+                  builder.create<field::InverseOp>(loc, /*zz=*/coords[2]);
               auto zzzInv =
-                  builder.create<field::InverseOp>(loc, /* zzz */ coords[3]);
+                  builder.create<field::InverseOp>(loc, /*zzz=*/coords[3]);
               auto newX =
-                  builder.create<field::MulOp>(loc, /* x */ coords[0], zzInv);
+                  builder.create<field::MulOp>(loc, /*x=*/coords[0], zzInv);
               auto newY =
-                  builder.create<field::MulOp>(loc, /* y */ coords[1], zzzInv);
+                  builder.create<field::MulOp>(loc, /*y=*/coords[1], zzzInv);
               builder.create<scf::YieldOp>(loc, ValueRange{newX, newY});
             });
-        outputCoords = {ifOp.getResult(0), ifOp.getResult(1)};
+        outputCoords = output.getResults();
       } else {
-        // xyzz to jacobian
-        // (x, y, z², z³) -> (x, y, z)
-        outputCoords = {/* x */ coords[0], /* y */ coords[1]};
+        outputCoords = {/*x=*/coords[0], /*y=*/coords[1]};
 
-        auto cmpEq = b.create<field::CmpOp>(arith::CmpIPredicate::eq,
-                                            /* zz */ coords[2], zeroBF);
         auto output = b.create<scf::IfOp>(
-            cmpEq,
+            isZero,
             /*thenBuilder=*/
             [&](OpBuilder &builder, Location loc) {
+              // xyzz to jacobian
+              // (x, y, 0, 0) -> (x, y, 0)
               builder.create<scf::YieldOp>(loc, ValueRange{zeroBF});
             },
             /*elseBuilder=*/
             [&](OpBuilder &builder, Location loc) {
+              // xyzz to jacobian
+              // (x, y, z², z³) -> (x, y, z)
               auto zzInv = builder.create<field::InverseOp>(loc, coords[2]);
               auto z =
-                  builder.create<field::MulOp>(loc, /* zzz */ coords[3], zzInv);
+                  builder.create<field::MulOp>(loc, /*zzz=*/coords[3], zzInv);
               builder.create<scf::YieldOp>(loc, ValueRange{z});
             });
         outputCoords.push_back(output.getResult(0));
@@ -348,9 +373,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
     Type outputType = op.getOutput().getType();
 
     // check p1 == zero point
-    Value p1isZeroCmp = b.create<elliptic_curve::IsZeroOp>(p1);
-    auto p1IsZeroOp = b.create<scf::IfOp>(
-        p1isZeroCmp,
+    Value p1IsZero = b.create<elliptic_curve::IsZeroOp>(p1);
+    auto output = b.create<scf::IfOp>(
+        p1IsZero,
         /*thenBuilder=*/
         [&](OpBuilder &builder, Location loc) {
           ImplicitLocOpBuilder b(loc, builder);
@@ -367,9 +392,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
           ImplicitLocOpBuilder b(loc, builder);
 
           // check p2 == zero point
-          Value p2isZeroCmp = b.create<elliptic_curve::IsZeroOp>(p2);
-          auto p2IsZeroOp = b.create<scf::IfOp>(
-              p2isZeroCmp,
+          Value p2isZero = b.create<elliptic_curve::IsZeroOp>(p2);
+          auto output = b.create<scf::IfOp>(
+              p2isZero,
               /*thenBuilder=*/
               [&](OpBuilder &builder, Location loc) {
                 ImplicitLocOpBuilder b(loc, builder);
@@ -397,9 +422,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
                 }
                 b.create<scf::YieldOp>(loc, sum);
               });
-          b.create<scf::YieldOp>(p2IsZeroOp.getResults());
+          b.create<scf::YieldOp>(output.getResults());
         });
-    rewriter.replaceOpWithMultiple(op, {p1IsZeroOp.getResults()});
+    rewriter.replaceOpWithMultiple(op, {output.getResults()});
     return success();
   }
 };
@@ -417,17 +442,17 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
 
     Type outputType = op.getOutput().getType();
     ValueRange coords = adaptor.getInput();
-    SmallVector<Value> sum;
+    SmallVector<Value> doubled;
 
     if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
-      sum = xyzzDouble(coords, xyzzType.getCurve(), b);
+      doubled = xyzzDouble(coords, xyzzType.getCurve(), b);
     } else if (auto jacobianType = dyn_cast<JacobianType>(outputType)) {
-      sum = jacobianDouble(coords, jacobianType.getCurve(), b);
+      doubled = jacobianDouble(coords, jacobianType.getCurve(), b);
     } else {
       assert(false && "Unsupported point type for doubling");
     }
 
-    rewriter.replaceOpWithMultiple(op, {sum});
+    rewriter.replaceOpWithMultiple(op, {doubled});
     return success();
   }
 };
@@ -591,21 +616,35 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
     unsigned numScalarMuls = pointSetType.getShape()[0];
     Type outputPointType = op.getOutput().getType();
 
-    auto idx = b.create<arith::ConstantIndexOp>(0);
-    auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{idx});
-    auto point = b.create<tensor::ExtractOp>(pointSet, ValueRange{idx});
-    Value accumulator =
-        b.create<elliptic_curve::ScalarMulOp>(outputPointType, scalar, point);
-    for (size_t i = 1; i < numScalarMuls; ++i) {
-      idx = b.create<arith::ConstantIndexOp>(i);
-      scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{idx});
-      point = b.create<tensor::ExtractOp>(pointSet, ValueRange{idx});
-      auto adder =
-          b.create<elliptic_curve::ScalarMulOp>(outputPointType, scalar, point);
-      accumulator =
-          b.create<elliptic_curve::AddOp>(outputPointType, accumulator, adder);
-    }
-    rewriter.replaceOp(op, accumulator);
+    auto zero = b.create<arith::ConstantIndexOp>(0);
+    auto one = b.create<arith::ConstantIndexOp>(1);
+    auto count = b.create<arith::ConstantIndexOp>(numScalarMuls);
+
+    auto scalar0 = b.create<tensor::ExtractOp>(scalars, ValueRange{zero});
+    auto point0 = b.create<tensor::ExtractOp>(pointSet, ValueRange{zero});
+    Value initial =
+        b.create<elliptic_curve::ScalarMulOp>(outputPointType, scalar0, point0);
+
+    auto forOp = b.create<scf::ForOp>(
+        one, count, one,  // induction variable: 1 to numScalarMuls
+        ValueRange{initial},
+        [&](OpBuilder &nestedBuilder, Location nestedLoc, Value iv,
+            ValueRange args) {
+          ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
+          Value acc = args.front();
+
+          auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{iv});
+          auto point = b.create<tensor::ExtractOp>(pointSet, ValueRange{iv});
+
+          auto mul = b.create<elliptic_curve::ScalarMulOp>(outputPointType,
+                                                           scalar, point);
+
+          auto sum = b.create<elliptic_curve::AddOp>(outputPointType, acc, mul);
+
+          b.create<scf::YieldOp>(ValueRange{sum});
+        });
+
+    rewriter.replaceOp(op, forOp.getResult(0));
     return success();
   }
 };
@@ -645,6 +684,10 @@ void EllipticCurveToField::runOnOperation() {
       ConvertPoint,
       ConvertScalarMul,
       ConvertSub,
+      ConvertAny<bufferization::MaterializeInDestinationOp>,
+      ConvertAny<bufferization::ToMemrefOp>,
+      ConvertAny<bufferization::ToTensorOp>,
+      ConvertAny<linalg::BroadcastOp>,
       ConvertAny<memref::LoadOp>,
       ConvertAny<memref::StoreOp>,
       ConvertAny<tensor::ExtractOp>,
@@ -653,6 +696,10 @@ void EllipticCurveToField::runOnOperation() {
       >(typeConverter, context);
   target.addDynamicallyLegalOp<
       // clang-format off
+      bufferization::MaterializeInDestinationOp,
+      bufferization::ToMemrefOp,
+      bufferization::ToTensorOp,
+      linalg::BroadcastOp,
       memref::LoadOp,
       memref::StoreOp,
       tensor::ExtractOp,
