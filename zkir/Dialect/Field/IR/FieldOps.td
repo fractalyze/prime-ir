@@ -38,7 +38,7 @@ class Field_BinaryOp<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def Field_ConstantOp : Op<Field_Dialect, "constant", [Pure]> {
+def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
   let summary = "Define a constant prime field element via an attribute";
   let description = [{
     Example:
@@ -49,6 +49,7 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [Pure]> {
   let arguments = (ins TypedAttrInterface:$value);
   let results = (outs FieldLike:$output);
   let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
   let builders = [
     OpBuilder<(ins "Type":$ty, "uint64_t":$value), [{
       if (auto pfType = dyn_cast<PrimeFieldType>(ty)) {

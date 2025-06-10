@@ -38,7 +38,7 @@ class ModArith_BinaryOp<string mnemonic, list<Trait> traits = []> :
   let hasVerifier = 1;
 }
 
-def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [Pure]> {
+def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [ConstantLike, Pure]> {
   let summary = "Define a constant value via an attribute.";
   let description = [{
     Example:
@@ -50,6 +50,7 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [Pure]> {
   let arguments = (ins TypedAttrInterface:$value);
   let results = (outs ModArithLike:$output);
   let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
 }
 
 // type conversion operations

@@ -188,10 +188,13 @@ func.func @test_scalar_mul() {
 }
 
 func.func @test_msm() {
+  %c_var1 = arith.constant 1 : i32
+  %c_var5 = arith.constant 5 : i32
   %var1 = field.constant 1 : !PFm
   %var5 = field.constant 5 : !PFm
 
-  %scalars = tensor.from_elements %var1, %var5, %var5 : tensor<3x!PFm>
+  %c_scalars = tensor.from_elements %c_var1, %c_var5, %c_var5 : tensor<3xi32>
+  %scalars = field.pf.encapsulate %c_scalars : tensor<3xi32> -> tensor<3x!PFm>
   %affine1 = elliptic_curve.point %var1, %var5 : !affine
   %points = tensor.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
   %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PFm>, tensor<3x!affine> -> !jacobian

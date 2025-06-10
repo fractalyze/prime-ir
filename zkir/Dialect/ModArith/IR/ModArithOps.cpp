@@ -135,6 +135,10 @@ LogicalResult MacOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }
 
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  return adaptor.getValue();
+}
+
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt parsedInt;
   Type parsedType;

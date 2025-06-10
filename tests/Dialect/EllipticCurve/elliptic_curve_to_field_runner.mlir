@@ -23,16 +23,17 @@ func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interf
 
 // CHECK-LABEL: @test_ops_in_order
 func.func @test_ops_in_order() {
-  %c1 = field.constant 1 : !PF
-  %c2 = field.constant 2 : !PF
+  %c1 = arith.constant 1 : i256
+  %c2 = arith.constant 2 : i256
 
   %c7 = field.constant 7 : !SF
 
   %index1 = arith.constant 0 : index
   %index2 = arith.constant 1 : index
 
-  %c_tensor = tensor.from_elements %c1, %c2: tensor<2x!PF>
-  %c_mont_tensor = field.to_mont %c_tensor : tensor<2x!PFm>
+  %c_tensor = tensor.from_elements %c1, %c2: tensor<2xi256>
+  %f_tensor = field.pf.encapsulate %c_tensor : tensor<2xi256> -> tensor<2x!PF>
+  %c_mont_tensor = field.to_mont %f_tensor : tensor<2x!PFm>
   %var1 = tensor.extract %c_mont_tensor[%index1] : tensor<2x!PFm>
   %var2 = tensor.extract %c_mont_tensor[%index2] : tensor<2x!PFm>
   %var7 = field.to_mont %c7 : !SFm

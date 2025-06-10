@@ -88,6 +88,10 @@ Type getMontgomeryFormType(Type type) {
   }
 }
 
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  return adaptor.getValue();
+}
+
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<APInt> parsedInt;
   Type parsedType;
