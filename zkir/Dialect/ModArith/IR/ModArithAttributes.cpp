@@ -77,6 +77,49 @@ MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
 
 }  // namespace detail
 
+ModArithType BYAttr::getModType() const { return getImpl()->modType; }
+IntegerAttr BYAttr::getDivsteps() const { return getImpl()->divsteps; }
+IntegerAttr BYAttr::getMInv() const { return getImpl()->mInv; }
+IntegerAttr BYAttr::getNewBitWidth() const { return getImpl()->newBitWidth; }
+
+namespace detail {
+
+// static
+BYAttrStorage *BYAttrStorage::construct(AttributeStorageAllocator &allocator,
+                                        KeyTy &&key) {
+  ModArithType modType = key;
+  APInt modulus = modType.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  // `divsteps` determine the number of steps we will batch into one jump step.
+  // Assuming 12 batches, divsteps * 12 should exceed the bound, which is a
+  // sufficient number of total iterations to calculate GCD.
+  // Refer to Section 12 of Bernstein and Yang's Fast constant-time gcd
+  // computation and modular inversion
+  // (https://gcd.cr.yp.to/safegcd-20190305.pdf).
+  unsigned bound =
+      bitWidth < 46 ? (49 * bitWidth + 80) / 17 : (49 * bitWidth + 57) / 17;
+  unsigned divsteps = 0;
+  while (12 * divsteps <= bound) {
+    divsteps++;
+  }
+
+  // need one extra limb to properly store the intermediate results
+  bitWidth += APInt::APINT_BITS_PER_WORD;
+
+  APInt mask = APInt::getOneBitSet(bitWidth, divsteps);
+  APInt mInv =
+      multiplicativeInverse(modulus.zextOrTrunc(bitWidth).urem(mask), mask);
+
+  auto intType = IntegerType::get(modType.getContext(), bitWidth);
+  auto divstepsAttr = IntegerAttr::get(intType, divsteps);
+  auto mInvAttr = IntegerAttr::get(intType, mInv);
+  auto newBitWidthAttr = IntegerAttr::get(intType, bitWidth);
+  return new (allocator.allocate<BYAttrStorage>())
+      BYAttrStorage(std::move(modType), std::move(divstepsAttr),
+                    std::move(mInvAttr), std::move(newBitWidthAttr));
+}
+
+}  // namespace detail
 }  // namespace mlir::zkir::mod_arith
 
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"

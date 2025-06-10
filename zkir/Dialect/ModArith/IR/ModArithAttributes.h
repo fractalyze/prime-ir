@@ -37,6 +37,33 @@ struct MontgomeryAttrStorage : public AttributeStorage {
   IntegerAttr rSquared;
 };
 
+struct BYAttrStorage : public AttributeStorage {
+  using KeyTy = ModArithType;
+
+  BYAttrStorage(ModArithType modType, IntegerAttr divsteps, IntegerAttr mInv,
+                IntegerAttr newBitWidth)
+      : modType(std::move(modType)),
+        divsteps(std::move(divsteps)),
+        mInv(std::move(mInv)),
+        newBitWidth(std::move(newBitWidth)) {}
+
+  KeyTy getAsKey() const { return KeyTy(modType); }
+
+  bool operator==(const KeyTy &key) const { return key == KeyTy(modType); }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(key);
+  }
+
+  static BYAttrStorage *construct(AttributeStorageAllocator &allocator,
+                                  KeyTy &&key);
+
+  ModArithType modType;
+  IntegerAttr divsteps;
+  IntegerAttr mInv;
+  IntegerAttr newBitWidth;
+};
+
 }  // namespace mlir::zkir::mod_arith::detail
 
 #define GET_ATTRDEF_CLASSES
