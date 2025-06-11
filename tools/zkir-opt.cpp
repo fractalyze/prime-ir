@@ -33,6 +33,12 @@ int main(int argc, char **argv) {
   mlir::zkir::elliptic_curve::registerEllipticCurveToFieldPasses();
 
   mlir::PassPipelineRegistration<>(
+      "field-to-llvm", "Run passes to lower the field dialect to LLVM",
+      mlir::zkir::pipelines::fieldToLLVMPipelineBuilder<false>);
+  mlir::PassPipelineRegistration<>(
+      "field-to-omp", "Run passes to lower the field dialect to OpenMP + LLVM",
+      mlir::zkir::pipelines::fieldToLLVMPipelineBuilder<true>);
+  mlir::PassPipelineRegistration<>(
       "poly-to-llvm", "Run passes to lower the polynomial dialect to LLVM",
       mlir::zkir::pipelines::polyToLLVMPipelineBuilder<false>);
   mlir::PassPipelineRegistration<>(
@@ -42,7 +48,11 @@ int main(int argc, char **argv) {
   mlir::PassPipelineRegistration<>(
       "elliptic-curve-to-llvm",
       "Run passes to lower the elliptic curve dialect to LLVM",
-      mlir::zkir::pipelines::ellipticCurveToLLVMPipelineBuilder);
+      mlir::zkir::pipelines::ellipticCurveToLLVMPipelineBuilder<false>);
+  mlir::PassPipelineRegistration<>(
+      "elliptic-curve-to-omp",
+      "Run passes to lower the elliptic curve dialect to OpenMP + LLVM",
+      mlir::zkir::pipelines::ellipticCurveToLLVMPipelineBuilder<true>);
 
   return failed(mlir::MlirOptMain(argc, argv, "ZKIR optimizer\n", registry));
 }

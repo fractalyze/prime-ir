@@ -1,4 +1,4 @@
-// RUN: zkir-opt -elliptic-curve-to-field --split-input-file %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -convert-linalg-to-parallel-loops -elliptic-curve-to-field --split-input-file %s | FileCheck %s --enable-var-scope
 
 !PF = !field.pf<97:i32>
 !PFm = !field.pf<97:i32, true>
@@ -188,10 +188,13 @@ func.func @test_scalar_mul() {
 }
 
 func.func @test_msm() {
+  %c_var1 = arith.constant 1 : i32
+  %c_var5 = arith.constant 5 : i32
   %var1 = field.constant 1 : !PFm
   %var5 = field.constant 5 : !PFm
 
-  %scalars = tensor.from_elements %var1, %var5, %var5 : tensor<3x!PFm>
+  %c_scalars = tensor.from_elements %c_var1, %c_var5, %c_var5 : tensor<3xi32>
+  %scalars = field.pf.encapsulate %c_scalars : tensor<3xi32> -> tensor<3x!PFm>
   %affine1 = elliptic_curve.point %var1, %var5 : !affine
   %points = tensor.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
   %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PFm>, tensor<3x!affine> -> !jacobian
@@ -200,6 +203,12 @@ func.func @test_msm() {
 
 func.func @test_g2_msm(%scalars: tensor<3x!PFm>, %points: tensor<3x!g2affine>) {
   %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PFm>, tensor<3x!g2affine> -> !g2jacobian
+  return
+}
+
+func.func @test_msm_by_dot_product(%scalars: tensor<3x!PF>, %points: tensor<3x!g2jacobian>) {
+  %result = tensor.empty() : tensor<!g2jacobian>
+  %msm_result = linalg.dot ins(%scalars, %points : tensor<3x!PF>, tensor<3x!g2jacobian>) outs(%result: tensor<!g2jacobian>) -> tensor<!g2jacobian>
   return
 }
 

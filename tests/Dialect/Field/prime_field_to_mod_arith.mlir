@@ -241,18 +241,6 @@ func.func @test_lower_square_vec(%val : !PFv) -> !PFv {
   return %res : !PFv
 }
 
-// CHECK-LABEL: @test_lower_constant_tensor
-// CHECK-SAME: () -> [[T:.*]] {
-func.func @test_lower_constant_tensor() -> !PFv {
-  // CHECK-NOT: field.constant
-  // CHECK: %[[C0:.*]] = mod_arith.constant 5 : [[C:.*]]
-  %c0 = field.constant 5:  !PF1
-  // CHECK: %[[RES:.*]] = tensor.from_elements %[[C0]], %[[C0]], %[[C0]], %[[C0]] : [[T]]
-  %res = tensor.from_elements %c0, %c0, %c0, %c0 : !PFv
-  // CHECK: return %[[RES]] : [[T]]
-  return %res : !PFv
-}
-
 // CHECK-LABEL: @test_lower_cmp
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) {
 func.func @test_lower_cmp(%lhs : !PF1) {

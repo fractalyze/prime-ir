@@ -44,59 +44,24 @@ void oneShotBufferize(OpPassManager &manager) {
   manager.addPass(createCanonicalizerPass());
 }
 
+template <bool allowOpenMP>
 void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
+  manager.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
   manager.addPass(elliptic_curve::createEllipticCurveToField());
-  manager.addPass(field::createFieldToModArith());
-  manager.addPass(mod_arith::createModArithToArith());
-  manager.addPass(createCanonicalizerPass());
-
-  // Linalg
-  manager.addNestedPass<FuncOp>(createConvertElementwiseToLinalgPass());
-  // Needed to lower affine.map and affine.apply
-  manager.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
-  manager.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
-  manager.addPass(createLowerAffinePass());
-  manager.addNestedPass<FuncOp>(memref::createExpandOpsPass());
-  manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
-
-  // Bufferize
-  oneShotBufferize(manager);
-
-  // Linalg must be bufferized before it can be lowered
-  // But lowering to loops also re-introduces affine.apply, so re-lower that
-  manager.addNestedPass<FuncOp>(createConvertLinalgToLoopsPass());
-  manager.addPass(createLowerAffinePass());
-  manager.addPass(createConvertBufferizationToMemRefPass());
-
-  // Cleanup
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(createSCCPPass());
-  manager.addPass(createCSEPass());
-  manager.addPass(createSymbolDCEPass());
-
-  // ToLLVM
-  manager.addPass(arith::createArithExpandOpsPass());
-  manager.addPass(createSCFToControlFlowPass());
-  manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
-
-  // expand strided metadata will create affine map. Needed to lower affine.map
-  // and affine.apply
-  manager.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
-  manager.addNestedPass<FuncOp>(affine::createSimplifyAffineStructuresPass());
-  manager.addPass(createLowerAffinePass());
-  manager.addPass(createConvertToLLVMPass());
-
-  // Cleanup
-  manager.addPass(createCanonicalizerPass());
-  manager.addPass(createSCCPPass());
-  manager.addPass(createCSEPass());
-  manager.addPass(createSymbolDCEPass());
+  fieldToLLVMPipelineBuilder<allowOpenMP>(manager);
 }
 
 template <bool allowOpenMP>
 void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(poly::createPolyToField());
+  fieldToLLVMPipelineBuilder<allowOpenMP>(manager);
+}
+
+template <bool allowOpenMP>
+void fieldToLLVMPipelineBuilder(OpPassManager &manager) {
+  manager.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
   manager.addPass(field::createFieldToModArith());
+  manager.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
   manager.addPass(mod_arith::createModArithToArith());
   // FIXME(batzor): With this, some memref loads are canonicalized even though
   // it was modified in the middle, causing `poly_ntt_runner` test to fail.
@@ -151,7 +116,11 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(createSymbolDCEPass());
 }
 
+template void fieldToLLVMPipelineBuilder<false>(OpPassManager &manager);
+template void fieldToLLVMPipelineBuilder<true>(OpPassManager &manager);
 template void polyToLLVMPipelineBuilder<false>(OpPassManager &manager);
 template void polyToLLVMPipelineBuilder<true>(OpPassManager &manager);
+template void ellipticCurveToLLVMPipelineBuilder<false>(OpPassManager &manager);
+template void ellipticCurveToLLVMPipelineBuilder<true>(OpPassManager &manager);
 
 }  // namespace mlir::zkir::pipelines

@@ -9,6 +9,7 @@ cc_library(
     name = "EllipticCurve",
     srcs = [
         "EllipticCurveDialect.cpp",
+        "EllipticCurveOps.cpp",
     ],
     hdrs = [
         "EllipticCurveAttributes.h",
