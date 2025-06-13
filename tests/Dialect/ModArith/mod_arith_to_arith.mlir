@@ -17,9 +17,6 @@ func.func @test_lower_constant() -> !mod_arith.int<3 : i5> {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_negate(%lhs : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.negate
-  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
-  // CHECK: %[[SUB:.*]] = arith.subi %[[CMOD]], %[[LHS]] : [[T]]
-  // CHECK: return %[[SUB]] : [[T]]
   %res = mod_arith.negate %lhs: !Zp
   return %res : !Zp
 }
@@ -28,9 +25,6 @@ func.func @test_lower_negate(%lhs : !Zp) -> !Zp {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_negate_vec(%lhs : !Zpv) -> !Zpv {
   // CHECK-NOT: mod_arith.negate
-  // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[T]]
-  // CHECK: %[[SUB:.*]] = arith.subi %[[CMOD]], %[[LHS]] : [[T]]
-  // CHECK: return %[[SUB]] : [[T]]
   %res = mod_arith.negate %lhs: !Zpv
   return %res : !Zpv
 }

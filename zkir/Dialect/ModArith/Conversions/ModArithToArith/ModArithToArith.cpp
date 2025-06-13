@@ -144,9 +144,21 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    Type intType = modulusType(op);
+    Value zero;
+    if (isa<ShapedType>(intType)) {
+      zero = b.create<arith::ConstantOp>(SplatElementsAttr::get(
+          cast<ShapedType>(intType),
+          IntegerAttr::get(getElementTypeOrSelf(intType), 0)));
+    } else {
+      zero = b.create<arith::ConstantOp>(IntegerAttr::get(intType, 0));
+    }
+    auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::eq,
+                                       adaptor.getInput(), zero);
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
     auto sub = b.create<arith::SubIOp>(cmod, adaptor.getInput());
-    rewriter.replaceOp(op, sub);
+    auto result = b.create<arith::SelectOp>(cmp, adaptor.getInput(), sub);
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
