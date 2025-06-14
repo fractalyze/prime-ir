@@ -7,6 +7,7 @@
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/Transforms.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
@@ -626,8 +627,13 @@ void FieldToModArith::runOnOperation() {
       ConvertAny<linalg::MapOp>,
       ConvertAny<linalg::YieldOp>,
       ConvertAny<memref::AllocOp>,
+      ConvertAny<memref::CastOp>,
+      ConvertAny<memref::CopyOp>,
       ConvertAny<memref::LoadOp>,
       ConvertAny<memref::StoreOp>,
+      ConvertAny<memref::SubViewOp>,
+      ConvertAny<memref::ViewOp>,
+      ConvertAny<sparse_tensor::AssembleOp>,
       ConvertAny<tensor::CastOp>,
       ConvertAny<tensor::ConcatOp>,
       ConvertAny<tensor::EmptyOp>,
@@ -658,8 +664,13 @@ void FieldToModArith::runOnOperation() {
       linalg::MapOp,
       linalg::YieldOp,
       memref::AllocOp,
+      memref::CastOp,
+      memref::CopyOp,
       memref::LoadOp,
       memref::StoreOp,
+      memref::SubViewOp,
+      memref::ViewOp,
+      sparse_tensor::AssembleOp,
       tensor::CastOp,
       tensor::ConcatOp,
       tensor::EmptyOp,
