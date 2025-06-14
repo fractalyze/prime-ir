@@ -9,6 +9,25 @@ Type ShapedTypeConverter::convertShapedType(ShapedType oldType,
                                             ArrayRef<int64_t> shape,
                                             Type elementType) {
   if (auto memrefType = dyn_cast<MemRefType>(oldType)) {
+    if (memrefType.getShape().size() != shape.size()) {
+      assert(memrefType.getShape().size() + 1 == shape.size());
+      int64_t newDimension = shape.back();
+      SmallVector<int64_t> strides;
+      int64_t offset;
+      assert(succeeded(memrefType.getStridesAndOffset(strides, offset)));
+      for (int64_t &stride : strides) {
+        stride *= newDimension;
+      }
+      strides.push_back(1);
+      auto layout = StridedLayoutAttr::get(memrefType.getContext(),
+                                           offset * newDimension, strides);
+      return MemRefType::get(shape, elementType, layout,
+                             memrefType.getMemorySpace())
+          .canonicalizeStridedLayout();
+    } else {
+      return MemRefType::get(shape, elementType, memrefType.getLayout(),
+                             memrefType.getMemorySpace());
+    }
     return MemRefType::get(shape, elementType);
   } else if (auto tensorType = dyn_cast<RankedTensorType>(oldType)) {
     return tensorType.cloneWith(shape, elementType);

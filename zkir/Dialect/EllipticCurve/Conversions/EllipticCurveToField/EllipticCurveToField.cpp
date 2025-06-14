@@ -637,6 +637,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertAny<memref::AllocOp>,
       ConvertAny<memref::LoadOp>,
       ConvertAny<memref::StoreOp>,
+      ConvertAny<memref::SubViewOp>,
       ConvertAny<tensor::ExtractOp>,
       ConvertAny<tensor::FromElementsOp>
       // clang-format on
@@ -650,6 +651,7 @@ void EllipticCurveToField::runOnOperation() {
       memref::AllocOp,
       memref::LoadOp,
       memref::StoreOp,
+      memref::SubViewOp,
       tensor::ExtractOp,
       tensor::FromElementsOp
       // clang-format on

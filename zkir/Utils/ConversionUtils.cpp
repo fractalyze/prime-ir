@@ -29,6 +29,7 @@
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "mlir/include/mlir/Interfaces/ViewLikeInterface.h"
 
 namespace mlir::zkir {
 
@@ -65,6 +66,43 @@ LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
   SmallVector<Value> flatOperands;
   for (auto operand : operands) {
     flatOperands.append(operand.begin(), operand.end());
+  }
+
+  if (auto offsetSizeAndStrideOp =
+          dyn_cast<OffsetSizeAndStrideOpInterface>(op)) {
+    auto newShapedType = cast<ShapedType>(newResultTypes[0]);
+    auto oldShapedType = cast<ShapedType>(op->getResultTypes()[0]);
+    if (oldShapedType.getRank() != newShapedType.getRank()) {
+      SmallVector<NamedAttribute> newAttrs;
+      for (const auto &attr : op->getAttrs()) {
+        if (attr.getName() == "static_offsets") {
+          ArrayRef<int64_t> offsets = offsetSizeAndStrideOp.getStaticOffsets();
+          SmallVector<int64_t> newOffsets(offsets);
+          newOffsets.push_back(0);
+          newAttrs.push_back(rewriter.getNamedAttr(
+              attr.getName(), rewriter.getDenseI64ArrayAttr(newOffsets)));
+        } else if (attr.getName() == "static_sizes") {
+          ArrayRef<int64_t> sizes = offsetSizeAndStrideOp.getStaticSizes();
+          SmallVector<int64_t> newSizes(sizes);
+          newSizes.push_back(newShapedType.getShape().back());
+          newAttrs.push_back(rewriter.getNamedAttr(
+              attr.getName(), rewriter.getDenseI64ArrayAttr(newSizes)));
+        } else if (attr.getName() == "static_strides") {
+          ArrayRef<int64_t> strides = offsetSizeAndStrideOp.getStaticStrides();
+          SmallVector<int64_t> newStrides(strides);
+          newStrides.push_back(1);
+          newAttrs.push_back(rewriter.getNamedAttr(
+              attr.getName(), rewriter.getDenseI64ArrayAttr(newStrides)));
+        } else {
+          newAttrs.push_back(attr);
+        }
+      }
+      Operation *newOp = rewriter.create(OperationState(
+          op->getLoc(), op->getName().getStringRef(), flatOperands,
+          newResultTypes, newAttrs, op->getSuccessors(), regions));
+      rewriter.replaceOp(op, newOp);
+      return success();
+    }
   }
 
   // If the op is tensor.extract, and the type conversion is 1:N, the return
