@@ -1,0 +1,35 @@
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "Pippengers",
+    srcs = ["Pippengers.cpp"],
+    hdrs = ["Pippengers.h"],
+    deps = [
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//zkir/Dialect/Field/IR:Field",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:MemRefDialect",
+        "@llvm-project//mlir:SCFDialect",
+    ],
+)
+
+cc_library(
+    name = "Generic",
+    srcs = ["Generic.cpp"],
+    hdrs = ["Generic.h"],
+    deps = [
+        ":Pippengers",
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//zkir/Dialect/Field/IR:Field",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:MemRefDialect",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)

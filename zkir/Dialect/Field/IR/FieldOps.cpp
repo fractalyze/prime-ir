@@ -39,14 +39,13 @@ PrimeFieldAttr getAttrAsMontgomeryForm(PrimeFieldAttr attr) {
 }
 
 Type getStandardFormType(Type type) {
-  Type standardType = type;
-  if (auto pfType = dyn_cast<PrimeFieldType>(getElementTypeOrSelf(type))) {
+  Type standardType = getElementTypeOrSelf(type);
+  if (auto pfType = dyn_cast<PrimeFieldType>(standardType)) {
     if (pfType.isMontgomery()) {
       standardType =
           PrimeFieldType::get(type.getContext(), pfType.getModulus());
     }
-  } else if (auto f2Type =
-                 dyn_cast<QuadraticExtFieldType>(getElementTypeOrSelf(type))) {
+  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(standardType)) {
     if (f2Type.getBaseField().isMontgomery()) {
       auto pfType = PrimeFieldType::get(type.getContext(),
                                         f2Type.getBaseField().getModulus());
@@ -64,14 +63,13 @@ Type getStandardFormType(Type type) {
 }
 
 Type getMontgomeryFormType(Type type) {
-  Type montType = type;
-  if (auto pfType = dyn_cast<PrimeFieldType>(getElementTypeOrSelf(type))) {
+  Type montType = getElementTypeOrSelf(type);
+  if (auto pfType = dyn_cast<PrimeFieldType>(montType)) {
     if (!pfType.isMontgomery()) {
       montType =
           PrimeFieldType::get(type.getContext(), pfType.getModulus(), true);
     }
-  } else if (auto f2Type =
-                 dyn_cast<QuadraticExtFieldType>(getElementTypeOrSelf(type))) {
+  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(montType)) {
     if (!f2Type.isMontgomery()) {
       auto pfType = PrimeFieldType::get(
           type.getContext(), f2Type.getBaseField().getModulus(), true);

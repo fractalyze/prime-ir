@@ -11,6 +11,7 @@
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Generic.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Add.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Double.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/XYZZ/Add.h"
@@ -160,9 +161,9 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ValueRange coords = adaptor.getInput();
-    Type baseField =
+    Type baseFieldType =
         getCurveFromPointLike(op.getInput().getType()).getBaseField();
-    Value zeroBF = b.create<field::ConstantOp>(baseField, 0);
+    Value zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
 
     Value isZero;
     if (isa<AffineType>(op.getInput().getType())) {
@@ -267,8 +268,6 @@ struct ConvertConvertPointType
       outputCoords = output.getResults();
     } else if (isa<JacobianType>(inputType)) {
       auto zz = b.create<field::SquareOp>(/*z=*/coords[2]);
-      auto zzz = b.create<field::MulOp>(zz, /*z=*/coords[2]);
-
       if (isa<AffineType>(outputType)) {
         auto output = b.create<scf::IfOp>(
             isZero,
@@ -283,8 +282,10 @@ struct ConvertConvertPointType
               // jacobian to affine
               // (x, y, z) -> (x/z², y/z³)
               // TODO(ashjeong): use Batch Inverse
-              auto zzInv = builder.create<field::InverseOp>(loc, zz);
-              auto zzzInv = builder.create<field::InverseOp>(loc, zzz);
+              auto zzInv = b.create<field::InverseOp>(zz);
+              auto zzzzInv = b.create<field::SquareOp>(loc, zzInv);
+              auto zzzInv =
+                  builder.create<field::MulOp>(loc, zzzzInv, /*z=*/coords[2]);
               auto newX =
                   builder.create<field::MulOp>(loc, /*x=*/coords[0], zzInv);
               auto newY =
@@ -294,6 +295,7 @@ struct ConvertConvertPointType
 
         outputCoords = output.getResults();
       } else {
+        auto zzz = b.create<field::MulOp>(zz, /*z=*/coords[2]);
         // jacobian to xyzz
         // (x, y, z) -> (x, y, z², z³)
         outputCoords = {/*x=*/coords[0], /*y=*/coords[1], zz, zzz};
@@ -313,10 +315,11 @@ struct ConvertConvertPointType
               // xyzz to affine
               // (x, y, z², z³) -> (x/z², y/z³)
               // TODO(ashjeong): use Batch Inverse
-              auto zzInv =
-                  builder.create<field::InverseOp>(loc, /*zz=*/coords[2]);
               auto zzzInv =
                   builder.create<field::InverseOp>(loc, /*zzz=*/coords[3]);
+              auto zInv =
+                  builder.create<field::MulOp>(loc, zzzInv, /*zz=*/coords[2]);
+              auto zzInv = builder.create<field::SquareOp>(loc, zInv);
               auto newX =
                   builder.create<field::MulOp>(loc, /*x=*/coords[0], zzInv);
               auto newY =
@@ -524,16 +527,23 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
         scalarFieldType.getModulus().getValue().getBitWidth();
     auto scalarIntType =
         IntegerType::get(b.getContext(), scalarBitWidth, IntegerType::Signless);
-    auto scalarReduced = b.create<field::FromMontOp>(
-        field::getStandardFormType(scalarFieldType), scalarPF);
+    Value scalarReduced =
+        scalarFieldType.isMontgomery()
+            ? b.create<field::FromMontOp>(
+                  field::getStandardFormType(scalarFieldType), scalarPF)
+            : scalarPF;
     auto scalarInt = b.create<field::ExtractOp>(scalarIntType, scalarReduced);
 
     Type baseFieldType =
         getCurveFromPointLike(op.getPoint().getType()).getBaseField();
     auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
-    Value oneBF = b.create<field::ToMontOp>(
-        baseFieldType, b.create<field::ConstantOp>(
-                           field::getStandardFormType(baseFieldType), 1));
+    Value oneBF = field::isMontgomery(baseFieldType)
+                      ? b.create<field::ToMontOp>(
+                             baseFieldType,
+                             b.create<field::ConstantOp>(
+                                 field::getStandardFormType(baseFieldType), 1))
+                            .getResult()
+                      : b.create<field::ConstantOp>(baseFieldType, 1);
 
     Value zeroPoint =
         isa<XYZZType>(outputType)
@@ -598,6 +608,7 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
   }
 };
 
+// Currently implements Pippenger's
 struct ConvertMSM : public OpConversionPattern<MSMOp> {
   explicit ConvertMSM(mlir::MLIRContext *context)
       : OpConversionPattern<MSMOp>(context) {}
@@ -609,45 +620,18 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // point set
-    // |(x1, y1, z1), (x2, y2, z2)|
-    Value pointSet = op.getPoints();
-    // tensor of PF, e.g.:
-    // | s1 , s2 |
     Value scalars = op.getScalars();
-    RankedTensorType pointSetType = cast<RankedTensorType>(pointSet.getType());
-    unsigned numScalarMuls = pointSetType.getShape()[0];
-    Type outputPointType = op.getOutput().getType();
+    Value points = op.getPoints();
 
-    auto zero = b.create<arith::ConstantIndexOp>(0);
-    auto one = b.create<arith::ConstantIndexOp>(1);
-    auto count = b.create<arith::ConstantIndexOp>(numScalarMuls);
+    Type baseFieldType =
+        cast<RankedTensorType>(adaptor.getPoints()[0].getType())
+            .getElementType();
 
-    auto scalar0 = b.create<tensor::ExtractOp>(scalars, ValueRange{zero});
-    auto point0 = b.create<tensor::ExtractOp>(pointSet, ValueRange{zero});
-    Value initial =
-        b.create<elliptic_curve::ScalarMulOp>(outputPointType, scalar0, point0);
+    Type outputType = op.getOutput().getType();
 
-    auto forOp = b.create<scf::ForOp>(
-        one, count, one,  // induction variable: 1 to numScalarMuls
-        ValueRange{initial},
-        [&](OpBuilder &nestedBuilder, Location nestedLoc, Value iv,
-            ValueRange args) {
-          ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
-          Value acc = args.front();
+    PippengersGeneric pippengers(scalars, points, baseFieldType, outputType, b);
 
-          auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{iv});
-          auto point = b.create<tensor::ExtractOp>(pointSet, ValueRange{iv});
-
-          auto mul = b.create<elliptic_curve::ScalarMulOp>(outputPointType,
-                                                           scalar, point);
-
-          auto sum = b.create<elliptic_curve::AddOp>(outputPointType, acc, mul);
-
-          b.create<scf::YieldOp>(ValueRange{sum});
-        });
-
-    rewriter.replaceOp(op, forOp.getResult(0));
+    rewriter.replaceOp(op, pippengers.generate());
     return success();
   }
 };
@@ -691,6 +675,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>,
       ConvertAny<linalg::BroadcastOp>,
+      ConvertAny<memref::AllocOp>,
       ConvertAny<memref::LoadOp>,
       ConvertAny<memref::StoreOp>,
       ConvertAny<tensor::ExtractOp>,
@@ -703,6 +688,7 @@ void EllipticCurveToField::runOnOperation() {
       bufferization::ToMemrefOp,
       bufferization::ToTensorOp,
       linalg::BroadcastOp,
+      memref::AllocOp,
       memref::LoadOp,
       memref::StoreOp,
       tensor::ExtractOp,

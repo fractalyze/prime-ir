@@ -1,0 +1,23 @@
+load("//benchmark:benchmark.bzl", "zkir_benchmark_test")
+
+zkir_benchmark_test(
+    name = "msm_benchmark_test_parallel",
+    mlir_src = "msm_benchmark.mlir",
+    tags = ["manual"],
+    test_src = ["msm_benchmark_test.cc"],
+    zkir_opt_flags = ["-elliptic-curve-to-omp"],
+    deps = [
+        "//benchmark:BenchmarkUtils",
+    ],
+)
+
+zkir_benchmark_test(
+    name = "msm_benchmark_test_serial",
+    mlir_src = "msm_benchmark.mlir",
+    tags = ["manual"],
+    test_src = ["msm_benchmark_test.cc"],
+    zkir_opt_flags = ["-elliptic-curve-to-llvm"],
+    deps = [
+        "//benchmark:BenchmarkUtils",
+    ],
+)

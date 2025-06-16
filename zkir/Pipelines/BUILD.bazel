@@ -21,6 +21,7 @@ cc_library(
         "@llvm-project//mlir:ConvertToLLVM",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:LinalgTransforms",
+        "@llvm-project//mlir:MemRefToLLVM",
         "@llvm-project//mlir:MemRefTransforms",
         "@llvm-project//mlir:OpenMPToLLVM",
         "@llvm-project//mlir:Pass",

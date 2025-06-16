@@ -3,7 +3,6 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s --check-prefix=CHECK_TEST_MSM < %t
 
-
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
 //BN254
@@ -21,7 +20,6 @@ func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interf
 !affine = !elliptic_curve.affine<#curve>
 !jacobian = !elliptic_curve.jacobian<#curve>
 !xyzz = !elliptic_curve.xyzz<#curve>
-
 
 // CHECK-LABEL: @test_msm
 func.func @test_msm() {
@@ -67,7 +65,7 @@ func.func @test_msm() {
   // RUNNING MSM
   %scalars = tensor.from_elements %scalar3, %scalar3, %scalar5, %scalar7 : tensor<4x!SFm>
   %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
-  %msm_test = elliptic_curve.msm %scalars, %points: tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
+  %msm_test = elliptic_curve.msm %scalars, %points : tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
   %msm_test_affine = elliptic_curve.convert_point_type %msm_test : !jacobian -> !affine
 
   %extract_point1x, %extract_point1y = elliptic_curve.extract %msm_test_affine : !affine -> !PFm, !PFm

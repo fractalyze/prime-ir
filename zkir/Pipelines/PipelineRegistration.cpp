@@ -3,6 +3,7 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/BufferizationToMemRef/BufferizationToMemRef.h"
 #include "mlir/Conversion/ConvertToLLVM/ToLLVMPass.h"
+#include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "mlir/Conversion/OpenMPToLLVM/ConvertOpenMPToLLVM.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/SCFToOpenMP/SCFToOpenMP.h"
@@ -46,7 +47,7 @@ void oneShotBufferize(OpPassManager &manager) {
 
 template <bool allowOpenMP>
 void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
-  manager.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
+  manager.addNestedPass<FuncOp>(createConvertLinalgToParallelLoopsPass());
   manager.addPass(elliptic_curve::createEllipticCurveToField());
   fieldToLLVMPipelineBuilder<allowOpenMP>(manager);
 }
@@ -98,8 +99,9 @@ void fieldToLLVMPipelineBuilder(OpPassManager &manager) {
   if constexpr (allowOpenMP) {
     manager.addPass(createConvertSCFToOpenMPPass());
   }
-  manager.addPass(createSCFToControlFlowPass());
   manager.addNestedPass<FuncOp>(memref::createExpandStridedMetadataPass());
+  manager.addPass(createFinalizeMemRefToLLVMConversionPass());
+  manager.addPass(createSCFToControlFlowPass());
 
   // expand strided metadata will create affine map. Needed to lower affine.map
   // and affine.apply

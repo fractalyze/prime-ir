@@ -4,8 +4,12 @@
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 
 namespace mlir::zkir::field {
+
 class PrimeFieldAttr;
-}
+
+bool isMontgomery(Type type);
+
+}  // namespace mlir::zkir::field
 
 #define GET_TYPEDEF_CLASSES
 #include "zkir/Dialect/Field/IR/FieldTypes.h.inc"
