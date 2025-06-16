@@ -268,8 +268,6 @@ struct ConvertConvertPointType
       outputCoords = output.getResults();
     } else if (isa<JacobianType>(inputType)) {
       auto zz = b.create<field::SquareOp>(/*z=*/coords[2]);
-      auto zzz = b.create<field::MulOp>(zz, /*z=*/coords[2]);
-
       if (isa<AffineType>(outputType)) {
         auto output = b.create<scf::IfOp>(
             isZero,
@@ -284,8 +282,10 @@ struct ConvertConvertPointType
               // jacobian to affine
               // (x, y, z) -> (x/z², y/z³)
               // TODO(ashjeong): use Batch Inverse
-              auto zzInv = builder.create<field::InverseOp>(loc, zz);
-              auto zzzInv = builder.create<field::InverseOp>(loc, zzz);
+              auto zzInv = b.create<field::InverseOp>(zz);
+              auto zzzzInv = b.create<field::SquareOp>(loc, zzInv);
+              auto zzzInv =
+                  builder.create<field::MulOp>(loc, zzzzInv, /*z=*/coords[2]);
               auto newX =
                   builder.create<field::MulOp>(loc, /*x=*/coords[0], zzInv);
               auto newY =
@@ -295,6 +295,7 @@ struct ConvertConvertPointType
 
         outputCoords = output.getResults();
       } else {
+        auto zzz = b.create<field::MulOp>(zz, /*z=*/coords[2]);
         // jacobian to xyzz
         // (x, y, z) -> (x, y, z², z³)
         outputCoords = {/*x=*/coords[0], /*y=*/coords[1], zz, zzz};
@@ -314,10 +315,11 @@ struct ConvertConvertPointType
               // xyzz to affine
               // (x, y, z², z³) -> (x/z², y/z³)
               // TODO(ashjeong): use Batch Inverse
-              auto zzInv =
-                  builder.create<field::InverseOp>(loc, /*zz=*/coords[2]);
               auto zzzInv =
                   builder.create<field::InverseOp>(loc, /*zzz=*/coords[3]);
+              auto zInv =
+                  builder.create<field::MulOp>(loc, zzzInv, /*zz=*/coords[2]);
+              auto zzInv = builder.create<field::SquareOp>(loc, zInv);
               auto newX =
                   builder.create<field::MulOp>(loc, /*x=*/coords[0], zzInv);
               auto newY =
