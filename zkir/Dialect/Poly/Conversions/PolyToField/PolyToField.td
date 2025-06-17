@@ -15,6 +15,7 @@ def PolyToField : Pass<"poly-to-field", "ModuleOp"> {
     "mlir::bufferization::BufferizationDialect",
     "mlir::linalg::LinalgDialect",
     "mlir::zkir::field::FieldDialect",
+    "mlir::zkir::tensor_ext::TensorExtDialect",
   ];
 }
 

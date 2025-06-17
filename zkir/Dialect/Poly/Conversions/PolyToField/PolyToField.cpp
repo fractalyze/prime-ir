@@ -13,6 +13,7 @@
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Poly/IR/PolyOps.h"
 #include "zkir/Dialect/Poly/IR/PolyTypes.h"
+#include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 #include "zkir/Utils/ConversionUtils.h"
 
 namespace mlir::zkir::poly {
@@ -221,77 +222,6 @@ static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
   Value gsMinusRoot = b.create<field::MulOp>(gsMinus, root);
   return {std::move(gsPlus), std::move(gsMinusRoot)};
 }
-
-struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
-  explicit ConvertBitReverse(MLIRContext *context)
-      : OpConversionPattern<BitReverseOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult matchAndRewrite(
-      BitReverseOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    auto tensorType = dyn_cast<RankedTensorType>(adaptor.getDest().getType());
-    MemRefType memrefType =
-        MemRefType::get(tensorType.getShape(), tensorType.getElementType());
-    unsigned numCoeffs = tensorType.getShape()[0];
-    assert(llvm::has_single_bit(numCoeffs) &&
-           "expected the number of coefficients to be a power of 2");
-    unsigned indexBitWidth = llvm::countr_zero(numCoeffs);
-
-    // Precompute the indices for the bit-reversal.
-    // TODO(batzor): Create attribute for the indices to avoid recomputing.
-    SmallVector<APInt> _indices;
-    _indices.reserve((numCoeffs - (1 << (indexBitWidth / 2))) / 2);
-
-    for (unsigned index = 0; index < numCoeffs; index++) {
-      APInt idx = APInt(indexBitWidth, index);
-      APInt ridx = idx.reverseBits();
-      if (idx.ult(ridx)) {
-        _indices.push_back(idx);
-        _indices.push_back(ridx);
-      }
-    }
-
-    llvm::SmallVector<int64_t> indicesShape = {
-        static_cast<int64_t>(_indices.size())};
-    auto indicesType =
-        RankedTensorType::get(indicesShape, IndexType::get(b.getContext()));
-    auto indices = b.create<arith::ConstantOp>(
-        indicesType, DenseElementsAttr::get(indicesType, _indices));
-
-    auto numSwaps = b.create<arith::ConstantIndexOp>(_indices.size());
-    auto c0 = b.create<arith::ConstantIndexOp>(0);
-    auto c1 = b.create<arith::ConstantIndexOp>(1);
-    auto c2 = b.create<arith::ConstantIndexOp>(2);
-
-    auto memref =
-        b.create<bufferization::ToMemrefOp>(memrefType, adaptor.getDest());
-    b.create<scf::ParallelOp>(
-        /*lowerBound=*/ValueRange{c0},
-        /*lowerBound=*/ValueRange{numSwaps},
-        /*steps=*/ValueRange{c2},
-        /*bodyBuilder=*/
-        [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
-          ImplicitLocOpBuilder nb(nestedLoc, nestedBuilder);
-          auto fromIndex = args[0];
-          auto toIndex = nb.create<arith::AddIOp>(fromIndex, c1);
-          auto i1 =
-              nb.create<tensor::ExtractOp>(indices, ValueRange{fromIndex});
-          auto i2 = nb.create<tensor::ExtractOp>(indices, ValueRange{toIndex});
-          auto e1 = nb.create<memref::LoadOp>(memref, ValueRange{i1});
-          auto e2 = nb.create<memref::LoadOp>(memref, ValueRange{i2});
-          nb.create<memref::StoreOp>(e1, memref, ValueRange{i2});
-          nb.create<memref::StoreOp>(e2, memref, ValueRange{i1});
-        });
-    auto result = b.create<bufferization::ToTensorOp>(
-        tensorType, memref, /*restrict=*/true, /*writable=*/true);
-    rewriter.replaceOp(op, result);
-    return success();
-  }
-};
 
 template <bool kInverse>
 static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
@@ -541,7 +471,7 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
         RankedTensorType::get(tensorType.getShape(), coeffStorageType);
 
     // Transform the input tensor to bit-reversed order.
-    auto bitReversed = b.create<BitReverseOp>(adaptor.getDest());
+    auto bitReversed = b.create<tensor_ext::BitReverseOp>(adaptor.getDest());
 
     // Compute the ntt and extract the values
     Value nttResult =
@@ -572,7 +502,7 @@ struct ConvertINTT : public OpConversionPattern<INTTOp> {
 
     auto inttResult = fastNTT<true>(b, op.getRoot(), intTensorType, tensorType,
                                     adaptor.getDest());
-    auto reversedBitOrder = b.create<BitReverseOp>(inttResult);
+    auto reversedBitOrder = b.create<tensor_ext::BitReverseOp>(inttResult);
     rewriter.replaceOp(op, reversedBitOrder);
 
     return success();
@@ -598,18 +528,24 @@ void PolyToField::runOnOperation() {
 
   patterns.add<
       // clang-format off
-      ConvertBitReverse,
       ConvertConstant,
       ConvertFromTensor,
       ConvertINTT,
       ConvertNTT,
       ConvertToTensor,
       ConvertPolyBinOp<AddOp, field::AddOp>,
-      ConvertPolyBinOp<SubOp, field::SubOp>
+      ConvertPolyBinOp<SubOp, field::SubOp>,
+      ConvertAny<tensor_ext::BitReverseOp>
       // clang-format on
       >(typeConverter, context);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
+
+  target.addDynamicallyLegalOp<
+      // clang-format off
+      tensor_ext::BitReverseOp
+      // clang-format on
+      >([&](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();

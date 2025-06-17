@@ -156,24 +156,6 @@ def Poly_FromTensorOp : Poly_Op<"from_tensor"> {
   let hasCanonicalizer = 1;
 }
 
-def Poly_BitReverseOp : Poly_Op<"bit_reverse", [Involution, DestinationStyleOpInterface, SameOperandsAndResultType]> {
-  let summary = "Bit reverse the given tensor.";
-  let description = [{
-    Bit-reverses the given tensor.
-
-    Example:
-    ```
-    %evals = poly.bit_reverse %some_tensor : tensor<4x!pf>
-    ```
-  }];
-  let arguments = (ins RankedTensorOf<[Field_PrimeFieldType]>:$dest);
-  let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
-  let assemblyFormat = "$dest attr-dict `:` type($dest)";
-  let extraClassDeclaration = [{
-    MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
-  }];
-}
-
 def Poly_NTTOp : Poly_Op<"ntt", [DestinationStyleOpInterface, SameOperandsAndResultType]> {
   let summary = "Compute the number theoretic transform.";
   let description = [{

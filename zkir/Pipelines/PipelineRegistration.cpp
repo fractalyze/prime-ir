@@ -22,6 +22,7 @@
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "zkir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
+#include "zkir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
 
 using mlir::func::FuncOp;
 
@@ -55,6 +56,7 @@ void ellipticCurveToLLVMPipelineBuilder(OpPassManager &manager) {
 template <bool allowOpenMP>
 void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(poly::createPolyToField());
+  manager.addPass(tensor_ext::createTensorExtToTensor());
   fieldToLLVMPipelineBuilder<allowOpenMP>(manager);
 }
 

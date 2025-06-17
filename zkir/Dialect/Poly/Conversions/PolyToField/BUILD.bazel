@@ -15,6 +15,7 @@ cc_library(
         ":pass_inc_gen",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/Poly/IR:Poly",
+        "//zkir/Dialect/TensorExt/IR:TensorExt",
         "//zkir/Utils:ConversionUtils",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:BufferizationDialect",
