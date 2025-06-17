@@ -1,0 +1,52 @@
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "TensorExtToTensor",
+    srcs = ["TensorExtToTensor.cpp"],
+    hdrs = ["TensorExtToTensor.h"],
+    deps = [
+        ":pass_inc_gen",
+        "//zkir/Dialect/TensorExt/IR:TensorExt",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:BufferizationDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
+
+gentbl_cc_library(
+    name = "pass_inc_gen",
+    tbl_outs = [
+        (
+            [
+                "-gen-pass-decls",
+                "-name=TensorExtToTensor",
+            ],
+            "TensorExtToTensor.h.inc",
+        ),
+        (
+            ["-gen-rewriters"],
+            "TensorExtToTensor.cpp.inc",
+        ),
+        (
+            ["-gen-pass-doc"],
+            "TensorExtToTensor.md",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "TensorExtToTensor.td",
+    deps = [
+        "//zkir/Dialect/TensorExt/IR:ops_inc_gen",
+        "//zkir/Dialect/TensorExt/IR:td_files",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+        "@llvm-project//mlir:TensorOpsTdFiles",
+    ],
+)

@@ -1,0 +1,97 @@
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "TensorExt",
+    srcs = [
+        "TensorExtAttributes.cpp",
+        "TensorExtDialect.cpp",
+    ],
+    hdrs = [
+        "TensorExtAttributes.h",
+        "TensorExtDialect.h",
+        "TensorExtOps.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":dialect_inc_gen",
+        ":ops_inc_gen",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:DestinationStyleOpInterface",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
+
+td_library(
+    name = "td_files",
+    srcs = [
+        "TensorExtAttributes.td",
+        "TensorExtDialect.td",
+        "TensorExtOps.td",
+    ],
+    deps = [
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:DestinationStyleOpInterfaceTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+        "@llvm-project//mlir:TensorOpsTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "attributes_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-attrdef-decls"],
+            "TensorExtAttributes.h.inc",
+        ),
+        (
+            ["-gen-attrdef-defs"],
+            "TensorExtAttributes.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "TensorExtAttributes.td",
+    deps = [":td_files"],
+)
+
+gentbl_cc_library(
+    name = "dialect_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-dialect-decls"],
+            "TensorExtDialect.h.inc",
+        ),
+        (
+            ["-gen-dialect-defs"],
+            "TensorExtDialect.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "TensorExtDialect.td",
+    deps = [":td_files"],
+)
+
+gentbl_cc_library(
+    name = "ops_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-op-decls"],
+            "TensorExtOps.h.inc",
+        ),
+        (
+            ["-gen-op-defs"],
+            "TensorExtOps.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "TensorExtOps.td",
+    deps = [":td_files"],
+)
