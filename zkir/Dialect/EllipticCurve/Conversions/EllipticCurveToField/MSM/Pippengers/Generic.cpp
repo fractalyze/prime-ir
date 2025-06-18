@@ -59,8 +59,8 @@ void PippengersGeneric::scalarIsNotOneBranch(Value scalar, Value point,
                                              ImplicitLocOpBuilder &b) {
   auto windowBitIntType = IntegerType::get(b.getContext(), bitsPerWindow_);
 
-  Value zeroInt = b.create<arith::ConstantIntOp>(0, windowBitIntType);
-  Value oneInt = b.create<arith::ConstantIntOp>(1, windowBitIntType);
+  Value zeroInt = b.create<arith::ConstantIntOp>(windowBitIntType, 0);
+  Value oneInt = b.create<arith::ConstantIntOp>(windowBitIntType, 1);
   Value scalarForWindow = scalarDecomposition(scalar, windowOffset, b);
 
   // If the scalar is non-zero, we update the corresponding bucket. (Recall that

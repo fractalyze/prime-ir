@@ -155,7 +155,7 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
           cast<ShapedType>(intType),
           IntegerAttr::get(getElementTypeOrSelf(intType), 0)));
     } else {
-      zero = b.create<arith::ConstantOp>(IntegerAttr::get(intType, 0));
+      zero = b.create<arith::ConstantIntOp>(intType, 0);
     }
     auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::eq,
                                        adaptor.getInput(), zero);
@@ -462,7 +462,7 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
     auto intType = modType.getModulus().getType();
 
     Value cmod = b.create<arith::ConstantOp>(modulusAttr(op));
-    Value one = b.create<arith::ConstantOp>(IntegerAttr::get(intType, 1));
+    Value one = b.create<arith::ConstantIntOp>(intType, 1);
     auto shifted = b.create<arith::ShLIOp>(adaptor.getInput(), one);
     auto ifge =
         b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, shifted, cmod);
@@ -629,7 +629,7 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
 
   Type limbType = IntegerType::get(b.getContext(), limbWidth);
-  Value zeroLimb = b.create<arith::ConstantOp>(IntegerAttr::get(limbType, 0));
+  Value zeroLimb = b.create<arith::ConstantIntOp>(limbType, 0);
 
   auto decomposeToLimbs = [&b, limbType, limbWidth, numLimbs](
                               SmallVector<Value> &limbs, Value input,
@@ -640,8 +640,7 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
     }
     limbs[0] = b.create<arith::TruncIOp>(limbType, input);
     Value remaining = input;
-    Value shift =
-        b.create<arith::ConstantOp>(IntegerAttr::get(type, limbWidth));
+    Value shift = b.create<arith::ConstantIntOp>(type, limbWidth);
     for (unsigned i = 1; i < limbs.size(); ++i) {
       remaining = b.create<arith::ShRUIOp>(remaining, shift);
       limbs[i] = b.create<arith::TruncIOp>(limbType, remaining);
@@ -687,19 +686,17 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   }
 
   // Reconstruct a single integer value by combining all limbs
-  Value result = b.create<arith::ConstantOp>(IntegerAttr::get(resultType, 0));
+  Value result = b.create<arith::ConstantIntOp>(resultType, 0);
   for (unsigned i = 0; i < 2 * numLimbs; ++i) {
     Value rAtI = b.create<arith::ExtUIOp>(resultType, resultVec[i]);
     Value shifted = b.create<arith::ShLIOp>(
-        rAtI, b.create<arith::ConstantOp>(
-                  IntegerAttr::get(resultType, i * limbWidth)));
+        rAtI, b.create<arith::ConstantIntOp>(resultType, i * limbWidth));
     result = b.create<arith::OrIOp>(result, shifted);
   }
 
   // Multiply result by 2. It's safe to assume no overflow
   result = b.create<arith::ShLIOp>(
-      result, b.create<arith::ConstantOp>(IntegerAttr::get(resultType, 1)),
-      noOverflow);
+      result, b.create<arith::ConstantIntOp>(resultType, 1), noOverflow);
 
   decomposeToLimbs(resultVec, result, resultType);
 
@@ -719,7 +716,7 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   }
 
   // Reconstruct `lo` and `hi` values by composing individual limbs
-  Value zero = b.create<arith::ConstantOp>(IntegerAttr::get(intType, 0));
+  Value zero = b.create<arith::ConstantIntOp>(intType, 0);
   Value resultLow = zero;
   Value resultHigh = zero;
   for (unsigned i = 0; i < 2 * numLimbs; ++i) {
@@ -728,13 +725,12 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
                      : b.create<arith::ExtUIOp>(intType, resultVec[i]);
     if (i < numLimbs) {
       auto shifted = b.create<arith::ShLIOp>(
-          rAtI, b.create<arith::ConstantOp>(
-                    IntegerAttr::get(intType, i * limbWidth)));
+          rAtI, b.create<arith::ConstantIntOp>(intType, i * limbWidth));
       resultLow = b.create<arith::OrIOp>(resultLow, shifted);
     } else {
       auto shifted = b.create<arith::ShLIOp>(
-          rAtI, b.create<arith::ConstantOp>(
-                    IntegerAttr::get(intType, (i - numLimbs) * limbWidth)));
+          rAtI,
+          b.create<arith::ConstantIntOp>(intType, (i - numLimbs) * limbWidth));
       resultHigh = b.create<arith::OrIOp>(resultHigh, shifted);
     }
   }
@@ -766,8 +762,8 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
     MulExtendedResult result = squareExtended(b, op, adaptor.getInput());
     Value lowExt = b.create<arith::ExtUIOp>(mulResultType, result.lo);
     Value highExt = b.create<arith::ExtUIOp>(mulResultType, result.hi);
-    Value shift = b.create<arith::ConstantOp>(IntegerAttr::get(
-        mulResultType, resultType.getModulus().getValue().getBitWidth()));
+    Value shift = b.create<arith::ConstantIntOp>(
+        mulResultType, resultType.getModulus().getValue().getBitWidth());
     highExt = b.create<arith::ShLIOp>(highExt, shift);
     Value squared = b.create<arith::OrIOp>(lowExt, highExt);
 

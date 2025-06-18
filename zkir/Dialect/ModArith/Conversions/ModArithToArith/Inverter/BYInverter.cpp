@@ -31,23 +31,21 @@ BYInverter::BYInverter(ImplicitLocOpBuilder &b, Type inputType)
   extIntType_ = IntegerType::get(b.getContext(), extModBitWidth);
   limbType_ = IntegerType::get(b.getContext(), limbBitWidth);
 
-  maskN_ = b.create<arith::ConstantOp>(IntegerAttr::get(
-      limbType_, APInt::getAllOnes(n).zextOrTrunc(limbBitWidth)));
+  maskN_ = b.create<arith::ConstantIntOp>(
+      limbType_, APInt::getAllOnes(n).zextOrTrunc(limbBitWidth));
   APInt m = modulus.getValue().zext(extModBitWidth);
   APInt mInv = byAttr.getMInv().getValue();
-  m_ = b.create<arith::ConstantOp>(IntegerAttr::get(extIntType_, m));
-  mInv_ = b.create<arith::ConstantOp>(
-      IntegerAttr::get(limbType_, mInv.zextOrTrunc(limbBitWidth)));
+  m_ = b.create<arith::ConstantIntOp>(extIntType_, m);
+  mInv_ =
+      b.create<arith::ConstantIntOp>(limbType_, mInv.zextOrTrunc(limbBitWidth));
 
-  limbTypeOne_ = b.create<arith::ConstantOp>(IntegerAttr::get(limbType_, 1));
-  limbTypeZero_ = b.create<arith::ConstantOp>(IntegerAttr::get(limbType_, 0));
-  extIntTypeOne_ =
-      b.create<arith::ConstantOp>(IntegerAttr::get(extIntType_, 1));
-  extIntTypeZero_ =
-      b.create<arith::ConstantOp>(IntegerAttr::get(extIntType_, 0));
+  limbTypeOne_ = b.create<arith::ConstantIntOp>(limbType_, 1);
+  limbTypeZero_ = b.create<arith::ConstantIntOp>(limbType_, 0);
+  extIntTypeOne_ = b.create<arith::ConstantIntOp>(extIntType_, 1);
+  extIntTypeZero_ = b.create<arith::ConstantIntOp>(extIntType_, 0);
 
-  extIntTypeN_ = b.create<arith::ConstantOp>(IntegerAttr::get(extIntType_, n));
-  limbTypeN_ = b.create<arith::ConstantOp>(IntegerAttr::get(limbType_, n));
+  extIntTypeN_ = b.create<arith::ConstantIntOp>(extIntType_, n);
+  limbTypeN_ = b.create<arith::ConstantIntOp>(limbType_, n);
 }
 
 BYInverter::JumpResult BYInverter::GenerateJump(Value f, Value g, Value eta) {
@@ -108,8 +106,7 @@ BYInverter::JumpResult BYInverter::GenerateJump(Value f, Value g, Value eta) {
         f = b.create<arith::SelectOp>(deltaPos, g, f);
         g = b.create<arith::SelectOp>(deltaPos, negF, g);
 
-        Value five =
-            b.create<arith::ConstantOp>(IntegerAttr::get(limbType_, 5));
+        Value five = b.create<arith::ConstantIntOp>(limbType_, 5);
         Value oneMinusEta = b.create<arith::SubIOp>(limbTypeOne_, eta);
         Value shift = b.create<arith::MinSIOp>(
             b.create<arith::MinSIOp>(steps, oneMinusEta), five);
@@ -117,9 +114,8 @@ BYInverter::JumpResult BYInverter::GenerateJump(Value f, Value g, Value eta) {
             b.create<arith::ShLIOp>(limbTypeOne_, shift), limbTypeOne_);
 
         Value threeF = b.create<arith::MulIOp>(
-            b.create<arith::ConstantOp>(IntegerAttr::get(limbType_, 3)), f);
-        Value twentyEight =
-            b.create<arith::ConstantOp>(IntegerAttr::get(limbType_, 28));
+            b.create<arith::ConstantIntOp>(limbType_, 3), f);
+        Value twentyEight = b.create<arith::ConstantIntOp>(limbType_, 28);
         Value w = b.create<arith::AndIOp>(
             b.create<arith::MulIOp>(
                 g, b.create<arith::XOrIOp>(threeF, twentyEight)),
@@ -275,8 +271,8 @@ Value BYInverter::Generate(Value input, bool isMont) {
   f = whileOp.getResult(0);
   d = whileOp.getResult(2);
 
-  Value minusOneIntType = b_.create<arith::ConstantOp>(
-      IntegerAttr::get(extIntType_, APInt::getAllOnes(extIntType_.getWidth())));
+  Value minusOneIntType = b_.create<arith::ConstantIntOp>(
+      extIntType_, APInt::getAllOnes(extIntType_.getWidth()));
 
   Value antiunit =
       b_.create<arith::CmpIOp>(arith::CmpIPredicate::eq, f, minusOneIntType);

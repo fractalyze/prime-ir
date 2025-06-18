@@ -517,8 +517,8 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
             ? b.create<elliptic_curve::ConvertPointTypeOp>(outputType, point)
             : point;
 
-    auto arithOne = b.create<arith::ConstantIntOp>(1, scalarIntType);
-    auto arithZero = b.create<arith::ConstantIntOp>(0, scalarIntType);
+    auto arithOne = b.create<arith::ConstantIntOp>(scalarIntType, 1);
+    auto arithZero = b.create<arith::ConstantIntOp>(scalarIntType, 0);
     auto result = zeroPoint;
     auto ifOp = b.create<scf::IfOp>(
         b.create<arith::CmpIOp>(arith::CmpIPredicate::ne,
