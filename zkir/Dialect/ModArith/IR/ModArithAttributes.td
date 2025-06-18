@@ -13,7 +13,7 @@ def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
   let summary = "An attribute with precomputed Montgomery parameters";
   let description = [{
     This attribute contains the precomputed Montgomery parameters for a given
-    modulus. It is used to for efficient multiplication when the modulus is fixed
+    modulus. It is used for efficient multiplication when the modulus is fixed
     at compile time.
   }];
   let parameters = (ins "ModArithType":$modType);
@@ -22,6 +22,23 @@ def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
     IntegerAttr getR() const;
     IntegerAttr getRInv() const;
     IntegerAttr getRSquared() const;
+  }];
+  let assemblyFormat = "`<`$modType`>`";
+  let genStorageClass = 0;
+}
+
+def ModArith_BYAttr : ModArith_Attr<"BY", "by"> {
+  let summary = "An attribute with precomputed Bernstein-Yang inverse parameters";
+  let description = [{
+    This attribute contains the precomputed Bernstein-Yang inverse parameters
+    for a given modulus. It is used for efficient inverse when the modulus is
+    fixed at compile time.
+  }];
+  let parameters = (ins "ModArithType":$modType);
+  let extraClassDeclaration = [{
+    IntegerAttr getDivsteps() const;
+    IntegerAttr getMInv() const;
+    IntegerAttr getNewBitWidth() const;
   }];
   let assemblyFormat = "`<`$modType`>`";
   let genStorageClass = 0;

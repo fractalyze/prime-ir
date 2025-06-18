@@ -268,7 +268,7 @@ def ModArith_MontSquareOp : ModArith_UnaryOp<"mont_square"> {
   let hasVerifier = 1;
 }
 
-def ModArith_InverseOp : ModArith_UnaryOp<"inverse"> {
+def ModArith_InverseOp : Op<ModArith_Dialect, "inverse", [Pure, SameOperandsAndResultType, Involution]> {
   let summary = "Modular inverse operation";
   let description = [{
     Computes the modular inverse of a given modular type integer.

@@ -267,7 +267,7 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto inv = b.create<mod_arith::MontInverseOp>(adaptor.getInput()[0]);
+      auto inv = b.create<mod_arith::InverseOp>(adaptor.getInput()[0]);
       rewriter.replaceOp(op, inv);
       return success();
     }
@@ -284,7 +284,7 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
       auto betaTimesHighSquared = b.create<mod_arith::MulOp>(beta, highSquared);
       auto denominator =
           b.create<mod_arith::SubOp>(lowSquared, betaTimesHighSquared);
-      auto denominatorInv = b.create<mod_arith::MontInverseOp>(denominator);
+      auto denominatorInv = b.create<mod_arith::InverseOp>(denominator);
 
       // c₀ = a₀ / denominator
       auto c0 =

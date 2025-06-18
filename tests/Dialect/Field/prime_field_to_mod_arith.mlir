@@ -102,7 +102,7 @@ func.func @test_lower_from_mont_vec(%lhs : !PFmv) -> !PFv {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_inverse(%lhs : !PF1) -> !PF1 {
   // CHECK-NOT: field.inverse
-  // CHECK: %[[RES:.*]] = mod_arith.mont_inverse %[[LHS]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.inverse %[[LHS]] : [[T]]
   %res = field.inverse %lhs : !PF1
   return %res : !PF1
 }
@@ -111,7 +111,7 @@ func.func @test_lower_inverse(%lhs : !PF1) -> !PF1 {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_inverse_vec(%lhs : !PFv) -> !PFv {
   // CHECK-NOT: field.inverse
-  // CHECK: %[[RES:.*]] = mod_arith.mont_inverse %[[LHS]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.inverse %[[LHS]] : [[T]]
   %res = field.inverse %lhs : !PFv
   return %res : !PFv
 }

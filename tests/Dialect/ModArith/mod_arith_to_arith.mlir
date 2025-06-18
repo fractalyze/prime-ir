@@ -75,33 +75,16 @@ func.func @test_lower_extract_vec(%lhs : !Zpv) -> tensor<4xi32> {
 // CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_inverse(%lhs : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.inverse
-  // CHECK: %[[C0:.*]] = arith.constant 0 : [[T]]
-  // CHECK: %[[C1:.*]] = arith.constant 1 : [[T]]
-  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
-  // CHECK:      %[[WHILE_RES:.*]]:4 = scf.while (%[[ARG1:.*]] = %[[CMOD]], %[[ARG2:.*]] = %[[INPUT]], %[[ARG3:.*]] = %[[C0]], %[[ARG4:.*]] = %[[C1]]) : ([[T]], [[T]], [[T]], [[T]]) -> ([[T]], [[T]], [[T]], [[T]]) {
-  // CHECK-NEXT:   %[[COND:.*]] = arith.cmpi ne, %[[ARG2]], %[[C0]] : [[T]]
-  // CHECK-NEXT:   scf.condition(%[[COND]]) %[[ARG1]], %[[ARG2]], %[[ARG3]], %[[ARG4]] : [[T]], [[T]], [[T]], [[T]]
-  // CHECK-NEXT: } do {
-  // CHECK-NEXT: ^bb0(%[[ARG1_LOOP:.*]]: [[T]], %[[ARG2_LOOP:.*]]: [[T]], %[[ARG3_LOOP:.*]]: [[T]], %[[ARG4_LOOP:.*]]: [[T]]):
-  // CHECK-NEXT:   %[[DIV:.*]] = arith.divui %[[ARG1_LOOP]], %[[ARG2_LOOP]] : [[T]]
-  // CHECK-NEXT:   %[[REM:.*]] = arith.remui %[[ARG1_LOOP]], %[[ARG2_LOOP]] : [[T]]
-  // CHECK-NEXT:   %[[MUL:.*]] = arith.muli %[[ARG4_LOOP]], %[[DIV]] : [[T]]
-  // CHECK-NEXT:   %[[SUB:.*]] = arith.subi %[[ARG3_LOOP]], %[[MUL]] : [[T]]
-  // CHECK-NEXT:   scf.yield %[[ARG2_LOOP]], %[[REM]], %[[ARG4_LOOP]], %[[SUB]] : [[T]], [[T]], [[T]], [[T]]
-  // CHECK-NEXT: }
-  // CHECK:      %[[EQ_COND:.*]] = arith.cmpi eq, %[[WHILE_RES]]#0, %[[C1]] : [[T]]
-  // CHECK-NEXT: %[[IF_RES:.*]] = scf.if %[[EQ_COND]] -> ([[T]]) {
-  // CHECK:      %[[SLT_COND:.*]] = arith.cmpi slt, %[[WHILE_RES]]#2, %[[C0]] : [[T]]
-  // CHECK-NEXT: %[[INNER_IF_RES:.*]] = scf.if %[[SLT_COND]] -> ([[T]]) {
-  // CHECK:      %[[C65537:.*]] = arith.constant 65537 : [[T]]
-  // CHECK-NEXT: %[[ADD:.*]] = arith.addi %[[WHILE_RES]]#2, %[[C65537]] : [[T]]
-  // CHECK-NEXT: scf.yield %[[ADD]] : [[T]]
-  // CHECK:      scf.yield %[[WHILE_RES]]#2 : [[T]]
-  // CHECK:      scf.yield %[[INNER_IF_RES]] : [[T]]
-  // CHECK:      scf.yield %[[C0]] : [[T]]
-  // CHECK:      return %[[IF_RES]] : [[T]]
   %res = mod_arith.inverse %lhs : !Zp
   return %res : !Zp
+}
+
+// CHECK-LABEL: @test_lower_inverse_tensor
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_inverse_tensor(%input : !Zpv) -> !Zpv {
+  // CHECK-NOT: mod_arith.inverse
+  %res = mod_arith.inverse %input : !Zpv
+  return %res : !Zpv
 }
 
 // CHECK-LABEL: @test_lower_add

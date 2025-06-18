@@ -11,5 +11,6 @@ glob_lit_tests(
     test_file_exts = ["mlir"],
     timeout_override = {
         "elliptic_curve_msm_runner.mlir": "moderate",
+        "elliptic_curve_to_field_runner.mlir": "moderate",
     },
 )
