@@ -10,6 +10,15 @@
 #curve = #elliptic_curve.sw<#1, #2, (#3, #4)>
 !affine = !elliptic_curve.affine<#curve>
 
+// CHECK-LABEL: @test_memref_cast
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_memref_cast(%input : memref<4x!affine>) -> memref<?x!affine> {
+  // CHECK: %[[CAST:.*]] = memref.cast %[[INPUT]] : [[INPUT_TYPE]] to [[T]]
+  %cast = memref.cast %input : memref<4x!affine> to memref<?x!affine>
+  // CHECK: return %[[CAST]] : [[T]]
+  return %cast : memref<?x!affine>
+}
+
 // CHECK-LABEL: @test_memref_unranked_cast
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
 func.func @test_memref_unranked_cast(%input : memref<4x!affine>) -> memref<*x!affine> {
