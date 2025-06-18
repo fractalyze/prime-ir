@@ -8,7 +8,11 @@ namespace mlir::zkir {
 Type ShapedTypeConverter::convertShapedType(ShapedType oldType,
                                             ArrayRef<int64_t> shape,
                                             Type elementType) {
-  if (auto memrefType = dyn_cast<MemRefType>(oldType)) {
+  if (auto memrefType = dyn_cast<UnrankedMemRefType>(oldType)) {
+    return UnrankedMemRefType::get(elementType, memrefType.getMemorySpace());
+  } else if (auto tensorType = dyn_cast<UnrankedTensorType>(oldType)) {
+    return UnrankedTensorType::get(elementType);
+  } else if (auto memrefType = dyn_cast<MemRefType>(oldType)) {
     if (memrefType.getShape().size() != shape.size()) {
       assert(memrefType.getShape().size() + 1 == shape.size());
       int64_t newDimension = shape.back();

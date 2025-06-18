@@ -20,6 +20,15 @@ func.func @test_memref_cast(%input : memref<4x!Zp>) -> memref<?x!Zp> {
   return %cast : memref<?x!Zp>
 }
 
+// CHECK-LABEL: @test_memref_unranked_cast
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_memref_unranked_cast(%input : memref<4x!Zp>) -> memref<*x!Zp> {
+  // CHECK: %[[CAST:.*]] = memref.cast %[[INPUT]] : [[INPUT_TYPE]] to [[T]]
+  %cast = memref.cast %input : memref<4x!Zp> to memref<*x!Zp>
+  // CHECK: return %[[CAST]] : [[T]]
+  return %cast : memref<*x!Zp>
+}
+
 // CHECK-LABEL: @test_memref_copy
 // CHECK-SAME: (%[[SRC:.*]]: [[SRC_TYPE:.*]], %[[DST:.*]]: [[DST_TYPE:.*]]) {
 func.func @test_memref_copy(%src : memref<4x!Zp>, %dst : memref<4x!Zp>) {
