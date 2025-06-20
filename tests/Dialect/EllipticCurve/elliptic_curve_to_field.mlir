@@ -1,4 +1,4 @@
-// RUN: zkir-opt -convert-linalg-to-parallel-loops -elliptic-curve-to-field --split-input-file %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -convert-linalg-to-parallel-loops -elliptic-curve-to-field -split-input-file %s | FileCheck %s -enable-var-scope
 
 !PF = !field.pf<97:i32>
 !PFm = !field.pf<97:i32, true>

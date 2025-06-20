@@ -1,4 +1,4 @@
-// RUN: zkir-opt --split-input-file %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -split-input-file %s | FileCheck %s -enable-var-scope
 
 !PF = !field.pf<97:i32>
 

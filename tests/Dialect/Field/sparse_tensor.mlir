@@ -1,4 +1,4 @@
-// RUN: zkir-opt -sparsification-and-bufferization --split-input-file %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -sparsification-and-bufferization -split-input-file %s | FileCheck %s -enable-var-scope
 
 !PF = !field.pf<7:i32, true>
 

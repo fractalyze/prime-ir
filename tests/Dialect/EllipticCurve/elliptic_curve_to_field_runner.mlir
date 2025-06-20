@@ -1,7 +1,7 @@
 // RUN: zkir-opt %s -elliptic-curve-to-llvm \
 // RUN:   | mlir-runner -e test_ops_in_order -entry-point-result=void \
-// RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
-// RUN: FileCheck %s --check-prefix=CHECK_TEST_OPS_IN_ORDER < %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
+// RUN: FileCheck %s -check-prefix=CHECK_TEST_OPS_IN_ORDER < %t
 
 //BN254
 !PF = !field.pf<21888242871839275222246405745257275088696311157297823662689037894645226208583:i256>

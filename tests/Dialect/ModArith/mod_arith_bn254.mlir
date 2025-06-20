@@ -1,4 +1,4 @@
-// RUN: zkir-opt -mod-arith-to-arith --sccp --split-input-file %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -mod-arith-to-arith -sccp -split-input-file %s | FileCheck %s -enable-var-scope
 
 !Zp = !mod_arith.int<21888242871839275222246405745257275088696311157297823662689037894645226208583 : i256>
 !Zv = !mod_arith.int<4 : i4>

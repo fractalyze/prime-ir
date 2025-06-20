@@ -1,4 +1,4 @@
-// RUN: zkir-opt -canonicalize %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -canonicalize %s | FileCheck %s -enable-var-scope
 
 // CHECK-LABEL: @test_constant_folding
 // CHECK-SAME: () -> [[T:.*]] {

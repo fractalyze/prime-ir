@@ -1,7 +1,7 @@
 // RUN: zkir-opt %s -poly-to-llvm \
 // RUN:   | mlir-runner -e test_poly_ntt -entry-point-result=void \
-// RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
-// RUN: FileCheck %s --check-prefix=CHECK_TEST_POLY_NTT < %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
+// RUN: FileCheck %s -check-prefix=CHECK_TEST_POLY_NTT < %t
 
 !coeff_ty = !field.pf<7681:i32>
 !coeff_ty_mont = !field.pf<7681:i32, true>

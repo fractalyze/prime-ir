@@ -1,4 +1,4 @@
-// RUN: zkir-opt -canonicalize -field-to-mod-arith -mod-arith-to-arith -canonicalize %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -canonicalize -field-to-mod-arith -mod-arith-to-arith -canonicalize %s | FileCheck %s -enable-var-scope
 
 !PF17 = !field.pf<17:i32>
 

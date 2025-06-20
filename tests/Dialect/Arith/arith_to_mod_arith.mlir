@@ -1,4 +1,4 @@
-// RUN: zkir-opt --arith-to-mod-arith --split-input-file %s | FileCheck %s --enable-var-scope
+// RUN: zkir-opt -arith-to-mod-arith -split-input-file %s | FileCheck %s -enable-var-scope
 
 // CHECK-LABEL: @test_lower_add
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
