@@ -6,22 +6,15 @@ package(
 )
 
 cc_library(
-    name = "PolyToField",
-    srcs = ["PolyToField.cpp"],
-    hdrs = [
-        "PolyToField.h",
-    ],
+    name = "TensorExtToTensor",
+    srcs = ["TensorExtToTensor.cpp"],
+    hdrs = ["TensorExtToTensor.h"],
     deps = [
         ":pass_inc_gen",
-        "//zkir/Dialect/Field/IR:Field",
-        "//zkir/Dialect/Poly/IR:Poly",
         "//zkir/Dialect/TensorExt/IR:TensorExt",
-        "//zkir/Utils:ConversionUtils",
-        "@llvm-project//mlir:AffineDialect",
+        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BufferizationDialect",
         "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:LinalgDialect",
-        "@llvm-project//mlir:MemRefDialect",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:SCFDialect",
         "@llvm-project//mlir:TensorDialect",
@@ -34,25 +27,26 @@ gentbl_cc_library(
         (
             [
                 "-gen-pass-decls",
-                "-name=PolyToField",
+                "-name=TensorExtToTensor",
             ],
-            "PolyToField.h.inc",
+            "TensorExtToTensor.h.inc",
         ),
         (
             ["-gen-rewriters"],
-            "PolyToField.cpp.inc",
+            "TensorExtToTensor.cpp.inc",
         ),
         (
             ["-gen-pass-doc"],
-            "PolyToField.md",
+            "TensorExtToTensor.md",
         ),
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "PolyToField.td",
+    td_file = "TensorExtToTensor.td",
     deps = [
-        "//zkir/Dialect/Field/IR:td_files",
-        "//zkir/Dialect/Poly/IR:td_files",
+        "//zkir/Dialect/TensorExt/IR:ops_inc_gen",
+        "//zkir/Dialect/TensorExt/IR:td_files",
         "@llvm-project//mlir:OpBaseTdFiles",
         "@llvm-project//mlir:PassBaseTdFiles",
+        "@llvm-project//mlir:TensorOpsTdFiles",
     ],
 )

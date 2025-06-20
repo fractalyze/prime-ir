@@ -13,6 +13,7 @@ cc_library(
         "//zkir/Dialect/Field/Conversions/FieldToModArith",
         "//zkir/Dialect/ModArith/Conversions/ModArithToArith",
         "//zkir/Dialect/Poly/Conversions/PolyToField",
+        "//zkir/Dialect/TensorExt/Conversions/TensorExtToTensor",
         "@llvm-project//mlir:AffineToStandard",
         "@llvm-project//mlir:AffineTransforms",
         "@llvm-project//mlir:ArithTransforms",

@@ -21,10 +21,12 @@ cc_library(
     ],
     deps = [
         ":attributes_inc_gen",
+        ":canonicalization_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Dialect/TensorExt/IR:TensorExt",
         "//zkir/Utils:APIntUtils",
         "//zkir/Utils:OpUtils",
         "@llvm-project//llvm:Support",
@@ -45,6 +47,7 @@ td_library(
     ],
     deps = [
         "//zkir/Dialect/ModArith/IR:td_files",
+        "//zkir/Dialect/TensorExt/IR:td_files",
         "@llvm-project//mlir:ArithOpsTdFiles",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
@@ -67,6 +70,21 @@ gentbl_cc_library(
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "FieldAttributes.td",
+    deps = [
+        ":td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "canonicalization_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-rewriters"],
+            "FieldCanonicalization.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "FieldCanonicalization.td",
     deps = [
         ":td_files",
     ],

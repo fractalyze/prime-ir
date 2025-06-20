@@ -15,6 +15,7 @@ cc_library(
         ":pass_inc_gen",
         "//zkir/Dialect/ModArith/Conversions/ModArithToArith/Inverter:BYInverter",
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Dialect/TensorExt/IR:TensorExt",
         "//zkir/Utils:APIntUtils",
         "//zkir/Utils:ConversionUtils",
         "@llvm-project//llvm:Support",

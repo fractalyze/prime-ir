@@ -295,6 +295,7 @@ def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
     ```
   }];
   let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDOPS_TD_

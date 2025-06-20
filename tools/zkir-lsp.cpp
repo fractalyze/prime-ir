@@ -6,6 +6,7 @@
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"
+#include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
 int main(int argc, char **argv) {
   mlir::DialectRegistry registry;
@@ -13,6 +14,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::zkir::field::FieldDialect>();
   registry.insert<mlir::zkir::poly::PolyDialect>();
   registry.insert<mlir::zkir::elliptic_curve::EllipticCurveDialect>();
+  registry.insert<mlir::zkir::tensor_ext::TensorExtDialect>();
   mlir::registerAllDialects(registry);
   mlir::registerAllExtensions(registry);
   return mlir::failed(mlir::MlirLspServerMain(argc, argv, registry));

@@ -1,5 +1,6 @@
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
+#include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 #include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::field {
@@ -224,6 +225,15 @@ LogicalResult ToMontOp::verify() {
            << resultType << ".";
   }
   return disallowTensorOfExtField(*this);
+}
+
+namespace {
+#include "zkir/Dialect/Field/IR/FieldCanonicalization.cpp.inc"
+}
+
+void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add<BitReverseMulBitReverse>(context);
 }
 
 }  // namespace mlir::zkir::field

@@ -27,6 +27,7 @@
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 #include "zkir/Utils/APIntUtils.h"
 #include "zkir/Utils/ConversionUtils.h"
 
@@ -144,9 +145,21 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    Type intType = modulusType(op);
+    Value zero;
+    if (isa<ShapedType>(intType)) {
+      zero = b.create<arith::ConstantOp>(SplatElementsAttr::get(
+          cast<ShapedType>(intType),
+          IntegerAttr::get(getElementTypeOrSelf(intType), 0)));
+    } else {
+      zero = b.create<arith::ConstantOp>(IntegerAttr::get(intType, 0));
+    }
+    auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::eq,
+                                       adaptor.getInput(), zero);
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
     auto sub = b.create<arith::SubIOp>(cmod, adaptor.getInput());
-    rewriter.replaceOp(op, sub);
+    auto result = b.create<arith::SelectOp>(cmp, adaptor.getInput(), sub);
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
@@ -849,7 +862,8 @@ void ModArithToArith::runOnOperation() {
       ConvertAny<tensor::FromElementsOp>,
       ConvertAny<tensor::InsertOp>,
       ConvertAny<tensor::InsertSliceOp>,
-      ConvertAny<tensor::ReshapeOp>
+      ConvertAny<tensor::ReshapeOp>,
+      ConvertAny<tensor_ext::BitReverseOp>
       // clang-format on
       >(typeConverter, context);
 
@@ -881,7 +895,8 @@ void ModArithToArith::runOnOperation() {
       tensor::FromElementsOp,
       tensor::InsertOp,
       tensor::InsertSliceOp,
-      tensor::ReshapeOp
+      tensor::ReshapeOp,
+      tensor_ext::BitReverseOp
       // clang-format on
       >([&](auto op) { return typeConverter.isLegal(op); });
 
