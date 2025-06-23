@@ -471,7 +471,10 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
         RankedTensorType::get(tensorType.getShape(), coeffStorageType);
 
     // Transform the input tensor to bit-reversed order.
-    auto bitReversed = b.create<tensor_ext::BitReverseOp>(adaptor.getDest());
+    auto bitReversed =
+        adaptor.getNoBitReverse()
+            ? adaptor.getDest()
+            : b.create<tensor_ext::BitReverseOp>(adaptor.getDest());
 
     // Compute the ntt and extract the values
     Value nttResult =
@@ -502,7 +505,10 @@ struct ConvertINTT : public OpConversionPattern<INTTOp> {
 
     auto inttResult = fastNTT<true>(b, op.getRoot(), intTensorType, tensorType,
                                     adaptor.getDest());
-    auto reversedBitOrder = b.create<tensor_ext::BitReverseOp>(inttResult);
+    auto reversedBitOrder =
+        adaptor.getNoBitReverse()
+            ? inttResult
+            : b.create<tensor_ext::BitReverseOp>(inttResult);
     rewriter.replaceOp(op, reversedBitOrder);
 
     return success();

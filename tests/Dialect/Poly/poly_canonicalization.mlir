@@ -16,6 +16,8 @@ func.func @test_canonicalize_intt_after_ntt(%p0 : !poly_ty) -> !poly_ty {
   %coeffs = poly.to_tensor %p0 : !poly_ty -> !tensor_ty
   %evals = poly.ntt %coeffs {root=#root} : !tensor_ty
   %coeffs1 = poly.intt %evals {root=#root} : !tensor_ty
+  %evals2 = poly.ntt %coeffs1 {root=#root} no_bit_reverse : !tensor_ty
+  %coeffs2 = poly.intt %evals2 {root=#root} no_bit_reverse : !tensor_ty
   %p1 = poly.from_tensor %coeffs1 : !tensor_ty -> !poly_ty
   %p2 = poly.add %p1, %p1 : !poly_ty
   // CHECK: return %[[RESULT]] : [[T]]
@@ -30,7 +32,9 @@ func.func @test_canonicalize_ntt_after_intt(%t0 : !tensor_ty) -> !tensor_ty {
   // CHECK: %[[RESULT:.*]] = field.add %[[X]], %[[X]] : [[T]]
   %coeffs = poly.intt %t0 {root=#root} : !tensor_ty
   %evals = poly.ntt %coeffs {root=#root} : !tensor_ty
-  %evals2 = field.add %evals, %evals : !tensor_ty
+  %coeffs1 = poly.intt %evals {root=#root} no_bit_reverse : !tensor_ty
+  %evals2 = poly.ntt %coeffs1 {root=#root} no_bit_reverse : !tensor_ty
+  %evals3 = field.add %evals2, %evals2 : !tensor_ty
   // CHECK: return %[[RESULT]] : [[T]]
-  return %evals2 : !tensor_ty
+  return %evals3 : !tensor_ty
 }

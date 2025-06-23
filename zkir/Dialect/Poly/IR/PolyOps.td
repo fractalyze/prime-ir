@@ -176,10 +176,11 @@ def Poly_NTTOp : Poly_Op<"ntt", [DestinationStyleOpInterface, SameOperandsAndRes
   }];
   let arguments = (ins
     RankedTensorOf<[Field_PrimeFieldType]>:$dest,
-    Poly_PrimitiveRootAttr:$root
+    Poly_PrimitiveRootAttr:$root,
+    UnitAttr:$noBitReverse
   );
   let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
-  let assemblyFormat = "$dest attr-dict `:` type($dest)";
+  let assemblyFormat = "$dest attr-dict (`no_bit_reverse` $noBitReverse^)? `:` type($dest)";
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
     MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
@@ -202,10 +203,11 @@ def Poly_INTTOp : Poly_Op<"intt", [DestinationStyleOpInterface, SameOperandsAndR
   }];
   let arguments = (ins
     RankedTensorOf<[Field_PrimeFieldType]>:$dest,
-    Poly_PrimitiveRootAttr:$root
+    Poly_PrimitiveRootAttr:$root,
+    UnitAttr:$noBitReverse
   );
   let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
-  let assemblyFormat = "$dest attr-dict `:` type($dest)";
+  let assemblyFormat = "$dest attr-dict (`no_bit_reverse` $noBitReverse^)? `:` type($dest)";
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
     MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
