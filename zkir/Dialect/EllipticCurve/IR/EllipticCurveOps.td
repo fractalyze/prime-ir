@@ -38,7 +38,7 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point", [TypesMatchWith<
   "output", "coords", "SmallVector<Type, 2>(getNumCoordsFromPointLike($_self), getCurveFromPointLike($_self).getBaseField())">]> {
   let summary = "An elliptic curve point";
   let description = [{
-    Defines an elliptic curve point in Affine(x, y), Jacobian(x, y, z), or XYZZ(x, y, z², z³) form.
+    Defines an elliptic curve point in affine(x, y), jacobian(x, y, z), or xyzz(x, y, z², z³) form.
 
     Example:
     ```
@@ -98,12 +98,12 @@ def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
   let description = [{
     Computes the sum of two elliptic curve points.
 
-    affine, affine -> Jacobian
-    affine, affine -> XYZZ
-    affine, Jacobian -> Jacobian
-    affine, XYZZ -> XYZZ
-    Jacobian, Jacobian -> Jacobian
-    XYZZ, XYZZ -> XYZZ
+    affine, affine -> jacobian
+    affine, affine -> xyzz
+    affine, jacobian -> jacobian
+    affine, xyzz -> xyzz
+    jacobian, jacobian -> jacobian
+    xyzz, xyzz -> xyzz
 
     Example:
     ```
@@ -118,12 +118,12 @@ def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
   let description = [{
     Computes the difference between two elliptic curve points.
 
-    affine, affine -> Jacobian
-    affine, affine -> XYZZ
-    affine, Jacobian -> Jacobian
-    affine, XYZZ -> XYZZ
-    Jacobian, Jacobian -> Jacobian
-    XYZZ, XYZZ -> XYZZ
+    affine, affine -> jacobian
+    affine, affine -> xyzz
+    affine, jacobian -> jacobian
+    affine, xyzz -> xyzz
+    jacobian, jacobian -> jacobian
+    xyzz, xyzz -> xyzz
 
     Example:
     ```
@@ -138,9 +138,9 @@ def EllipticCurve_NegateOp : EllipticCurve_UnaryOp<"negate", [Involution, SameOp
   let description = [{
     Computes the negation of an elliptic curve point.
 
-    affine -> Jacobian
-    Jacobian -> Jacobian
-    XYZZ -> XYZZ
+    affine -> jacobian
+    jacobian -> jacobian
+    xyzz -> xyzz
 
     Example:
     ```
@@ -155,12 +155,12 @@ def EllipticCurve_DoubleOp : EllipticCurve_UnaryOp<"double"> {
   let summary = "Elliptic curve point doubling operation";
   let description = [{
     Computes the double of an elliptic curve point. If an affine point is doubled,
-    it becomes Jacobian. If a Jacobian or XYZZ point is doubled, its type remains the same.
+    it becomes jacobian. If a jacobian or xyzz point is doubled, its type remains the same.
 
-    affine -> Jacobian
-    affine -> XYZZ
-    Jacobian -> Jacobian
-    XYZZ -> XYZZ
+    affine -> jacobian
+    affine -> xyzz
+    jacobian -> jacobian
+    xyzz -> xyzz
 
     Example:
     ```
@@ -177,10 +177,10 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutativ
   let description = [{
     Computes the product of an elliptic curve point and a scalar prime field value.
 
-    affine -> Jacobian
-    affine -> XYZZ
-    Jacobian -> Jacobian
-    XYZZ -> XYZZ
+    affine -> jacobian
+    affine -> xyzz
+    jacobian -> jacobian
+    xyzz -> xyzz
 
     Example:
     ```
@@ -200,7 +200,7 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
     Computes multi-scalar multiplication (MSM) of elliptic curve points and scalars.
 
     Output type determines internal computation type of buckets and window sums.
-    XYZZ is recommended for best performance.
+    xyzz is recommended for best performance.
 
     Example:
     ```
@@ -219,7 +219,7 @@ def EllipticCurve_ConvertPointTypeOp : EllipticCurve_UnaryOp<"convert_point_type
   let summary = "Convert a point from one form to another.";
   let description = [{
     Converts a point on an elliptic curve from one form to another.
-    Possible forms are Affine, Jacobian, and XYZZ.
+    Possible forms are affine, jacobian, and xyzz.
 
     Example:
     ```

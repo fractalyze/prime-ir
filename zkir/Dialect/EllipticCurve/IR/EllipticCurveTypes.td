@@ -35,10 +35,10 @@ def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [MemRefEle
 }
 
 def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [MemRefElementTypeInterface]> {
-  let summary = "A Jacobian point within an elliptic curve";
+  let summary = "A jacobian point within an elliptic curve";
   let description = [{
-    A Jacobian point within an elliptic curve. If the point in affine form is represented as (x,y),
-    then the Jacobian form is (X:Y:Z) where x = X/Z², y = Y/Z³. It must be instantiated with an elliptic
+    A jacobian point within an elliptic curve. If the point in affine form is represented as (x,y),
+    then the jacobian form is (X:Y:Z) where x = X/Z², y = Y/Z³. It must be instantiated with an elliptic
     curve attribute such as `#elliptic_curve.sw` that defines the elliptic curve.
 
     Example:
@@ -47,7 +47,7 @@ def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [Mem
     #3 = #field.pf.elem<3> : !PF
     #curve = #elliptic_curve.sw<#3, #3, (#3, #3)>
 
-    !jacobian = !elliptic_curve.affine<#curve> AKA AffineType
+    !jacobian = !elliptic_curve.affine<#curve> AKA affine
     ```
   }];
   let parameters = (ins EllipticCurve_ShortWeierstrassAttr:$curve);
@@ -55,10 +55,10 @@ def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [Mem
 }
 
 def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [MemRefElementTypeInterface, ]> {
-  let summary = "A XYZZ point within an elliptic curve";
+  let summary = "A xyzz point within an elliptic curve";
   let description = [{
-    A XYZZ point within an elliptic curve. The XYZZ form is a different way of storing
-    a Jacobian point. While a Jacobian point is stored as (X:Y:Z), the XYZZ form is
+    A xyzz point within an elliptic curve. The xyzz form is a different way of storing
+    a jacobian point. While a jacobian point is stored as (X:Y:Z), the xyzz form is
     stored as (X:Y:Z²:Z³) to make computing x = X/Z², y = Y/Z³ easier. It must be instantiated
     with an elliptic curve attribute such as `#elliptic_curve.sw` that defines the elliptic curve.
 

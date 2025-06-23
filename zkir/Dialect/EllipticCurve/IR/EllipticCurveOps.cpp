@@ -21,18 +21,18 @@ LogicalResult verifyBinaryOp(OpType op) {
   if (isa<AffineType>(lhsType) || isa<AffineType>(rhsType)) {
     if (lhsType == rhsType &&
         (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) {
-      // affine, affine -> Jacobian
-      // affine, affine -> XYZZ
+      // affine, affine -> jacobian
+      // affine, affine -> xyzz
       return success();
     } else if (!isa<AffineType>(outputType) &&
                (lhsType == outputType || rhsType == outputType)) {
-      // affine, Jacobian -> Jacobian
-      // affine, XYZZ -> XYZZ
+      // affine, jacobian -> jacobian
+      // affine, xyzz -> xyzz
       return success();
     }
   } else if (lhsType == rhsType && rhsType == outputType) {
-    // Jacobian, Jacobian -> Jacobian
-    // XYZZ, XYZZ -> XYZZ
+    // jacobian, jacobian -> jacobian
+    // xyzz, xyzz -> xyzz
     return success();
   }
   // TODO(ashjeong): check the curves of given types are the same

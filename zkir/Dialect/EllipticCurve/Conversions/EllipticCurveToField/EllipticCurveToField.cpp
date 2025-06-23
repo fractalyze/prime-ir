@@ -152,7 +152,7 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
     ValueRange coordsTmp = adaptor.getInput();
 
     // NOTE(ashjeong): Here we attempt to restructure the input coordinates like
-    // so: [[x,y,z]] to [[x],[y],[z]] (i.e. for Jacobian). A naive copy of the
+    // so: [[x,y,z]] to [[x],[y],[z]] (i.e. for jacobian). A naive copy of the
     // coordinate values into a `SmallVector<ValueRange>` does not work given
     // `ValueRange's` nature, so a deep copy is needed beforehand.
     SmallVector<SmallVector<Value>> coords_copy(coordsTmp.size());
