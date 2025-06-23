@@ -99,6 +99,7 @@ def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
     Computes the sum of two elliptic curve points.
 
     affine, affine -> Jacobian
+    affine, affine -> XYZZ
     affine, Jacobian -> Jacobian
     affine, XYZZ -> XYZZ
     Jacobian, Jacobian -> Jacobian
@@ -118,6 +119,7 @@ def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
     Computes the difference between two elliptic curve points.
 
     affine, affine -> Jacobian
+    affine, affine -> XYZZ
     affine, Jacobian -> Jacobian
     affine, XYZZ -> XYZZ
     Jacobian, Jacobian -> Jacobian
@@ -156,6 +158,7 @@ def EllipticCurve_DoubleOp : EllipticCurve_UnaryOp<"double"> {
     it becomes Jacobian. If a Jacobian or XYZZ point is doubled, its type remains the same.
 
     affine -> Jacobian
+    affine -> XYZZ
     Jacobian -> Jacobian
     XYZZ -> XYZZ
 
@@ -175,6 +178,7 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutativ
     Computes the product of an elliptic curve point and a scalar prime field value.
 
     affine -> Jacobian
+    affine -> XYZZ
     Jacobian -> Jacobian
     XYZZ -> XYZZ
 

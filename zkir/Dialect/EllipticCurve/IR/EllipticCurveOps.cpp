@@ -19,8 +19,10 @@ LogicalResult verifyBinaryOp(OpType op) {
   Type rhsType = op.getRhs().getType();
   Type outputType = op.getOutput().getType();
   if (isa<AffineType>(lhsType) || isa<AffineType>(rhsType)) {
-    if (lhsType == rhsType && isa<JacobianType>(outputType)) {
+    if (lhsType == rhsType &&
+        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) {
       // affine, affine -> Jacobian
+      // affine, affine -> XYZZ
       return success();
     } else if (!isa<AffineType>(outputType) &&
                (lhsType == outputType || rhsType == outputType)) {
@@ -44,7 +46,8 @@ LogicalResult SubOp::verify() { return verifyBinaryOp(*this); }
 LogicalResult DoubleOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
-  if ((isa<AffineType>(inputType) && isa<JacobianType>(outputType)) ||
+  if ((isa<AffineType>(inputType) &&
+       (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       inputType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same
@@ -54,7 +57,8 @@ LogicalResult DoubleOp::verify() {
 LogicalResult ScalarMulOp::verify() {
   Type pointType = getPoint().getType();
   Type outputType = getOutput().getType();
-  if ((isa<AffineType>(pointType) && isa<JacobianType>(outputType)) ||
+  if ((isa<AffineType>(pointType) &&
+       (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       pointType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same
