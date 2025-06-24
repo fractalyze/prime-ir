@@ -71,9 +71,17 @@ LogicalResult MSMOp::verify() {
   if (scalarsType.getRank() != pointsType.getRank()) {
     return emitError() << "scalars and points must have the same rank";
   }
+  Type inputType = pointsType.getElementType();
   Type outputType = getOutput().getType();
-  if (isa<AffineType>(outputType)) {
-    return emitError() << "output type cannot be affine";
+  if (isa<JacobianType>(inputType) && isa<AffineType>(outputType)) {
+    return emitError() << "jacobian input points require a jacobian or xyzz "
+                          "output type for msm";
+  } else if (isa<XYZZType>(inputType) &&
+             (isa<AffineType>(outputType) || isa<JacobianType>(outputType))) {
+    return emitError()
+           << "xyzz input points require an xyzz output type for msm";
+  } else {
+    return success();
   }
 
   int32_t degree = getDegree();

@@ -213,6 +213,13 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
     When parallel is enabled, window-based parallelization is applied. If term-based parallelization is needed,
     parallel should be disabled and the caller should implement it.
 
+    The following input point types and output types are supported:
+
+    (unsupported combinations are not allowed as they incur extra field inversions)
+    affine -> affine, jacobian, xyzz
+    jacobian -> jacobian, xyzz
+    xyzz -> xyzz
+
     Example:
 
     If you want to run window-based parallelization, use the parallel attribute as follows:
