@@ -208,6 +208,8 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
     Additionally, 2^{degree} must be greater than or equal to the size of scalars
     if both scalars and points have a static shape.
 
+    window_bits is the number of bits to use for the window. If window_bits is 0, window_bits is computed from the degree.
+
     When parallel is enabled, window-based parallelization is applied. If term-based parallelization is needed,
     parallel should be disabled and the caller should implement it.
 
@@ -224,16 +226,23 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
     ```
     %msm_result = elliptic_curve.msm %scalars, %points degree=2 : tensor<3x!PF>, tensor<3x!affine> -> !xyzz
     ```
+
+    If you want to configure the MSM with a specific window bits, use the window_bits attribute as follows:
+
+    ```
+    %msm_result = elliptic_curve.msm %scalars, %points degree=2 window_bits=4 : tensor<3x!PF>, tensor<3x!affine> -> !xyzz
+    ```
   }];
   let arguments = (ins
     RankedTensorOf<[Field_PrimeFieldType]>:$scalars,
     RankedTensorOf<[PointType]>:$points,
     I32Attr:$degree,
+    DefaultValuedAttr<I32Attr, "0">:$windowBits,
     UnitAttr:$parallel
   );
   let results = (outs PointType:$output);
   let hasVerifier = 1;
-  let assemblyFormat = "operands attr-dict `degree` `=` $degree (`parallel` $parallel^)? `:` type($scalars) `,` type($points) `->` type($output)";
+  let assemblyFormat = "operands attr-dict `degree` `=` $degree (`window_bits` `=` $windowBits^)? (`parallel` $parallel^)? `:` type($scalars) `,` type($points) `->` type($output)";
 }
 
 ////////////// POINT CONVERSIONS //////////////

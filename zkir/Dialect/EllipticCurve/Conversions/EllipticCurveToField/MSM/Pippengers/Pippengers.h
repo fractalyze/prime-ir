@@ -38,7 +38,7 @@ constexpr size_t computeWindowsCount(size_t scalarBitWidth,
 class Pippengers {
  public:
   Pippengers(Value scalars, Value points, Type baseFieldType, Type outputType,
-             ImplicitLocOpBuilder &b)
+             ImplicitLocOpBuilder &b, int32_t degree, int32_t windowBits)
       : points_(points), outputType_(outputType), b_(b) {
     zero_ = b_.create<arith::ConstantIndexOp>(0);
     one_ = b_.create<arith::ConstantIndexOp>(1);
@@ -55,9 +55,8 @@ class Pippengers {
 
     size_t scalarBitWidth =
         scalarFieldType_.getModulus().getValue().getBitWidth();
-    // TODO(chokobole): Temporarily fixed to 16. This is fixed in the next
-    // commit.
-    bitsPerWindow_ = computeWindowsBits(16);
+    bitsPerWindow_ =
+        windowBits > 0 ? windowBits : computeWindowsBits(size_t{1} << degree);
     size_t numWindows = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
 
     numScalarMuls_ = b.create<tensor::DimOp>(scalars_, 0);

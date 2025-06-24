@@ -588,7 +588,8 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
     Type outputType = op.getOutput().getType();
 
     PippengersGeneric pippengers(scalars, points, baseFieldType, outputType, b,
-                                 adaptor.getParallel());
+                                 adaptor.getParallel(), adaptor.getDegree(),
+                                 adaptor.getWindowBits());
 
     rewriter.replaceOp(op, pippengers.generate());
     return success();

@@ -11,8 +11,10 @@ namespace mlir::zkir::elliptic_curve {
 class PippengersGeneric : public Pippengers {
  public:
   PippengersGeneric(Value scalars, Value points, Type baseFieldType,
-                    Type outputType, ImplicitLocOpBuilder &b, bool parallel)
-      : Pippengers(scalars, points, baseFieldType, outputType, b),
+                    Type outputType, ImplicitLocOpBuilder &b, bool parallel,
+                    int32_t degree, int32_t windowBits)
+      : Pippengers(scalars, points, baseFieldType, outputType, b, degree,
+                   windowBits),
         parallel_(parallel) {
     // Note that the required number of buckets per window is 2^{bitsPerWindow}
     // - 1 since we don't need the "zero" bucket.

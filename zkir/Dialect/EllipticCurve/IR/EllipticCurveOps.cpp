@@ -94,6 +94,12 @@ LogicalResult MSMOp::verify() {
   } else if (!scalarsType.hasStaticShape() && pointsType.hasStaticShape()) {
     return emitError() << "points has static shape and scalars does not";
   }
+
+  int32_t windowBits = getWindowBits();
+  if (windowBits < 0) {
+    return emitError() << "window bits must be greater than or equal to 0";
+  }
+
   return success();
   // TODO(ashjeong): check curves/fields are the same
 }
