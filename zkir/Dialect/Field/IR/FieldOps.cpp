@@ -268,7 +268,8 @@ LogicalResult EncapsulateOp::verify() {
   Type resultType = (this->getOutput().getType());
   TypeRange inputTypes = this->getInput().getTypes();
 
-  disallowShapedTypeOfExtField(*this);
+  if (failed(disallowShapedTypeOfExtField(*this))) return failure();
+
   if (auto pfType = dyn_cast<PrimeFieldType>(resultType)) {
     if (inputTypes.size() != 1) {
       return emitOpError()

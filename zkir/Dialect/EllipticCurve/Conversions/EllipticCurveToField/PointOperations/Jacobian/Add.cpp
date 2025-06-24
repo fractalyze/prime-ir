@@ -234,6 +234,7 @@ SmallVector<Value> jacobianAdd(ValueRange p1, ValueRange p2,
     return jacobianAndJacobian(p1, p2, curve, b);
   } else {
     assert(false && "Unsupported point types for Jacobian addition");
+    return {};
   }
 }
 
