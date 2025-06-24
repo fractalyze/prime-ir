@@ -6,6 +6,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
@@ -52,13 +53,14 @@ class Pippengers {
                          .getResult()
                    : scalars;
 
-    size_t numScalarMuls = scalarsType.getShape()[0];
     size_t scalarBitWidth =
         scalarFieldType_.getModulus().getValue().getBitWidth();
-    bitsPerWindow_ = computeWindowsBits(numScalarMuls);
+    // TODO(chokobole): Temporarily fixed to 16. This is fixed in the next
+    // commit.
+    bitsPerWindow_ = computeWindowsBits(16);
     size_t numWindows = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
 
-    numScalarMuls_ = b.create<arith::ConstantIndexOp>(numScalarMuls);
+    numScalarMuls_ = b.create<tensor::DimOp>(scalars_, 0);
     numWindows_ = b.create<arith::ConstantIndexOp>(numWindows);
 
     auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
