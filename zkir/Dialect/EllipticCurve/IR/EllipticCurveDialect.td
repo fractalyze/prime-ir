@@ -6,7 +6,7 @@ include "mlir/IR/DialectBase.td"
 def EllipticCurve_Dialect : Dialect {
   let name = "elliptic_curve";
   let summary = "Dialect for elliptic curve operations and types";
-  let description = "Dialect for elliptic curve operations and types. Contains Affine, Jacobian, and XYZZ point types.";
+  let description = "Dialect for elliptic curve operations and types. Contains affine, jacobian, and xyzz point types.";
   let cppNamespace = "::mlir::zkir::elliptic_curve";
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;

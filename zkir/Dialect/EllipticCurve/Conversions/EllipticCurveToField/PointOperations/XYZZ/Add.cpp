@@ -11,6 +11,59 @@
 namespace mlir::zkir::elliptic_curve {
 
 // madd-2008-s
+// http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-mmadd-2008-s
+// Cost: 4M + 2S
+// Assumption: ZZ1 == ZZZ1 == ZZ2 == ZZZ2 == 1
+static SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
+                                          ShortWeierstrassAttr curve,
+                                          ImplicitLocOpBuilder &b) {
+  auto x1 = p1[0];
+  auto y1 = p1[1];
+
+  auto x2 = p2[0];
+  auto y2 = p2[1];
+
+  // if x1 == x2 && y1 == y2
+  auto cmpEq1 = b.create<field::CmpOp>(arith::CmpIPredicate::eq, x1, x2);
+  auto cmpEq2 = b.create<field::CmpOp>(arith::CmpIPredicate::eq, y1, y2);
+  auto combined_condition = b.create<arith::AndIOp>(cmpEq1, cmpEq2);
+  auto ifOp = b.create<scf::IfOp>(
+      combined_condition,
+      /*thenBuilder=*/
+      [&](OpBuilder &builder, Location loc) {
+        ImplicitLocOpBuilder b(loc, builder);
+        b.create<scf::YieldOp>(affineToXYZZDouble(p1, curve, b));
+      },
+      /*elseBuilder=*/
+      [&](OpBuilder &builder, Location loc) {
+        ImplicitLocOpBuilder b(loc, builder);
+        // P = X2-X1
+        auto p = b.create<field::SubOp>(x2, x1);
+        // R = Y2-Y1
+        auto r = b.create<field::SubOp>(y2, y1);
+        // PP = P²
+        auto pp = b.create<field::SquareOp>(p);
+        // PPP = P*PP
+        auto ppp = b.create<field::MulOp>(p, pp);
+        // Q = X1*PP
+        auto q = b.create<field::MulOp>(x1, pp);
+        // X3 = R²-PPP-2*Q
+        auto x3Tmp1 = b.create<field::SquareOp>(r);
+        auto x3Tmp2 = b.create<field::SubOp>(x3Tmp1, ppp);
+        auto x3Tmp3 = b.create<field::DoubleOp>(q);
+        auto x3 = b.create<field::SubOp>(x3Tmp2, x3Tmp3);
+        // Y3 = R*(Q-X3)-Y1*PPP
+        auto y3Tmp1 = b.create<field::SubOp>(q, x3);
+        auto y3Tmp2 = b.create<field::MulOp>(r, y3Tmp1);
+        auto y3Tmp3 = b.create<field::MulOp>(y1, ppp);
+        auto y3 = b.create<field::SubOp>(y3Tmp2, y3Tmp3);
+
+        b.create<scf::YieldOp>(ValueRange{x3, y3, pp, ppp});
+      });
+  return ifOp.getResults();
+}
+
+// madd-2008-s
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-madd-2008-s
 // Cost: 8M + 2S
 // Assumption: ZZ2 == ZZZ2 == 1
@@ -148,6 +201,9 @@ SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
                            ShortWeierstrassAttr curve,
                            ImplicitLocOpBuilder &b) {
   if (p1.size() == 2) {
+    if (p2.size() == 2) {
+      return affineAndAffine(p2, p1, curve, b);
+    }
     return xyzzAndAffine(p2, p1, curve, b);
   } else if (p2.size() == 2) {
     return xyzzAndAffine(p1, p2, curve, b);

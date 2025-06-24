@@ -19,18 +19,20 @@ LogicalResult verifyBinaryOp(OpType op) {
   Type rhsType = op.getRhs().getType();
   Type outputType = op.getOutput().getType();
   if (isa<AffineType>(lhsType) || isa<AffineType>(rhsType)) {
-    if (lhsType == rhsType && isa<JacobianType>(outputType)) {
-      // affine, affine -> Jacobian
+    if (lhsType == rhsType &&
+        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) {
+      // affine, affine -> jacobian
+      // affine, affine -> xyzz
       return success();
     } else if (!isa<AffineType>(outputType) &&
                (lhsType == outputType || rhsType == outputType)) {
-      // affine, Jacobian -> Jacobian
-      // affine, XYZZ -> XYZZ
+      // affine, jacobian -> jacobian
+      // affine, xyzz -> xyzz
       return success();
     }
   } else if (lhsType == rhsType && rhsType == outputType) {
-    // Jacobian, Jacobian -> Jacobian
-    // XYZZ, XYZZ -> XYZZ
+    // jacobian, jacobian -> jacobian
+    // xyzz, xyzz -> xyzz
     return success();
   }
   // TODO(ashjeong): check the curves of given types are the same
@@ -44,7 +46,8 @@ LogicalResult SubOp::verify() { return verifyBinaryOp(*this); }
 LogicalResult DoubleOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
-  if ((isa<AffineType>(inputType) && isa<JacobianType>(outputType)) ||
+  if ((isa<AffineType>(inputType) &&
+       (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       inputType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same
@@ -54,7 +57,8 @@ LogicalResult DoubleOp::verify() {
 LogicalResult ScalarMulOp::verify() {
   Type pointType = getPoint().getType();
   Type outputType = getOutput().getType();
-  if ((isa<AffineType>(pointType) && isa<JacobianType>(outputType)) ||
+  if ((isa<AffineType>(pointType) &&
+       (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       pointType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same
