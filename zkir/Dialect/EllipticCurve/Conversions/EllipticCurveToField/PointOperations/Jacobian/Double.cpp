@@ -168,6 +168,7 @@ SmallVector<Value> jacobianDouble(ValueRange point, ShortWeierstrassAttr curve,
     return ifOp.getResults();
   } else {
     assert(false && "Unsupported point type for jacobian doubling");
+    return {};
   }
 }
 
