@@ -177,7 +177,7 @@ void ConstantOp::print(OpAsmPrinter &p) {
 }
 
 template <typename OpType>
-static LogicalResult disallowTensorOfExtField(OpType op) {
+static LogicalResult disallowShapedTypeOfExtField(OpType op) {
   // FIXME(batzor): In the prime field case, we rely on elementwise trait but in
   // the quadratic extension case, `linalg.generic` introduced by the
   // elementwise pass will be ill-formed due to the 1:N conversion.
@@ -186,18 +186,20 @@ static LogicalResult disallowTensorOfExtField(OpType op) {
     auto elementType = cast<ShapedType>(resultType).getElementType();
     if (isa<QuadraticExtFieldType>(elementType)) {
       return op->emitOpError(
-          "tensor operation is not supported for quadratic "
+          "shaped type is not supported for quadratic "
           "extension field type");
     }
   }
   return success();
 }
 
-LogicalResult NegateOp::verify() { return disallowTensorOfExtField(*this); }
-LogicalResult AddOp::verify() { return disallowTensorOfExtField(*this); }
-LogicalResult SubOp::verify() { return disallowTensorOfExtField(*this); }
-LogicalResult MulOp::verify() { return disallowTensorOfExtField(*this); }
-LogicalResult InverseOp::verify() { return disallowTensorOfExtField(*this); }
+LogicalResult NegateOp::verify() { return disallowShapedTypeOfExtField(*this); }
+LogicalResult AddOp::verify() { return disallowShapedTypeOfExtField(*this); }
+LogicalResult SubOp::verify() { return disallowShapedTypeOfExtField(*this); }
+LogicalResult MulOp::verify() { return disallowShapedTypeOfExtField(*this); }
+LogicalResult InverseOp::verify() {
+  return disallowShapedTypeOfExtField(*this);
+}
 LogicalResult FromMontOp::verify() {
   bool isMont = isMontgomery(this->getOutput().getType());
   if (isMont) {
@@ -205,7 +207,7 @@ LogicalResult FromMontOp::verify() {
            << "FromMontOp result should be a standard type, but got "
            << getElementTypeOrSelf(this->getOutput().getType()) << ".";
   }
-  return disallowTensorOfExtField(*this);
+  return disallowShapedTypeOfExtField(*this);
 }
 LogicalResult ToMontOp::verify() {
   bool isMont = isMontgomery(this->getOutput().getType());
@@ -214,7 +216,7 @@ LogicalResult ToMontOp::verify() {
            << "ToMontOp result should be a Montgomery type, but got "
            << getElementTypeOrSelf(this->getOutput().getType()) << ".";
   }
-  return disallowTensorOfExtField(*this);
+  return disallowShapedTypeOfExtField(*this);
 }
 
 namespace {
