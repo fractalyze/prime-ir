@@ -541,7 +541,8 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
         /*resultTypes=*/TypeRange{scalarIntType, outputType, outputType},
         /*operands=*/ValueRange{scalarInt, initialPoint, result},
         /*beforeBuilder=*/
-        [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
+        [&](OpBuilder &beforeBuilder, Location beforeLoc, ValueRange args) {
+          ImplicitLocOpBuilder b(beforeLoc, beforeBuilder);
           // if `decreasingScalar` > 0, continue
           Value decreasingScalar = args[0];
           auto cmpGt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt,
@@ -549,7 +550,8 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
           b.create<scf::ConditionOp>(cmpGt, args);
         },
         /*afterBuilder=*/
-        [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
+        [&](OpBuilder &afterBuilder, Location afterLoc, ValueRange args) {
+          ImplicitLocOpBuilder b(afterLoc, afterBuilder);
           Value decreasingScalar = args[0];
           Value multiplyingPoint = args[1];
           Value result = args[2];
