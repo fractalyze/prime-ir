@@ -1,6 +1,7 @@
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Pippengers.h"
 
 #include <cmath>
+#include <limits>
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -14,19 +15,26 @@
 namespace mlir::zkir::elliptic_curve {
 namespace {
 
-// The result of this function is only approximately `ln(a)`.
-// See https://github.com/scipr-lab/zexe/issues/79#issue-556220473
-constexpr static size_t lnWithoutFloats(size_t a) {
-  // log2(a) * ln(2)
-  return std::log2(a) * 69 / 100;
-}
+// https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#total-complexity
+constexpr size_t estimateOptimalWindowBits(size_t lambda, size_t n) {
+  size_t optimalBits = 1;
+  size_t minCost = std::numeric_limits<size_t>::max();
 
-constexpr size_t computeWindowsBits(size_t size) {
-  if (size < 32) {
-    return 3;
-  } else {
-    return lnWithoutFloats(size) + 2;
+  for (size_t s = 1; s <= lambda; ++s) {
+    // ⌈λ/s⌉ × (n + 2^(s+1) - 1) × PointAdd
+    size_t numWindows = (lambda + s - 1) / s;
+    size_t pointAddCost = numWindows * (n + (size_t{1} << (s + 1)) - 1);
+
+    if (pointAddCost < minCost) {
+      minCost = pointAddCost;
+      optimalBits = s;
+    } else {
+      // We've found the optimal window size.
+      break;
+    }
   }
+
+  return optimalBits;
 }
 
 constexpr size_t computeWindowsCount(size_t scalarBitWidth,
@@ -55,8 +63,9 @@ Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
 
   size_t scalarBitWidth =
       scalarFieldType_.getModulus().getValue().getBitWidth();
-  bitsPerWindow_ =
-      windowBits > 0 ? windowBits : computeWindowsBits(size_t{1} << degree);
+  bitsPerWindow_ = windowBits > 0 ? windowBits
+                                  : estimateOptimalWindowBits(
+                                        scalarBitWidth, size_t{1} << degree);
   size_t numWindows = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
 
   numScalarMuls_ = b.create<tensor::DimOp>(scalars_, 0);
