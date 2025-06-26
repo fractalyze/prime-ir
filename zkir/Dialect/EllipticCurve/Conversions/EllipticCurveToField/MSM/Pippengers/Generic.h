@@ -33,8 +33,8 @@ class PippengersGeneric : public Pippengers {
   //             - scalarDecomposition(): calculate scalar slice @ window
   //             - populate bucket
   //       }
-  //       bucketReduction(): reduce buckets to one window sum per window
   //     }
+  //     bucketReduction(): reduce buckets to one window sum per window
   //   }
   // }
   // windowReduction(): reduce window sums to MSM result
