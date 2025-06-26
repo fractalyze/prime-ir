@@ -197,12 +197,12 @@ func.func @test_msm() {
   %scalars = field.pf.encapsulate %c_scalars : tensor<3xi32> -> tensor<3x!PFm>
   %affine1 = elliptic_curve.point %var1, %var5 : !affine
   %points = tensor.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
-  %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PFm>, tensor<3x!affine> -> !jacobian
+  %msm_result = elliptic_curve.msm %scalars, %points degree=2 : tensor<3x!PFm>, tensor<3x!affine> -> !jacobian
   return
 }
 
 func.func @test_g2_msm(%scalars: tensor<3x!PFm>, %points: tensor<3x!g2affine>) {
-  %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PFm>, tensor<3x!g2affine> -> !g2jacobian
+  %msm_result = elliptic_curve.msm %scalars, %points degree=2 : tensor<3x!PFm>, tensor<3x!g2affine> -> !g2jacobian
   return
 }
 

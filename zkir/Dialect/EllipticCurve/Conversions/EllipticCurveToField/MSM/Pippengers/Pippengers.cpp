@@ -1,13 +1,102 @@
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Pippengers.h"
 
+#include <cmath>
+#include <limits>
+
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "zkir/Dialect/Field/IR/FieldOps.h"
 
 namespace mlir::zkir::elliptic_curve {
+namespace {
+
+// https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#total-complexity
+constexpr size_t estimateOptimalWindowBits(size_t lambda, size_t n) {
+  size_t optimalBits = 1;
+  size_t minCost = std::numeric_limits<size_t>::max();
+
+  for (size_t s = 1; s <= lambda; ++s) {
+    // ⌈λ/s⌉ × (n + 2^(s+1) - 1) × PointAdd
+    size_t numWindows = (lambda + s - 1) / s;
+    size_t pointAddCost = numWindows * (n + (size_t{1} << (s + 1)) - 1);
+
+    if (pointAddCost < minCost) {
+      minCost = pointAddCost;
+      optimalBits = s;
+    } else {
+      // We've found the optimal window size.
+      break;
+    }
+  }
+
+  return optimalBits;
+}
+
+constexpr size_t computeWindowsCount(size_t scalarBitWidth,
+                                     size_t bitsPerWindow) {
+  return (scalarBitWidth + bitsPerWindow - 1) / bitsPerWindow;
+}
+
+}  // namespace
+
+Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
+                       Type outputType, ImplicitLocOpBuilder &b, int32_t degree,
+                       int32_t windowBits)
+    : points_(points), outputType_(outputType), b_(b) {
+  zero_ = b.create<arith::ConstantIndexOp>(0);
+  one_ = b.create<arith::ConstantIndexOp>(1);
+
+  auto scalarsType = cast<RankedTensorType>(scalars.getType());
+
+  scalarFieldType_ = cast<field::PrimeFieldType>(
+      field::getStandardFormType(scalarsType.getElementType()));
+  scalars_ = field::isMontgomery(scalarsType)
+                 ? b.create<field::FromMontOp>(
+                        field::getStandardFormType(scalarsType), scalars)
+                       .getResult()
+                 : scalars;
+
+  size_t scalarBitWidth =
+      scalarFieldType_.getModulus().getValue().getBitWidth();
+  bitsPerWindow_ = windowBits > 0 ? windowBits
+                                  : estimateOptimalWindowBits(
+                                        scalarBitWidth, size_t{1} << degree);
+  size_t numWindows = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
+
+  numScalarMuls_ = b.create<tensor::DimOp>(scalars_, 0);
+  numWindows_ = b.create<arith::ConstantIndexOp>(numWindows);
+
+  auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
+  Value oneBF = field::isMontgomery(baseFieldType)
+                    ? b.create<field::ToMontOp>(
+                           baseFieldType,
+                           b.create<field::ConstantOp>(
+                               field::getStandardFormType(baseFieldType), 1))
+                          .getResult()
+                    : b.create<field::ConstantOp>(baseFieldType, 1);
+  zeroPoint_ = isa<XYZZType>(outputType)
+                   ? b.create<elliptic_curve::PointOp>(
+                         outputType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
+                   : b.create<elliptic_curve::PointOp>(
+                         outputType, ValueRange{oneBF, oneBF, zeroBF});
+
+  auto windowSumsType =
+      MemRefType::get({static_cast<int64_t>(numWindows)}, outputType_);
+  windowSums_ = b.create<memref::AllocOp>(windowSumsType);
+
+  b.create<scf::ForOp>(
+      zero_, numWindows_, one_, std::nullopt,
+      [&](OpBuilder &builder, Location loc, Value i, ValueRange args) {
+        ImplicitLocOpBuilder b0(loc, builder);
+        b0.create<memref::StoreOp>(zeroPoint_, windowSums_, i);
+        b0.create<scf::YieldOp>();
+      });
+}
 
 // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-3.-bucket-reduction
 void Pippengers::bucketReduction(Value j, Value initialPoint, Value buckets,

@@ -65,7 +65,7 @@ func.func @test_msm() {
   // RUNNING MSM
   %scalars = tensor.from_elements %scalar3, %scalar3, %scalar5, %scalar7 : tensor<4x!SFm>
   %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
-  %msm_test = elliptic_curve.msm %scalars, %points : tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
+  %msm_test = elliptic_curve.msm %scalars, %points degree=2 parallel : tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
   %msm_test_affine = elliptic_curve.convert_point_type %msm_test : !jacobian -> !affine
 
   %extract_point1x, %extract_point1y = elliptic_curve.extract %msm_test_affine : !affine -> !PFm, !PFm

@@ -202,15 +202,47 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
     Output type determines internal computation type of buckets and window sums.
     xyzz is recommended for best performance.
 
+    If both scalars and points have a static shape, the size of scalars and points must be equal.
+    Otherwise, both must have a dynamic shape.
+
+    Additionally, 2^{degree} must be greater than or equal to the size of scalars
+    if both scalars and points have a static shape.
+
+    window_bits is the number of bits to use for the window. If window_bits is 0, window_bits is computed from the degree.
+
+    When parallel is enabled, window-based parallelization is applied. If term-based parallelization is needed,
+    parallel should be disabled and the caller should implement it.
+
     Example:
+
+    If you want to run window-based parallelization, use the parallel attribute as follows:
+
     ```
-    %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PF>, tensor<3x!affine> -> !jacobian
+    %msm_result = elliptic_curve.msm %scalars, %points degree=2 parallel : tensor<3x!PF>, tensor<3x!affine> -> !xyzz
+    ```
+
+    If you want to run serial execution, simply omit the parallel attribute:
+
+    ```
+    %msm_result = elliptic_curve.msm %scalars, %points degree=2 : tensor<3x!PF>, tensor<3x!affine> -> !xyzz
+    ```
+
+    If you want to configure the MSM with a specific window bits, use the window_bits attribute as follows:
+
+    ```
+    %msm_result = elliptic_curve.msm %scalars, %points degree=2 window_bits=4 : tensor<3x!PF>, tensor<3x!affine> -> !xyzz
     ```
   }];
-  let arguments = (ins RankedTensorOf<[Field_PrimeFieldType]>:$scalars, RankedTensorOf<[PointType]>:$points);
+  let arguments = (ins
+    RankedTensorOf<[Field_PrimeFieldType]>:$scalars,
+    RankedTensorOf<[PointType]>:$points,
+    I32Attr:$degree,
+    DefaultValuedAttr<I32Attr, "0">:$windowBits,
+    UnitAttr:$parallel
+  );
   let results = (outs PointType:$output);
   let hasVerifier = 1;
-  let assemblyFormat = "operands attr-dict `:` type($scalars) `,` type($points) `->` type($output)";
+  let assemblyFormat = "operands attr-dict `degree` `=` $degree (`window_bits` `=` $windowBits^)? (`parallel` $parallel^)? `:` type($scalars) `,` type($points) `->` type($output)";
 }
 
 ////////////// POINT CONVERSIONS //////////////

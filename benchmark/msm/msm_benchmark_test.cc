@@ -64,31 +64,31 @@ BENCHMARK(BM_msm_benchmark)->Iterations(20)->Unit(::benchmark::kMillisecond);
 // clang-format off
 // NOLINTBEGIN(whitespace/line_length)
 
-// $bazel run //benchmark/msm:msm_benchmark_test_serial
-// 2025-06-16
+// $bazel run -c opt //benchmark/msm:msm_benchmark_test_serial
+// 2025-06-26 tested on M4 Pro
 //
-// Run on (8 X 24 MHz CPU s)
+// Run on (14 X 24 MHz CPU s)
 // CPU Caches:
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
-//   L2 Unified 4096 KiB (x8)
-// Load Average: 1.70, 2.47, 3.13
+//   L2 Unified 4096 KiB (x14)
+// Load Average: 7.82, 13.83, 10.35
 // -------------------------------------------------------------------------
 // Benchmark                               Time             CPU   Iterations
 // -------------------------------------------------------------------------
-// BM_msm_benchmark/iterations:20       4263 ms         4254 ms           20
+// BM_msm_benchmark/iterations:20       2786 ms         2761 ms           20
 
-// $bazel run //benchmark/msm:msm_benchmark_test_parallel
-// 2025-06-16
+// $bazel run -c opt //benchmark/msm:msm_benchmark_test_parallel
+// 2025-06-26 tested on M4 Pro
 //
-// Run on (8 X 24 MHz CPU s)
+// Run on (14 X 24 MHz CPU s)
 // CPU Caches:
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
-//   L2 Unified 4096 KiB (x8)
-// Load Average: 7.68, 4.68, 3.73
+//   L2 Unified 4096 KiB (x14)
+// Load Average: 22.03, 18.19, 11.02
 // -------------------------------------------------------------------------
 // Benchmark                               Time             CPU   Iterations
 // -------------------------------------------------------------------------
-// BM_msm_benchmark/iterations:20        946 ms          916 ms           20
+// BM_msm_benchmark/iterations:20        609 ms          485 ms           20
 // NOLINTEND()

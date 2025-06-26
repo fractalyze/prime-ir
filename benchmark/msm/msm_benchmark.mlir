@@ -19,7 +19,7 @@
 func.func @msm(%scalars : !SFm_M, %points : !points_M) attributes { llvm.emit_c_interface } {
   %s = bufferization.to_tensor %scalars restrict writable : !SFm_M to !SFm_T
   %p = bufferization.to_tensor %points restrict writable : !points_M to !points_T
-  %f = elliptic_curve.msm %s, %p : !SFm_T, !points_T -> !xyzz
+  %f = elliptic_curve.msm %s, %p degree=20 parallel : !SFm_T, !points_T -> !xyzz
   %res = elliptic_curve.convert_point_type %f : !xyzz -> !jacobian
   return
 }

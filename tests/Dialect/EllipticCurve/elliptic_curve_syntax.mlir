@@ -264,7 +264,7 @@ func.func @test_msm() {
   %affine1 = elliptic_curve.point %var1, %var5 : !affine
   // CHECK: %[[POINTS:.*]] = tensor.from_elements %[[AFFINE1]], %[[AFFINE1]], %[[AFFINE1]] : [[TAF:.*]]
   %points = tensor.from_elements %affine1, %affine1, %affine1 : tensor<3x!affine>
-  // CHECK: %[[MSM_RESULT:.*]] = elliptic_curve.msm %[[SCALARS]], %[[POINTS]] : [[TPF]], [[TAF]] -> ![[JA:.*]]
-  %msm_result = elliptic_curve.msm %scalars, %points : tensor<3x!PF>, tensor<3x!affine> -> !jacobian
+  // CHECK: %[[MSM_RESULT:.*]] = elliptic_curve.msm %[[SCALARS]], %[[POINTS]] degree = 2 : [[TPF]], [[TAF]] -> ![[JA:.*]]
+  %msm_result = elliptic_curve.msm %scalars, %points degree=2 : tensor<3x!PF>, tensor<3x!affine> -> !jacobian
   return
 }

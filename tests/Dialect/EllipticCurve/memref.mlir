@@ -37,6 +37,16 @@ func.func @test_memref_unranked_cast(%input : memref<4x!affine>) -> memref<*x!af
   return %cast : memref<*x!affine>
 }
 
+// CHECK-LABEL: @test_memref_dim
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_memref_dim(%input : memref<?x!affine>) -> index {
+  %c0 = arith.constant 0 : index
+  // CHECK: %[[DIM:.*]] = memref.dim %[[INPUT]], %[[C0:.*]] : [[INPUT_TYPE]]
+  %dim = memref.dim %input, %c0 : memref<?x!affine>
+  // CHECK: return %[[DIM]] : [[T]]
+  return %dim : index
+}
+
 // CHECK-LABEL: @test_memref_load
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> ([[T:.*]], [[T:.*]]) {
 func.func @test_memref_load(%input : memref<4x!affine>) -> !affine {

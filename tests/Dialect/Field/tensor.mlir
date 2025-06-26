@@ -21,6 +21,16 @@ func.func @test_tensor_concat(%input1 : tensor<2x!PF>, %input2 : tensor<3x!PF>) 
   return %concat : tensor<5x!PF>
 }
 
+// CHECK-LABEL: @test_tensor_dim
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_tensor_dim(%input : tensor<?x!PF>) -> index {
+  %c0 = arith.constant 0 : index
+  // CHECK: %[[DIM:.*]] = tensor.dim %[[INPUT]], %[[C0:.*]] : [[INPUT_TYPE]]
+  %dim = tensor.dim %input, %c0 : tensor<?x!PF>
+  // CHECK: return %[[DIM]] : [[T]]
+  return %dim : index
+}
+
 // CHECK-LABEL: @test_tensor_empty
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_tensor_empty() -> tensor<4x!PF> {

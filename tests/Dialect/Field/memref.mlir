@@ -37,6 +37,16 @@ func.func @test_memref_copy(%src : memref<4x!PF>, %dst : memref<4x!PF>) {
   return
 }
 
+// CHECK-LABEL: @test_memref_dim
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_memref_dim(%input : memref<?x!PF>) -> index {
+  %c0 = arith.constant 0 : index
+  // CHECK: %[[DIM:.*]] = memref.dim %[[INPUT]], %[[C0:.*]] : [[INPUT_TYPE]]
+  %dim = memref.dim %input, %c0 : memref<?x!PF>
+  // CHECK: return %[[DIM]] : [[T]]
+  return %dim : index
+}
+
 // CHECK-LABEL: @test_memref_load
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
 func.func @test_memref_load(%input : memref<4x!PF>) -> !PF {

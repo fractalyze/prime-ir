@@ -587,7 +587,9 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
 
     Type outputType = op.getOutput().getType();
 
-    PippengersGeneric pippengers(scalars, points, baseFieldType, outputType, b);
+    PippengersGeneric pippengers(scalars, points, baseFieldType, outputType, b,
+                                 adaptor.getParallel(), adaptor.getDegree(),
+                                 adaptor.getWindowBits());
 
     rewriter.replaceOp(op, pippengers.generate());
     return success();
@@ -634,10 +636,13 @@ void EllipticCurveToField::runOnOperation() {
       ConvertAny<bufferization::ToTensorOp>,
       ConvertAny<memref::AllocOp>,
       ConvertAny<memref::CastOp>,
+      ConvertAny<memref::DimOp>,
       ConvertAny<memref::LoadOp>,
       ConvertAny<memref::StoreOp>,
       ConvertAny<memref::SubViewOp>,
+      ConvertAny<tensor::DimOp>,
       ConvertAny<tensor::ExtractOp>,
+      ConvertAny<tensor::ExtractSliceOp>,
       ConvertAny<tensor::FromElementsOp>
       // clang-format on
       >(typeConverter, context);
@@ -648,10 +653,13 @@ void EllipticCurveToField::runOnOperation() {
       bufferization::ToTensorOp,
       memref::AllocOp,
       memref::CastOp,
+      memref::DimOp,
       memref::LoadOp,
       memref::StoreOp,
       memref::SubViewOp,
+      tensor::DimOp,
       tensor::ExtractOp,
+      tensor::ExtractSliceOp,
       tensor::FromElementsOp
       // clang-format on
       >([&](auto op) { return typeConverter.isLegal(op); });

@@ -74,9 +74,33 @@ LogicalResult MSMOp::verify() {
   Type outputType = getOutput().getType();
   if (isa<AffineType>(outputType)) {
     return emitError() << "output type cannot be affine";
-  } else {
-    return success();
   }
+
+  int32_t degree = getDegree();
+  if (degree <= 0) {
+    return emitError() << "degree must be greater than 0";
+  }
+
+  if (scalarsType.hasStaticShape() && pointsType.hasStaticShape()) {
+    if (scalarsType.getNumElements() != pointsType.getNumElements()) {
+      return emitError()
+             << "scalars and points must have the same number of elements";
+    }
+    if (scalarsType.getNumElements() > (int64_t{1} << degree)) {
+      return emitError() << "scalars must have at least 2^degree elements";
+    }
+  } else if (scalarsType.hasStaticShape() && !pointsType.hasStaticShape()) {
+    return emitError() << "scalars has static shape and points does not";
+  } else if (!scalarsType.hasStaticShape() && pointsType.hasStaticShape()) {
+    return emitError() << "points has static shape and scalars does not";
+  }
+
+  int32_t windowBits = getWindowBits();
+  if (windowBits < 0) {
+    return emitError() << "window bits must be greater than or equal to 0";
+  }
+
+  return success();
   // TODO(ashjeong): check curves/fields are the same
 }
 

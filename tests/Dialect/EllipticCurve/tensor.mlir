@@ -10,6 +10,16 @@
 #curve = #elliptic_curve.sw<#1, #2, (#3, #4)>
 !affine = !elliptic_curve.affine<#curve>
 
+// CHECK-LABEL: @test_tensor_dim
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_tensor_dim(%input : tensor<?x!affine>) -> index {
+  %c0 = arith.constant 0 : index
+  // CHECK: %[[DIM:.*]] = tensor.dim %[[INPUT]], %[[C0:.*]] : [[INPUT_TYPE]]
+  %dim = tensor.dim %input, %c0 : tensor<?x!affine>
+  // CHECK: return %[[DIM]] : [[T]]
+  return %dim : index
+}
+
 // CHECK-LABEL: @test_tensor_extract
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> ([[T:.*]], [[T:.*]]) {
 func.func @test_tensor_extract(%input : tensor<4x!affine>) -> !affine {
@@ -28,4 +38,16 @@ func.func @test_tensor_from_elements(%point : !affine) -> tensor<2x!affine> {
   %tensor = tensor.from_elements %point, %point : tensor<2x!affine>
   // CHECK: return %[[TENSOR]] : [[T]]
   return %tensor : tensor<2x!affine>
+}
+
+// CHECK-LABEL: @test_tensor_extract_slice
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_tensor_extract_slice(%input : tensor<4x!affine>) -> tensor<?x!affine> {
+  %c0 = arith.constant 0 : index
+  %c2 = arith.constant 2 : index
+  %c1 = arith.constant 1 : index
+  // CHECK: %[[SLICE:.*]] = tensor.extract_slice %[[INPUT]][%[[C0:.*]]] [%[[C2:.*]]] [%[[C1:.*]]] : [[INPUT_TYPE]] to [[T]]
+  %slice = tensor.extract_slice %input[%c0] [%c2] [%c1] : tensor<4x!affine> to tensor<?x!affine>
+  // CHECK: return %[[SLICE]] : [[T]]
+  return %slice : tensor<?x!affine>
 }

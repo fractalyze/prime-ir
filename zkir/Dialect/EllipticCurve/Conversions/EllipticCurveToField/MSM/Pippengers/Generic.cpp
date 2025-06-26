@@ -4,10 +4,8 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
-#include "zkir/Dialect/Field/IR/FieldTypes.h"
 
 namespace mlir::zkir::elliptic_curve {
 
@@ -140,42 +138,49 @@ ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
 }
 
 void PippengersGeneric::bucketAccReduc() {
-  b_.create<scf::ParallelOp>(
-      zero_, numWindows_, one_,
-      [&](OpBuilder &builder, Location loc, ValueRange inducVars) {
-        ImplicitLocOpBuilder b0(loc, builder);
-        Value j = inducVars[0];
+  Operation *windowsForOp = nullptr;
+  Value j;
 
-        // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-2.-bucket-accumulation
-        Value bitsPerWindow = b0.create<arith::ConstantIndexOp>(bitsPerWindow_);
-        Value windowOffset = b0.create<arith::MulIOp>(bitsPerWindow, j);
-        MemRefType bucketsType =
-            MemRefType::get({static_cast<int64_t>(numBuckets_)}, outputType_);
-        auto buckets = b0.create<memref::AllocOp>(bucketsType);
+  if (parallel_) {
+    auto parOp = b_.create<scf::ParallelOp>(zero_, numWindows_, one_);
+    b_.setInsertionPointToStart(parOp.getBody());
+    j = parOp.getInductionVars()[0];
+    windowsForOp = parOp;
+  } else {
+    auto forOp = b_.create<scf::ForOp>(zero_, numWindows_, one_);
+    b_.setInsertionPointToStart(forOp.getBody());
+    j = forOp.getInductionVar();
+    windowsForOp = forOp;
+  }
 
-        Value numBuckets = b0.create<arith::ConstantIndexOp>(numBuckets_);
-        b0.create<scf::ForOp>(
-            zero_, numBuckets, one_, std::nullopt,
-            [&](OpBuilder &nestedBuilder, Location nestedLoc, Value i,
-                ValueRange args) {
-              ImplicitLocOpBuilder b1(nestedLoc, nestedBuilder);
-              b1.create<memref::StoreOp>(zeroPoint_, buckets, i);
-              b1.create<scf::YieldOp>();
-            });
+  // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-2.-bucket-accumulation
+  Value bitsPerWindow = b_.create<arith::ConstantIndexOp>(bitsPerWindow_);
+  Value windowOffset = b_.create<arith::MulIOp>(bitsPerWindow, j);
+  MemRefType bucketsType =
+      MemRefType::get({static_cast<int64_t>(numBuckets_)}, outputType_);
+  auto buckets = b_.create<memref::AllocOp>(bucketsType);
 
-        auto scalarMulsForOp = b0.create<scf::ForOp>(
-            zero_, numScalarMuls_, one_,
-            /*windowSum=*/zeroPoint_,
-            [&](OpBuilder &nestedBuilder, Location nestedLoc, Value i,
-                ValueRange args) {
-              ImplicitLocOpBuilder b1(nestedLoc, nestedBuilder);
-              auto windowSum =
-                  bucketSingleAcc(i, args[0], buckets, windowOffset, b1);
-              b1.create<scf::YieldOp>(windowSum);
-            });
+  Value numBuckets = b_.create<arith::ConstantIndexOp>(numBuckets_);
+  b_.create<scf::ForOp>(zero_, numBuckets, one_, std::nullopt,
+                        [&](OpBuilder &nestedBuilder, Location nestedLoc,
+                            Value i, ValueRange args) {
+                          ImplicitLocOpBuilder b0(nestedLoc, nestedBuilder);
+                          b0.create<memref::StoreOp>(zeroPoint_, buckets, i);
+                          b0.create<scf::YieldOp>();
+                        });
 
-        bucketReduction(j, scalarMulsForOp.getResult(0), buckets, b0);
+  auto scalarMulsForOp = b_.create<scf::ForOp>(
+      zero_, numScalarMuls_, one_,
+      /*windowSum=*/zeroPoint_,
+      [&](OpBuilder &nestedBuilder, Location nestedLoc, Value i,
+          ValueRange args) {
+        ImplicitLocOpBuilder b0(nestedLoc, nestedBuilder);
+        auto windowSum = bucketSingleAcc(i, args[0], buckets, windowOffset, b0);
+        b0.create<scf::YieldOp>(windowSum);
       });
+
+  bucketReduction(j, scalarMulsForOp.getResult(0), buckets, b_);
+  b_.setInsertionPointAfter(windowsForOp);
 }
 
 }  // namespace mlir::zkir::elliptic_curve

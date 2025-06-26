@@ -3,7 +3,6 @@
 
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Pippengers.h"
-#include "zkir/Dialect/Field/IR/FieldTypes.h"
 
 namespace mlir::zkir::elliptic_curve {
 
@@ -11,8 +10,11 @@ namespace mlir::zkir::elliptic_curve {
 class PippengersGeneric : public Pippengers {
  public:
   PippengersGeneric(Value scalars, Value points, Type baseFieldType,
-                    Type outputType, ImplicitLocOpBuilder &b)
-      : Pippengers(scalars, points, baseFieldType, outputType, b) {
+                    Type outputType, ImplicitLocOpBuilder &b, bool parallel,
+                    int32_t degree, int32_t windowBits)
+      : Pippengers(scalars, points, baseFieldType, outputType, b, degree,
+                   windowBits),
+        parallel_(parallel) {
     // Note that the required number of buckets per window is 2^{bitsPerWindow}
     // - 1 since we don't need the "zero" bucket.
     numBuckets_ = (1 << bitsPerWindow_) - 1;
@@ -60,6 +62,8 @@ class PippengersGeneric : public Pippengers {
   // Bucket Accumulation and Reduction - populate buckets for each window
   // (accumulation), then reduce buckets per window (reduction)
   void bucketAccReduc();
+
+  bool parallel_;
 };
 
 }  // namespace mlir::zkir::elliptic_curve
