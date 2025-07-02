@@ -210,7 +210,7 @@ SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
   } else if (p1.size() == 4 && p2.size() == 4) {
     return xyzzAndXyzz(p1, p2, curve, b);
   } else {
-    assert(false && "Unsupported point types for XYZZ addition");
+    assert(false && "Unsupported point types for xyzz addition");
     return {};
   }
 }
