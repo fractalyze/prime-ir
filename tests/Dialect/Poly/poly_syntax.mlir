@@ -4,26 +4,23 @@
 !PF2 = !field.pf<13:i32>
 !poly_ty1 = !poly.polynomial<!PF1, 32>
 !poly_ty2 = !poly.polynomial<!PF2, 32>
-#uni_poly = #poly.univariate_polynomial<x**6 + 1> : !poly_ty2
 #elem = #field.pf.elem<2:i32>  : !PF1
 #root_of_unity = #field.root_of_unity<#elem, 3:i32>
 #root = #poly.primitive_root<#root_of_unity>
 
 // CHECK-LABEL: @test_poly_syntax
-func.func @test_poly_syntax() {
-  // CHECK: %[[C0:.*]] = poly.constant<1 + x**3> : [[T:.*]]
-  %0 = poly.constant<x**3 + 1> : !poly_ty1
-  // CHECK: %[[C1:.*]] = poly.constant<2 + x**3> : [[T]]
-  %1 = poly.constant<x**3 + 2> : !poly_ty1
-  // CHECK: %[[RES0:.*]] = poly.add %[[C0]], %[[C1]] : [[T]]
-  %2 = poly.add %0, %1 : !poly_ty1
-  // CHECK: %[[RES1:.*]] = poly.sub %[[C0]], %[[C1]] : [[T]]
-  %3 = poly.sub %0, %1 : !poly_ty1
-  // CHECK: %[[RES2:.*]] = poly.mul %[[C0]], %[[C1]] : [[T]]
-  %4 = poly.mul %0, %1 : !poly_ty1
-  // CHECK: %[[RES3:.*]] = poly.to_tensor %[[C0]] : [[T]] -> [[T_TENSOR:.*]]
-  %5 = poly.to_tensor %0 : !poly_ty1 -> tensor<4x!PF1>
-  // CHECK: %[[RES4:.*]] = poly.from_tensor %[[RES3]] : [[T_TENSOR]] -> [[T]]
-  %6 = poly.from_tensor %5 : tensor<4x!PF1> -> !poly_ty1
-  return
+// CHECK-SAME: (%[[ARG0:.*]]: [[P:.*]], %[[ARG1:.*]]: [[P]]) -> [[P]] {
+func.func @test_poly_syntax(%arg0 : !poly_ty1, %arg1 : !poly_ty1) -> !poly_ty1 {
+  // CHECK: %[[RES0:.*]] = poly.add %[[ARG0]], %[[ARG1]] : [[P]]
+  %0 = poly.add %arg0, %arg1 : !poly_ty1
+  // CHECK: %[[RES1:.*]] = poly.sub %[[ARG0]], %[[ARG1]] : [[P]]
+  %1 = poly.sub %arg0, %arg1 : !poly_ty1
+  // CHECK: %[[RES2:.*]] = poly.mul %[[RES0]], %[[RES1]] : [[P]]
+  %2 = poly.mul %0, %1 : !poly_ty1
+  // CHECK: %[[RES3:.*]] = poly.to_tensor %[[RES2]] : [[P]] -> [[T:.*]]
+  %3 = poly.to_tensor %2 : !poly_ty1 -> tensor<4x!PF1>
+  // CHECK: %[[RES4:.*]] = poly.from_tensor %[[RES3]] : [[T]] -> [[P]]
+  %4 = poly.from_tensor %3 : tensor<4x!PF1> -> !poly_ty1
+  // CHECK: return %[[RES4]] : [[P]]
+  return %4 : !poly_ty1
 }

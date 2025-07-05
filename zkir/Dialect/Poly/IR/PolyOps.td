@@ -35,23 +35,6 @@ class Poly_BinaryOp<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def Poly_ConstantOp : Op<Poly_Dialect, "constant", [Pure]> {
-  let summary = "Define a constant polynomial via an attribute.";
-  let description = [{
-    Defines a constant polynomial in the given polynomial ring type.
-
-    Example:
-    ```
-    !base_field = !field.pf<3:i32>
-    !poly_ty = !poly.polynomial<!base_field, 32>
-    %0 = poly.constant <1 + x**2> : !poly_ty
-    ```
-  }];
-  let arguments = (ins Poly_UnivariatePolyAttr:$value);
-  let results = (outs Poly_PolyType:$output);
-  let hasCustomAssemblyFormat = 1;
-}
-
 def Poly_AddOp : Poly_BinaryOp<"add", [Commutative]> {
   let summary = "Addition operation between polynomials.";
   let description = [{

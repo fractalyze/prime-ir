@@ -4,7 +4,6 @@
 #include <tuple>
 #include <utility>
 
-#include "mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"

@@ -10,15 +10,17 @@ def Poly_Dialect : Dialect {
 
     Example:
     ```
-    // A constant polynomial
+    // A polynomial with base field F₃
     !PF1 = field.pf<3:i32>
     !poly_ty = poly.polynomial<!PF1>
-    %a = poly.constant <1+2x+3x^2> : !poly_ty
     ```
   }];
   let cppNamespace = "::mlir::zkir::poly";
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
+  let dependentDialects = [
+    "::mlir::zkir::field::FieldDialect",
+  ];
 }
 
 #endif // ZKIR_DIALECT_POLY_IR_POLYDIALECT_TD_
