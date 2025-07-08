@@ -169,37 +169,11 @@ def Poly_NTTOp : Poly_Op<"ntt", [DestinationStyleOpInterface, SameOperandsAndRes
   let arguments = (ins
     RankedTensorOf<[Field_PrimeFieldType]>:$dest,
     Poly_PrimitiveRootAttr:$root,
-    UnitAttr:$noBitReverse
+    DefaultValuedAttr<BoolAttr, "true">:$bitReverse,
+    DefaultValuedAttr<BoolAttr, "false">:$inverse
   );
   let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
-  let assemblyFormat = "$dest attr-dict (`no_bit_reverse` $noBitReverse^)? `:` type($dest)";
-  let hasCanonicalizer = 1;
-  let extraClassDeclaration = [{
-    MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
-  }];
-}
-
-def Poly_INTTOp : Poly_Op<"intt", [DestinationStyleOpInterface, SameOperandsAndResultType]> {
-  let summary = "Compute the inverse Number Theoretic Transform.";
-  let description = [{
-    Computes the inverse Number Theoretic Transform (INTT) on the input
-    point-value representation tensor and outputs polynomial in its coefficient form.
-
-    The input tensor is interpreted as a point-value representation of the
-    output polynomial at powers of a primitive `n`-th root of unity.
-
-    Example:
-    ```
-    %coeffs = poly.intt %evals {root=#root} : tensor<4x!pf>
-    ```
-  }];
-  let arguments = (ins
-    RankedTensorOf<[Field_PrimeFieldType]>:$dest,
-    Poly_PrimitiveRootAttr:$root,
-    UnitAttr:$noBitReverse
-  );
-  let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
-  let assemblyFormat = "$dest attr-dict (`no_bit_reverse` $noBitReverse^)? `:` type($dest)";
+  let assemblyFormat = "$dest attr-dict (`inverse` `=` $inverse^)? (`bit_reverse` `=` $bitReverse^)? `:` type($dest)";
   let hasCanonicalizer = 1;
   let extraClassDeclaration = [{
     MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }

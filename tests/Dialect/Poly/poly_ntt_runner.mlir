@@ -28,7 +28,7 @@ func.func @test_poly_ntt() {
   %U = memref.cast %1 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
 
-  %intt = poly.intt %res {root=#root} : tensor<4x!coeff_ty_mont>
+  %intt = poly.ntt %res {root=#root} inverse=true : tensor<4x!coeff_ty_mont>
   %poly = poly.from_tensor %intt : tensor<4x!coeff_ty_mont> -> !poly_ty
   %res2 = poly.to_tensor %poly : !poly_ty -> tensor<4x!coeff_ty_mont>
   %res2_standard = field.from_mont %res2 : tensor<4x!coeff_ty>

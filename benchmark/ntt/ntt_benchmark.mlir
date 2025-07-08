@@ -22,7 +22,7 @@ func.func @ntt(%arg0 : !memref_ty) attributes { llvm.emit_c_interface } {
 
 func.func @intt(%arg0 : !memref_ty) attributes { llvm.emit_c_interface } {
   %t = bufferization.to_tensor %arg0 restrict writable : !memref_ty to !coefft_ty
-  poly.intt %t {root=#root} : !coefft_ty
+  poly.ntt %t {root=#root} inverse=true : !coefft_ty
   return
 }
 
@@ -34,6 +34,6 @@ func.func @ntt_mont(%arg0 : !memref_ty_mont) attributes { llvm.emit_c_interface 
 
 func.func @intt_mont(%arg0 : !memref_ty_mont) attributes { llvm.emit_c_interface } {
   %t = bufferization.to_tensor %arg0 restrict writable : !memref_ty_mont to !coefft_ty_mont
-  poly.intt %t {root=#root_mont} : !coefft_ty_mont
+  poly.ntt %t {root=#root_mont} inverse=true : !coefft_ty_mont
   return
 }

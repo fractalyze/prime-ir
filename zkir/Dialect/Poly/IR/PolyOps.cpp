@@ -23,11 +23,6 @@ void ToTensorOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void NTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.add<NTTAfterINTT>(context);
-}
-
-void INTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {
   results.add<INTTAfterNTT>(context);
 }
 

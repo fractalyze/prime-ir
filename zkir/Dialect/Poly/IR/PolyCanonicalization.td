@@ -6,17 +6,13 @@ include "mlir/IR/OpBase.td"
 include "mlir/IR/PatternBase.td"
 
 def Equal : Constraint<CPred<"$0 == $1">>;
+def BoolNotEqual : Constraint<CPred<"$0.getValue() != $1.getValue()">, "not equal">;
+def BoolEqual : Constraint<CPred<"$0.getValue() == $1.getValue()">, "equal">;
 
 def INTTAfterNTT : Pat<
-  (Poly_INTTOp (Poly_NTTOp $tensor, $r1, $bitReverse1), $r2, $bitReverse2),
+  (Poly_NTTOp (Poly_NTTOp $tensor, $r1, $bitReverse1, $inverse1), $r2, $bitReverse2, $inverse2),
   (replaceWithValue $tensor),
-  [(Equal $r1, $r2), (Equal $bitReverse1, $bitReverse2)]
->;
-
-def NTTAfterINTT : Pat<
-  (Poly_NTTOp (Poly_INTTOp $tensor, $r1, $bitReverse1), $r2, $bitReverse2),
-  (replaceWithValue $tensor),
-  [(Equal $r1, $r2), (Equal $bitReverse1, $bitReverse2)]
+  [(Equal $r1, $r2), (BoolNotEqual $inverse1, $inverse2), (BoolEqual $bitReverse1, $bitReverse2)]
 >;
 
 def FromToTensor : Pat<

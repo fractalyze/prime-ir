@@ -56,7 +56,7 @@ func.func @test_lower_ntt(%input : tensor<2x!PF1>) -> tensor<2x!PF1> {
 // CHECK-LABEL: @test_lower_intt
 // CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[P:.*]] {
 func.func @test_lower_intt(%input : tensor<2x!PF1>) -> tensor<2x!PF1> {
-  // CHECK-NOT: poly.intt
-  %res = poly.intt %input {root=#root} : tensor<2x!PF1>
+  // CHECK-NOT: poly.ntt
+  %res = poly.ntt %input {root=#root} inverse=true : tensor<2x!PF1>
   return %res: tensor<2x!PF1>
 }

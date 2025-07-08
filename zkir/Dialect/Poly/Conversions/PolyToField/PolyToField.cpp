@@ -158,9 +158,17 @@ static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
   return {std::move(gsPlus), std::move(gsMinusRoot)};
 }
 
-template <bool kInverse>
-static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
-                     RankedTensorType tensorType, Type modType, Value input) {
+static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
+                     Value input) {
+  auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
+  auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
+
+  auto coeffStorageType = coeffType.getModulus().getType();
+  auto intTensorType =
+      RankedTensorType::get(tensorType.getShape(), coeffStorageType);
+
+  bool kInverse = adaptor.getInverse();
+
   // -------------------------------------------------------------------------
   // Compute basic parameters and precompute the roots of unity.
   // -------------------------------------------------------------------------
@@ -175,6 +183,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
   // -------------------------------------------------------------------------
   // Precompute the roots of unity in the given prime field.
   // -------------------------------------------------------------------------
+  auto rootAttr = adaptor.getRoot();
   auto baseFieldType =
       dyn_cast<field::PrimeFieldType>(rootAttr.getRoot().getType());
   APInt cmod = baseFieldType.getModulus().getValue();
@@ -182,14 +191,14 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
 
   // Create a tensor constant of precomputed roots for fast access during the
   // NTT.
-  auto rootsType = tensorType.clone({degree});
+  auto rootsType = intTensorType.clone({degree});
   Value roots =
       !kInverse
           ? b.create<arith::ConstantOp>(rootsType, rootAttr.getRoots())
           : b.create<arith::ConstantOp>(rootsType, rootAttr.getInvRoots());
 
   // Wrap the roots in a field encapsulation for further field operations.
-  roots = b.create<field::EncapsulateOp>(modType, roots);
+  roots = b.create<field::EncapsulateOp>(tensorType, roots);
 
   // -------------------------------------------------------------------------
   // Iterative NTT computation using a modified Cooley-Tukey / Gentleman-Sande
@@ -233,7 +242,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
   Value n = b.create<arith::ConstantIndexOp>(degree);
 
   // Create a memref buffer for in-place updates
-  auto memrefType = MemRefType::get(tensorType.getShape(), baseFieldType);
+  auto memrefType = MemRefType::get(intTensorType.getShape(), baseFieldType);
   Value inputMemref = b.create<bufferization::ToMemrefOp>(memrefType, input);
 
   // Define affine expressions for index calculations.
@@ -361,7 +370,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
 
   // For the inverse NTT, we must scale the output by the multiplicative inverse
   // of the degree.
-  if constexpr (kInverse) {
+  if (kInverse) {
     // TODO(batzor): Use scalar multiplication directly when it's available.
     Value invDegree =
         b.create<arith::ConstantOp>(rootAttr.getInvDegree().getValue());
@@ -380,7 +389,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, PrimitiveRootAttr rootAttr,
 
   // The final result is the coefficient tensor after all stages.
   Value result = b.create<bufferization::ToTensorOp>(
-      tensorType.cloneWith(std::nullopt, baseFieldType), inputMemref,
+      intTensorType.cloneWith(std::nullopt, baseFieldType), inputMemref,
       /*restrict=*/true, /*writable=*/true);
 
   return result;
@@ -397,54 +406,23 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
-    auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
-
-    auto coeffStorageType = coeffType.getModulus().getType();
-    auto intTensorType =
-        RankedTensorType::get(tensorType.getShape(), coeffStorageType);
-
-    // Transform the input tensor to bit-reversed order.
-    auto bitReversed =
-        adaptor.getNoBitReverse()
+    // Transform the input tensor to bit-reversed order at first if performing
+    // forward NTT.
+    auto bitReverseAtFirst =
+        adaptor.getInverse() || !adaptor.getBitReverse()
             ? adaptor.getDest()
             : b.create<tensor_ext::BitReverseOp>(adaptor.getDest());
 
     // Compute the ntt and extract the values
-    Value nttResult =
-        fastNTT<false>(b, op.getRoot(), intTensorType, tensorType, bitReversed);
+    Value nttResult = fastNTT(b, adaptor, bitReverseAtFirst);
 
-    rewriter.replaceOp(op, nttResult);
-    return success();
-  }
-};
-
-struct ConvertINTT : public OpConversionPattern<INTTOp> {
-  explicit ConvertINTT(MLIRContext *context)
-      : OpConversionPattern<INTTOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult matchAndRewrite(
-      INTTOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
-    auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
-
-    auto coeffStorageType = coeffType.getModulus().getType();
-    auto intTensorType =
-        RankedTensorType::get(tensorType.getShape(), coeffStorageType);
-
-    auto inttResult = fastNTT<true>(b, op.getRoot(), intTensorType, tensorType,
-                                    adaptor.getDest());
-    auto reversedBitOrder =
-        adaptor.getNoBitReverse()
-            ? inttResult
-            : b.create<tensor_ext::BitReverseOp>(inttResult);
-    rewriter.replaceOp(op, reversedBitOrder);
-
+    // Transform the input tensor to bit-reversed order at last if performing
+    // inverse NTT.
+    auto nttResultBitReversed =
+        !adaptor.getInverse() || !adaptor.getBitReverse()
+            ? nttResult
+            : b.create<tensor_ext::BitReverseOp>(nttResult);
+    rewriter.replaceOp(op, nttResultBitReversed);
     return success();
   }
 };
@@ -469,7 +447,6 @@ void PolyToField::runOnOperation() {
   patterns.add<
       // clang-format off
       ConvertFromTensor,
-      ConvertINTT,
       ConvertNTT,
       ConvertToTensor,
       ConvertPolyBinOp<AddOp, field::AddOp>,
