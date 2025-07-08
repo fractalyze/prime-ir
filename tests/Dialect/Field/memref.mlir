@@ -11,6 +11,15 @@ func.func @test_memref_alloc() -> memref<4x!PF> {
   return %alloc : memref<4x!PF>
 }
 
+// CHECK-LABEL: @test_memref_alloca
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_memref_alloca() -> memref<4x!PF> {
+  // CHECK: %[[ALLOCA:.*]] = memref.alloca() : [[T]]
+  %alloca = memref.alloca() : memref<4x!PF>
+  // CHECK: return %[[ALLOCA]] : [[T]]
+  return %alloca : memref<4x!PF>
+}
+
 // CHECK-LABEL: @test_memref_cast
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
 func.func @test_memref_cast(%input : memref<4x!PF>) -> memref<?x!PF> {
