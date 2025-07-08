@@ -104,10 +104,8 @@ ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
   auto zeroSF = b.create<field::ConstantOp>(scalarFieldType_, 0);
   auto scalarIsZero =
       b.create<field::CmpOp>(arith::CmpIPredicate::eq, scalar, zeroSF);
-  auto pointIsZero = b.create<elliptic_curve::IsZeroOp>(point);
-  auto zeroScalarMul = b.create<arith::OrIOp>(scalarIsZero, pointIsZero);
   auto zeroScalarMulIfOp = b.create<scf::IfOp>(
-      zeroScalarMul,
+      scalarIsZero,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         // early exit for scalar == 0 or zero point
