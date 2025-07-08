@@ -87,7 +87,7 @@ Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
 
   auto windowSumsType =
       MemRefType::get({static_cast<int64_t>(numWindows)}, outputType_);
-  windowSums_ = b.create<memref::AllocOp>(windowSumsType);
+  windowSums_ = b.create<memref::AllocaOp>(windowSumsType);
 
   b.create<scf::ForOp>(
       zero_, numWindows_, one_, std::nullopt,
