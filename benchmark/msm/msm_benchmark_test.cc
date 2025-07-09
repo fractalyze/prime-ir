@@ -43,20 +43,40 @@ static void fillWithRandomPoints(Memref<i256> *input, const i256 &kPrime) {
   }
 }
 
-extern "C" void _mlir_ciface_msm(Memref<i256> *scalars, Memref<i256> *points);
+extern "C" void _mlir_ciface_msm_pippengers(Memref<i256> *scalars,
+                                            Memref<i256> *points);
+extern "C" void _mlir_ciface_msm_signed_bucket_index(Memref<i256> *scalars,
+                                                     Memref<i256> *points);
 
-void BM_msm_benchmark(::benchmark::State &state) {
+void BM_msm_pippengers_benchmark(::benchmark::State &state) {
   Memref<i256> scalars(NUM_SCALARMULS, 1);
   fillWithRandom(&scalars, kPrimeScalar);
   Memref<i256> points(NUM_SCALARMULS, 2);
   fillWithRandomPoints(&points, kPrimeBase);
 
   for (auto _ : state) {
-    _mlir_ciface_msm(&scalars, &points);
+    _mlir_ciface_msm_pippengers(&scalars, &points);
   }
 }
 
-BENCHMARK(BM_msm_benchmark)->Iterations(20)->Unit(::benchmark::kMillisecond);
+BENCHMARK(BM_msm_pippengers_benchmark)
+    ->Iterations(20)
+    ->Unit(::benchmark::kMillisecond);
+
+void BM_msm_signed_bucket_index_benchmark(::benchmark::State &state) {
+  Memref<i256> scalars(NUM_SCALARMULS, 1);
+  fillWithRandom(&scalars, kPrimeScalar);
+  Memref<i256> points(NUM_SCALARMULS, 2);
+  fillWithRandomPoints(&points, kPrimeBase);
+
+  for (auto _ : state) {
+    _mlir_ciface_msm_signed_bucket_index(&scalars, &points);
+  }
+}
+
+BENCHMARK(BM_msm_signed_bucket_index_benchmark)
+    ->Iterations(20)
+    ->Unit(::benchmark::kMillisecond);
 
 }  // namespace
 }  // namespace zkir
