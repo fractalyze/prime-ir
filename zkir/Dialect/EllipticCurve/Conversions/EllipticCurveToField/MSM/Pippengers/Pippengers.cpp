@@ -44,10 +44,15 @@ constexpr size_t computeWindowsCount(size_t scalarBitWidth,
 
 }  // namespace
 
-Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
-                       Type outputType, ImplicitLocOpBuilder &b, int32_t degree,
+Pippengers::Pippengers(bool parallel, Value scalars, Value points,
+                       Type baseFieldType, Type outputType,
+                       ImplicitLocOpBuilder &b, int32_t degree,
                        int32_t windowBits)
-    : points_(points), outputType_(outputType), b_(b) {
+    : parallel_(parallel),
+      scalars_(scalars),
+      points_(points),
+      outputType_(outputType),
+      b_(b) {
   zero_ = b.create<arith::ConstantIndexOp>(0);
   one_ = b.create<arith::ConstantIndexOp>(1);
 
@@ -100,9 +105,7 @@ Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
 
 // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-3.-bucket-reduction
 void Pippengers::bucketReduction(Value j, Value initialPoint, Value buckets,
-                                 ImplicitLocOpBuilder &b) {
-  auto numBuckets = b_.create<arith::ConstantIndexOp>(numBuckets_);
-
+                                 Value numBuckets, ImplicitLocOpBuilder &b) {
   // TODO(ashjeong): explore potential for loop parallelization
   auto bucketsForOp = b_.create<scf::ForOp>(
       zero_, numBuckets, one_,

@@ -41,7 +41,7 @@ Value PippengersGeneric::scalarDecomposition(Value scalar,
 
   // We right-shift by `windowOffset`, thus getting rid of the lower bits.
   Value signlessScalar =
-      b.create<field::ExtractOp>(TypeRange{scalarIntType}, scalar).getResult(0);
+      b.create<field::ExtractOp>(scalarIntType, scalar).getResult(0);
   auto upperBitsScalar = b.create<arith::ShRUIOp>(signlessScalar, windowOffset);
 
   auto windowBitIntType = IntegerType::get(b.getContext(), bitsPerWindow_);
@@ -140,11 +140,15 @@ void PippengersGeneric::bucketAccReduc() {
   // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-2.-bucket-accumulation
   Value bitsPerWindow = b_.create<arith::ConstantIndexOp>(bitsPerWindow_);
   Value windowOffset = b_.create<arith::MulIOp>(bitsPerWindow, j);
+
+  // Note that the required number of buckets per window is 2^{bitsPerWindow}
+  // - 1 since we don't need the "zero" bucket.
+  size_t numBucketsInt = (1 << bitsPerWindow_) - 1;
   MemRefType bucketsType =
-      MemRefType::get({static_cast<int64_t>(numBuckets_)}, outputType_);
+      MemRefType::get({static_cast<int64_t>(numBucketsInt)}, outputType_);
   auto buckets = b_.create<memref::AllocOp>(bucketsType);
 
-  Value numBuckets = b_.create<arith::ConstantIndexOp>(numBuckets_);
+  Value numBuckets = b_.create<arith::ConstantIndexOp>(numBucketsInt);
   b_.create<scf::ForOp>(zero_, numBuckets, one_, std::nullopt,
                         [&](OpBuilder &nestedBuilder, Location nestedLoc,
                             Value i, ValueRange args) {
@@ -163,7 +167,7 @@ void PippengersGeneric::bucketAccReduc() {
         b0.create<scf::YieldOp>(windowSum);
       });
 
-  bucketReduction(j, scalarMulsForOp.getResult(0), buckets, b_);
+  bucketReduction(j, scalarMulsForOp.getResult(0), buckets, numBuckets, b_);
   b_.setInsertionPointAfter(windowsForOp);
 }
 
