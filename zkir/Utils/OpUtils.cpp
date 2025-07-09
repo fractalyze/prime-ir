@@ -1,6 +1,6 @@
 #include "zkir/Utils/OpUtils.h"
 
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
 
 namespace mlir::zkir {

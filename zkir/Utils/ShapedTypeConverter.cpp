@@ -17,7 +17,7 @@ Type ShapedTypeConverter::convertShapedType(ShapedType oldType,
       assert(memrefType.getShape().size() + 1 == shape.size());
       int64_t newDimension = shape.back();
       SmallVector<int64_t> strides;
-      int64_t offset;
+      int64_t offset = 0;
       bool result = succeeded(memrefType.getStridesAndOffset(strides, offset));
       assert(result);
       for (int64_t &stride : strides) {

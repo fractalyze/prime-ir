@@ -211,6 +211,7 @@ SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
     return xyzzAndXyzz(p1, p2, curve, b);
   } else {
     assert(false && "Unsupported point types for XYZZ addition");
+    return {};
   }
 }
 

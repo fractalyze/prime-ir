@@ -1,5 +1,9 @@
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
+#include "mlir/IR/Matchers.h"
+#include "mlir/IR/PatternMatch.h"
+#include "zkir/Utils/APIntUtils.h"
+
 namespace mlir::zkir::mod_arith {
 
 Type getStandardFormType(Type type) {
@@ -143,6 +147,256 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   return adaptor.getValue();
 }
 
+ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
+                                   Type type, Location loc) {
+  return builder.create<ConstantOp>(loc, type, cast<TypedAttr>(value));
+}
+
+Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
+                                                Attribute value, Type type,
+                                                Location loc) {
+  if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
+    return builder.create<arith::ConstantOp>(loc, boolAttr);
+  }
+  return ConstantOp::materialize(builder, value, type, loc);
+}
+
+OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
+  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    auto montAttr =
+        MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+
+    APInt modulus = modArithType.getModulus().getValue();
+    APInt resultValue =
+        mulMod(input.getValue(), montAttr.getR().getValue(), modulus);
+    return IntegerAttr::get(input.getType(), resultValue);
+  }
+  return {};
+}
+
+OpFoldResult FromMontOp::fold(FoldAdaptor adaptor) {
+  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    auto montAttr =
+        MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+
+    APInt modulus = modArithType.getModulus().getValue();
+    APInt resultValue =
+        mulMod(input.getValue(), montAttr.getRInv().getValue(), modulus);
+    return IntegerAttr::get(input.getType(), resultValue);
+  }
+  return {};
+}
+
+OpFoldResult CmpOp::fold(FoldAdaptor adaptor) {
+  auto predicate = adaptor.getPredicate();
+  if (auto lhs = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+    if (auto rhs = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+      APInt lhsValue = lhs.getValue();
+      APInt rhsValue = rhs.getValue();
+      switch (predicate) {
+        case arith::CmpIPredicate::eq:
+          return BoolAttr::get(getType().getContext(), lhsValue.eq(rhsValue));
+        case arith::CmpIPredicate::ne:
+          return BoolAttr::get(getType().getContext(), lhsValue.ne(rhsValue));
+        case arith::CmpIPredicate::slt:
+          return BoolAttr::get(getType().getContext(), lhsValue.slt(rhsValue));
+        case arith::CmpIPredicate::sle:
+          return BoolAttr::get(getType().getContext(), lhsValue.sle(rhsValue));
+        case arith::CmpIPredicate::sgt:
+          return BoolAttr::get(getType().getContext(), lhsValue.sgt(rhsValue));
+        case arith::CmpIPredicate::sge:
+          return BoolAttr::get(getType().getContext(), lhsValue.sge(rhsValue));
+        case arith::CmpIPredicate::ult:
+          return BoolAttr::get(getType().getContext(), lhsValue.ult(rhsValue));
+        case arith::CmpIPredicate::ule:
+          return BoolAttr::get(getType().getContext(), lhsValue.ule(rhsValue));
+        case arith::CmpIPredicate::ugt:
+          return BoolAttr::get(getType().getContext(), lhsValue.ugt(rhsValue));
+        case arith::CmpIPredicate::uge:
+          return BoolAttr::get(getType().getContext(), lhsValue.uge(rhsValue));
+        default:
+          llvm_unreachable("unknown cmpi predicate kind");
+      }
+    }
+  }
+  return {};
+}
+
+OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
+  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    APInt modulus = modArithType.getModulus().getValue();
+    APInt resultValue = modulus - input.getValue();
+    return IntegerAttr::get(input.getType(), resultValue);
+  }
+  return {};
+}
+
+OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
+  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    APInt modulus = modArithType.getModulus().getValue();
+    assert(modulus.getBitWidth() > modulus.getActiveBits());
+    APInt resultValue = input.getValue().shl(1);
+    if (resultValue.uge(modulus)) {
+      resultValue -= modulus;
+    }
+    return IntegerAttr::get(input.getType(), resultValue);
+  }
+  return {};
+}
+
+OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
+  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    APInt modulus = modArithType.getModulus().getValue();
+    APInt resultValue = mulMod(input.getValue(), input.getValue(), modulus);
+    if (modArithType.isMontgomery()) {
+      auto montAttr =
+          MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+      resultValue = mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
+    }
+    return IntegerAttr::get(input.getType(), resultValue);
+  }
+  return {};
+}
+
+OpFoldResult MontSquareOp::fold(FoldAdaptor adaptor) {
+  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    APInt modulus = modArithType.getModulus().getValue();
+    APInt resultValue = mulMod(input.getValue(), input.getValue(), modulus);
+    MontgomeryAttr montAttr =
+        MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+    resultValue = mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
+    return IntegerAttr::get(input.getType(), resultValue);
+  }
+  return {};
+}
+
+OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
+  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    APInt modulus = modArithType.getModulus().getValue();
+    APInt resultValue = multiplicativeInverse(input.getValue(), modulus);
+    if (modArithType.isMontgomery()) {
+      auto montAttr =
+          MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+      resultValue =
+          mulMod(resultValue, montAttr.getRSquared().getValue(), modulus);
+    }
+    return IntegerAttr::get(input.getType(), resultValue);
+  }
+  return {};
+}
+
+OpFoldResult MontInverseOp::fold(FoldAdaptor adaptor) {
+  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    auto montAttr =
+        MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+
+    APInt modulus = modArithType.getModulus().getValue();
+    APInt resultValue = multiplicativeInverse(input.getValue(), modulus);
+    resultValue =
+        mulMod(resultValue, montAttr.getRSquared().getValue(), modulus);
+    return IntegerAttr::get(input.getType(), resultValue);
+  }
+  return {};
+}
+
+OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
+  if (auto rhs = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+    if (rhs.getValue().isZero()) {
+      return getLhs();
+    }
+    if (auto lhs = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+      auto modArithType = cast<ModArithType>(getOutput().getType());
+      APInt modulus = modArithType.getModulus().getValue();
+      APInt resultValue = lhs.getValue() + rhs.getValue();
+      if (resultValue.uge(modulus)) {
+        resultValue -= modulus;
+      }
+      return IntegerAttr::get(lhs.getType(), resultValue);
+    }
+  }
+  return {};
+}
+
+OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
+  if (auto rhs = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+    if (rhs.getValue().isZero()) {
+      return getLhs();
+    }
+    if (auto lhs = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+      auto modArithType = cast<ModArithType>(getOutput().getType());
+      APInt modulus = modArithType.getModulus().getValue();
+      APInt rhsValue = rhs.getValue();
+      APInt lhsValue = lhs.getValue();
+      APInt resultValue;
+      if (lhsValue.uge(rhsValue)) {
+        resultValue = lhsValue - rhsValue;
+      } else {
+        resultValue = modulus - rhsValue + lhsValue;
+      }
+      return IntegerAttr::get(lhs.getType(), resultValue);
+    }
+  }
+  return {};
+}
+
+OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  if (auto rhs = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    if (rhs.getValue().isZero()) {
+      return getRhs();
+    } else if (!modArithType.isMontgomery() && rhs.getValue().isOne()) {
+      return getLhs();
+    } else if (modArithType.isMontgomery()) {
+      auto montAttr =
+          MontgomeryAttr::get(adaptor.getRhs().getContext(), modArithType);
+      if (montAttr.getR().getValue().eq(rhs.getValue())) {
+        return getLhs();
+      }
+    }
+    if (auto lhs = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+      APInt modulus = modArithType.getModulus().getValue();
+      APInt resultValue = mulMod(lhs.getValue(), rhs.getValue(), modulus);
+      if (modArithType.isMontgomery()) {
+        auto montAttr =
+            MontgomeryAttr::get(adaptor.getLhs().getContext(), modArithType);
+        resultValue =
+            mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
+      }
+      return IntegerAttr::get(lhs.getType(), resultValue);
+    }
+  }
+  return {};
+}
+
+OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
+  if (auto rhs = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+    auto modArithType = cast<ModArithType>(getOutput().getType());
+    if (rhs.getValue().isZero()) {
+      return getRhs();
+    }
+    auto montAttr =
+        MontgomeryAttr::get(adaptor.getRhs().getContext(), modArithType);
+    if (montAttr.getR().getValue().eq(rhs.getValue())) {
+      return getLhs();
+    }
+    if (auto lhs = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+      APInt modulus = modArithType.getModulus().getValue();
+      APInt resultValue = mulMod(lhs.getValue(), rhs.getValue(), modulus);
+      resultValue = mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
+      return IntegerAttr::get(lhs.getType(), resultValue);
+    }
+  }
+  return {};
+}
+
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt parsedInt;
   Type parsedType;
@@ -187,6 +441,81 @@ void ConstantOp::print(OpAsmPrinter &p) {
   p.printAttributeWithoutType(getValue());
   p << " : ";
   p.printType(getOutput().getType());
+}
+
+namespace {
+bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
+  APInt modulus = modArithType.getModulus().getValue();
+  if (modArithType.isMontgomery()) {
+    auto montAttr = MontgomeryAttr::get(attr.getContext(), modArithType);
+    auto intAttr = cast<IntegerAttr>(attr);
+    APInt montReduced =
+        mulMod(intAttr.getValue(), montAttr.getRInv().getValue(), modulus);
+    return montReduced == modulus - offset;
+  } else {
+    auto intAttr = cast<IntegerAttr>(attr);
+    return intAttr.getValue() == modulus - offset;
+  }
+  return false;
+}
+
+bool isEqualTo(Attribute attr, uint32_t offset) {
+  auto intAttr = cast<IntegerAttr>(attr);
+
+  return (intAttr.getValue() - offset).isZero();
+}
+}  // namespace
+
+namespace {
+#include "zkir/Dialect/ModArith/IR/ModArithCanonicalization.cpp.inc"
+}
+
+void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add<AddConstantTwice>(context);
+  patterns.add<AddConstantToSubLhs>(context);
+  patterns.add<AddConstantToSubRhs>(context);
+  patterns.add<AddSelfIsDouble>(context);
+  patterns.add<AddBothNegated>(context);
+  patterns.add<AddAfterSub>(context);
+  patterns.add<AddAfterNegLhs>(context);
+  patterns.add<AddAfterNegRhs>(context);
+  patterns.add<FactorMulAdd>(context);
+}
+
+void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add<SubConstantFromAdd>(context);
+  patterns.add<SubConstantTwiceLhs>(context);
+  patterns.add<SubConstantTwiceRhs>(context);
+  patterns.add<SubAddFromConstant>(context);
+  patterns.add<SubSubFromConstantLhs>(context);
+  patterns.add<SubSubFromConstantRhs>(context);
+  patterns.add<SubSelfIsZero>(context);
+  patterns.add<SubLhsAfterAdd>(context);
+  patterns.add<SubRhsAfterAdd>(context);
+  patterns.add<SubLhsAfterSub>(context);
+  patterns.add<SubAfterNegLhs>(context);
+  patterns.add<SubAfterNegRhs>(context);
+  patterns.add<SubBothNegated>(context);
+  patterns.add<SubAfterSquareBoth>(context);
+  patterns.add<FactorMulSub>(context);
+}
+
+void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add<MulByTwoIsDouble>(context);
+  patterns.add<MulSelfIsSquare>(context);
+  patterns.add<MulNegativeOneRhs>(context);
+  patterns.add<MulNegativeTwoRhs>(context);
+  patterns.add<MulNegativeThreeRhs>(context);
+  patterns.add<MulNegativeFourRhs>(context);
+  patterns.add<MulConstantTwice>(context);
+  patterns.add<MulOfMulByConstant>(context);
+  patterns.add<MulAddDistributeConstant>(context);
+  patterns.add<MulSubDistributeConstantRhs>(context);
+  patterns.add<MulSubDistributeConstantLhs>(context);
 }
 
 }  // namespace mlir::zkir::mod_arith

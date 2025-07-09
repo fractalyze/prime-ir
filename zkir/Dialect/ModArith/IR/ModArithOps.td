@@ -49,6 +49,12 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [ConstantLike, Pure]>
   }];
   let arguments = (ins TypedAttrInterface:$value);
   let results = (outs ModArithLike:$output);
+  let extraClassDeclaration = [{
+    /// Build the constant op with `value` and `type` if possible, otherwise
+    /// returns null.
+    static ConstantOp materialize(OpBuilder &builder, Attribute value,
+                                  Type type, Location loc);
+  }];
   let hasCustomAssemblyFormat = 1;
   let hasFolder = 1;
 }
@@ -147,6 +153,7 @@ def ModArith_ToMontOp : ModArith_Op<"to_mont", [TypesMatchWith<
   let arguments = (ins ModArithLike:$input);
   let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
+  let hasFolder = 1;
   let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
@@ -165,6 +172,7 @@ def ModArith_FromMontOp : ModArith_Op<"from_mont", [TypesMatchWith<
   let arguments = (ins ModArithLike:$input);
   let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
+  let hasFolder = 1;
   let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
@@ -199,6 +207,7 @@ def ModArith_CmpOp : ModArith_Op<"cmp", [SameTypeOperands, TypesMatchWith<
                        ModArithLike:$rhs);
   let results = (outs BoolLike:$result);
   let assemblyFormat = "$predicate `,` $lhs `,` $rhs attr-dict `:` type($lhs)";
+  let hasFolder = 1;
 }
 
 def ModArith_MacOp : ModArith_ArithOp<"mac"> {
@@ -239,6 +248,7 @@ def ModArith_NegateOp : ModArith_UnaryOp<"negate", [Involution]> {
   let arguments = (ins ModArithLike:$input);
   let results = (outs ModArithLike:$output);
   let hasVerifier = 1;
+  let hasFolder = 1;
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
@@ -253,6 +263,7 @@ def ModArith_SquareOp : ModArith_UnaryOp<"square"> {
     ```
   }];
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 def ModArith_MontSquareOp : ModArith_UnaryOp<"mont_square"> {
@@ -266,6 +277,7 @@ def ModArith_MontSquareOp : ModArith_UnaryOp<"mont_square"> {
     ```
   }];
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 def ModArith_InverseOp : Op<ModArith_Dialect, "inverse", [Pure, SameOperandsAndResultType, Involution]> {
@@ -282,6 +294,7 @@ def ModArith_InverseOp : Op<ModArith_Dialect, "inverse", [Pure, SameOperandsAndR
   let arguments = (ins ModArithLike:$input);
   let results = (outs ModArithLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($output)";
+  let hasFolder = 1;
 }
 
 def ModArith_DoubleOp : ModArith_UnaryOp<"double"> {
@@ -295,6 +308,7 @@ def ModArith_DoubleOp : ModArith_UnaryOp<"double"> {
     ```
   }];
   let hasVerifier = 1;
+  let hasFolder = 1;
 }
 
 def ModArith_MontInverseOp : ModArith_UnaryOp<"mont_inverse"> {
@@ -308,6 +322,7 @@ def ModArith_MontInverseOp : ModArith_UnaryOp<"mont_inverse"> {
     %c0 = mod_arith.mont_inverse %0 : !mod_arith.int<7:i4>
     ```
   }];
+  let hasFolder = 1;
 }
 
 def ModArith_AddOp : ModArith_BinaryOp<"add", [Commutative]> {
@@ -315,6 +330,8 @@ def ModArith_AddOp : ModArith_BinaryOp<"add", [Commutative]> {
   let description = [{
     Performs modular addition on the given two modular type integers.
   }];
+  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 def ModArith_SubOp : ModArith_BinaryOp<"sub"> {
@@ -322,6 +339,8 @@ def ModArith_SubOp : ModArith_BinaryOp<"sub"> {
   let description = [{
     Performs modular subtraction on the given two modular type integers.
   }];
+  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 def ModArith_MulOp : ModArith_BinaryOp<"mul", [Commutative]> {
@@ -330,6 +349,8 @@ def ModArith_MulOp : ModArith_BinaryOp<"mul", [Commutative]> {
     Performs modular multiplication on the given two modular type integers.
     WARNING: This operation assumes that both operands are in the standard form.
   }];
+  let hasCanonicalizer = 1;
+  let hasFolder = 1;
 }
 
 def ModArith_MontMulOp : ModArith_BinaryOp<"mont_mul", [Commutative]> {
@@ -343,6 +364,7 @@ def ModArith_MontMulOp : ModArith_BinaryOp<"mont_mul", [Commutative]> {
     %m0 = mod_arith.mont_mul %a, %b : mod_arith.int<65537 : i256>
     ```
   }];
+  let hasFolder = 1;
 }
 
 #endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_TD_

@@ -527,23 +527,38 @@ struct ConvertMac : public OpConversionPattern<MacOp> {
       MacOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
-                                             arith::IntegerOverflowFlags::nsw);
-    auto noOverflow =
-        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
+    ModArithType resultType = getResultModArithType(op);
+    if (resultType.isMontgomery()) {
+      auto mul =
+          b.create<arith::MulUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
+      auto sum =
+          b.create<arith::AddUIExtendedOp>(mul.getLow(), adaptor.getAcc());
+      auto high = b.create<arith::AddIOp>(mul.getHigh(), sum.getOverflow());
+      auto reduced =
+          b.create<mod_arith::MontReduceOp>(resultType, sum.getSum(), high);
+      rewriter.replaceOp(op, reduced);
+      return success();
+    } else {
+      arith::IntegerOverflowFlags overflowFlag(
+          arith::IntegerOverflowFlags::nuw & arith::IntegerOverflowFlags::nsw);
+      auto noOverflow =
+          arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
 
-    auto cmod = b.create<arith::ConstantOp>(modulusAttr(op, true));
-    auto x = b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getLhs());
-    auto y = b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getRhs());
-    auto acc =
-        b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getAcc());
-    auto mul = b.create<arith::MulIOp>(x, y);
-    auto add = b.create<arith::AddIOp>(mul, acc, noOverflow);
-    auto remu = b.create<arith::RemUIOp>(add, cmod);
-    auto trunc = b.create<arith::TruncIOp>(modulusType(op), remu);
+      auto cmod = b.create<arith::ConstantOp>(modulusAttr(op, true));
+      auto x =
+          b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getLhs());
+      auto y =
+          b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getRhs());
+      auto acc =
+          b.create<arith::ExtUIOp>(modulusType(op, true), adaptor.getAcc());
+      auto mul = b.create<arith::MulIOp>(x, y);
+      auto add = b.create<arith::AddIOp>(mul, acc, noOverflow);
+      auto remu = b.create<arith::RemUIOp>(add, cmod);
+      auto trunc = b.create<arith::TruncIOp>(modulusType(op), remu);
 
-    rewriter.replaceOp(op, trunc);
-    return success();
+      rewriter.replaceOp(op, trunc);
+      return success();
+    }
   }
 };
 
@@ -854,6 +869,7 @@ void ModArithToArith::runOnOperation() {
       ConvertAny<affine::AffineParallelOp>,
       ConvertAny<affine::AffineStoreOp>,
       ConvertAny<affine::AffineYieldOp>,
+      ConvertAny<arith::SelectOp>,
       ConvertAny<bufferization::MaterializeInDestinationOp>,
       ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>,
@@ -894,6 +910,7 @@ void ModArithToArith::runOnOperation() {
       affine::AffineParallelOp,
       affine::AffineStoreOp,
       affine::AffineYieldOp,
+      arith::SelectOp,
       bufferization::MaterializeInDestinationOp,
       bufferization::ToMemrefOp,
       bufferization::ToTensorOp,

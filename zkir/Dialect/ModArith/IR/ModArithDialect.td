@@ -15,6 +15,7 @@ def ModArith_Dialect : Dialect {
   let dependentDialects = [
     "arith::ArithDialect",
   ];
+  let hasConstantMaterializer = 1;
 }
 
 #endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHDIALECT_TD_

@@ -1,0 +1,41 @@
+diff --git mlir/lib/Dialect/Tensor/IR/TensorOps.cpp mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
+index 815806f06b47..ec3a4a333f45 100644
+--- mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
++++ mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
+@@ -37,6 +37,8 @@
+ #include <algorithm>
+ #include <optional>
+
++#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
++
+ using namespace mlir;
+ using namespace mlir::tensor;
+
+@@ -1275,8 +1277,15 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
+ }
+
+ OpFoldResult FromElementsOp::fold(FoldAdaptor adaptor) {
+-  if (!llvm::is_contained(adaptor.getElements(), nullptr))
++  if (!llvm::is_contained(adaptor.getElements(), nullptr)) {
++    if (auto modArithType = dyn_cast<zkir::mod_arith::ModArithType>(
++            getType().getElementType())) {
++      auto st = cast<ShapedType>(getType());
++      return DenseElementsAttr::get(
++          st.cloneWith(std::nullopt, modArithType.getModulus().getType()), adaptor.getElements());
++    }
+     return DenseElementsAttr::get(getType(), adaptor.getElements());
++  }
+   return {};
+ }
+
+diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+index b5c63c72ac1e..017915a8fe08 100644
+--- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+@@ -7016,5 +7016,6 @@ cc_library(
+         ":ValueBoundsOpInterface",
+         ":ViewLikeInterface",
+         "//llvm:Support",
++        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
+     ],
+ )

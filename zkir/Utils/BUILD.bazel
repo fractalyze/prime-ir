@@ -39,7 +39,6 @@ cc_library(
     hdrs = ["OpUtils.h"],
     deps = [
         "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:TensorDialect",
     ],
 )
 

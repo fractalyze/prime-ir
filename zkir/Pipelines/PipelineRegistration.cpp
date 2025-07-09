@@ -57,6 +57,9 @@ template <bool allowOpenMP>
 void polyToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(poly::createPolyToField());
   manager.addPass(tensor_ext::createTensorExtToTensor());
+  // FIXME(batzor): Without this, some memref loads are CSE'd even though they
+  // were modified in the middle, causing `poly_ntt_runner` test to fail.
+  manager.addPass(createCanonicalizerPass());
   fieldToLLVMPipelineBuilder<allowOpenMP>(manager);
 }
 
@@ -65,10 +68,9 @@ void fieldToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
   manager.addPass(field::createFieldToModArith());
   manager.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
+  manager.addPass(createCanonicalizerPass());
   manager.addPass(mod_arith::createModArithToArith());
-  // FIXME(batzor): With this, some memref loads are canonicalized even though
-  // it was modified in the middle, causing `poly_ntt_runner` test to fail.
-  // manager.addPass(createCanonicalizerPass());
+  manager.addPass(createCanonicalizerPass());
 
   // Linalg
   manager.addNestedPass<FuncOp>(createConvertElementwiseToLinalgPass());

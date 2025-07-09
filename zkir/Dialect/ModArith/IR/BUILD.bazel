@@ -20,6 +20,7 @@ cc_library(
     ],
     deps = [
         ":attributes_inc_gen",
+        ":canonicalization_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
@@ -37,6 +38,7 @@ td_library(
     name = "td_files",
     srcs = [
         "ModArithAttributes.td",
+        "ModArithCanonicalization.td",
         "ModArithDialect.td",
         "ModArithOps.td",
         "ModArithTypes.td",
@@ -64,6 +66,21 @@ gentbl_cc_library(
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "ModArithAttributes.td",
+    deps = [
+        ":td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "canonicalization_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-rewriters"],
+            "ModArithCanonicalization.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "ModArithCanonicalization.td",
     deps = [
         ":td_files",
     ],
