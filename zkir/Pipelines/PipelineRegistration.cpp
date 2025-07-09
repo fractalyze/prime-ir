@@ -65,6 +65,7 @@ void polyToLLVMPipelineBuilder(OpPassManager &manager) {
 
 template <bool allowOpenMP>
 void fieldToLLVMPipelineBuilder(OpPassManager &manager) {
+  manager.addNestedPass<FuncOp>(createConvertElementwiseToLinalgPass());
   manager.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
   manager.addPass(field::createFieldToModArith());
   manager.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
@@ -73,7 +74,6 @@ void fieldToLLVMPipelineBuilder(OpPassManager &manager) {
   manager.addPass(createCanonicalizerPass());
 
   // Linalg
-  manager.addNestedPass<FuncOp>(createConvertElementwiseToLinalgPass());
   manager.addNestedPass<FuncOp>(createLinalgElementwiseOpFusionPass());
   // Needed to lower affine.map and affine.apply
   manager.addNestedPass<FuncOp>(affine::createAffineExpandIndexOpsPass());
