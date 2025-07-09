@@ -197,9 +197,9 @@ static SmallVector<Value> xyzzAndXyzz(ValueRange p1, ValueRange p2,
   return ifOp.getResults();
 }
 
-SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
-                           ShortWeierstrassAttr curve,
+SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2, XYZZType xyzzType,
                            ImplicitLocOpBuilder &b) {
+  auto curve = xyzzType.getCurve();
   if (p1.size() == 2) {
     if (p2.size() == 2) {
       return affineAndAffine(p2, p1, curve, b);
@@ -207,6 +207,12 @@ SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
     return xyzzAndAffine(p2, p1, curve, b);
   } else if (p2.size() == 2) {
     return xyzzAndAffine(p1, p2, curve, b);
+  } else if (p1.size() == 3 && p2.size() == 4) {
+    Value p1xyzz = b.create<elliptic_curve::ConvertPointTypeOp>(xyzzType, p1);
+    return xyzzAndXyzz(p1xyzz, p2, curve, b);
+  } else if (p1.size() == 4 && p2.size() == 3) {
+    Value p2xyzz = b.create<elliptic_curve::ConvertPointTypeOp>(xyzzType, p2);
+    return xyzzAndXyzz(p1, p2xyzz, curve, b);
   } else if (p1.size() == 4 && p2.size() == 4) {
     return xyzzAndXyzz(p1, p2, curve, b);
   } else {

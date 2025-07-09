@@ -374,7 +374,7 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
                 // run default add
                 SmallVector<Value> sum;
                 if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
-                  sum = xyzzAdd(p1Coords, p2Coords, xyzzType.getCurve(), b);
+                  sum = xyzzAdd(p1Coords, p2Coords, xyzzType, b);
                 } else if (auto jacobianType =
                                dyn_cast<JacobianType>(outputType)) {
                   sum = jacobianAdd(p1Coords, p2Coords, jacobianType.getCurve(),
