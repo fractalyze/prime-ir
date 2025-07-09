@@ -12,11 +12,13 @@ struct MontgomeryAttrStorage : public AttributeStorage {
   using KeyTy = ModArithType;
 
   MontgomeryAttrStorage(ModArithType modType, IntegerAttr nPrime, IntegerAttr r,
-                        IntegerAttr rInv, IntegerAttr rSquared)
+                        IntegerAttr rInv, IntegerAttr bInv,
+                        IntegerAttr rSquared)
       : modType(std::move(modType)),
         nPrime(std::move(nPrime)),
         r(std::move(r)),
         rInv(std::move(rInv)),
+        bInv(std::move(bInv)),
         rSquared(std::move(rSquared)) {}
 
   KeyTy getAsKey() const { return KeyTy(modType); }
@@ -34,6 +36,7 @@ struct MontgomeryAttrStorage : public AttributeStorage {
   IntegerAttr nPrime;
   IntegerAttr r;
   IntegerAttr rInv;
+  IntegerAttr bInv;
   IntegerAttr rSquared;
 };
 

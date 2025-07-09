@@ -22,6 +22,7 @@ def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
     IntegerAttr getR() const;
     IntegerAttr getRInv() const;
     IntegerAttr getRSquared() const;
+    IntegerAttr getBInv() const;
   }];
   let assemblyFormat = "`<`$modType`>`";
   let genStorageClass = 0;

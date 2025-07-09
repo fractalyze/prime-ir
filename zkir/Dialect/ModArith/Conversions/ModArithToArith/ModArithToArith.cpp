@@ -175,17 +175,20 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
       MontReduceOp op, OpAdaptor adaptor,
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    TypedAttr modAttr = modulusAttr(op);
 
     // `T` is the operand (e.g. the result of a multiplication, twice the
     // bitwidth of modulus).
     Value tLow = adaptor.getLow();
     Value tHigh = adaptor.getHigh();
 
-    // Extract Montgomery constants: `nPrime` and `modulus`.
+    // Extract Montgomery constants:
+    // `nPrime` = -n⁻¹ mod R, where R is the base and n is the modulus
+    // `bInv` = b⁻¹ mod n = (2ʷ)⁻¹ mod n, where w is the word size (e.g. 64)
     MontgomeryAttr montAttr = MontgomeryAttr::get(
         op.getContext(), cast<ModArithType>(op.getOutput().getType()));
     TypedAttr nPrimeAttr = montAttr.getNPrime();
-    TypedAttr modAttr = modulusAttr(op);
+    TypedAttr bInvAttr = montAttr.getBInv();
 
     // Retrieve the modulus bitwidth.
     const unsigned modBitWidth =
@@ -219,6 +222,7 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
       limbMaskAttr = SplatElementsAttr::get(shapedType, limbMaskAttr);
       limbShiftAttr = SplatElementsAttr::get(shapedType, limbShiftAttr);
       modAttr = SplatElementsAttr::get(shapedType, modAttr);
+      bInvAttr = SplatElementsAttr::get(shapedType, bInvAttr);
     }
 
     // Create constants for the Montgomery reduction.
@@ -227,44 +231,55 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     auto limbMaskConst = b.create<arith::ConstantOp>(limbMaskAttr);
     auto limbShiftConst = b.create<arith::ConstantOp>(limbShiftAttr);
     auto modConst = b.create<arith::ConstantOp>(modAttr);
+    auto bInvConst = b.create<arith::ConstantOp>(bInvAttr);
 
     // Because the number of limbs (`numLimbs`) is known at compile time, we can
     // unroll the loop as a straight-line chain of operations.
-    for (unsigned i = 0; i < numLimbs; ++i) {
-      // Extract the current lowest limb: `tLow` (mod `base`)
-      Value lowerLimb = tLow;
-      if (numLimbs > 1) {
-        lowerLimb = b.create<arith::TruncIOp>(limbType, tLow);
-      }
-      // Compute `m` = `lowerLimb` * `nPrime` (mod `base`)
-      auto m = b.create<arith::MulIOp>(lowerLimb, nPrimeConst);
-      // Compute `m` * `N` , where `N` is modulus
-      Value mExt = m;
-      if (numLimbs > 1) {
-        mExt = b.create<arith::ExtUIOp>(tLow.getType(), m);
-      }
-      auto mN = b.create<arith::MulUIExtendedOp>(modConst, mExt);
-      // Add the product to `T`.
-      auto sum = b.create<arith::AddUIExtendedOp>(tLow, mN.getLow());
+    // The result of the `i`th iteration is `T` * b⁻¹ mod n.
+    for (unsigned i = 0; i < numLimbs - 1; ++i) {
+      // Shift `T` right by `limbWidth`.
+      Value freeCoeff = b.create<arith::AndIOp>(tLow, limbMaskConst);
+      tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
+      Value tHighLowerLimb = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
+      tLow = b.create<arith::OrIOp>(tLow, tHighLowerLimb);
+      tHigh = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
+
+      // Compute `m` = `freeCoeff` * (b⁻¹ mod n) and add to `T`.
+      auto m = b.create<arith::MulUIExtendedOp>(freeCoeff, bInvConst);
+      auto sum = b.create<arith::AddUIExtendedOp>(tLow, m.getLow());
       tLow = sum.getSum();
-      tHigh = b.create<arith::AddIOp>(tHigh, mN.getHigh(), noOverflow);
-      // Add carry from the `sum` to `tHigh`.
+      tHigh = b.create<arith::AddIOp>(tHigh, m.getHigh(), noOverflow);
       auto carryExt =
           b.create<arith::ExtUIOp>(tHigh.getType(), sum.getOverflow());
       tHigh = b.create<arith::AddIOp>(tHigh, carryExt, noOverflow);
-      if (numLimbs == 1) {
-        // For a single-precision case, skip shifting and break.
-        tLow = tHigh;
-        break;
-      }
-      // Shift right by `limbWidth` to discard the zeroed limb.
+    }
+    // The last iteration is the same as normal Montgomery reduction.
+    Value freeCoeff = tLow;
+    if (numLimbs > 1) {
+      freeCoeff = b.create<arith::TruncIOp>(limbType, tLow);
+    }
+    // Compute `m` = `freeCoeff` * `nPrime` (mod `base`)
+    auto m = b.create<arith::MulIOp>(freeCoeff, nPrimeConst);
+    // Compute `m` * `n`
+    Value mExt = m;
+    if (numLimbs > 1) {
+      mExt = b.create<arith::ExtUIOp>(tLow.getType(), m);
+    }
+    auto mN = b.create<arith::MulUIExtendedOp>(modConst, mExt);
+    // Add the product to `T`.
+    auto sum = b.create<arith::AddUIExtendedOp>(tLow, mN.getLow());
+    tLow = sum.getSum();
+    tHigh = b.create<arith::AddIOp>(tHigh, mN.getHigh(), noOverflow);
+    auto carryExt =
+        b.create<arith::ExtUIOp>(tHigh.getType(), sum.getOverflow());
+    tHigh = b.create<arith::AddIOp>(tHigh, carryExt, noOverflow);
+    if (numLimbs == 1) {
+      tLow = tHigh;
+    } else {
+      // Shift right `T` by `limbWidth` to discard the zeroed limb.
       tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
-      // copy the lowest limb of `tHigh` to the highest limb of `tLow`
-      Value tHighLimb = b.create<arith::AndIOp>(tHigh, limbMaskConst);
-      tHighLimb = b.create<arith::ShLIOp>(tHighLimb, limbShiftConst);
-      tLow = b.create<arith::OrIOp>(tLow, tHighLimb);
-      // Shift right `tHigh` by `limbWidth`.
-      tHigh = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
+      tHigh = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
+      tLow = b.create<arith::OrIOp>(tLow, tHigh);
     }
 
     // Final conditional subtraction: if (`tLow` >= `modulus`) then subtract

@@ -11,6 +11,7 @@ ModArithType MontgomeryAttr::getModType() const { return getImpl()->modType; }
 IntegerAttr MontgomeryAttr::getNPrime() const { return getImpl()->nPrime; }
 IntegerAttr MontgomeryAttr::getR() const { return getImpl()->r; }
 IntegerAttr MontgomeryAttr::getRInv() const { return getImpl()->rInv; }
+IntegerAttr MontgomeryAttr::getBInv() const { return getImpl()->bInv; }
 IntegerAttr MontgomeryAttr::getRSquared() const { return getImpl()->rSquared; }
 
 namespace detail {
@@ -32,12 +33,14 @@ MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
   // `b` = 2^`w`
   APInt b = APInt::getOneBitSet(w + 1, w);
 
-  // bReduced = `b` (mod `modulus`)
+  // `bReduced` = `b` (mod `modulus`)
+  // `bInv` = `b`⁻¹ mod `modulus`
   APInt modExt = modulus.zextOrTrunc(b.getBitWidth());
   APInt bReduced = b.urem(modExt);
   bReduced = bReduced.zextOrTrunc(modulus.getBitWidth());
+  APInt bInv = multiplicativeInverse(bReduced, modulus);
 
-  // Compute `r` = `b^l` (mod `modulus`) where `l` is the number of limbs
+  // Compute `R` = `b^l` (mod `modulus`) where `l` is the number of limbs
   APInt r = expMod(bReduced, numWords, modulus);
   APInt rInv = multiplicativeInverse(r, modulus);
   APInt rSquared = mulMod(r, r, modulus);
@@ -61,6 +64,9 @@ MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
   // Construct the `rInvAttr` with the bitwidth of the modulus
   IntegerAttr rInvAttr = IntegerAttr::get(modType.getModulus().getType(), rInv);
 
+  // Construct the `bInvAttr` with the bitwidth of the modulus
+  IntegerAttr bInvAttr = IntegerAttr::get(modType.getModulus().getType(), bInv);
+
   // Construct the `rSquaredAttr` with the bitwidth of the modulus
   IntegerAttr rSquaredAttr =
       IntegerAttr::get(modType.getModulus().getType(), rSquared);
@@ -72,7 +78,7 @@ MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
   return new (allocator.allocate<MontgomeryAttrStorage>())
       MontgomeryAttrStorage(std::move(modType), std::move(nPrimeAttr),
                             std::move(rAttr), std::move(rInvAttr),
-                            std::move(rSquaredAttr));
+                            std::move(bInvAttr), std::move(rSquaredAttr));
 }
 
 }  // namespace detail

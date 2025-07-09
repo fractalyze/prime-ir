@@ -67,9 +67,12 @@ func.func @test_lower_inverse() {
   return
 }
 
-// CHECK_TEST_INVERSE: [1]
-// CHECK_TEST_INVERSE: [1]
-// CHECK_TEST_INVERSE: [1]
+// CHECK_TEST_INVERSE: data =
+// CHECK_TEST_INVERSE-NEXT: [1]
+// CHECK_TEST_INVERSE: data =
+// CHECK_TEST_INVERSE-NEXT: [1]
+// CHECK_TEST_INVERSE: data =
+// CHECK_TEST_INVERSE-NEXT: [1]
 
 func.func @test_lower_inverse_tensor() {
   %p1 = arith.constant 3723 : i256
@@ -120,7 +123,8 @@ func.func @test_lower_mont_reduce() {
   return
 }
 
-// CHECK_TEST_MONT_REDUCE: [1]
+// CHECK_TEST_MONT_REDUCE: data =
+// CHECK_TEST_MONT_REDUCE-NEXT: [1]
 
 func.func @test_lower_mont_mul() {
   %p = mod_arith.constant 17221657567640823606390383439573883756117969501024189775361 : !Fq
