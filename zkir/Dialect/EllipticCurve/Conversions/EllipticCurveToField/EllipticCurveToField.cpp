@@ -11,6 +11,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Generic.h"
+#include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/SignedBucketIndex.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Add.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Double.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/XYZZ/Add.h"
@@ -609,11 +610,18 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
 
     Type outputType = op.getOutput().getType();
 
-    PippengersGeneric pippengers(scalars, points, baseFieldType, outputType, b,
-                                 adaptor.getParallel(), adaptor.getDegree(),
-                                 adaptor.getWindowBits());
+    if (adaptor.getSignedBucketIndex()) {
+      PippengersSignedBucketIndex pippengers(
+          scalars, points, baseFieldType, outputType, b, adaptor.getParallel(),
+          adaptor.getDegree(), adaptor.getWindowBits());
+      rewriter.replaceOp(op, pippengers.generate());
+    } else {
+      PippengersGeneric pippengers(
+          scalars, points, baseFieldType, outputType, b, adaptor.getParallel(),
+          adaptor.getDegree(), adaptor.getWindowBits());
+      rewriter.replaceOp(op, pippengers.generate());
+    }
 
-    rewriter.replaceOp(op, pippengers.generate());
     return success();
   }
 };

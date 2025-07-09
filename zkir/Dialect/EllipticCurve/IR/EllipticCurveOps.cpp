@@ -108,6 +108,11 @@ LogicalResult MSMOp::verify() {
     return emitError() << "window bits must be greater than or equal to 0";
   }
 
+  if (getSignedBucketIndex() && getParallel()) {
+    return emitError()
+           << "signed_bucket_index does not support window parallelization";
+  }
+
   return success();
   // TODO(ashjeong): check curves/fields are the same
 }

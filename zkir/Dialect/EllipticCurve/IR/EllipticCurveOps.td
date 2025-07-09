@@ -211,7 +211,7 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
     window_bits is the number of bits to use for the window. If window_bits is 0, window_bits is computed from the degree.
 
     When parallel is enabled, window-based parallelization is applied. If term-based parallelization is needed,
-    parallel should be disabled and the caller should implement it.
+    parallel should be disabled and the caller should implement it. Note that signed_bucket_index does not support window parallelization.
 
     The following input point types and output types are supported:
 
@@ -245,11 +245,12 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
     RankedTensorOf<[PointType]>:$points,
     I32Attr:$degree,
     DefaultValuedAttr<I32Attr, "0">:$windowBits,
-    UnitAttr:$parallel
+    UnitAttr:$parallel,
+    UnitAttr:$signedBucketIndex
   );
   let results = (outs PointType:$output);
   let hasVerifier = 1;
-  let assemblyFormat = "operands attr-dict `degree` `=` $degree (`window_bits` `=` $windowBits^)? (`parallel` $parallel^)? `:` type($scalars) `,` type($points) `->` type($output)";
+  let assemblyFormat = "operands attr-dict `degree` `=` $degree (`window_bits` `=` $windowBits^)? (`parallel` $parallel^)? (`signed_bucket_index` $signedBucketIndex^)? `:` type($scalars) `,` type($points) `->` type($output)";
 }
 
 ////////////// POINT CONVERSIONS //////////////
