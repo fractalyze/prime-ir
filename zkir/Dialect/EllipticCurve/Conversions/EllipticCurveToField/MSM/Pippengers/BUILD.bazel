@@ -34,3 +34,20 @@ cc_library(
         "@llvm-project//mlir:TensorDialect",
     ],
 )
+
+cc_library(
+    name = "SignedBucketIndex",
+    srcs = ["SignedBucketIndex.cpp"],
+    hdrs = ["SignedBucketIndex.h"],
+    deps = [
+        ":Pippengers",
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//zkir/Dialect/Field/IR:Field",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:ControlFlowDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:MemRefDialect",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)

@@ -29,6 +29,7 @@ class Pippengers {
   Value windowReduction();
 
   bool parallel_;
+  bool enableYrridsTrick_;
 
   size_t bitsPerWindow_;
   Value numScalarMuls_;  // Index

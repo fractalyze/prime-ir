@@ -72,6 +72,9 @@ Pippengers::Pippengers(bool parallel, Value scalars, Value points,
                                   : estimateOptimalWindowBits(
                                         scalarBitWidth, size_t{1} << degree);
   size_t numWindows = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
+  // Only used for signed bucket index
+  enableYrridsTrick_ = (static_cast<int64_t>(bitsPerWindow_ * numWindows) -
+                        static_cast<int64_t>(scalarBitWidth)) > 1;
 
   numScalarMuls_ = b.create<tensor::DimOp>(scalars_, 0);
   numWindows_ = b.create<arith::ConstantIndexOp>(numWindows);

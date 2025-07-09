@@ -666,7 +666,8 @@ void EllipticCurveToField::runOnOperation() {
       ConvertAny<tensor::DimOp>,
       ConvertAny<tensor::ExtractOp>,
       ConvertAny<tensor::ExtractSliceOp>,
-      ConvertAny<tensor::FromElementsOp>
+      ConvertAny<tensor::FromElementsOp>,
+      ConvertAny<tensor::InsertOp>
       // clang-format on
       >(typeConverter, context);
   target.addDynamicallyLegalOp<
@@ -684,7 +685,8 @@ void EllipticCurveToField::runOnOperation() {
       tensor::DimOp,
       tensor::ExtractOp,
       tensor::ExtractSliceOp,
-      tensor::FromElementsOp
+      tensor::FromElementsOp,
+      tensor::InsertOp
       // clang-format on
       >([&](auto op) { return typeConverter.isLegal(op); });
 
