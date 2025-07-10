@@ -5,10 +5,11 @@ package(
 )
 
 cc_library(
-    name = "Pippengers",
-    srcs = ["Pippengers.cpp"],
-    hdrs = ["Pippengers.h"],
+    name = "Generic",
+    srcs = ["Generic.cpp"],
+    hdrs = ["Generic.h"],
     deps = [
+        ":Pippengers",
         "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//zkir/Dialect/Field/IR:Field",
         "@llvm-project//mlir:ArithDialect",
@@ -20,11 +21,10 @@ cc_library(
 )
 
 cc_library(
-    name = "Generic",
-    srcs = ["Generic.cpp"],
-    hdrs = ["Generic.h"],
+    name = "Pippengers",
+    srcs = ["Pippengers.cpp"],
+    hdrs = ["Pippengers.h"],
     deps = [
-        ":Pippengers",
         "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//zkir/Dialect/Field/IR:Field",
         "@llvm-project//mlir:ArithDialect",
