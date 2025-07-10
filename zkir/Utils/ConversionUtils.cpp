@@ -139,7 +139,8 @@ LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
     newOpResults.push_back(entryValues);
     rewriter.replaceOpWithMultiple(op, newOpResults);
     return success();
-  } else if (op->getName().getStringRef() == "memref.store" &&
+  } else if ((op->getName().getStringRef() == "memref.store" ||
+              op->getName().getStringRef() == "tensor.insert") &&
              operands[0].size() > 1) {
     // In this case, the value to be inserted is 1:N converted and should be
     // inserted into the container at multiple indices.
