@@ -62,7 +62,7 @@ func.func @test_msm() {
   %U = memref.cast %mem : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
 
-  // RUNNING MSM
+  // RUNNING MSM - GENERIC PIPPENGER'S
   %scalars = tensor.from_elements %scalar3, %scalar3, %scalar5, %scalar7 : tensor<4x!SFm>
   %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
   %msm_test = elliptic_curve.msm %scalars, %points degree=2 parallel : tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
@@ -76,8 +76,22 @@ func.func @test_msm() {
   %mem1 = bufferization.to_memref %trunc1 : tensor<2xi32> to memref<2xi32>
   %U1 = memref.cast %mem1 : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U1) : (memref<*xi32>) -> ()
+
+  // RUNNING MSM - SIGNED BUCKET INDEX
+  %msm_test1 = elliptic_curve.msm %scalars, %points degree=2 parallel signed_bucket_index : tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
+  %msm_test_affine1 = elliptic_curve.convert_point_type %msm_test1 : !jacobian -> !affine
+
+  %extract_point2x, %extract_point2y = elliptic_curve.extract %msm_test_affine1 : !affine -> !PFm, !PFm
+  %extract_point2 = tensor.from_elements %extract_point2x, %extract_point2y : tensor<2x!PFm>
+  %extract_point2_reduced = field.from_mont %extract_point2 : tensor<2x!PF>
+  %extract2 = field.extract %extract_point2_reduced : tensor<2x!PF> -> tensor<2xi256>
+  %trunc2 = arith.trunci %extract2 : tensor<2xi256> to tensor<2xi32>
+  %mem2 = bufferization.to_memref %trunc2 : tensor<2xi32> to memref<2xi32>
+  %U2 = memref.cast %mem2 : memref<2xi32> to memref<*xi32>
+  func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
   return
 }
 
+// CHECK_TEST_MSM: [-1898406218, -965466820]
 // CHECK_TEST_MSM: [-1898406218, -965466820]
 // CHECK_TEST_MSM: [-1898406218, -965466820]
