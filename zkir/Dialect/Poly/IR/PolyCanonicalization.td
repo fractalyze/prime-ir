@@ -25,4 +25,4 @@ def ToFromTensor : Pat<
   (replaceWithValue $tensor)
 >;
 
-#endif  // LIB_DIALECT_POLYNOMIAL_IR_POLYNOMIALCANONICALIZATION_TD_
+#endif  // ZKIR_DIALECT_POLY_IR_POLYCANONICALIZATION_TD_
