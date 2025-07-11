@@ -1,6 +1,5 @@
 // RUN: zkir-opt -field-to-mod-arith -split-input-file %s | FileCheck %s -enable-var-scope
-!mod = !mod_arith.int<7:i32>
-#mont = #mod_arith.montgomery<!mod>
+#mont = #mod_arith.montgomery<7:i32>
 !PF = !field.pf<7:i32>
 !PFm = !field.pf<7:i32, true>
 

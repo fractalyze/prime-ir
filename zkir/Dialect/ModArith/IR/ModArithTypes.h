@@ -1,6 +1,7 @@
 #ifndef ZKIR_DIALECT_MODARITH_IR_MODARITHTYPES_H_
 #define ZKIR_DIALECT_MODARITH_IR_MODARITHTYPES_H_
 
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 
 #define GET_TYPEDEF_CLASSES

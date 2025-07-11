@@ -124,7 +124,7 @@ def SubLhsAfterSub :
 // (-x) - y -> -(x + y)
 def SubAfterNegLhs :
     Pat<(ModArith_SubOp (ModArith_NegateOp $x), $y),
-        (ModArith_NegateOp (ModArith_SubOp $x, $y))>;
+        (ModArith_NegateOp (ModArith_AddOp $x, $y))>;
 
 // x - (-y) -> x + y
 def SubAfterNegRhs :

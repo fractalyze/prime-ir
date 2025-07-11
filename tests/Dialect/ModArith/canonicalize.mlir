@@ -310,8 +310,8 @@ func.func @test_sub_lhs_after_sub(%arg0: !Zp, %arg1: !Zp) -> !Zp {
 func.func @test_sub_after_neg_lhs(%arg0: !Zp, %arg1: !Zp) -> !Zp {
   %neg_arg0 = mod_arith.negate %arg0 : !Zp
   %0 = mod_arith.sub %neg_arg0, %arg1 : !Zp
-  // CHECK: %[[SUB:.*]] = mod_arith.sub %[[ARG0]], %[[ARG1]] : [[T]]
-  // CHECK: %[[RES:.*]] = mod_arith.negate %[[SUB]] : [[T]]
+  // CHECK: %[[SUM:.*]] = mod_arith.add %[[ARG0]], %[[ARG1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.negate %[[SUM]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %0 : !Zp
 }

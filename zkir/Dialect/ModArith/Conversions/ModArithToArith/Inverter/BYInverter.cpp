@@ -21,7 +21,7 @@ BYInverter::BYInverter(ImplicitLocOpBuilder &b, Type inputType)
     : b_(b),
       modArithType_(cast<ModArithType>(getElementTypeOrSelf(inputType))) {
   IntegerAttr modulus = modArithType_.getModulus();
-  BYAttr byAttr = BYAttr::get(b.getContext(), modArithType_);
+  BYAttr byAttr = modArithType_.getBYAttr();
   unsigned extModBitWidth = byAttr.getNewBitWidth().getValue().getZExtValue();
   unsigned modBitWidth = modulus.getValue().getBitWidth();
   unsigned n = byAttr.getDivsteps().getValue().getZExtValue();
@@ -235,8 +235,7 @@ Value BYInverter::Generate(Value input, bool isMont) {
   Value d = extIntTypeZero_;
   Value e;
   if (isMont) {
-    MontgomeryAttr montAttr =
-        MontgomeryAttr::get(b_.getContext(), modArithType_);
+    MontgomeryAttr montAttr = modArithType_.getMontgomeryAttr();
     e = b_.create<arith::ConstantOp>(montAttr.getRSquared());
     e = b_.create<arith::ExtUIOp>(extIntType_, e);
   } else {

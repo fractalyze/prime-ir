@@ -3,8 +3,7 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s --check-prefix=CHECK_TEST_POWER < %t
 
-!mod = !mod_arith.int<7:i32>
-#mont = #mod_arith.montgomery<!mod>
+#mont = #mod_arith.montgomery<7:i32>
 !PF = !field.pf<7:i32>
 !PFm = !field.pf<7:i32, true>
 

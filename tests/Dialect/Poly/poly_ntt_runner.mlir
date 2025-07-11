@@ -3,24 +3,24 @@
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_POLY_NTT < %t
 
+// RUN: zkir-opt %s -poly-to-llvm \
+// RUN:   | mlir-runner -e test_poly_ntt_with_twiddles -entry-point-result=void \
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
+// RUN: FileCheck %s -check-prefix=CHECK_TEST_POLY_NTT_WITH_TWIDDLES < %t
+
 !coeff_ty = !field.pf<7681:i32>
 !coeff_ty_mont = !field.pf<7681:i32, true>
 #elem = #field.pf.elem<3383:i32>  : !coeff_ty
-#inv_elem = #field.pf.elem<4298:i32>  : !coeff_ty
 #root_of_unity = #field.root_of_unity<#elem, 4:i32>
-
-!mod = !mod_arith.int<7681:i32>
-#mont = #mod_arith.montgomery<!mod>
-#root = #poly.primitive_root<#root_of_unity, #mont>
 !poly_ty = !poly.polynomial<!coeff_ty_mont, 3>
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
 func.func @test_poly_ntt() {
-  %coeffsRaw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.encapsulate %coeffsRaw : tensor<4xi32> -> tensor<4x!coeff_ty>
+  %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
+  %coeffs = field.encapsulate %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
   %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
-  %res = poly.ntt %coeffs_mont {root=#root} : tensor<4x!coeff_ty_mont>
+  %res = poly.ntt %coeffs_mont {root=#root_of_unity} : tensor<4x!coeff_ty_mont>
 
   %res_standard = field.from_mont %res : tensor<4x!coeff_ty>
   %extract = field.extract %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
@@ -28,7 +28,7 @@ func.func @test_poly_ntt() {
   %U = memref.cast %1 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
 
-  %intt = poly.intt %res {root=#root} : tensor<4x!coeff_ty_mont>
+  %intt = poly.ntt %res {root=#root_of_unity} inverse=true : tensor<4x!coeff_ty_mont>
   %poly = poly.from_tensor %intt : tensor<4x!coeff_ty_mont> -> !poly_ty
   %res2 = poly.to_tensor %poly : !poly_ty -> tensor<4x!coeff_ty_mont>
   %res2_standard = field.from_mont %res2 : tensor<4x!coeff_ty>
@@ -40,3 +40,33 @@ func.func @test_poly_ntt() {
 }
 // CHECK_TEST_POLY_NTT: [10, 913, 7679, 6764]
 // CHECK_TEST_POLY_NTT: [1, 2, 3, 4]
+
+func.func @test_poly_ntt_with_twiddles() {
+  %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
+  %coeffs = field.encapsulate %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
+  %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
+  %twiddles_raw = arith.constant dense<[5569, 6115, 2112, 1566]> : tensor<4xi32>
+  %twiddles = field.encapsulate %twiddles_raw : tensor<4xi32> -> tensor<4x!coeff_ty_mont>
+  %res = poly.ntt %coeffs_mont, %twiddles : tensor<4x!coeff_ty_mont>
+
+  %res_standard = field.from_mont %res : tensor<4x!coeff_ty>
+  %extract = field.extract %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %1 = bufferization.to_memref %extract : tensor<4xi32> to memref<4xi32>
+  %U = memref.cast %1 : memref<4xi32> to memref<*xi32>
+  func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
+
+  %inv_twiddles_raw = arith.constant dense<[5569, 1566, 2112, 6115]> : tensor<4xi32>
+  %inv_twiddles = field.encapsulate %inv_twiddles_raw : tensor<4xi32> -> tensor<4x!coeff_ty_mont>
+  %intt = poly.ntt %res, %inv_twiddles inverse=true : tensor<4x!coeff_ty_mont>
+  %poly = poly.from_tensor %intt : tensor<4x!coeff_ty_mont> -> !poly_ty
+  %res2 = poly.to_tensor %poly : !poly_ty -> tensor<4x!coeff_ty_mont>
+  %res2_standard = field.from_mont %res2 : tensor<4x!coeff_ty>
+  %extract2 = field.extract %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %2= bufferization.to_memref %extract2 : tensor<4xi32> to memref<4xi32>
+  %U2 = memref.cast %2 : memref<4xi32> to memref<*xi32>
+  func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
+  return
+}
+
+// CHECK_TEST_POLY_NTT_WITH_TWIDDLES: [10, 913, 7679, 6764]
+// CHECK_TEST_POLY_NTT_WITH_TWIDDLES: [1, 2, 3, 4]

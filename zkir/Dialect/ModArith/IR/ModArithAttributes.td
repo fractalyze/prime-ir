@@ -16,7 +16,7 @@ def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
     modulus. It is used for efficient multiplication when the modulus is fixed
     at compile time.
   }];
-  let parameters = (ins "ModArithType":$modType);
+  let parameters = (ins "IntegerAttr":$modulus);
   let extraClassDeclaration = [{
     IntegerAttr getNPrime() const;
     IntegerAttr getR() const;
@@ -24,7 +24,7 @@ def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
     IntegerAttr getRSquared() const;
     IntegerAttr getBInv() const;
   }];
-  let assemblyFormat = "`<`$modType`>`";
+  let assemblyFormat = "`<`$modulus`>`";
   let genStorageClass = 0;
 }
 
@@ -35,13 +35,13 @@ def ModArith_BYAttr : ModArith_Attr<"BY", "by"> {
     for a given modulus. It is used for efficient inverse when the modulus is
     fixed at compile time.
   }];
-  let parameters = (ins "ModArithType":$modType);
+  let parameters = (ins "IntegerAttr":$modulus);
   let extraClassDeclaration = [{
     IntegerAttr getDivsteps() const;
     IntegerAttr getMInv() const;
     IntegerAttr getNewBitWidth() const;
   }];
-  let assemblyFormat = "`<`$modType`>`";
+  let assemblyFormat = "`<`$modulus`>`";
   let genStorageClass = 0;
 }
 

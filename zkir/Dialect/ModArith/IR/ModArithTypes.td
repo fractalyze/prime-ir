@@ -60,6 +60,12 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [MemRefElementTypeI
     bool isMontgomery() {
       return getIsMontgomery();
     }
+    MontgomeryAttr getMontgomeryAttr() {
+      return MontgomeryAttr::get(getContext(), getModulus());
+    }
+    BYAttr getBYAttr() {
+      return BYAttr::get(getContext(), getModulus());
+    }
   }];
 }
 

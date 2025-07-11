@@ -185,8 +185,7 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     // Extract Montgomery constants:
     // `nPrime` = -n⁻¹ mod R, where R is the base and n is the modulus
     // `bInv` = b⁻¹ mod n = (2ʷ)⁻¹ mod n, where w is the word size (e.g. 64)
-    MontgomeryAttr montAttr = MontgomeryAttr::get(
-        op.getContext(), cast<ModArithType>(op.getOutput().getType()));
+    MontgomeryAttr montAttr = getResultModArithType(op).getMontgomeryAttr();
     TypedAttr nPrimeAttr = montAttr.getNPrime();
     TypedAttr bInvAttr = montAttr.getBInv();
 
@@ -306,7 +305,7 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ModArithType resultType = getResultModArithType(op);
-    MontgomeryAttr montAttr = MontgomeryAttr::get(op.getContext(), resultType);
+    MontgomeryAttr montAttr = resultType.getMontgomeryAttr();
     TypedAttr rSquaredAttr = montAttr.getRSquared();
     if (auto shapedType = dyn_cast<ShapedType>(op.getOutput().getType())) {
       auto intShapedType = shapedType.cloneWith(

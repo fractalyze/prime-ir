@@ -1,5 +1,7 @@
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 #include "zkir/Utils/APIntUtils.h"
 
@@ -15,8 +17,7 @@ PrimeFieldAttr getAttrAsStandardForm(PrimeFieldAttr attr) {
   APInt modulus = attr.getType().getModulus().getValue();
   auto modArithType = mod_arith::ModArithType::get(attr.getContext(),
                                                    attr.getType().getModulus());
-  auto montAttr =
-      mod_arith::MontgomeryAttr::get(attr.getContext(), modArithType);
+  mod_arith::MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
   value = mulMod(value, montAttr.getRInv().getValue(), modulus);
 
   return PrimeFieldAttr::get(standardType, value);
@@ -32,8 +33,7 @@ PrimeFieldAttr getAttrAsMontgomeryForm(PrimeFieldAttr attr) {
   APInt modulus = attr.getType().getModulus().getValue();
   auto modArithType = mod_arith::ModArithType::get(attr.getContext(),
                                                    attr.getType().getModulus());
-  auto montAttr =
-      mod_arith::MontgomeryAttr::get(attr.getContext(), modArithType);
+  mod_arith::MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
   value = mulMod(value, montAttr.getR().getValue(), modulus);
 
   return PrimeFieldAttr::get(montType, value);

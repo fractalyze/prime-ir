@@ -16,6 +16,7 @@ cc_library(
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/Poly/IR:Poly",
         "//zkir/Dialect/TensorExt/IR:TensorExt",
+        "//zkir/Utils:APIntUtils",
         "//zkir/Utils:ConversionUtils",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:BufferizationDialect",

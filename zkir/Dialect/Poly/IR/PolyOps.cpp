@@ -1,35 +1,11 @@
 #include "zkir/Dialect/Poly/IR/PolyOps.h"
 
-#include "mlir/Dialect/Polynomial/IR/PolynomialAttributes.h"
 #include "mlir/include/mlir/IR/PatternMatch.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h"
 #include "zkir/Dialect/Poly/IR/PolyTypes.h"
 
 namespace mlir::zkir::poly {
-
-ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  Attribute attr = polynomial::IntPolynomialAttr::parse(parser, nullptr);
-  PolyType type;
-  if (attr) {
-    if (failed(parser.parseColonType(type))) return failure();
-    polynomial::IntPolynomialAttr intPolyAttr =
-        cast<polynomial::IntPolynomialAttr>(attr);
-
-    result.addAttribute("value", UnivariatePolyAttr::get(parser.getContext(),
-                                                         type, intPolyAttr));
-    result.addTypes(type);
-    return success();
-  } else {
-    return failure();
-  }
-}
-
-void ConstantOp::print(OpAsmPrinter &p) {
-  getValueAttr().getValue().print(p);
-  p << " : ";
-  p.printType(getOutput().getType());
-}
 
 namespace {
 #include "zkir/Dialect/Poly/IR/PolyCanonicalization.cpp.inc"
@@ -47,11 +23,6 @@ void ToTensorOp::getCanonicalizationPatterns(RewritePatternSet &results,
 
 void NTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                         MLIRContext *context) {
-  results.add<NTTAfterINTT>(context);
-}
-
-void INTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
-                                         MLIRContext *context) {
   results.add<INTTAfterNTT>(context);
 }
 

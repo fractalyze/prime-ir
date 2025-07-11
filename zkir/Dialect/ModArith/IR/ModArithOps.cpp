@@ -164,8 +164,7 @@ Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
 OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
   if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
     auto modArithType = cast<ModArithType>(getOutput().getType());
-    auto montAttr =
-        MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
 
     APInt modulus = modArithType.getModulus().getValue();
     APInt resultValue =
@@ -178,8 +177,7 @@ OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
 OpFoldResult FromMontOp::fold(FoldAdaptor adaptor) {
   if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
     auto modArithType = cast<ModArithType>(getOutput().getType());
-    auto montAttr =
-        MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
 
     APInt modulus = modArithType.getModulus().getValue();
     APInt resultValue =
@@ -254,8 +252,7 @@ OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
     APInt modulus = modArithType.getModulus().getValue();
     APInt resultValue = mulMod(input.getValue(), input.getValue(), modulus);
     if (modArithType.isMontgomery()) {
-      auto montAttr =
-          MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+      MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
       resultValue = mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
     }
     return IntegerAttr::get(input.getType(), resultValue);
@@ -268,8 +265,7 @@ OpFoldResult MontSquareOp::fold(FoldAdaptor adaptor) {
     auto modArithType = cast<ModArithType>(getOutput().getType());
     APInt modulus = modArithType.getModulus().getValue();
     APInt resultValue = mulMod(input.getValue(), input.getValue(), modulus);
-    MontgomeryAttr montAttr =
-        MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
     resultValue = mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
     return IntegerAttr::get(input.getType(), resultValue);
   }
@@ -282,8 +278,7 @@ OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
     APInt modulus = modArithType.getModulus().getValue();
     APInt resultValue = multiplicativeInverse(input.getValue(), modulus);
     if (modArithType.isMontgomery()) {
-      auto montAttr =
-          MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+      MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
       resultValue =
           mulMod(resultValue, montAttr.getRSquared().getValue(), modulus);
     }
@@ -295,8 +290,7 @@ OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
 OpFoldResult MontInverseOp::fold(FoldAdaptor adaptor) {
   if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
     auto modArithType = cast<ModArithType>(getOutput().getType());
-    auto montAttr =
-        MontgomeryAttr::get(adaptor.getInput().getContext(), modArithType);
+    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
 
     APInt modulus = modArithType.getModulus().getValue();
     APInt resultValue = multiplicativeInverse(input.getValue(), modulus);
@@ -355,8 +349,7 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
     } else if (!modArithType.isMontgomery() && rhs.getValue().isOne()) {
       return getLhs();
     } else if (modArithType.isMontgomery()) {
-      auto montAttr =
-          MontgomeryAttr::get(adaptor.getRhs().getContext(), modArithType);
+      MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
       if (montAttr.getR().getValue().eq(rhs.getValue())) {
         return getLhs();
       }
@@ -365,8 +358,7 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
       APInt modulus = modArithType.getModulus().getValue();
       APInt resultValue = mulMod(lhs.getValue(), rhs.getValue(), modulus);
       if (modArithType.isMontgomery()) {
-        auto montAttr =
-            MontgomeryAttr::get(adaptor.getLhs().getContext(), modArithType);
+        MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
         resultValue =
             mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
       }
@@ -382,8 +374,7 @@ OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
     if (rhs.getValue().isZero()) {
       return getRhs();
     }
-    auto montAttr =
-        MontgomeryAttr::get(adaptor.getRhs().getContext(), modArithType);
+    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
     if (montAttr.getR().getValue().eq(rhs.getValue())) {
       return getLhs();
     }
@@ -448,7 +439,7 @@ bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
   auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
   APInt modulus = modArithType.getModulus().getValue();
   if (modArithType.isMontgomery()) {
-    auto montAttr = MontgomeryAttr::get(attr.getContext(), modArithType);
+    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
     auto intAttr = cast<IntegerAttr>(attr);
     APInt montReduced =
         mulMod(intAttr.getValue(), montAttr.getRInv().getValue(), modulus);

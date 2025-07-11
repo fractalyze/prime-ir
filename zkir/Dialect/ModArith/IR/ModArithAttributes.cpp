@@ -7,7 +7,7 @@
 
 namespace mlir::zkir::mod_arith {
 
-ModArithType MontgomeryAttr::getModType() const { return getImpl()->modType; }
+IntegerAttr MontgomeryAttr::getModulus() const { return getImpl()->modulus; }
 IntegerAttr MontgomeryAttr::getNPrime() const { return getImpl()->nPrime; }
 IntegerAttr MontgomeryAttr::getR() const { return getImpl()->r; }
 IntegerAttr MontgomeryAttr::getRInv() const { return getImpl()->rInv; }
@@ -18,9 +18,9 @@ namespace detail {
 
 MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
     AttributeStorageAllocator &allocator, KeyTy &&key) {
-  // Extract the `modType` and `modulus` from the key
-  ModArithType modType = key;
-  APInt modulus = modType.getModulus().getValue();
+  // Extract `modulus` from the key
+  IntegerAttr modAttr = key;
+  APInt modulus = modAttr.getValue();
 
   // `w` is single limb size when `modulus` is a multi-precision
   // NOTE(batzor): In the single-precision case, we use modulus.getBitWidth() -
@@ -59,31 +59,30 @@ MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
   nPrime = nPrime.trunc(w);
 
   // Construct the `rAttr` with the bitwidth of the modulus
-  IntegerAttr rAttr = IntegerAttr::get(modType.getModulus().getType(), r);
+  IntegerAttr rAttr = IntegerAttr::get(modAttr.getType(), r);
 
   // Construct the `rInvAttr` with the bitwidth of the modulus
-  IntegerAttr rInvAttr = IntegerAttr::get(modType.getModulus().getType(), rInv);
+  IntegerAttr rInvAttr = IntegerAttr::get(modAttr.getType(), rInv);
 
   // Construct the `bInvAttr` with the bitwidth of the modulus
-  IntegerAttr bInvAttr = IntegerAttr::get(modType.getModulus().getType(), bInv);
+  IntegerAttr bInvAttr = IntegerAttr::get(modAttr.getType(), bInv);
 
   // Construct the `rSquaredAttr` with the bitwidth of the modulus
-  IntegerAttr rSquaredAttr =
-      IntegerAttr::get(modType.getModulus().getType(), rSquared);
+  IntegerAttr rSquaredAttr = IntegerAttr::get(modAttr.getType(), rSquared);
 
   // Construct the `nPrimeAttr` with the bitwidth `w`
   IntegerAttr nPrimeAttr = IntegerAttr::get(
-      IntegerType::get(modType.getContext(), nPrime.getBitWidth()), nPrime);
+      IntegerType::get(modAttr.getContext(), nPrime.getBitWidth()), nPrime);
 
   return new (allocator.allocate<MontgomeryAttrStorage>())
-      MontgomeryAttrStorage(std::move(modType), std::move(nPrimeAttr),
+      MontgomeryAttrStorage(std::move(modAttr), std::move(nPrimeAttr),
                             std::move(rAttr), std::move(rInvAttr),
                             std::move(bInvAttr), std::move(rSquaredAttr));
 }
 
 }  // namespace detail
 
-ModArithType BYAttr::getModType() const { return getImpl()->modType; }
+IntegerAttr BYAttr::getModulus() const { return getImpl()->modulus; }
 IntegerAttr BYAttr::getDivsteps() const { return getImpl()->divsteps; }
 IntegerAttr BYAttr::getMInv() const { return getImpl()->mInv; }
 IntegerAttr BYAttr::getNewBitWidth() const { return getImpl()->newBitWidth; }
@@ -93,8 +92,8 @@ namespace detail {
 // static
 BYAttrStorage *BYAttrStorage::construct(AttributeStorageAllocator &allocator,
                                         KeyTy &&key) {
-  ModArithType modType = key;
-  APInt modulus = modType.getModulus().getValue();
+  IntegerAttr modAttr = key;
+  APInt modulus = modAttr.getValue();
   unsigned bitWidth = modulus.getBitWidth();
   // `divsteps` determine the number of steps we will batch into one jump step.
   // Assuming 12 batches, divsteps * 12 should exceed the bound, which is a
@@ -116,12 +115,12 @@ BYAttrStorage *BYAttrStorage::construct(AttributeStorageAllocator &allocator,
   APInt mInv =
       multiplicativeInverse(modulus.zextOrTrunc(bitWidth).urem(mask), mask);
 
-  auto intType = IntegerType::get(modType.getContext(), bitWidth);
+  auto intType = IntegerType::get(modAttr.getContext(), bitWidth);
   auto divstepsAttr = IntegerAttr::get(intType, divsteps);
   auto mInvAttr = IntegerAttr::get(intType, mInv);
   auto newBitWidthAttr = IntegerAttr::get(intType, bitWidth);
   return new (allocator.allocate<BYAttrStorage>())
-      BYAttrStorage(std::move(modType), std::move(divstepsAttr),
+      BYAttrStorage(std::move(modAttr), std::move(divstepsAttr),
                     std::move(mInvAttr), std::move(newBitWidthAttr));
 }
 

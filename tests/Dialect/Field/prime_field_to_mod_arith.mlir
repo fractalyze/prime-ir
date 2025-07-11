@@ -6,8 +6,7 @@
 #root_elem = #field.pf.elem<96:i32> : !PF1
 #root = #field.root_of_unity<#root_elem, 2>
 
-!mod = !mod_arith.int<97 : i32>
-#mont = #mod_arith.montgomery<!mod>
+#mont = #mod_arith.montgomery<97:i32>
 
 // CHECK-LABEL: @test_lower_constant
 // CHECK-SAME: () -> [[T:.*]] {

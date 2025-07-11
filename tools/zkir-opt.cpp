@@ -3,7 +3,6 @@
 #include "mlir/InitAllExtensions.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
-#include "zkir/Dialect/Arith/Conversions/ArithToModArith/ArithToModArith.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
@@ -30,7 +29,6 @@ int main(int argc, char **argv) {
 
   // Dialect conversion passes
   mlir::zkir::mod_arith::registerModArithToArithPasses();
-  mlir::zkir::arith::registerArithToModArithPasses();
   mlir::zkir::field::registerFieldToModArithPasses();
   mlir::zkir::poly::registerPolyToFieldPasses();
   mlir::zkir::elliptic_curve::registerEllipticCurveToFieldPasses();
