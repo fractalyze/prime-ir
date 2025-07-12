@@ -1,10 +1,11 @@
 #ifndef ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_POINTOPERATIONS_JACOBIAN_ADD_H_
 #define ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_POINTOPERATIONS_JACOBIAN_ADD_H_
 
-#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "llvm/ADT/SmallVector.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
-#include "zkir/Dialect/Field/IR/FieldOps.h"
 
 namespace mlir::zkir::elliptic_curve {
 
