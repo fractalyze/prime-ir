@@ -29,7 +29,7 @@ static SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(affineToXYZZDouble(p1, curve, b));
+        b.create<scf::YieldOp>(xyzzDouble(p1, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
@@ -89,7 +89,7 @@ static SmallVector<Value> xyzzAndAffine(ValueRange p1, ValueRange p2,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(affineToXYZZDouble(p2, curve, b));
+        b.create<scf::YieldOp>(xyzzDouble(p2, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
