@@ -92,11 +92,12 @@ BENCHMARK(BM_msm_signed_bucket_index_benchmark)
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
 //   L2 Unified 4096 KiB (x14)
-// Load Average: 7.82, 13.83, 10.35
-// -------------------------------------------------------------------------
-// Benchmark                               Time             CPU   Iterations
-// -------------------------------------------------------------------------
-// BM_msm_benchmark/iterations:20       2786 ms         2761 ms           20
+// Load Average: 6.16, 5.18, 3.75
+// ---------------------------------------------------------------------------------------------
+// Benchmark                                                   Time             CPU   Iterations
+// ---------------------------------------------------------------------------------------------
+// BM_msm_pippengers_benchmark/iterations:20                2132 ms         2131 ms           20
+// BM_msm_signed_bucket_index_benchmark/iterations:20       2253 ms         2249 ms           20
 
 // $bazel run -c opt //benchmark/msm:msm_benchmark_test_parallel
 // 2025-06-26 tested on M4 Pro
@@ -106,9 +107,10 @@ BENCHMARK(BM_msm_signed_bucket_index_benchmark)
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
 //   L2 Unified 4096 KiB (x14)
-// Load Average: 22.03, 18.19, 11.02
-// -------------------------------------------------------------------------
-// Benchmark                               Time             CPU   Iterations
-// -------------------------------------------------------------------------
-// BM_msm_benchmark/iterations:20        609 ms          485 ms           20
+// Load Average: 6.43, 4.84, 3.54
+// ---------------------------------------------------------------------------------------------
+// Benchmark                                                   Time             CPU   Iterations
+// ---------------------------------------------------------------------------------------------
+// BM_msm_pippengers_benchmark/iterations:20                 407 ms          377 ms           20
+// BM_msm_signed_bucket_index_benchmark/iterations:20       2253 ms         2251 ms           20
 // NOLINTEND()
