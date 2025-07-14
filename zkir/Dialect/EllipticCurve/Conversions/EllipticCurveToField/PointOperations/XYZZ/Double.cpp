@@ -1,20 +1,15 @@
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/XYZZ/Double.h"
 
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
-#include "zkir/Dialect/Field/IR/FieldTypes.h"
 
 namespace mlir::zkir::elliptic_curve {
+namespace {
 
 // mdbl-2008-s-1
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-mdbl-2008-s-1
 // Cost: 4M + 3S
-SmallVector<Value> affineToXYZZDouble(ValueRange point,
-                                      ShortWeierstrassAttr curve,
-                                      ImplicitLocOpBuilder &b) {
+SmallVector<Value> affineToXYZZ(ValueRange point, ShortWeierstrassAttr curve,
+                                ImplicitLocOpBuilder &b) {
   Value x = point[0];
   Value y = point[1];
 
@@ -50,7 +45,7 @@ SmallVector<Value> affineToXYZZDouble(ValueRange point,
 // dbl-2008-s-1
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#doubling-dbl-2008-s-1
 // Cost: 6M + 4S + 1*a
-SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
+SmallVector<Value> xyzzToXyzz(ValueRange point, ShortWeierstrassAttr curve,
                               ImplicitLocOpBuilder &b) {
   Value x = point[0];
   Value y = point[1];
@@ -88,6 +83,20 @@ SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
   auto zzz3 = b.create<field::MulOp>(w, zzz);
 
   return {x3, y3, zz3, zzz3};
+}
+
+}  // namespace
+
+SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
+                              ImplicitLocOpBuilder &b) {
+  if (point.size() == 2) {
+    return affineToXYZZ(point, curve, b);
+  } else if (point.size() == 4) {
+    return xyzzToXyzz(point, curve, b);
+  } else {
+    assert(false && "Unsupported point type for xyzz doubling");
+    return {};
+  }
 }
 
 }  // namespace mlir::zkir::elliptic_curve

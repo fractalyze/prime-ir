@@ -2,13 +2,11 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/XYZZ/Double.h"
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
 namespace mlir::zkir::elliptic_curve {
+namespace {
 
 // madd-2008-s
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-mmadd-2008-s
@@ -32,7 +30,7 @@ static SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(affineToXYZZDouble(p1, curve, b));
+        b.create<scf::YieldOp>(xyzzDouble(p1, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
@@ -92,7 +90,7 @@ static SmallVector<Value> xyzzAndAffine(ValueRange p1, ValueRange p2,
       /*thenBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b(loc, builder);
-        b.create<scf::YieldOp>(affineToXYZZDouble(p2, curve, b));
+        b.create<scf::YieldOp>(xyzzDouble(p2, curve, b));
       },
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
@@ -196,6 +194,8 @@ static SmallVector<Value> xyzzAndXyzz(ValueRange p1, ValueRange p2,
       });
   return ifOp.getResults();
 }
+
+}  // namespace
 
 SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
                            ShortWeierstrassAttr curve,

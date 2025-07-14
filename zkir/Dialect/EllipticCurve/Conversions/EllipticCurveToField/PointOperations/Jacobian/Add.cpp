@@ -2,12 +2,11 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Double.h"
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
 namespace mlir::zkir::elliptic_curve {
+namespace {
 
 // mmadd-2007-bl
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-mmadd-2007-bl
@@ -219,6 +218,8 @@ static SmallVector<Value> jacobianAndJacobian(ValueRange p1, ValueRange p2,
       });
   return ifOp.getResults();
 }
+
+}  // namespace
 
 SmallVector<Value> jacobianAdd(ValueRange p1, ValueRange p2,
                                ShortWeierstrassAttr curve,
