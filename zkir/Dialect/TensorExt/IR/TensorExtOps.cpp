@@ -15,9 +15,9 @@ Operation *TensorExtDialect::materializeConstant(OpBuilder &builder,
 }
 
 OpFoldResult BitReverseOp::fold(FoldAdaptor adaptor) {
-  auto shapedType = cast<ShapedType>(getInput().getType());
+  auto shapedType = cast<ShapedType>(getSource().getType());
   if (auto constTensor =
-          dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getInput())) {
+          dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getSource())) {
     unsigned bitWidth =
         llvm::countr_zero(static_cast<unsigned>(shapedType.getShape()[0]));
 
@@ -40,5 +40,14 @@ OpFoldResult BitReverseOp::fold(FoldAdaptor adaptor) {
     return DenseElementsAttr::get(constTensor.getType(), reversed);
   }
   return {};
+}
+
+namespace {
+#include "zkir/Dialect/TensorExt/IR/TensorExtCanonicalization.cpp.inc"
+}
+
+void BitReverseOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                               MLIRContext *context) {
+  patterns.add<IsInvolution>(context);
 }
 }  // namespace mlir::zkir::tensor_ext

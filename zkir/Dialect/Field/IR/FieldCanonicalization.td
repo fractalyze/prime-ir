@@ -6,6 +6,6 @@ include "zkir/Dialect/Field/IR/FieldOps.td"
 include "zkir/Dialect/TensorExt/IR/TensorExtOps.td"
 
 // bit_reverse(mul(bit_reverse(x), y)) -> mul(x, bit_reverse(y))
-def BitReverseMulBitReverse : Pat<(TensorExt_BitReverseOp (Field_MulOp (TensorExt_BitReverseOp $x), $y)), (Field_MulOp $x, (TensorExt_BitReverseOp $y))>;
+def BitReverseMulBitReverse : Pat<(TensorExt_BitReverseOp (Field_MulOp (TensorExt_BitReverseOp $x, $dst0), $y), $dst1), (Field_MulOp $x, (TensorExt_BitReverseOp $y, $y))>;
 
 #endif // ZKIR_FIELD_IR_FIELD_CANONICALIZATION_TD

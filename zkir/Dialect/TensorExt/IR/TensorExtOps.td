@@ -14,7 +14,7 @@ class TensorExt_Op<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def TensorExt_BitReverseOp : TensorExt_Op<"bit_reverse", [Pure, Involution, DestinationStyleOpInterface, SameOperandsAndResultType]> {
+def TensorExt_BitReverseOp : TensorExt_Op<"bit_reverse", [Pure, DestinationStyleOpInterface, SameOperandsAndResultType]> {
   let summary = "Bit-reverse the given order.";
   let description = [{
     Transforms a tensor to its bit-reversed order.
@@ -25,13 +25,14 @@ def TensorExt_BitReverseOp : TensorExt_Op<"bit_reverse", [Pure, Involution, Dest
     ```
   }];
 
-  let arguments = (ins AnyRankedTensor:$input);
-  let results = (outs AnyRankedTensor:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
+  let arguments = (ins AnyRankedTensor:$source, AnyRankedTensor:$dest);
+  let results = (outs AnyRankedTensor:$result);
+  let assemblyFormat = "$source `into` $dest attr-dict `:` type($result)";
   let extraClassDeclaration = [{
-    MutableOperandRange getDpsInitsMutable() { return getInputMutable(); }
+    MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
   }];
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 #endif  // ZKIR_DIALECT_TENSOREXT_IR_TENSOREXTOPS_TD_

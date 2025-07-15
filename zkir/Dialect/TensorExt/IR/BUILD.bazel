@@ -19,6 +19,7 @@ cc_library(
     ],
     deps = [
         ":attributes_inc_gen",
+        ":canonicalization_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
         "@llvm-project//llvm:Support",
@@ -62,6 +63,21 @@ gentbl_cc_library(
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "TensorExtAttributes.td",
     deps = [":td_files"],
+)
+
+gentbl_cc_library(
+    name = "canonicalization_inc_gen",
+    tbl_outs = [
+        (
+            ["-gen-rewriters"],
+            "TensorExtCanonicalization.cpp.inc",
+        ),
+    ],
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "TensorExtCanonicalization.td",
+    deps = [
+        ":td_files",
+    ],
 )
 
 gentbl_cc_library(

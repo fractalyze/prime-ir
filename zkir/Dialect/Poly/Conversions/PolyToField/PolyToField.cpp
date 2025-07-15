@@ -428,10 +428,10 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
 
     // Transform the input tensor to bit-reversed order at first if performing
     // forward NTT.
-    auto bitReverseAtFirst =
-        adaptor.getInverse() || !adaptor.getBitReverse()
-            ? adaptor.getDest()
-            : b.create<tensor_ext::BitReverseOp>(adaptor.getDest());
+    auto bitReverseAtFirst = adaptor.getInverse() || !adaptor.getBitReverse()
+                                 ? adaptor.getDest()
+                                 : b.create<tensor_ext::BitReverseOp>(
+                                       adaptor.getDest(), adaptor.getDest());
 
     // Compute the ntt and extract the values
     Value nttResult = fastNTT(b, adaptor, bitReverseAtFirst);
@@ -441,7 +441,7 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     auto nttResultBitReversed =
         !adaptor.getInverse() || !adaptor.getBitReverse()
             ? nttResult
-            : b.create<tensor_ext::BitReverseOp>(nttResult);
+            : b.create<tensor_ext::BitReverseOp>(nttResult, nttResult);
     rewriter.replaceOp(op, nttResultBitReversed);
     return success();
   }

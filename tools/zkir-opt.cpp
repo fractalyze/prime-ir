@@ -11,8 +11,8 @@
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"
-#include "zkir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
+#include "zkir/Dialect/TensorExt/Transforms/BufferizableOpInterfaceImpl.h"
 #include "zkir/Pipelines/PipelineRegistration.h"
 
 int main(int argc, char **argv) {
@@ -32,7 +32,10 @@ int main(int argc, char **argv) {
   mlir::zkir::field::registerFieldToModArithPasses();
   mlir::zkir::poly::registerPolyToFieldPasses();
   mlir::zkir::elliptic_curve::registerEllipticCurveToFieldPasses();
-  mlir::zkir::tensor_ext::registerTensorExtToTensorPasses();
+
+  // `BufferizableOpInterface` implementation
+  mlir::zkir::tensor_ext::registerBufferizableOpInterfaceExternalModels(
+      registry);
 
   mlir::PassPipelineRegistration<>(
       "field-to-llvm", "Run passes to lower the field dialect to LLVM",
