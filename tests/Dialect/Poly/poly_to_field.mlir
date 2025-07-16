@@ -48,7 +48,7 @@ func.func @test_lower_from_tensor(%t : tensor<4x!PF1>) -> !poly_ty1 {
 // CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_ntt(%input : tensor<2x!PF1>) -> tensor<2x!PF1> {
   // CHECK-NOT: poly.ntt
-  %res = poly.ntt %input {root=#root_of_unity}: tensor<2x!PF1>
+  %res = poly.ntt %input into %input {root=#root_of_unity}: tensor<2x!PF1>
   return %res: tensor<2x!PF1>
 }
 
@@ -57,7 +57,7 @@ func.func @test_lower_ntt(%input : tensor<2x!PF1>) -> tensor<2x!PF1> {
 func.func @test_lower_ntt_with_twiddles(%input : tensor<2x!PF1>, %twiddles : tensor<2x!PF1>) -> tensor<2x!PF1> {
   // CHECK-NOT: poly.ntt
   // CHECK-NOT: arith.constant dense
-  %res = poly.ntt %input, %twiddles: tensor<2x!PF1>
+  %res = poly.ntt %input into %input with %twiddles: tensor<2x!PF1>
   return %res: tensor<2x!PF1>
 }
 
@@ -65,7 +65,7 @@ func.func @test_lower_ntt_with_twiddles(%input : tensor<2x!PF1>, %twiddles : ten
 // CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[P:.*]] {
 func.func @test_lower_intt(%input : tensor<2x!PF1>) -> tensor<2x!PF1> {
   // CHECK-NOT: poly.ntt
-  %res = poly.ntt %input {root=#root_of_unity} inverse=true : tensor<2x!PF1>
+  %res = poly.ntt %input into %input {root=#root_of_unity} inverse=true : tensor<2x!PF1>
   return %res: tensor<2x!PF1>
 }
 
@@ -74,6 +74,6 @@ func.func @test_lower_intt(%input : tensor<2x!PF1>) -> tensor<2x!PF1> {
 func.func @test_lower_intt_with_twiddles(%input : tensor<2x!PF1>, %twiddles : tensor<2x!PF1>) -> tensor<2x!PF1> {
   // CHECK-NOT: poly.ntt
   // CHECK-NOT: arith.constant dense
-  %res = poly.ntt %input, %twiddles inverse=true: tensor<2x!PF1>
+  %res = poly.ntt %input into %input with %twiddles inverse=true: tensor<2x!PF1>
   return %res: tensor<2x!PF1>
 }

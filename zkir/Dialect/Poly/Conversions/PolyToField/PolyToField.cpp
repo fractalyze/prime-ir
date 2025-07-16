@@ -160,7 +160,7 @@ static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
 }
 
 static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
-                     Value input) {
+                     Value source, Value dest) {
   auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
   auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
 
@@ -257,7 +257,9 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
 
   // Create a memref buffer for in-place updates
   auto memrefType = MemRefType::get(intTensorType.getShape(), coeffType);
-  Value inputMemref = b.create<bufferization::ToMemrefOp>(memrefType, input);
+  Value srcMemref = b.create<bufferization::ToMemrefOp>(memrefType, source,
+                                                        /*read_only=*/true);
+  Value destMemref = b.create<bufferization::ToMemrefOp>(memrefType, dest);
 
   // Define affine expressions for index calculations.
   // `x` and `y` will be used in affine maps to compute proper indices.
@@ -326,9 +328,9 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
 
           // Load values from memref
           Value A =
-              pb.create<affine::AffineLoadOp>(inputMemref, ValueRange{indexA});
+              pb.create<affine::AffineLoadOp>(srcMemref, ValueRange{indexA});
           Value B =
-              pb.create<affine::AffineLoadOp>(inputMemref, ValueRange{indexB});
+              pb.create<affine::AffineLoadOp>(srcMemref, ValueRange{indexB});
 
           // ---------------------------------------------------------
           // Compute the twiddle factor for the butterfly.
@@ -353,9 +355,9 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
           // Write the results back into the coefficient array.
           // Insert the "plus" result into `indexA` and the "minus"
           // result into `indexB`.
-          pb.create<affine::AffineStoreOp>(bflyResult.first, inputMemref,
+          pb.create<affine::AffineStoreOp>(bflyResult.first, destMemref,
                                            ValueRange{indexA});
-          pb.create<affine::AffineStoreOp>(bflyResult.second, inputMemref,
+          pb.create<affine::AffineStoreOp>(bflyResult.second, destMemref,
                                            ValueRange{indexB});
 
           // Empty yield is implicitly added here.
@@ -396,20 +398,19 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
     // TODO(batzor): Use scalar multiplication directly when it's available.
     auto invDegreeConst = b.create<field::ConstantOp>(coeffType, invDegreeAttr);
     b.create<linalg::MapOp>(
-        /*inputs=*/ValueRange{inputMemref},
-        /*outputs=*/inputMemref,
+        /*inputs=*/ValueRange{destMemref},
+        /*outputs=*/destMemref,
         /*bodyBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
           ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
-          Value mulResult;
-          mulResult = b.create<field::MulOp>(args[0], invDegreeConst);
-          b.create<linalg::YieldOp>(mulResult);
+          Value prod = b.create<field::MulOp>(args[0], invDegreeConst);
+          b.create<linalg::YieldOp>(ValueRange{prod});
         });
   }
 
   // The final result is the coefficient tensor after all stages.
   Value result = b.create<bufferization::ToTensorOp>(
-      intTensorType.cloneWith(std::nullopt, coeffType), inputMemref,
+      intTensorType.cloneWith(std::nullopt, coeffType), destMemref,
       /*restrict=*/true, /*writable=*/true);
 
   return result;
@@ -426,15 +427,21 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
       ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    Value nttResult;
+
     // Transform the input tensor to bit-reversed order at first if performing
     // forward NTT.
-    auto bitReverseAtFirst = adaptor.getInverse() || !adaptor.getBitReverse()
-                                 ? adaptor.getDest()
-                                 : b.create<tensor_ext::BitReverseOp>(
-                                       adaptor.getDest(), adaptor.getDest());
+    if (!adaptor.getInverse() && adaptor.getBitReverse()) {
+      Value bitReversed = b.create<tensor_ext::BitReverseOp>(
+          adaptor.getSource(), adaptor.getDest());
 
-    // Compute the ntt and extract the values
-    Value nttResult = fastNTT(b, adaptor, bitReverseAtFirst);
+      // NOTE(batzor): We should not use `dest` operand for the destination
+      // here. Otherwise, writable `ToMemrefOp` will be called twice on the same
+      // `dest` SSA Value causing conflict and force memory copy.
+      nttResult = fastNTT(b, adaptor, bitReversed, bitReversed);
+    } else {
+      nttResult = fastNTT(b, adaptor, adaptor.getSource(), adaptor.getDest());
+    }
 
     // Transform the input tensor to bit-reversed order at last if performing
     // inverse NTT.
