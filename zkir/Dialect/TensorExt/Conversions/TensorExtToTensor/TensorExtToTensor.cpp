@@ -1,6 +1,5 @@
 #include "zkir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
 
-#include <tuple>
 #include <utility>
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"

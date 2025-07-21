@@ -2,8 +2,14 @@
 
 #include <utility>
 
-#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinTypes.h"
+
+// IWYU pragma: begin_keep
+// Headers needed for TensorExtAttributes.cpp.inc
+#include "llvm/ADT/TypeSwitch.h"
+#include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
+// IWYU pragma: end_keep
 
 namespace mlir::zkir::tensor_ext {
 

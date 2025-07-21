@@ -1,7 +1,13 @@
 #include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
+// IWYU pragma: begin_keep
+// Headers needed for TensorExtDialect.cpp.inc
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+// Headers needed for TensorExtAttributes.cpp.inc
 #include "zkir/Dialect/TensorExt/IR/TensorExtAttributes.h"
+// Headers needed for TensorExtOps.cpp.inc
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
+// IWYU pragma: end_keep
 
 // Generated definitions
 #include "zkir/Dialect/TensorExt/IR/TensorExtDialect.cpp.inc"

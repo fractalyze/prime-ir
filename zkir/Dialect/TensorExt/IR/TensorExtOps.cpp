@@ -1,7 +1,9 @@
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/IR/PatternMatch.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtAttributes.h"
+#include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
 namespace mlir::zkir::tensor_ext {
 

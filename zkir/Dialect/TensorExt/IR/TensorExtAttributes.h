@@ -6,7 +6,6 @@
 
 #include "mlir/IR/AttributeSupport.h"
 #include "mlir/IR/BuiltinAttributes.h"
-#include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
 namespace mlir::zkir::tensor_ext::detail {
 
