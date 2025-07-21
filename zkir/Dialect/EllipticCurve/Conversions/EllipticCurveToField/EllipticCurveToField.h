@@ -1,7 +1,10 @@
 #ifndef ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_ELLIPTICCURVETOFIELD_H_
 #define ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_ELLIPTICCURVETOFIELD_H_
 
+// IWYU pragma: begin_keep
+// Headers needed for EllipticCurveToField.h.inc
 #include "mlir/Pass/Pass.h"
+// IWYU pragma: end_keep
 
 namespace mlir::zkir::elliptic_curve {
 

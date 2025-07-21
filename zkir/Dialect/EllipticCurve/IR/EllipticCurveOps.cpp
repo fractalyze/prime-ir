@@ -1,5 +1,10 @@
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/TypeUtilities.h"
+#include "mlir/Support/LogicalResult.h"
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+
 namespace mlir::zkir::elliptic_curve {
 
 /////////////// VERIFY OPS /////////////////

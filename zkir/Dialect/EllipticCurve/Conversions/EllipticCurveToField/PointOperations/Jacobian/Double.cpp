@@ -1,7 +1,5 @@
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/Jacobian/Double.h"
 
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
 namespace mlir::zkir::elliptic_curve {

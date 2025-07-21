@@ -1,8 +1,11 @@
 #ifndef ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEATTRIBUTES_H_
 #define ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEATTRIBUTES_H_
 
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
-#include "zkir/Dialect/Field/IR/FieldAttributes.h"
+// IWYU pragma: begin_keep
+// Headers needed for EllipticCurveAttributes.h.inc
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/OpDefinition.h"
+// IWYU pragma: end_keep
 
 #define GET_ATTRDEF_CLASSES
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h.inc"

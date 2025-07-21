@@ -1,25 +1,27 @@
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 
 #include <cassert>
-#include <optional>
 
-#include "llvm/include/llvm/ADT/TypeSwitch.h"
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/TypeUtilities.h"
+#include "mlir/Support/LLVM.h"
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+
+// IWYU pragma: begin_keep
+// Headers needed for EllipticCurveAttributes.cpp.inc
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Location.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/OpImplementation.h"
-#include "mlir/IR/OperationSupport.h"
-#include "mlir/IR/TypeUtilities.h"
-#include "mlir/IR/ValueRange.h"
-#include "mlir/Support/LLVM.h"
-#include "mlir/Support/LogicalResult.h"
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
+// Headers needed for EllipticCurveOps.cpp.inc
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
+#include "zkir/Utils/OpUtils.h"
+// IWYU pragma: end_keep
 
 namespace mlir::zkir::elliptic_curve {
 
