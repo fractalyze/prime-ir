@@ -1,7 +1,8 @@
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/Diagnostics.h"
+#include "mlir/Support/LogicalResult.h"
 #include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::field {

@@ -30,7 +30,6 @@ cc_library(
         "@llvm-project//mlir:SparseTensorDialect",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
-        "@llvm-project//mlir:TensorTransforms",
         "@llvm-project//mlir:TransformUtils",
     ],
 )

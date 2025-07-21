@@ -1,7 +1,11 @@
 #ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_FIELDTOMODARITH_H_
 #define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_FIELDTOMODARITH_H_
 
+// IWYU pragma: begin_keep
+// Headers needed for FieldToModArith.h.inc
 #include "mlir/Pass/Pass.h"
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+// IWYU pragma: end_keep
 
 namespace mlir::zkir::field {
 

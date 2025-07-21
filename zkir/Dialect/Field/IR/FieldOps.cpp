@@ -1,10 +1,15 @@
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
+#include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 #include "zkir/Utils/APIntUtils.h"
 
+// IWYU pragma: begin_keep
+// Headers needed for FieldCanonicalization.cpp.inc
+#include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
+// IWYU pragma: end_keep
 namespace mlir::zkir::field {
 
 PrimeFieldAttr getAttrAsStandardForm(PrimeFieldAttr attr) {

@@ -1,7 +1,13 @@
 #ifndef ZKIR_DIALECT_FIELD_IR_FIELDTYPES_H_
 #define ZKIR_DIALECT_FIELD_IR_FIELDTYPES_H_
 
-#include "zkir/Dialect/Field/IR/FieldDialect.h"
+#include "mlir/IR/Types.h"
+
+// IWYU pragma: begin_keep
+// Headers needed for FieldTypes.h.inc
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypeInterfaces.h"
+// IWYU pragma: end_keep
 
 namespace mlir::zkir::field {
 

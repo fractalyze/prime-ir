@@ -16,7 +16,6 @@ cc_library(
         "//zkir/Dialect/ModArith/Conversions/ModArithToArith/Inverter:BYInverter",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/TensorExt/IR:TensorExt",
-        "//zkir/Utils:APIntUtils",
         "//zkir/Utils:ConversionUtils",
         "//zkir/Utils:ShapedTypeConverter",
         "@llvm-project//llvm:Support",

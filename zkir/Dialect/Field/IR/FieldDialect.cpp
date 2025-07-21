@@ -1,23 +1,31 @@
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 
 #include <cassert>
-#include <optional>
 
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/TypeUtilities.h"
+#include "mlir/Support/LLVM.h"
+#include "zkir/Dialect/Field/IR/FieldTypes.h"
+
+// IWYU pragma: begin_keep
+// Headers needed for FieldDialect.cpp.inc
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/OperationSupport.h"
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+
+// Headers needed for FieldAttributes.cpp.inc
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Location.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/OpImplementation.h"
-#include "mlir/IR/OperationSupport.h"
-#include "mlir/IR/TypeUtilities.h"
-#include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
+
+// Headers needed for FieldOps.cpp.inc
 #include "zkir/Dialect/Field/IR/FieldOps.h"
-#include "zkir/Dialect/Field/IR/FieldTypes.h"
+#include "zkir/Utils/OpUtils.h"
+// IWYU pragma: end_keep
 
 // Generated definitions
 #include "zkir/Dialect/Field/IR/FieldDialect.cpp.inc"
