@@ -1,10 +1,16 @@
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"
 
 #include "llvm/ADT/TypeSwitch.h"
-#include "zkir/Dialect/Field/IR/FieldTypes.h"
-#include "zkir/Dialect/Poly/IR/PolyAttributes.h"
-#include "zkir/Dialect/Poly/IR/PolyOps.h"
 #include "zkir/Dialect/Poly/IR/PolyTypes.h"
+
+// IWYU pragma: begin_keep
+// Headers needed for PolyDialect.cpp.inc
+#include "zkir/Dialect/Field/IR/FieldDialect.h"
+// Headers needed for PolyAttributes.cpp.inc
+#include "zkir/Dialect/Poly/IR/PolyAttributes.h"
+// Headers needed for PolyOps.cpp.inc
+#include "zkir/Dialect/Poly/IR/PolyOps.h"
+// IWYU pragma: end_keep
 
 // Generated definitions
 #include "zkir/Dialect/Poly/IR/PolyDialect.cpp.inc"

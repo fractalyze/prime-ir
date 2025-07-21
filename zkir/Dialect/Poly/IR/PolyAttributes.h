@@ -6,8 +6,6 @@
 
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
-#include "zkir/Dialect/Poly/IR/PolyDialect.h"
-#include "zkir/Dialect/Poly/IR/PolyTypes.h"
 
 namespace mlir::zkir::poly::detail {
 

@@ -1,8 +1,12 @@
 #ifndef ZKIR_DIALECT_POLY_CONVERSIONS_POLYTOFIELD_POLYTOFIELD_H_
 #define ZKIR_DIALECT_POLY_CONVERSIONS_POLYTOFIELD_POLYTOFIELD_H_
 
+// IWYU pragma: begin_keep
+// Headers needed for PolyToField.h.inc
 #include "mlir/Pass/Pass.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
+#include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
+// IWYU pragma: end_keep
 
 namespace mlir::zkir::poly {
 
