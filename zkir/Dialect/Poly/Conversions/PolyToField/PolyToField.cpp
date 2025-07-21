@@ -471,6 +471,7 @@ void PolyToField::runOnOperation() {
       ConvertToTensor,
       ConvertPolyBinOp<AddOp, field::AddOp>,
       ConvertPolyBinOp<SubOp, field::SubOp>,
+      ConvertAny<bufferization::AllocTensorOp>,
       ConvertAny<tensor_ext::BitReverseOp>
       // clang-format on
       >(typeConverter, context);
@@ -479,6 +480,7 @@ void PolyToField::runOnOperation() {
 
   target.addDynamicallyLegalOp<
       // clang-format off
+      bufferization::AllocTensorOp,
       tensor_ext::BitReverseOp
       // clang-format on
       >([&](auto op) { return typeConverter.isLegal(op); });

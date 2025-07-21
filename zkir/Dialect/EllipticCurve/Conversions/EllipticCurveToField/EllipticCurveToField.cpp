@@ -653,6 +653,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertPoint,
       ConvertScalarMul,
       ConvertSub,
+      ConvertAny<bufferization::AllocTensorOp>,
       ConvertAny<bufferization::MaterializeInDestinationOp>,
       ConvertAny<bufferization::ToMemrefOp>,
       ConvertAny<bufferization::ToTensorOp>,
@@ -671,6 +672,7 @@ void EllipticCurveToField::runOnOperation() {
       >(typeConverter, context);
   target.addDynamicallyLegalOp<
       // clang-format off
+      bufferization::AllocTensorOp,
       bufferization::MaterializeInDestinationOp,
       bufferization::ToMemrefOp,
       bufferization::ToTensorOp,

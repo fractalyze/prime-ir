@@ -2,6 +2,15 @@
 
 !PF = !field.pf<7:i32, true>
 
+// CHECK-LABEL: @test_bufferization_alloc_tensor
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_bufferization_alloc_tensor() -> tensor<2x!PF> {
+  // CHECK: %[[TENSOR:.*]] = bufferization.alloc_tensor() : [[T]]
+  %tensor = bufferization.alloc_tensor() : tensor<2x!PF>
+  // CHECK: return %[[TENSOR]] : [[T]]
+  return %tensor : tensor<2x!PF>
+}
+
 // CHECK-LABEL: @test_bufferization_materialize_in_destination
 // CHECK-SAME: (%[[TENSOR:.*]]: [[TENSOR_TYPE:.*]], %[[MEMREF:.*]]: [[MEMREF_TYPE:.*]]) {
 func.func @test_bufferization_materialize_in_destination(%tensor : tensor<2x!PF>, %memref : memref<2x!PF>) {
