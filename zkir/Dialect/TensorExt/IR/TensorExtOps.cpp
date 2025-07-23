@@ -2,7 +2,6 @@
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
-#include "zkir/Dialect/TensorExt/IR/TensorExtAttributes.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
 namespace mlir::zkir::tensor_ext {
@@ -17,26 +16,21 @@ Operation *TensorExtDialect::materializeConstant(OpBuilder &builder,
 }
 
 OpFoldResult BitReverseOp::fold(FoldAdaptor adaptor) {
-  auto shapedType = cast<ShapedType>(getSource().getType());
   if (auto constTensor =
           dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getSource())) {
-    unsigned bitWidth =
-        llvm::countr_zero(static_cast<unsigned>(shapedType.getShape()[0]));
-
-    BitReverseIndicesAttr bitReverseIndicesAttr = BitReverseIndicesAttr::get(
-        getContext(),
-        IntegerAttr::get(IntegerType::get(getContext(), 64), bitWidth));
-    DenseIntElementsAttr indices = bitReverseIndicesAttr.getIndices();
-
     SmallVector<APInt> reversed(constTensor.begin(), constTensor.end());
+    unsigned bitWidth = llvm::countr_zero(reversed.size());
 
     // Apply the bit reversal mapping
-    for (size_t i = 0; i < indices.getNumElements(); i += 2) {
-      size_t fromIdx = (*(indices.begin() + i)).getZExtValue();
-      size_t toIdx = (*(indices.begin() + i + 1)).getZExtValue();
-      APInt tmp = reversed[fromIdx];
-      reversed[fromIdx] = reversed[toIdx];
-      reversed[toIdx] = tmp;
+    for (size_t i = 0; i < reversed.size(); ++i) {
+      APInt fromIndex(bitWidth, i);
+      APInt toIndex = fromIndex.reverseBits();
+      if (toIndex.ugt(fromIndex)) {
+        size_t j = toIndex.getZExtValue();
+        APInt tmp = reversed[i];
+        reversed[i] = reversed[j];
+        reversed[j] = tmp;
+      }
     }
 
     return DenseElementsAttr::get(constTensor.getType(), reversed);

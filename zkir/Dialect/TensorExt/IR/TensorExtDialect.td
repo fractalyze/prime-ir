@@ -13,7 +13,6 @@ def TensorExt_Dialect : Dialect {
     "tensor::TensorDialect",
     "LLVM::LLVMDialect",
   ];
-  let useDefaultAttributePrinterParser = 1;
   let hasConstantMaterializer = 1;
 }
 
