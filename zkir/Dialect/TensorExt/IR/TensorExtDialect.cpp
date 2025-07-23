@@ -2,6 +2,7 @@
 
 // IWYU pragma: begin_keep
 // Headers needed for TensorExtDialect.cpp.inc
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 // Headers needed for TensorExtAttributes.cpp.inc
 #include "zkir/Dialect/TensorExt/IR/TensorExtAttributes.h"
