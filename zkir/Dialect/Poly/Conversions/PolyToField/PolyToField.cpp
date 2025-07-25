@@ -2,7 +2,6 @@
 
 #include <utility>
 
-#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -255,9 +254,13 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
       b.create<arith::ConstantIndexOp>(kInverse ? degree : 2);
   Value initialRootExp =
       b.create<arith::ConstantIndexOp>(kInverse ? 1 : degree / 2);
-  Value zero = b.create<arith::ConstantIndexOp>(0);
-  Value two = b.create<arith::ConstantIndexOp>(2);
-  Value n = b.create<arith::ConstantIndexOp>(degree);
+
+  // Define constants for index calculations.
+  auto c0 = b.create<arith::ConstantIndexOp>(0);
+  auto c1 = b.create<arith::ConstantIndexOp>(1);
+  auto c2 = b.create<arith::ConstantIndexOp>(2);
+  auto cDegree = b.create<arith::ConstantIndexOp>(degree);
+  auto cStages = b.create<arith::ConstantIndexOp>(stages);
 
   // Create a memref buffer for in-place updates
   auto memrefType = MemRefType::get(intTensorType.getShape(), coeffType);
@@ -265,39 +268,31 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
                                                         /*read_only=*/true);
   Value destMemref = b.create<bufferization::ToMemrefOp>(memrefType, dest);
 
-  // Define affine expressions for index calculations.
-  // `x` and `y` will be used in affine maps to compute proper indices.
-  AffineExpr x, y;
-  bindDims(b.getContext(), x, y);
-
   // Begin the outer loop over the stages of the NTT.
   // The iterative loop carries three values:
   //   - The current batchSize,
   //   - The current root exponent (rootExp).
-  b.create<affine::AffineForOp>(
-      /*lowerBound=*/0, /* upperBound=*/stages, /*step=*/1,
-      /*iterArgs=*/ValueRange{initialBatchSize, initialRootExp},
+  b.create<scf::ForOp>(
+      /*lowerBound=*/c0, /* upperBound=*/cStages,
+      /*step=*/c1,
+      /*initArgs=*/ValueRange{initialBatchSize, initialRootExp, srcMemref},
       /*bodyBuilder=*/
-      [&](OpBuilder &nestedBuilder, Location nestedLoc, Value index,
+      [&](OpBuilder &nestedBuilder, Location nestedLoc, Value stageIndex,
           ValueRange args) {
         ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
         Value batchSize = args[0];
         Value rootExp = args[1];
+        Value stageMemref = args[2];
+
+        Value batchNum = b.create<arith::DivUIOp>(cDegree, batchSize);
+        Value bflyNum = b.create<arith::DivUIOp>(batchSize, c2);
 
         // The inner loop processes groups of coefficients defined by the
         // current batchSize.
-        auto parallelLoop = b.create<affine::AffineParallelOp>(
-            /*resultTypes=*/TypeRange{},
-            /*reductions=*/ArrayRef<arith::AtomicRMWKind>{},
-            /*lbMaps=*/
-            ArrayRef<AffineMap>{b.getConstantAffineMap(0),
-                                b.getConstantAffineMap(0)},
-            /*lbArgs=*/ValueRange{},
-            /*ubMaps=*/
-            ArrayRef<AffineMap>{AffineMap::get(2, 0, x.floorDiv(y)),
-                                AffineMap::get(2, 0, y.floorDiv(2))},
-            /*ubArgs=*/ValueRange{n, batchSize},
-            /*steps=*/ArrayRef<int64_t>{1, 1});
+        auto parallelLoop = b.create<scf::ParallelOp>(
+            /*lowerBounds=*/ValueRange{c0, c0},
+            /*upperBounds=*/ValueRange{batchNum, bflyNum},
+            /*steps=*/ValueRange{c1, c1});
 
         // Build the body of the parallel loop.
         {
@@ -311,8 +306,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
 
           // `indexBfly` calculates the starting index of the current butterfly
           // group.
-          Value indexBfly = pb.create<affine::AffineApplyOp>(
-              x * y, ValueRange{batchSize, indexK});
+          Value indexBfly = pb.create<arith::MulIOp>(batchSize, indexK);
 
           // ---------------------------------------------------------
           // Compute the indices for the butterfly pair:
@@ -323,37 +317,15 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
 
           // `indexA` is computed by combining the local index
           // `indexJ` with the base `indexBfly`.
-          Value indexA = pb.create<affine::AffineApplyOp>(
-              x + y, ValueRange{indexJ, indexBfly});
+          Value indexA = pb.create<arith::AddIOp>(indexJ, indexBfly);
           // `indexB` is calculated by shifting `indexA` by half the
           // batch size.
-          Value indexB = pb.create<affine::AffineApplyOp>(
-              x + y.floorDiv(2), ValueRange{indexA, batchSize});
+          Value halfBatchSize = pb.create<arith::DivUIOp>(batchSize, c2);
+          Value indexB = pb.create<arith::AddIOp>(indexA, halfBatchSize);
 
-          // Load values from source memref if it's first stage, otherwise load
-          // from destination memref
-          auto ifFirstStage =
-              pb.create<arith::CmpIOp>(arith::CmpIPredicate::eq, index, zero);
-          auto scfIf = pb.create<scf::IfOp>(
-              ifFirstStage,
-              [&](OpBuilder &b, Location loc) {
-                ImplicitLocOpBuilder ib(loc, b);
-                Value A = ib.create<affine::AffineLoadOp>(srcMemref,
-                                                          ValueRange{indexA});
-                Value B = ib.create<affine::AffineLoadOp>(srcMemref,
-                                                          ValueRange{indexB});
-                ib.create<scf::YieldOp>(ValueRange{A, B});
-              },
-              [&](OpBuilder &b, Location loc) {
-                ImplicitLocOpBuilder ib(loc, b);
-                Value A = ib.create<affine::AffineLoadOp>(destMemref,
-                                                          ValueRange{indexA});
-                Value B = ib.create<affine::AffineLoadOp>(destMemref,
-                                                          ValueRange{indexB});
-                ib.create<scf::YieldOp>(ValueRange{A, B});
-              });
-          Value A = scfIf.getResults()[0];
-          Value B = scfIf.getResults()[1];
+          // Load values from previous stage output.
+          Value A = pb.create<memref::LoadOp>(stageMemref, ValueRange{indexA});
+          Value B = pb.create<memref::LoadOp>(stageMemref, ValueRange{indexB});
 
           // ---------------------------------------------------------
           // Compute the twiddle factor for the butterfly.
@@ -362,8 +334,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
           // affine map using the current butterfly index `indexJ` and
           // the current `rootExp` value
           // ---------------------------------------------------------
-          Value rootIndex = pb.create<affine::AffineApplyOp>(
-              x * y, ValueRange{indexJ, rootExp});
+          Value rootIndex = pb.create<arith::MulIOp>(indexJ, rootExp);
           Value root = pb.create<tensor::ExtractOp>(roots, rootIndex);
 
           // ---------------------------------------------------------
@@ -375,15 +346,10 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
           auto bflyResult =
               kInverse ? bflyGS(pb, A, B, root) : bflyCT(pb, A, B, root);
 
-          // Write the results back into the coefficient array.
-          // Insert the "plus" result into `indexA` and the "minus"
-          // result into `indexB`.
-          pb.create<affine::AffineStoreOp>(bflyResult.first, destMemref,
-                                           ValueRange{indexA});
-          pb.create<affine::AffineStoreOp>(bflyResult.second, destMemref,
-                                           ValueRange{indexB});
-
-          // Empty yield is implicitly added here.
+          pb.create<memref::StoreOp>(bflyResult.first, destMemref,
+                                     ValueRange{indexA});
+          pb.create<memref::StoreOp>(bflyResult.second, destMemref,
+                                     ValueRange{indexB});
         }
 
         // ---------------------------------------------------------------------
@@ -396,15 +362,15 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
         //    - Increase the root exponent by multiplying by 2.
         // ---------------------------------------------------------------------
         batchSize = kInverse
-                        ? b.create<arith::DivUIOp>(batchSize, two).getResult()
-                        : b.create<arith::MulIOp>(batchSize, two).getResult();
+                        ? b.create<arith::DivUIOp>(batchSize, c2).getResult()
+                        : b.create<arith::MulIOp>(batchSize, c2).getResult();
 
-        rootExp = kInverse ? b.create<arith::MulIOp>(rootExp, two).getResult()
-                           : b.create<arith::DivUIOp>(rootExp, two).getResult();
+        rootExp = kInverse ? b.create<arith::MulIOp>(rootExp, c2).getResult()
+                           : b.create<arith::DivUIOp>(rootExp, c2).getResult();
 
         // Yield the updated `batchSize`, and `rootExp` for the next
         // stage.
-        b.create<affine::AffineYieldOp>(ValueRange{batchSize, rootExp});
+        b.create<scf::YieldOp>(ValueRange{batchSize, rootExp, destMemref});
       });
 
   // For the inverse NTT, we must scale the output by the multiplicative inverse
