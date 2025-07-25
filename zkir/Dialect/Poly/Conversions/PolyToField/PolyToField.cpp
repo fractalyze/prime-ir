@@ -6,6 +6,7 @@
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
@@ -254,6 +255,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
       b.create<arith::ConstantIndexOp>(kInverse ? degree : 2);
   Value initialRootExp =
       b.create<arith::ConstantIndexOp>(kInverse ? 1 : degree / 2);
+  Value zero = b.create<arith::ConstantIndexOp>(0);
   Value two = b.create<arith::ConstantIndexOp>(2);
   Value n = b.create<arith::ConstantIndexOp>(degree);
 
@@ -328,11 +330,30 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
           Value indexB = pb.create<affine::AffineApplyOp>(
               x + y.floorDiv(2), ValueRange{indexA, batchSize});
 
-          // Load values from memref
-          Value A =
-              pb.create<affine::AffineLoadOp>(srcMemref, ValueRange{indexA});
-          Value B =
-              pb.create<affine::AffineLoadOp>(srcMemref, ValueRange{indexB});
+          // Load values from source memref if it's first stage, otherwise load
+          // from destination memref
+          auto ifFirstStage =
+              pb.create<arith::CmpIOp>(arith::CmpIPredicate::eq, index, zero);
+          auto scfIf = pb.create<scf::IfOp>(
+              ifFirstStage,
+              [&](OpBuilder &b, Location loc) {
+                ImplicitLocOpBuilder ib(loc, b);
+                Value A = ib.create<affine::AffineLoadOp>(srcMemref,
+                                                          ValueRange{indexA});
+                Value B = ib.create<affine::AffineLoadOp>(srcMemref,
+                                                          ValueRange{indexB});
+                ib.create<scf::YieldOp>(ValueRange{A, B});
+              },
+              [&](OpBuilder &b, Location loc) {
+                ImplicitLocOpBuilder ib(loc, b);
+                Value A = ib.create<affine::AffineLoadOp>(destMemref,
+                                                          ValueRange{indexA});
+                Value B = ib.create<affine::AffineLoadOp>(destMemref,
+                                                          ValueRange{indexB});
+                ib.create<scf::YieldOp>(ValueRange{A, B});
+              });
+          Value A = scfIf.getResults()[0];
+          Value B = scfIf.getResults()[1];
 
           // ---------------------------------------------------------
           // Compute the twiddle factor for the butterfly.
