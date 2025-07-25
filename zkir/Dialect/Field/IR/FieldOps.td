@@ -98,7 +98,7 @@ def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<
   let assemblyFormat = "$low `,` $high attr-dict `:` type($output)";
 }
 
-def Field_EncapsulateOp : Field_Op<"encapsulate"> {
+def Field_EncapsulateOp : Op<Field_Dialect, "encapsulate", [Pure]> {
   let summary = "Encapsulate an integer into a field type";
   let description = [{
     Converts the integer to be of field type.
@@ -120,7 +120,7 @@ def Field_EncapsulateOp : Field_Op<"encapsulate"> {
   let hasVerifier = 1;
 }
 
-def Field_ExtractOp : Field_Op<"extract"> {
+def Field_ExtractOp : Op<Field_Dialect, "extract", [Pure]> {
   let summary = "Extract the integer stored inside field type";
   let description = [{
     Extracts the integer inside the field type.

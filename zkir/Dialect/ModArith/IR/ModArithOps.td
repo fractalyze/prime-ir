@@ -60,7 +60,7 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [ConstantLike, Pure]>
 }
 
 // type conversion operations
-def ModArith_EncapsulateOp : ModArith_Op<"encapsulate"> {
+def ModArith_EncapsulateOp : Op<ModArith_Dialect, "encapsulate", [Pure]> {
   let summary = "Encapsulate an integer into a modular type integer";
   let description = [{
     Converts the integer to be of modular type integer.
@@ -79,7 +79,7 @@ def ModArith_EncapsulateOp : ModArith_Op<"encapsulate"> {
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
-def ModArith_ExtractOp : ModArith_Op<"extract"> {
+def ModArith_ExtractOp : Op<ModArith_Dialect, "extract", [Pure]> {
   let summary = "Extract the integer from inside modular type integer";
   let description = [{
     Extracts the integer inside the modular type integer.
