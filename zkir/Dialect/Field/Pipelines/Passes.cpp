@@ -29,6 +29,8 @@ namespace mlir::zkir::field {
 
 void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   pm.addNestedPass<mlir::func::FuncOp>(
+      mlir::createLinalgGeneralizeNamedOpsPass());
+  pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createConvertElementwiseToLinalgPass());
   pm.addNestedPass<mlir::func::FuncOp>(
       mlir::createLinalgElementwiseOpFusionPass());
@@ -38,12 +40,11 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   pm.addPass(mod_arith::createModArithToArith());
   pm.addPass(createCanonicalizerPass());
 
-  pm.addPass(createLowerAffinePass());
-
   pm.addPass(tensor_ext::createTensorExtToTensor());
 
   pm.addPass(bufferization::createOneShotBufferizePass(
       options.bufferizationOptions()));
+  pm.addPass(createCanonicalizerPass());
 
   if (options.bufferResultsToOutParams) {
     pm.addPass(bufferization::createBufferResultsToOutParamsPass(
@@ -51,13 +52,13 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   }
 
   pm.addNestedPass<func::FuncOp>(createConvertLinalgToParallelLoopsPass());
+  pm.addPass(createLowerAffinePass());
 
   if (options.enableOpenMP) {
     pm.addPass(createConvertSCFToOpenMPPass());
   }
 
   pm.addNestedPass<func::FuncOp>(memref::createExpandStridedMetadataPass());
-  pm.addPass(createLowerAffinePass());
   pm.addPass(createFinalizeMemRefToLLVMConversionPass());
   pm.addPass(createSCFToControlFlowPass());
   pm.addPass(createConvertToLLVMPass());
