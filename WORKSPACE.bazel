@@ -79,3 +79,15 @@ http_archive(
 load("@hedron_compile_commands//:workspace_setup.bzl", "hedron_compile_commands_setup")
 
 hedron_compile_commands_setup()
+
+http_archive(
+    name = "rules_cuda",
+    strip_prefix = "rules_cuda-b11b7e499550954ad396ad41aac597b380ce2957",
+    urls = ["https://github.com/bazel-contrib/rules_cuda/archive/b11b7e499550954ad396ad41aac597b380ce2957.tar.gz"],
+)
+
+load("@rules_cuda//cuda:repositories.bzl", "rules_cuda_dependencies", "rules_cuda_toolchains")
+
+rules_cuda_dependencies()
+
+rules_cuda_toolchains(register_toolchains = True)
