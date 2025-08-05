@@ -15,6 +15,7 @@ cc_library(
         "@llvm-project//mlir:AffineToStandard",
         "@llvm-project//mlir:AffineTransforms",
         "@llvm-project//mlir:BufferizationTransforms",
+        "@llvm-project//mlir:ControlFlowToLLVM",
         "@llvm-project//mlir:ConvertToLLVM",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:GPUToGPURuntimeTransforms",

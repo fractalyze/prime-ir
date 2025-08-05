@@ -2,6 +2,9 @@
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllExtensions.h"
 #include "mlir/InitAllPasses.h"
+#include "mlir/Target/LLVMIR/Dialect/GPU/GPUToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Dialect/NVVM/NVVMToLLVMIRTranslation.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
@@ -23,6 +26,9 @@ int main(int argc, char **argv) {
   registry.insert<mlir::zkir::elliptic_curve::EllipticCurveDialect>();
   registry.insert<mlir::zkir::tensor_ext::TensorExtDialect>();
   mlir::registerAllDialects(registry);
+  mlir::registerGPUDialectTranslation(registry);
+  mlir::registerNVVMDialectTranslation(registry);
+  mlir::registerLLVMDialectTranslation(registry);
   mlir::registerAllExtensions(registry);
 
   mlir::registerAllPasses();

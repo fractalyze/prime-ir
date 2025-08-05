@@ -1,6 +1,7 @@
 #include "zkir/Dialect/Field/Pipelines/Passes.h"
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/ConvertToLLVM/ToLLVMPass.h"
 #include "mlir/Conversion/GPUCommon/GPUCommonPass.h"
 #include "mlir/Conversion/GPUToNVVM/GPUToNVVMPass.h"
@@ -117,10 +118,13 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   pm.addNestedPass<gpu::GPUModuleOp>(createReconcileUnrealizedCastsPass());
 
   GpuToLLVMConversionPassOptions opt;
-  opt.hostBarePtrCallConv = true;
-  opt.kernelBarePtrCallConv = true;
+  opt.hostBarePtrCallConv = options.nvvmUseBarePtrCallConv;
+  opt.kernelBarePtrCallConv = options.nvvmUseBarePtrCallConv;
   pm.addPass(createGpuToLLVMConversionPass(opt));
   pm.addPass(createSCFToControlFlowPass());
+  pm.addPass(createConvertControlFlowToLLVMPass());
+  pm.addPass(
+      createGpuModuleToBinaryPass(options.gpuModuleToBinaryPassOptions()));
   pm.addPass(createConvertToLLVMPass());
   pm.addPass(createCanonicalizerPass());
 }

@@ -68,6 +68,9 @@ struct FieldToGPUOptions : public PassPipelineOptions<FieldToGPUOptions> {
       *this, "hoist-static-allocs", llvm::cl::desc("Hoist static allocs"),
       llvm::cl::init(true)};
 
+  PassOptions::Option<std::string> targetFormat{*this, "target-format",
+                                                llvm::cl::desc("Target format"),
+                                                llvm::cl::init("fatbin")};
   PassOptions::Option<std::string> targetChip{*this, "target-chip",
                                               llvm::cl::desc("Target chip"),
                                               llvm::cl::init("sm_80")};
@@ -114,6 +117,12 @@ struct FieldToGPUOptions : public PassPipelineOptions<FieldToGPUOptions> {
     opts.chip = targetChip;
     opts.features = targetFeatures;
     opts.optLevel = targetOptLevel;
+    return opts;
+  }
+
+  GpuModuleToBinaryPassOptions gpuModuleToBinaryPassOptions() const {
+    GpuModuleToBinaryPassOptions opts{};
+    opts.compilationTarget = targetFormat;
     return opts;
   }
 };

@@ -1,4 +1,4 @@
-// RUN: zkir-opt %s -field-to-gpu="bufferize-function-boundaries" | FileCheck %s
+// RUN: zkir-opt %s -field-to-gpu="bufferize-function-boundaries target-format=llvm nvvm-use-bare-ptr-call-conv" | FileCheck %s
 
 !PF = !field.pf<21888242871839275222246405745257275088696311157297823662689037894645226208583:i256, true>
 

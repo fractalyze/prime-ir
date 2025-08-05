@@ -1,4 +1,4 @@
-// RUN: zkir-opt %s -poly-to-field -field-to-gpu="bufferize-function-boundaries parallelize-affine" | FileCheck %s
+// RUN: zkir-opt %s -poly-to-field -field-to-gpu="bufferize-function-boundaries parallelize-affine target-format=llvm nvvm-use-bare-ptr-call-conv" | FileCheck %s
 
 !PF = !field.pf<7681:i32>
 #elem = #field.pf.elem<3383:i32>  : !PF
