@@ -76,10 +76,10 @@ struct FieldToGPUOptions : public PassPipelineOptions<FieldToGPUOptions> {
 
   PassOptions::Option<unsigned> nvvmIndexBitwidth{
       *this, "nvvm-index-bitwidth", llvm::cl::desc("NVVM index bitwidth"),
-      llvm::cl::init(0)};
+      llvm::cl::init(64)};
   PassOptions::Option<bool> nvvmUseBarePtrCallConv{
       *this, "nvvm-use-bare-ptr-call-conv",
-      llvm::cl::desc("NVVM use bare ptr call conv"), llvm::cl::init(true)};
+      llvm::cl::desc("NVVM use bare ptr call conv"), llvm::cl::init(false)};
 
   // Projects out the options for `OneShotBufferizePass`.
   bufferization::OneShotBufferizePassOptions bufferizationOptions() const {
