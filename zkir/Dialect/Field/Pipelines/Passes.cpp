@@ -93,7 +93,9 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   // FIXME(batzor): 1-D `affine::ForOp` is making the GPU conversion pass to
   // fail so I added this pass as a temporary workaround. Due to this, some
   // VecOps will not be lowered to GPU dialect.
-  pm.addPass(affine::createAffineParallelize());
+  if (options.parallelizeAffine) {
+    pm.addPass(affine::createAffineParallelize());
+  }
   pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
   pm.addNestedPass<func::FuncOp>(createConvertAffineForToGPUPass());
   // -gpu-map-parallel-loops greedily maps loops to GPU hardware dimensions if

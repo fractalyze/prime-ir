@@ -1,4 +1,4 @@
-// RUN: zkir-opt %s -poly-to-field -field-to-gpu=bufferize-function-boundaries | FileCheck %s
+// RUN: zkir-opt %s -poly-to-field -field-to-gpu="bufferize-function-boundaries parallelize-affine" | FileCheck %s
 
 !PF = !field.pf<7681:i32>
 #elem = #field.pf.elem<3383:i32>  : !PF

@@ -52,6 +52,10 @@ struct FieldToLLVMOptions : public PassPipelineOptions<FieldToLLVMOptions> {
 void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options);
 
 struct FieldToGPUOptions : public PassPipelineOptions<FieldToGPUOptions> {
+  PassOptions::Option<bool> parallelizeAffine{
+      *this, "parallelize-affine", llvm::cl::desc("Parallelize affine loops"),
+      llvm::cl::init(false)};
+
   PassOptions::Option<bool> bufferizeFunctionBoundaries{
       *this, "bufferize-function-boundaries",
       llvm::cl::desc("Bufferize function boundaries"), llvm::cl::init(false)};
