@@ -7,12 +7,10 @@
 
 #define NUM_SCALARMULS (1 << 20)
 
-namespace zkir {
+namespace mlir::zkir::benchmark {
 namespace {
 
-using benchmark::Memref;
-
-using i256 = benchmark::BigInt<4>;
+using i256 = BigInt<4>;
 
 // `kPrime` =
 // 21888242871839275222246405745257275088548364400416034343698204186575808495617
@@ -59,7 +57,7 @@ void BM_msm_benchmark(::benchmark::State &state) {
 BENCHMARK(BM_msm_benchmark)->Iterations(20)->Unit(::benchmark::kMillisecond);
 
 }  // namespace
-}  // namespace zkir
+}  // namespace mlir::zkir::benchmark
 
 // clang-format off
 // NOLINTBEGIN(whitespace/line_length)

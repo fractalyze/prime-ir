@@ -24,8 +24,7 @@
 #define HOST_IS_BIG_ENDIAN 0
 #endif
 
-namespace zkir {
-namespace benchmark {
+namespace mlir::zkir::benchmark {
 
 // For reference, see
 // https://mlir.llvm.org/docs/TargetLLVMIR/#c-compatible-wrapper-emission
@@ -261,7 +260,6 @@ struct BigInt {
   }
 };
 
-}  // namespace benchmark
-}  // namespace zkir
+}  // namespace mlir::zkir::benchmark
 
 #endif  // BENCHMARK_BENCHMARKUTILS_H_

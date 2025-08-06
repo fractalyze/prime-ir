@@ -2,12 +2,10 @@
 #include "benchmark/benchmark.h"
 #include "gtest/gtest.h"
 
-namespace zkir {
+namespace mlir::zkir::benchmark {
 namespace {
 
-using benchmark::Memref;
-
-using i256 = benchmark::BigInt<4>;
+using i256 = BigInt<4>;
 
 // `kPrime` =
 // 21888242871839275222246405745257275088548364400416034343698204186575808495617
@@ -53,7 +51,7 @@ void BM_mont_mul_benchmark(::benchmark::State &state) {
 BENCHMARK(BM_mont_mul_benchmark);
 
 }  // namespace
-}  // namespace zkir
+}  // namespace mlir::zkir::benchmark
 
 // Run on (14 X 24 MHz CPU s)
 // CPU Caches:
