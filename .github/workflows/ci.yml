@@ -18,36 +18,21 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout ZKIR
         uses: actions/checkout@v4
 
-      - name: Setup Bazelisk
-        uses: bazel-contrib/setup-bazel@0.14.0
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ runner.os }}-zkir_bazelbuild
-          repository-cache: true
-          external-cache: true
-
-      - name: Clean up disk space
-        run: |
-          df -h
-          rm -rf /usr/share/dotnet/
-          rm -rf /opt/hostedtoolcache
-          df -h
-
       - name: Run `bazel build`
         run: |
-          bazel build --test_output=errors //...
+          bazel build --remote_cache=grpc://127.0.0.1:9092 --test_output=errors //...
 
       - name: Run `bazel test`
         run: |
-          bazel test --config ci --test_output=errors //...
+          bazel test --config ci --remote_cache=grpc://127.0.0.1:9092 --test_output=errors //...
 
   pre-commit-style:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - name: Checkout ZKIR
         uses: actions/checkout@v4
