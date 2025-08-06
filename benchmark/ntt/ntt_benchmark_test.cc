@@ -18,7 +18,7 @@ const i256 kPrime = i256::fromHexString(
     "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");
 
 // Fill the input with random numbers in [0, prime).
-static void fillWithRandom(Memref<i256> *input, const i256 &kPrime) {
+void fillWithRandom(Memref<i256> *input, const i256 &kPrime) {
   // Set up the random number generator.
   std::mt19937_64 rng(std::random_device{}());  // NOLINT(whitespace/braces)
   std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);

@@ -9,8 +9,8 @@ namespace {
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-mdbl-2007-bl
 // Cost: 1M + 5S
 // Assumption: Z == 1
-static SmallVector<Value> affineToJacobian(ValueRange point, Value a,
-                                           ImplicitLocOpBuilder &b) {
+SmallVector<Value> affineToJacobian(ValueRange point, Value a,
+                                    ImplicitLocOpBuilder &b) {
   auto x = point[0];
   auto y = point[1];
 
@@ -56,8 +56,8 @@ static SmallVector<Value> affineToJacobian(ValueRange point, Value a,
 // dbl-2007-bl
 // https://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian.html#doubling-dbl-2007-bl
 // Cost: 1M + 8S + 1*a
-static SmallVector<Value> jacobianToJacobian(ValueRange point, Value a,
-                                             ImplicitLocOpBuilder &b) {
+SmallVector<Value> jacobianToJacobian(ValueRange point, Value a,
+                                      ImplicitLocOpBuilder &b) {
   Value x = point[0];
   Value y = point[1];
   Value z = point[2];

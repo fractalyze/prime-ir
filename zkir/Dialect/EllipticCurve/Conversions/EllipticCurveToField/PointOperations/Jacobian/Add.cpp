@@ -13,9 +13,9 @@ namespace {
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-mmadd-2007-bl
 // Cost: 4M + 2S
 // Assumption: Z1 == Z2 == 1
-static SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
-                                          ShortWeierstrassAttr curve,
-                                          ImplicitLocOpBuilder &b) {
+SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
+                                   ShortWeierstrassAttr curve,
+                                   ImplicitLocOpBuilder &b) {
   Value x1 = p1[0];
   Value y1 = p1[1];
 
@@ -73,9 +73,9 @@ static SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-madd-2007-bl
 // Cost: 7M + 4S
 // Assumption: Z2 == 1
-static SmallVector<Value> jacobianAndAffine(ValueRange p1, ValueRange p2,
-                                            ShortWeierstrassAttr curve,
-                                            ImplicitLocOpBuilder &b) {
+SmallVector<Value> jacobianAndAffine(ValueRange p1, ValueRange p2,
+                                     ShortWeierstrassAttr curve,
+                                     ImplicitLocOpBuilder &b) {
   auto x1 = p1[0];
   auto y1 = p1[1];
   auto z1 = p1[2];
@@ -144,9 +144,9 @@ static SmallVector<Value> jacobianAndAffine(ValueRange p1, ValueRange p2,
 // add-2007-bl
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-jacobian-0.html#addition-add-2007-bl
 // Cost: 11M + 5S
-static SmallVector<Value> jacobianAndJacobian(ValueRange p1, ValueRange p2,
-                                              ShortWeierstrassAttr curve,
-                                              ImplicitLocOpBuilder &b) {
+SmallVector<Value> jacobianAndJacobian(ValueRange p1, ValueRange p2,
+                                       ShortWeierstrassAttr curve,
+                                       ImplicitLocOpBuilder &b) {
   Value x1 = p1[0];
   Value y1 = p1[1];
   Value z1 = p1[2];

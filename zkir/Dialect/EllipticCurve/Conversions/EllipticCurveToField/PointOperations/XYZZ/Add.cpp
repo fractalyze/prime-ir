@@ -12,9 +12,9 @@ namespace {
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-mmadd-2008-s
 // Cost: 4M + 2S
 // Assumption: ZZ1 == ZZZ1 == ZZ2 == ZZZ2 == 1
-static SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
-                                          ShortWeierstrassAttr curve,
-                                          ImplicitLocOpBuilder &b) {
+SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
+                                   ShortWeierstrassAttr curve,
+                                   ImplicitLocOpBuilder &b) {
   auto x1 = p1[0];
   auto y1 = p1[1];
 
@@ -65,9 +65,9 @@ static SmallVector<Value> affineAndAffine(ValueRange p1, ValueRange p2,
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-madd-2008-s
 // Cost: 8M + 2S
 // Assumption: ZZ2 == ZZZ2 == 1
-static SmallVector<Value> xyzzAndAffine(ValueRange p1, ValueRange p2,
-                                        ShortWeierstrassAttr curve,
-                                        ImplicitLocOpBuilder &b) {
+SmallVector<Value> xyzzAndAffine(ValueRange p1, ValueRange p2,
+                                 ShortWeierstrassAttr curve,
+                                 ImplicitLocOpBuilder &b) {
   auto x1 = p1[0];
   auto y1 = p1[1];
   auto zz1 = p1[2];
@@ -128,9 +128,9 @@ static SmallVector<Value> xyzzAndAffine(ValueRange p1, ValueRange p2,
 // add-2008-s
 // http://www.hyperelliptic.org/EFD/g1p/auto-shortw-xyzz.html#addition-add-2008-s
 // Cost: 12M + 2S
-static SmallVector<Value> xyzzAndXyzz(ValueRange p1, ValueRange p2,
-                                      ShortWeierstrassAttr curve,
-                                      ImplicitLocOpBuilder &b) {
+SmallVector<Value> xyzzAndXyzz(ValueRange p1, ValueRange p2,
+                               ShortWeierstrassAttr curve,
+                               ImplicitLocOpBuilder &b) {
   auto x1 = p1[0];
   auto y1 = p1[1];
   auto zz1 = p1[2];
