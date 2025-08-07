@@ -16,6 +16,7 @@ extern "C" void _mlir_ciface_mul(Memref<i256> *output, Memref<i256> *input);
 extern "C" void _mlir_ciface_mont_mul(Memref<i256> *output,
                                       Memref<i256> *input);
 
+template <bool kIsMont>
 void BM_mul_benchmark(::benchmark::State &state) {
   Memref<i256> input(1, 1);
 
@@ -27,40 +28,34 @@ void BM_mul_benchmark(::benchmark::State &state) {
     state.PauseTiming();
     *input.pget(0, 0) = i256::randomLT(kPrime, rng, dist);
     state.ResumeTiming();
-    _mlir_ciface_mul(&output, &input);
+    if constexpr (kIsMont) {
+      _mlir_ciface_mont_mul(&output, &input);
+    } else {
+      _mlir_ciface_mul(&output, &input);
+    }
   }
 }
 
-BENCHMARK(BM_mul_benchmark);
-
-void BM_mont_mul_benchmark(::benchmark::State &state) {
-  Memref<i256> input(1, 1);
-
-  std::mt19937_64 rng(std::random_device{}());  // NOLINT(whitespace/braces)
-  std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
-
-  Memref<i256> mont_output(1, 1);
-  for (auto _ : state) {
-    state.PauseTiming();
-    *input.pget(0, 0) = i256::randomLT(kPrime, rng, dist);
-    state.ResumeTiming();
-    _mlir_ciface_mont_mul(&mont_output, &input);
-  }
-}
-
-BENCHMARK(BM_mont_mul_benchmark);
+BENCHMARK_TEMPLATE(BM_mul_benchmark, /*kIsMont=*/false)->Name("mul");
+BENCHMARK_TEMPLATE(BM_mul_benchmark, /*kIsMont=*/true)->Name("mont_mul");
 
 }  // namespace
 }  // namespace mlir::zkir::benchmark
 
-// Run on (14 X 24 MHz CPU s)
+// clang-format off
+// NOLINTBEGIN(whitespace/line_length)
+//
+// 2025-08-07T01:12:10+00:00
+// Run on AMD Ryzen 9 9950X3D (32 X 5529.37 MHz CPU s)
 // CPU Caches:
-//   L1 Data 64 KiB
-//   L1 Instruction 128 KiB
-//   L2 Unified 4096 KiB (x14)
-// Load Average: 2.27, 2.16, 2.53
-// ----------------------------------------------------------------
-// Benchmark                      Time             CPU   Iterations
-// ----------------------------------------------------------------
-// BM_mul_benchmark            2219 ns         2221 ns       318374
-// BM_mont_mul_benchmark        411 ns          413 ns      1678053
+//   L1 Data 48 KiB (x16)
+//   L1 Instruction 32 KiB (x16)
+//   L2 Unified 1024 KiB (x16)
+//   L3 Unified 98304 KiB (x2)
+// Load Average: 0.49, 8.35, 8.82
+// -----------------------------------------------------
+// Benchmark           Time             CPU   Iterations
+// -----------------------------------------------------
+// mul               124 ns          124 ns      5624619
+// mont_mul          128 ns          128 ns      5472464
+// NOLINTEND()
