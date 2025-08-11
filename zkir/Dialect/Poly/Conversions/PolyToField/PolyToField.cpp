@@ -265,9 +265,9 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
 
   // Create a memref buffer for in-place updates
   auto memrefType = MemRefType::get(intTensorType.getShape(), coeffType);
-  Value srcMemref = b.create<bufferization::ToMemrefOp>(memrefType, source,
+  Value srcMemref = b.create<bufferization::ToBufferOp>(memrefType, source,
                                                         /*read_only=*/true);
-  Value destMemref = b.create<bufferization::ToMemrefOp>(memrefType, dest);
+  Value destMemref = b.create<bufferization::ToBufferOp>(memrefType, dest);
 
   // Begin the outer loop over the stages of the NTT.
   // The iterative loop carries three values:
@@ -439,7 +439,7 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
       }
 
       // NOTE(batzor): We should not use `dest` operand for the destination
-      // here. Otherwise, writable `ToMemrefOp` will be called twice on the same
+      // here. Otherwise, writable `ToBufferOp` will be called twice on the same
       // `dest` SSA Value causing conflict and force memory copy.
       nttResult = fastNTT(b, adaptor, bitReversed.getResult(),
                           bitReversed.getResult(), nttMappingAttr);

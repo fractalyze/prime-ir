@@ -58,7 +58,7 @@ func.func @test_msm() {
   %extract_point_reduced = field.from_mont %extract_point : tensor<2x!PF>
   %extract = field.extract %extract_point_reduced : tensor<2x!PF> -> tensor<2xi256>
   %trunc = arith.trunci %extract : tensor<2xi256> to tensor<2xi32>
-  %mem = bufferization.to_memref %trunc : tensor<2xi32> to memref<2xi32>
+  %mem = bufferization.to_buffer %trunc : tensor<2xi32> to memref<2xi32>
   %U = memref.cast %mem : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
 
@@ -73,7 +73,7 @@ func.func @test_msm() {
   %extract_point1_reduced = field.from_mont %extract_point1 : tensor<2x!PF>
   %extract1 = field.extract %extract_point1_reduced : tensor<2x!PF> -> tensor<2xi256>
   %trunc1 = arith.trunci %extract1 : tensor<2xi256> to tensor<2xi32>
-  %mem1 = bufferization.to_memref %trunc1 : tensor<2xi32> to memref<2xi32>
+  %mem1 = bufferization.to_buffer %trunc1 : tensor<2xi32> to memref<2xi32>
   %U1 = memref.cast %mem1 : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U1) : (memref<*xi32>) -> ()
   return

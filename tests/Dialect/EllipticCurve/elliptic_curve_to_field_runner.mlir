@@ -49,7 +49,7 @@ func.func @test_ops_in_order() {
   %from_mont1 = field.from_mont %extract_point1 : tensor<3x!PF>
   %extract1 = field.extract %from_mont1 : tensor<3x!PF> -> tensor<3xi256>
   %trunc1 = arith.trunci %extract1 : tensor<3xi256> to tensor<3xi32>
-  %1 = bufferization.to_memref %trunc1 : tensor<3xi32> to memref<3xi32>
+  %1 = bufferization.to_buffer %trunc1 : tensor<3xi32> to memref<3xi32>
   %U1 = memref.cast %1 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U1) : (memref<*xi32>) -> ()
 
@@ -59,7 +59,7 @@ func.func @test_ops_in_order() {
   %from_mont2 = field.from_mont %extract_point2 : tensor<3x!PF>
   %extract2 = field.extract %from_mont2 : tensor<3x!PF> -> tensor<3xi256>
   %trunc2 = arith.trunci %extract2 : tensor<3xi256> to tensor<3xi32>
-  %2 = bufferization.to_memref %trunc2 : tensor<3xi32> to memref<3xi32>
+  %2 = bufferization.to_buffer %trunc2 : tensor<3xi32> to memref<3xi32>
   %U2 = memref.cast %2 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
 
@@ -69,7 +69,7 @@ func.func @test_ops_in_order() {
   %from_mont3 = field.from_mont %extract_point3 : tensor<3x!PF>
   %extract3 = field.extract %from_mont3 : tensor<3x!PF> -> tensor<3xi256>
   %trunc3 = arith.trunci %extract3 : tensor<3xi256> to tensor<3xi32>
-  %3 = bufferization.to_memref %trunc3 : tensor<3xi32> to memref<3xi32>
+  %3 = bufferization.to_buffer %trunc3 : tensor<3xi32> to memref<3xi32>
   %U3 = memref.cast %3 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U3) : (memref<*xi32>) -> ()
 
@@ -79,7 +79,7 @@ func.func @test_ops_in_order() {
   %from_mont4 = field.from_mont %extract_point4 : tensor<3x!PF>
   %extract4 = field.extract %from_mont4 : tensor<3x!PF> -> tensor<3xi256>
   %trunc4 = arith.trunci %extract4 : tensor<3xi256> to tensor<3xi32>
-  %4 = bufferization.to_memref %trunc4 : tensor<3xi32> to memref<3xi32>
+  %4 = bufferization.to_buffer %trunc4 : tensor<3xi32> to memref<3xi32>
   %U4 = memref.cast %4 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U4) : (memref<*xi32>) -> ()
 
@@ -89,7 +89,7 @@ func.func @test_ops_in_order() {
   %from_mont5 = field.from_mont %extract_point5 : tensor<4x!PF>
   %extract5 = field.extract %from_mont5 : tensor<4x!PF> -> tensor<4xi256>
   %trunc5 = arith.trunci %extract5 : tensor<4xi256> to tensor<4xi32>
-  %5 = bufferization.to_memref %trunc5 : tensor<4xi32> to memref<4xi32>
+  %5 = bufferization.to_buffer %trunc5 : tensor<4xi32> to memref<4xi32>
   %U5 = memref.cast %5 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U5) : (memref<*xi32>) -> ()
 
@@ -99,7 +99,7 @@ func.func @test_ops_in_order() {
   %from_mont6 = field.from_mont %extract_point6 : tensor<2x!PF>
   %extract6 = field.extract %from_mont6 : tensor<2x!PF> -> tensor<2xi256>
   %trunc6 = arith.trunci %extract6 : tensor<2xi256> to tensor<2xi32>
-  %6 = bufferization.to_memref %trunc6 : tensor<2xi32> to memref<2xi32>
+  %6 = bufferization.to_buffer %trunc6 : tensor<2xi32> to memref<2xi32>
   %U6 = memref.cast %6 : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U6) : (memref<*xi32>) -> ()
 
@@ -111,7 +111,7 @@ func.func @test_ops_in_order() {
   %from_mont7 = field.from_mont %extract_point7 : tensor<3x!PF>
   %extract7 = field.extract %from_mont7 : tensor<3x!PF> -> tensor<3xi256>
   %trunc7 = arith.trunci %extract7 : tensor<3xi256> to tensor<3xi32>
-  %7 = bufferization.to_memref %trunc7 : tensor<3xi32> to memref<3xi32>
+  %7 = bufferization.to_buffer %trunc7 : tensor<3xi32> to memref<3xi32>
   %U7 = memref.cast %7 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U7) : (memref<*xi32>) -> ()
 
@@ -121,7 +121,7 @@ func.func @test_ops_in_order() {
   %from_mont8 = field.from_mont %extract_point8 : tensor<2x!PF>
   %extract8 = field.extract %from_mont8 : tensor<2x!PF> -> tensor<2xi256>
   %trunc8 = arith.trunci %extract8 : tensor<2xi256> to tensor<2xi32>
-  %8 = bufferization.to_memref %trunc8 : tensor<2xi32> to memref<2xi32>
+  %8 = bufferization.to_buffer %trunc8 : tensor<2xi32> to memref<2xi32>
   %U8 = memref.cast %8 : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U8) : (memref<*xi32>) -> ()
 
@@ -133,7 +133,7 @@ func.func @test_ops_in_order() {
   %from_mont9 = field.from_mont %extract_point9 : tensor<4x!PF>
   %extract9 = field.extract %from_mont9 : tensor<4x!PF> -> tensor<4xi256>
   %trunc9 = arith.trunci %extract9 : tensor<4xi256> to tensor<4xi32>
-  %9 = bufferization.to_memref %trunc9 : tensor<4xi32> to memref<4xi32>
+  %9 = bufferization.to_buffer %trunc9 : tensor<4xi32> to memref<4xi32>
   %U9 = memref.cast %9 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U9) : (memref<*xi32>) -> ()
 

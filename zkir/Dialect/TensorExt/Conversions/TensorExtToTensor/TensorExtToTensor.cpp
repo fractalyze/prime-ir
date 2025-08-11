@@ -38,10 +38,10 @@ struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
     auto c1 = b.create<arith::ConstantIndexOp>(1);
     auto cN = b.create<arith::ConstantIndexOp>(numCoeffs);
     auto sourceMemref =
-        b.create<bufferization::ToMemrefOp>(memrefType, adaptor.getSource(),
+        b.create<bufferization::ToBufferOp>(memrefType, adaptor.getSource(),
                                             /*read_only=*/true);
     auto destMemref =
-        b.create<bufferization::ToMemrefOp>(memrefType, adaptor.getDest());
+        b.create<bufferization::ToBufferOp>(memrefType, adaptor.getDest());
     auto parallelOp = b.create<scf::ParallelOp>(
         /*lowerBound=*/ValueRange{c0},
         /*lowerBound=*/ValueRange{cN},

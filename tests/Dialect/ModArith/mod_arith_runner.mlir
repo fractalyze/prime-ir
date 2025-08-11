@@ -41,7 +41,7 @@ func.func @test_lower_inverse() {
   %2 = mod_arith.extract %from_mont : !Fq -> i256
   %3 = arith.trunci %2 : i256 to i32
   %4 = tensor.from_elements %3 : tensor<1xi32>
-  %5 = bufferization.to_memref %4 : tensor<1xi32> to memref<1xi32>
+  %5 = bufferization.to_buffer %4 : tensor<1xi32> to memref<1xi32>
   %U = memref.cast %5 : memref<1xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
 
@@ -50,7 +50,7 @@ func.func @test_lower_inverse() {
   %6 = mod_arith.extract %mul2 : !Fq -> i256
   %7 = arith.trunci %6 : i256 to i32
   %8 = tensor.from_elements %7 : tensor<1xi32>
-  %9 = bufferization.to_memref %8 : tensor<1xi32> to memref<1xi32>
+  %9 = bufferization.to_buffer %8 : tensor<1xi32> to memref<1xi32>
   %10 = memref.cast %9 : memref<1xi32> to memref<*xi32>
   func.call @printMemrefI32(%10) : (memref<*xi32>) -> ()
 
@@ -61,7 +61,7 @@ func.func @test_lower_inverse() {
   %from_mont_r = mod_arith.from_mont %mul_r : !Fr
   %r_ext = mod_arith.extract %from_mont_r : !Fr -> i32
   %r_tensor = tensor.from_elements %r_ext : tensor<1xi32>
-  %r_mem = bufferization.to_memref %r_tensor : tensor<1xi32> to memref<1xi32>
+  %r_mem = bufferization.to_buffer %r_tensor : tensor<1xi32> to memref<1xi32>
   %r_mem_cast = memref.cast %r_mem : memref<1xi32> to memref<*xi32>
   func.call @printMemrefI32(%r_mem_cast) : (memref<*xi32>) -> ()
   return
@@ -84,7 +84,7 @@ func.func @test_lower_inverse_tensor() {
   %mul = mod_arith.mul %inv, %tensor2 : tensor<3x!Fq>
   %ext = mod_arith.extract %mul : tensor<3x!Fq> -> tensor<3xi256>
   %trunc = arith.trunci %ext : tensor<3xi256> to tensor<3xi32>
-  %1 = bufferization.to_memref %trunc : tensor<3xi32> to memref<3xi32>
+  %1 = bufferization.to_buffer %trunc : tensor<3xi32> to memref<3xi32>
   %U1 = memref.cast %1 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U1) : (memref<*xi32>) -> ()
 
@@ -94,7 +94,7 @@ func.func @test_lower_inverse_tensor() {
   %from_mont = mod_arith.from_mont %mul_mont : tensor<3x!Fq>
   %ext2 = mod_arith.extract %from_mont : tensor<3x!Fq> -> tensor<3xi256>
   %trunc2 = arith.trunci %ext2 : tensor<3xi256> to tensor<3xi32>
-  %2 = bufferization.to_memref %trunc2 : tensor<3xi32> to memref<3xi32>
+  %2 = bufferization.to_buffer %trunc2 : tensor<3xi32> to memref<3xi32>
   %U2 = memref.cast %2 : memref<3xi32> to memref<*xi32>
   func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
   return

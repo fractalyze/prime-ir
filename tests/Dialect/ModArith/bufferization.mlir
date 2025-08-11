@@ -19,11 +19,11 @@ func.func @test_bufferization_materialize_in_destination(%tensor : tensor<2x!Zp>
   return
 }
 
-// CHECK-LABEL: @test_bufferization_to_memref
+// CHECK-LABEL: @test_bufferization_to_buffer
 // CHECK-SAME: (%[[TENSOR:.*]]: [[TENSOR_TYPE:.*]]) -> [[T:.*]] {
-func.func @test_bufferization_to_memref(%tensor : tensor<2x!Zp>) -> memref<2x!Zp> {
-  // CHECK: %[[MEMREF:.*]] = bufferization.to_memref %[[TENSOR]] : [[TENSOR_TYPE]] to [[T]]
-  %memref = bufferization.to_memref %tensor : tensor<2x!Zp> to memref<2x!Zp>
+func.func @test_bufferization_to_buffer(%tensor : tensor<2x!Zp>) -> memref<2x!Zp> {
+  // CHECK: %[[MEMREF:.*]] = bufferization.to_buffer %[[TENSOR]] : [[TENSOR_TYPE]] to [[T]]
+  %memref = bufferization.to_buffer %tensor : tensor<2x!Zp> to memref<2x!Zp>
   // CHECK: return %[[MEMREF]] : [[T]]
   return %memref : memref<2x!Zp>
 }

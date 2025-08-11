@@ -1,5 +1,5 @@
 diff --git mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp w/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
-index 7d1844df4219..53ee42ae95b1 100644
+index ca7f31dd6b51..5b0e32f98e8e 100644
 --- mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
 +++ mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
 @@ -25,12 +25,18 @@
@@ -21,7 +21,7 @@ index 7d1844df4219..53ee42ae95b1 100644
 
  /// Include the definitions of the copy operation interface.
  #include "mlir/Dialect/Linalg/IR/LinalgInterfaces.cpp.inc"
-@@ -489,6 +495,9 @@ mlir::linalg::detail::isContractionInterfaceImpl(
+@@ -525,6 +531,9 @@ mlir::linalg::detail::isContractionInterfaceImpl(
    // TODO: more fields than add/mul.
    // clang-format off
    if (!::isContractionBody<
@@ -32,7 +32,7 @@ index 7d1844df4219..53ee42ae95b1 100644
          arith::MulIOp, arith::AddIOp,
          complex::MulOp, complex::AddOp,
 diff --git mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp w/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
-index 96106cf7ae12..abda2b01ddfb 100644
+index 8075df730ccc..eed50cf6fb63 100644
 --- mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
 +++ mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
 @@ -51,6 +51,14 @@
@@ -50,7 +50,7 @@ index 96106cf7ae12..abda2b01ddfb 100644
  #include <cassert>
  #include <optional>
 
-@@ -429,8 +437,16 @@ static void printNamedStructuredOp(OpAsmPrinter &p, Operation *op,
+@@ -439,8 +447,16 @@ static void printNamedStructuredOp(OpAsmPrinter &p, Operation *op,
 
  namespace {
 
@@ -67,11 +67,11 @@ index 96106cf7ae12..abda2b01ddfb 100644
    RegionBuilderHelper(OpBuilder &builder, Block &block)
        : builder(builder), block(block) {}
 
-@@ -482,8 +498,16 @@ public:
+@@ -506,7 +522,14 @@ public:
      bool allInteger = isInteger(arg0) && isInteger(arg1);
      bool allBool = allInteger && arg0.getType().getIntOrFloatBitWidth() == 1 &&
                     arg1.getType().getIntOrFloatBitWidth() == 1;
--    if (!allComplex && !allFloatingPoint && !allInteger)
+-    if (!allComplex && !allFloatingPoint && !allInteger) {
 +
 +    bool allModular = isModular(arg0) && isModular(arg1);
 +    bool allField = isField(arg0) && isField(arg1);
@@ -79,13 +79,19 @@ index 96106cf7ae12..abda2b01ddfb 100644
 +    bool allECPoint = isECPoint(arg0) && isECPoint(arg1);
 +
 +    if (!allComplex && !allFloatingPoint && !allInteger && !allModular &&
-+        !allField && !scalarByPoint && !allECPoint)
++        !allField && !scalarByPoint && !allECPoint) {
+       if (emitError) {
+         emitError()
+             << "Cannot build binary Linalg operation: expects allComplex, "
+@@ -516,6 +539,7 @@ public:
+       }
        llvm_unreachable("unsupported non numeric type");
+     }
 +
      OpBuilder::InsertionGuard g(builder);
      builder.setInsertionPointToEnd(&block);
      switch (binaryFn) {
-@@ -494,6 +518,15 @@ public:
+@@ -526,6 +550,15 @@ public:
          return builder.create<arith::AddFOp>(arg0.getLoc(), arg0, arg1);
        if (allBool)
          return builder.create<arith::OrIOp>(arg0.getLoc(), arg0, arg1);
@@ -101,10 +107,10 @@ index 96106cf7ae12..abda2b01ddfb 100644
        return builder.create<arith::AddIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::sub:
        if (allComplex)
-@@ -502,6 +535,15 @@ public:
-         return builder.create<arith::SubFOp>(arg0.getLoc(), arg0, arg1);
-       if (allBool)
+@@ -539,6 +572,15 @@ public:
+         }
          llvm_unreachable("unsupported operation: sub with bools");
+       }
 +      if (allModular)
 +        return builder.create<mod_arith::SubOp>(arg0.getLoc(), arg0, arg1);
 +      if (allField)
@@ -117,7 +123,7 @@ index 96106cf7ae12..abda2b01ddfb 100644
        return builder.create<arith::SubIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::mul:
        if (allComplex)
-@@ -510,6 +552,15 @@ public:
+@@ -547,6 +589,15 @@ public:
          return builder.create<arith::MulFOp>(arg0.getLoc(), arg0, arg1);
        if (allBool)
          return builder.create<arith::AndIOp>(arg0.getLoc(), arg0, arg1);
@@ -133,10 +139,10 @@ index 96106cf7ae12..abda2b01ddfb 100644
        return builder.create<arith::MulIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::div:
        if (allComplex)
-@@ -518,30 +569,96 @@ public:
-         return builder.create<arith::DivFOp>(arg0.getLoc(), arg0, arg1);
-       if (allBool)
+@@ -560,6 +611,14 @@ public:
+         }
          llvm_unreachable("unsupported operation: div with bools");
+       }
 +      if (allModular)
 +        llvm_unreachable("unsupported operation: div with modular int");
 +      if (allField)
@@ -147,8 +153,11 @@ index 96106cf7ae12..abda2b01ddfb 100644
 +        llvm_unreachable("unsupported operation: div with two EC points");
        return builder.create<arith::DivSIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::div_unsigned:
-       if (!allInteger || allBool)
+       if (!allInteger || allBool) {
+@@ -569,26 +628,84 @@ public:
+         }
          llvm_unreachable("unsupported operation: unsigned div not on uint");
+       }
 +      if (allModular)
 +        llvm_unreachable(
 +            "unsupported operation: div_unsigned with modular int");
@@ -230,17 +239,17 @@ index 96106cf7ae12..abda2b01ddfb 100644
        return builder.create<arith::MinUIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::powf:
        assert(allFloatingPoint);
-@@ -571,6 +688,9 @@ public:
-
+@@ -627,6 +744,9 @@ public:
    // Build the type functions defined by OpDSL.
-   Value buildTypeFn(TypeFn typeFn, Type toType, Value operand) {
+   Value buildTypeFn(TypeFn typeFn, Type toType, Value operand,
+                     function_ref<InFlightDiagnostic()> emitError = {}) {
 +    if (isField(operand) || isECPoint(operand) || isModular(operand)) {
 +      return operand; // Do not cast ZKIR types.
 +    }
      switch (typeFn) {
      case TypeFn::cast_signed:
        return cast(toType, operand, false);
-@@ -629,6 +749,21 @@ private:
+@@ -696,6 +816,21 @@ private:
    bool isInteger(Value value) {
      return llvm::isa<IntegerType>(value.getType());
    }
@@ -263,10 +272,10 @@ index 96106cf7ae12..abda2b01ddfb 100644
    OpBuilder &builder;
    Block &block;
 diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel w/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 05c2fb481980..b5c63c72ac1e 100644
+index cc266c2fe3a7..13b7e256ea64 100644
 --- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -10349,5 +10349,8 @@ cc_library(
+@@ -10544,5 +10544,8 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",

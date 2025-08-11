@@ -655,7 +655,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertSub,
       ConvertAny<bufferization::AllocTensorOp>,
       ConvertAny<bufferization::MaterializeInDestinationOp>,
-      ConvertAny<bufferization::ToMemrefOp>,
+      ConvertAny<bufferization::ToBufferOp>,
       ConvertAny<bufferization::ToTensorOp>,
       ConvertAny<memref::AllocOp>,
       ConvertAny<memref::AllocaOp>,
@@ -674,7 +674,7 @@ void EllipticCurveToField::runOnOperation() {
       // clang-format off
       bufferization::AllocTensorOp,
       bufferization::MaterializeInDestinationOp,
-      bufferization::ToMemrefOp,
+      bufferization::ToBufferOp,
       bufferization::ToTensorOp,
       memref::AllocOp,
       memref::AllocaOp,
