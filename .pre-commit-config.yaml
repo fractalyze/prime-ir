@@ -78,4 +78,4 @@ repos:
       - id: pyink
         language_version: python3
 
-exclude: patches/.*\.patch$
+exclude: third_party/llvm-project/.*\.patch$
