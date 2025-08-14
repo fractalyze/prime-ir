@@ -25,7 +25,7 @@ jobs:
 
       - name: Run `bazel build`
         run: |
-          bazel build --remote_cache=grpc://127.0.0.1:9092 --test_output=errors //...
+          bazel build --remote_cache=grpc://127.0.0.1:9092 --remote_download_outputs=all --test_output=errors //...
 
       - name: Run `bazel test`
         run: |
@@ -47,7 +47,7 @@ jobs:
 
       - name: Refresh compile commands
         run: |
-          bazel run --remote_cache=grpc://127.0.0.1:9092 @hedron_compile_commands//:refresh_all
+          bazel run --remote_cache=grpc://127.0.0.1:9092 --remote_download_outputs=all @hedron_compile_commands//:refresh_all
 
       - name: Run pre-commit github action
         uses: pre-commit/action@646c83fcd040023954eafda54b4db0192ce70507 # pin@v3
