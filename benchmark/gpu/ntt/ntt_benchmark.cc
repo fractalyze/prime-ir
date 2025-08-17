@@ -24,7 +24,7 @@ extern "C" void _mlir_ciface_intt_gpu(StridedMemRefType<i64, 1> *input);
 const i64 kPrime = i64({9223372036836950017});
 
 // Set up the random number generator.
-std::mt19937_64 rng(std::random_device{}());  // NOLINT(whitespace/braces)
+std::mt19937_64 rng(std::random_device{}()); // NOLINT(whitespace/braces)
 std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
 
 // Set the element to random number in [0, kPrime).
@@ -71,8 +71,8 @@ BENCHMARK_TEMPLATE(BM_ntt_benchmark, /*kIsGPU=*/true)
     ->Unit(::benchmark::kMillisecond)
     ->Name("ntt_gpu");
 
-}  // namespace
-}  // namespace mlir::zkir::benchmark
+} // namespace
+} // namespace mlir::zkir::benchmark
 
 // clang-format off
 // NOLINTBEGIN(whitespace/line_length)

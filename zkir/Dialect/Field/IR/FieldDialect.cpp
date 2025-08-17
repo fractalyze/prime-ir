@@ -42,7 +42,7 @@
 namespace mlir::zkir::field {
 
 class FieldOpAsmDialectInterface : public OpAsmDialectInterface {
- public:
+public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
   AliasResult getAlias(Type type, raw_ostream &os) const override {
@@ -60,18 +60,18 @@ class FieldOpAsmDialectInterface : public OpAsmDialectInterface {
 void FieldDialect::initialize() {
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "zkir/Dialect/Field/IR/FieldTypes.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/Field/IR/FieldTypes.cpp.inc" // NOLINT(build/include)
       >();
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "zkir/Dialect/Field/IR/FieldAttributes.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/Field/IR/FieldAttributes.cpp.inc" // NOLINT(build/include)
       >();
   addOperations<
 #define GET_OP_LIST
-#include "zkir/Dialect/Field/IR/FieldOps.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/Field/IR/FieldOps.cpp.inc" // NOLINT(build/include)
       >();
 
   addInterface<FieldOpAsmDialectInterface>();
 }
 
-}  // namespace mlir::zkir::field
+} // namespace mlir::zkir::field

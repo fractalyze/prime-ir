@@ -37,6 +37,6 @@ inline IntegerType getOperandIntegerType(OpType op) {
 Type getStandardFormType(Type type);
 Type getMontgomeryFormType(Type type);
 
-}  // namespace mlir::zkir::mod_arith
+} // namespace mlir::zkir::mod_arith
 
-#endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_
+#endif // ZKIR_DIALECT_MODARITH_IR_MODARITHOPS_H_

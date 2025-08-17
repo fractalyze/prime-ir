@@ -55,4 +55,4 @@ LogicalResult RootOfUnityAttr::verify(
   return success();
 }
 
-}  // namespace mlir::zkir::field
+} // namespace mlir::zkir::field

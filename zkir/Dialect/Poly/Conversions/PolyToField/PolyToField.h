@@ -14,8 +14,8 @@ namespace mlir::zkir::poly {
 #include "zkir/Dialect/Poly/Conversions/PolyToField/PolyToField.h.inc"
 
 #define GEN_PASS_REGISTRATION
-#include "zkir/Dialect/Poly/Conversions/PolyToField/PolyToField.h.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/Poly/Conversions/PolyToField/PolyToField.h.inc" // NOLINT(build/include)
 
-}  // namespace mlir::zkir::poly
+} // namespace mlir::zkir::poly
 
-#endif  // ZKIR_DIALECT_POLY_CONVERSIONS_POLYTOFIELD_POLYTOFIELD_H_
+#endif // ZKIR_DIALECT_POLY_CONVERSIONS_POLYTOFIELD_POLYTOFIELD_H_

@@ -86,7 +86,8 @@ LogicalResult ExtractOp::verify() {
   auto modArithType = getOperandModArithType(*this);
   auto integerType = getResultIntegerType(*this);
   auto result = verifySameWidth(*this, modArithType, integerType);
-  if (result.failed()) return result;
+  if (result.failed())
+    return result;
   return verifyModArithType(*this, modArithType);
 }
 
@@ -201,28 +202,28 @@ OpFoldResult CmpOp::fold(FoldAdaptor adaptor) {
       APInt lhsValue = lhs.getValue();
       APInt rhsValue = rhs.getValue();
       switch (predicate) {
-        case arith::CmpIPredicate::eq:
-          return BoolAttr::get(getType().getContext(), lhsValue.eq(rhsValue));
-        case arith::CmpIPredicate::ne:
-          return BoolAttr::get(getType().getContext(), lhsValue.ne(rhsValue));
-        case arith::CmpIPredicate::slt:
-          return BoolAttr::get(getType().getContext(), lhsValue.slt(rhsValue));
-        case arith::CmpIPredicate::sle:
-          return BoolAttr::get(getType().getContext(), lhsValue.sle(rhsValue));
-        case arith::CmpIPredicate::sgt:
-          return BoolAttr::get(getType().getContext(), lhsValue.sgt(rhsValue));
-        case arith::CmpIPredicate::sge:
-          return BoolAttr::get(getType().getContext(), lhsValue.sge(rhsValue));
-        case arith::CmpIPredicate::ult:
-          return BoolAttr::get(getType().getContext(), lhsValue.ult(rhsValue));
-        case arith::CmpIPredicate::ule:
-          return BoolAttr::get(getType().getContext(), lhsValue.ule(rhsValue));
-        case arith::CmpIPredicate::ugt:
-          return BoolAttr::get(getType().getContext(), lhsValue.ugt(rhsValue));
-        case arith::CmpIPredicate::uge:
-          return BoolAttr::get(getType().getContext(), lhsValue.uge(rhsValue));
-        default:
-          llvm_unreachable("unknown cmpi predicate kind");
+      case arith::CmpIPredicate::eq:
+        return BoolAttr::get(getType().getContext(), lhsValue.eq(rhsValue));
+      case arith::CmpIPredicate::ne:
+        return BoolAttr::get(getType().getContext(), lhsValue.ne(rhsValue));
+      case arith::CmpIPredicate::slt:
+        return BoolAttr::get(getType().getContext(), lhsValue.slt(rhsValue));
+      case arith::CmpIPredicate::sle:
+        return BoolAttr::get(getType().getContext(), lhsValue.sle(rhsValue));
+      case arith::CmpIPredicate::sgt:
+        return BoolAttr::get(getType().getContext(), lhsValue.sgt(rhsValue));
+      case arith::CmpIPredicate::sge:
+        return BoolAttr::get(getType().getContext(), lhsValue.sge(rhsValue));
+      case arith::CmpIPredicate::ult:
+        return BoolAttr::get(getType().getContext(), lhsValue.ult(rhsValue));
+      case arith::CmpIPredicate::ule:
+        return BoolAttr::get(getType().getContext(), lhsValue.ule(rhsValue));
+      case arith::CmpIPredicate::ugt:
+        return BoolAttr::get(getType().getContext(), lhsValue.ugt(rhsValue));
+      case arith::CmpIPredicate::uge:
+        return BoolAttr::get(getType().getContext(), lhsValue.uge(rhsValue));
+      default:
+        llvm_unreachable("unknown cmpi predicate kind");
       }
     }
   }
@@ -410,7 +411,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   }
 
   auto modArithType = dyn_cast<ModArithType>(parsedType);
-  if (!modArithType) return failure();
+  if (!modArithType)
+    return failure();
 
   auto modulus = modArithType.getModulus().getValue();
   if (modulus.isNegative() || modulus.isZero()) {
@@ -463,7 +465,7 @@ bool isEqualTo(Attribute attr, uint32_t offset) {
 
   return (intAttr.getValue() - offset).isZero();
 }
-}  // namespace
+} // namespace
 
 namespace {
 #include "zkir/Dialect/ModArith/IR/ModArithCanonicalization.cpp.inc"
@@ -516,4 +518,4 @@ void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   patterns.add<MulSubDistributeConstantLhs>(context);
 }
 
-}  // namespace mlir::zkir::mod_arith
+} // namespace mlir::zkir::mod_arith

@@ -85,7 +85,7 @@ SmallVector<Value> xyzzToXyzz(ValueRange point, ShortWeierstrassAttr curve,
   return {x3, y3, zz3, zzz3};
 }
 
-}  // namespace
+} // namespace
 
 SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
                               ImplicitLocOpBuilder &b) {
@@ -99,4 +99,4 @@ SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
   }
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve

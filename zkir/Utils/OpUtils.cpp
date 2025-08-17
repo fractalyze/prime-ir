@@ -9,8 +9,9 @@ Type getI1SameShape(Type type) {
   auto i1Type = IntegerType::get(type.getContext(), 1);
   if (auto shapedType = dyn_cast<ShapedType>(type))
     return shapedType.cloneWith(std::nullopt, i1Type);
-  if (isa<UnrankedTensorType>(type)) return UnrankedTensorType::get(i1Type);
+  if (isa<UnrankedTensorType>(type))
+    return UnrankedTensorType::get(i1Type);
   return i1Type;
 }
 
-}  // namespace mlir::zkir
+} // namespace mlir::zkir

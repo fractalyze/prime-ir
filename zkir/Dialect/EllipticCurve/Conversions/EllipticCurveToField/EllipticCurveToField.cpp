@@ -32,7 +32,7 @@ namespace mlir::zkir::elliptic_curve {
 //////////////// TYPE CONVERSION ////////////////
 
 class EllipticCurveToFieldTypeConverter : public ShapedTypeConverter {
- public:
+public:
   explicit EllipticCurveToFieldTypeConverter(MLIRContext *ctx) {
     addConversion([](Type type) { return type; });
     addConversion(
@@ -69,7 +69,7 @@ class EllipticCurveToFieldTypeConverter : public ShapedTypeConverter {
     });
   }
 
- private:
+private:
   template <typename T>
   static LogicalResult convertPointType(T type,
                                         SmallVectorImpl<Type> &converted) {
@@ -97,9 +97,9 @@ struct ConvertPoint : public OpConversionPattern<PointOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      PointOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(PointOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     rewriter.replaceOpWithMultiple(op, {adaptor.getCoords()});
@@ -113,9 +113,9 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      IsZeroOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(IsZeroOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ValueRange coords = adaptor.getInput();
@@ -145,9 +145,9 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      ExtractOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(ExtractOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ValueRange coordsTmp = adaptor.getInput();
 
     // NOTE(ashjeong): Here we attempt to restructure the input coordinates like
@@ -172,9 +172,9 @@ struct ConvertConvertPointType
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      ConvertPointTypeOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(ConvertPointTypeOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ValueRange coords = adaptor.getInput();
@@ -321,9 +321,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      AddOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(AddOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value p1 = op.getLhs();
@@ -397,9 +397,9 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      DoubleOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(DoubleOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type outputType = op.getOutput().getType();
@@ -425,9 +425,9 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      NegateOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(NegateOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ValueRange coords = adaptor.getInput();
@@ -447,9 +447,9 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      SubOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(SubOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value negP2 = b.create<elliptic_curve::NegateOp>(op.getRhs());
@@ -469,9 +469,9 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      ScalarMulOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(ScalarMulOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value point = op.getPoint();
@@ -595,9 +595,9 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      MSMOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(MSMOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value scalars = op.getScalars();
@@ -621,7 +621,7 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.cpp.inc"
-}  // namespace rewrites
+} // namespace rewrites
 
 struct EllipticCurveToField
     : impl::EllipticCurveToFieldBase<EllipticCurveToField> {
@@ -697,4 +697,4 @@ void EllipticCurveToField::runOnOperation() {
   }
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve

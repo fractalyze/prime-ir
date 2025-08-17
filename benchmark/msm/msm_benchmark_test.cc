@@ -22,7 +22,7 @@ const i256 kPrimeScalar = i256::fromHexString(
     "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");
 
 // Set up the random number generator.
-std::mt19937_64 rng(std::random_device{}());  // NOLINT(whitespace/braces)
+std::mt19937_64 rng(std::random_device{}()); // NOLINT(whitespace/braces)
 std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
 
 template <bool kIsScalar>
@@ -66,8 +66,8 @@ BENCHMARK_TEMPLATE(BM_msm_benchmark, /*kIsParallel=*/true)
     ->Unit(::benchmark::kMillisecond)
     ->Name("msm_parallel");
 
-}  // namespace
-}  // namespace mlir::zkir::benchmark
+} // namespace
+} // namespace mlir::zkir::benchmark
 
 // clang-format off
 // NOLINTBEGIN(whitespace/line_length)

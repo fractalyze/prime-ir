@@ -9,4 +9,4 @@
 #define GET_ATTRDEF_CLASSES
 #include "zkir/Dialect/Field/IR/FieldAttributes.h.inc"
 
-#endif  // ZKIR_DIALECT_FIELD_IR_FIELDATTRIBUTES_H_
+#endif // ZKIR_DIALECT_FIELD_IR_FIELDATTRIBUTES_H_

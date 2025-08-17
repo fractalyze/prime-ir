@@ -12,8 +12,8 @@ namespace mlir::zkir::elliptic_curve {
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h.inc"
 
 #define GEN_PASS_REGISTRATION
-#include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h.inc" // NOLINT(build/include)
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve
 
-#endif  // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_ELLIPTICCURVETOFIELD_H_
+#endif // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_ELLIPTICCURVETOFIELD_H_

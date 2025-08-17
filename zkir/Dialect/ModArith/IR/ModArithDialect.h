@@ -10,4 +10,4 @@
 // Generated headers (block clang-format from messing up order)
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h.inc"
 
-#endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHDIALECT_H_
+#endif // ZKIR_DIALECT_MODARITH_IR_MODARITHDIALECT_H_

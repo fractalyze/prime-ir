@@ -190,9 +190,8 @@ static LogicalResult disallowShapedTypeOfExtField(OpType op) {
   if (isa<ShapedType>(resultType)) {
     auto elementType = cast<ShapedType>(resultType).getElementType();
     if (isa<QuadraticExtFieldType>(elementType)) {
-      return op->emitOpError(
-          "shaped type is not supported for quadratic "
-          "extension field type");
+      return op->emitOpError("shaped type is not supported for quadratic "
+                             "extension field type");
     }
   }
   return success();
@@ -273,7 +272,8 @@ LogicalResult EncapsulateOp::verify() {
   Type resultType = (this->getOutput().getType());
   TypeRange inputTypes = this->getInput().getTypes();
 
-  if (failed(disallowShapedTypeOfExtField(*this))) return failure();
+  if (failed(disallowShapedTypeOfExtField(*this)))
+    return failure();
 
   if (auto pfType = dyn_cast<PrimeFieldType>(resultType)) {
     if (inputTypes.size() != 1) {
@@ -317,4 +317,4 @@ void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   patterns.add<BitReverseMulBitReverse>(context);
 }
 
-}  // namespace mlir::zkir::field
+} // namespace mlir::zkir::field

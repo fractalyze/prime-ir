@@ -18,6 +18,6 @@ llvm::APInt mulMod(const llvm::APInt &x, const llvm::APInt &y,
 // Compute `base` ^ `exp` (mod `modulus`).
 llvm::APInt expMod(const llvm::APInt &base, unsigned exp,
                    const llvm::APInt &modulus);
-}  // namespace mlir::zkir
+} // namespace mlir::zkir
 
-#endif  // ZKIR_UTILS_APINTUTILS_H_
+#endif // ZKIR_UTILS_APINTUTILS_H_

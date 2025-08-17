@@ -6,7 +6,7 @@ namespace mlir::zkir::poly {
 
 namespace {
 #include "zkir/Dialect/Poly/IR/PolyCanonicalization.cpp.inc"
-}  // namespace
+} // namespace
 
 void FromTensorOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                                MLIRContext *context) {
@@ -23,4 +23,4 @@ void NTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
   results.add<INTTAfterNTT>(context);
 }
 
-}  // namespace mlir::zkir::poly
+} // namespace mlir::zkir::poly

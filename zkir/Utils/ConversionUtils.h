@@ -26,9 +26,9 @@ struct ConvertAny : public ConversionPattern {
 
   // generate a new op where all operands have been replaced with their
   // materialized/typeconverted versions
-  LogicalResult matchAndRewrite(
-      Operation *op, ArrayRef<ValueRange> operands,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<ValueRange> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     if (!isa<T>(op)) {
       return failure();
     }
@@ -48,9 +48,9 @@ struct ConvertAny<void> : public ConversionPattern {
 
   // generate a new op where all operands have been replaced with their
   // materialized/typeconverted versions
-  LogicalResult matchAndRewrite(
-      Operation *op, ArrayRef<ValueRange> operands,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(Operation *op, ArrayRef<ValueRange> operands,
+                  ConversionPatternRewriter &rewriter) const override {
     return convertAnyOperand(getTypeConverter(), op, operands, rewriter);
   }
 };
@@ -62,9 +62,9 @@ struct ConvertBinOp : public OpConversionPattern<SourceArithOp> {
 
   using OpConversionPattern<SourceArithOp>::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      SourceArithOp op, typename SourceArithOp::Adaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(SourceArithOp op, typename SourceArithOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     auto result = b.create<TargetModArithOp>(
@@ -82,6 +82,6 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
                                      RewritePatternSet &patterns,
                                      ConversionTarget &target);
 
-}  // namespace mlir::zkir
+} // namespace mlir::zkir
 
-#endif  // ZKIR_UTILS_CONVERSIONUTILS_H_
+#endif // ZKIR_UTILS_CONVERSIONUTILS_H_

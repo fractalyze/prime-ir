@@ -37,7 +37,7 @@ namespace mlir::zkir::field {
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc"
 
 class FieldToModArithTypeConverter : public ShapedTypeConverter {
- public:
+public:
   explicit FieldToModArithTypeConverter(MLIRContext *ctx) {
     addConversion([](Type type) { return type; });
     addConversion([](PrimeFieldType type) -> Type {
@@ -66,7 +66,7 @@ class FieldToModArithTypeConverter : public ShapedTypeConverter {
     });
   }
 
- private:
+private:
   static mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
     IntegerAttr modulus = type.getModulus();
     bool isMontgomery = type.isMontgomery();
@@ -74,8 +74,9 @@ class FieldToModArithTypeConverter : public ShapedTypeConverter {
                                         isMontgomery);
   }
 
-  static LogicalResult convertQuadraticExtFieldType(
-      QuadraticExtFieldType type, SmallVectorImpl<Type> &converted) {
+  static LogicalResult
+  convertQuadraticExtFieldType(QuadraticExtFieldType type,
+                               SmallVectorImpl<Type> &converted) {
     mod_arith::ModArithType modArithType =
         convertPrimeFieldType(type.getBaseField());
     converted.push_back(modArithType);
@@ -90,9 +91,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      ConstantOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     mod_arith::ModArithType modType;
@@ -133,9 +134,9 @@ struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      EncapsulateOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(EncapsulateOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput().getType());
@@ -166,9 +167,9 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      ExtractOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(ExtractOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getInput().getType());
@@ -197,9 +198,9 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      ToMontOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(ToMontOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -230,9 +231,9 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      FromMontOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(FromMontOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -263,9 +264,9 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      InverseOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(InverseOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -308,9 +309,9 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      NegateOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(NegateOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -335,9 +336,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      AddOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(AddOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -367,9 +368,9 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      DoubleOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(DoubleOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -396,9 +397,9 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      SubOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(SubOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -426,9 +427,9 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      MulOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(MulOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -478,9 +479,9 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      SquareOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(SquareOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -530,9 +531,9 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      PowUIOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(PowUIOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     auto base = op.getBase();
     auto exp = op.getExp();
@@ -657,9 +658,9 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      CmpOp op, OneToNOpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(CmpOp op, OneToNOpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getLhs());
@@ -689,9 +690,9 @@ struct ConvertF2Constant : public OpConversionPattern<F2ConstantOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      F2ConstantOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(F2ConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     SmallVector<ValueRange> values;
@@ -705,7 +706,7 @@ struct ConvertF2Constant : public OpConversionPattern<F2ConstantOp> {
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
-}  // namespace rewrites
+} // namespace rewrites
 
 struct FieldToModArith : impl::FieldToModArithBase<FieldToModArith> {
   using FieldToModArithBase::FieldToModArithBase;
@@ -824,4 +825,4 @@ void FieldToModArith::runOnOperation() {
   }
 }
 
-}  // namespace mlir::zkir::field
+} // namespace mlir::zkir::field

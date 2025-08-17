@@ -38,7 +38,7 @@
 namespace mlir::zkir::mod_arith {
 
 class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
- public:
+public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
   AliasResult getAlias(Type type, raw_ostream &os) const override {
@@ -58,18 +58,18 @@ class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
 void ModArithDialect::initialize() {
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc" // NOLINT(build/include)
       >();
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.cpp.inc" // NOLINT(build/include)
       >();
   addOperations<
 #define GET_OP_LIST
-#include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc" // NOLINT(build/include)
       >();
 
   addInterface<ModArithOpAsmDialectInterface>();
 }
 
-}  // namespace mlir::zkir::mod_arith
+} // namespace mlir::zkir::mod_arith

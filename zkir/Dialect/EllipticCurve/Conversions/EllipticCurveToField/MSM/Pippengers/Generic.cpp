@@ -177,4 +177,4 @@ void PippengersGeneric::bucketAccReduc() {
   b_.setInsertionPointAfter(windowsForOp);
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve

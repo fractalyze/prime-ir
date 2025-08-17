@@ -17,6 +17,6 @@ class ShortWeierstrassAttr;
 
 size_t getNumCoordsFromPointLike(Type pointLike);
 ShortWeierstrassAttr getCurveFromPointLike(Type pointLike);
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve
 
-#endif  // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_H_
+#endif // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_H_

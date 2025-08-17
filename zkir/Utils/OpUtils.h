@@ -7,6 +7,6 @@ namespace mlir::zkir {
 
 Type getI1SameShape(Type type);
 
-}  // namespace mlir::zkir
+} // namespace mlir::zkir
 
-#endif  // ZKIR_UTILS_OPUTILS_H_
+#endif // ZKIR_UTILS_OPUTILS_H_

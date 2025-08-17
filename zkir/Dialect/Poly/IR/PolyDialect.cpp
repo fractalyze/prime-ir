@@ -27,7 +27,7 @@
 namespace mlir::zkir::poly {
 
 class PolyOpAsmDialectInterface : public OpAsmDialectInterface {
- public:
+public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
   AliasResult getAlias(Type type, raw_ostream &os) const override {
@@ -45,18 +45,18 @@ class PolyOpAsmDialectInterface : public OpAsmDialectInterface {
 void PolyDialect::initialize() {
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "zkir/Dialect/Poly/IR/PolyAttributes.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/Poly/IR/PolyAttributes.cpp.inc" // NOLINT(build/include)
       >();
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "zkir/Dialect/Poly/IR/PolyTypes.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/Poly/IR/PolyTypes.cpp.inc" // NOLINT(build/include)
       >();
   addOperations<
 #define GET_OP_LIST
-#include "zkir/Dialect/Poly/IR/PolyOps.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/Poly/IR/PolyOps.cpp.inc" // NOLINT(build/include)
       >();
 
   addInterface<PolyOpAsmDialectInterface>();
 }
 
-}  // namespace mlir::zkir::poly
+} // namespace mlir::zkir::poly

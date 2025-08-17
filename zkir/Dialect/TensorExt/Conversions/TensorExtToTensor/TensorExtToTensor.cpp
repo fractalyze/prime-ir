@@ -21,9 +21,9 @@ namespace mlir::zkir::tensor_ext {
 struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
   explicit ConvertBitReverse(MLIRContext *context)
       : OpConversionPattern<BitReverseOp>(context) {}
-  LogicalResult matchAndRewrite(
-      BitReverseOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(BitReverseOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     auto tensorType = cast<RankedTensorType>(adaptor.getSource().getType());
@@ -114,4 +114,4 @@ void TensorExtToTensor::runOnOperation() {
   }
 }
 
-}  // namespace mlir::zkir::tensor_ext
+} // namespace mlir::zkir::tensor_ext

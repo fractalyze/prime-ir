@@ -11,7 +11,7 @@ namespace mlir::zkir::tensor_ext {
 #include "zkir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h.inc"
 
 #define GEN_PASS_REGISTRATION
-#include "zkir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h.inc"  // NOLINT(build/include)
-}  // namespace mlir::zkir::tensor_ext
+#include "zkir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h.inc" // NOLINT(build/include)
+} // namespace mlir::zkir::tensor_ext
 
-#endif  // ZKIR_DIALECT_TENSOREXT_CONVERSIONS_TENSOREXTTOTENSOR_TENSOREXTTOTENSOR_H_
+#endif // ZKIR_DIALECT_TENSOREXT_CONVERSIONS_TENSOREXTTOTENSOR_TENSOREXTTOTENSOR_H_

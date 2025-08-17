@@ -1,4 +1,4 @@
-BasedOnStyle: Google
+BasedOnStyle: LLVM
 # This specifies how template declarations should be formatted in the code.
 # When this option is set to Yes, Clang-Format will always break
 # template declarations onto multiple lines. This means that each part
@@ -13,7 +13,7 @@ AlwaysBreakTemplateDeclarations: Yes
 PointerBindsToType: false
 
 # Specify the #include statement order.  This implements the order mandated by
-# the Google C++ Style Guide: related header, C headers, C++ headers, library
+# the LLVM Coding Standard: related header, C headers, C++ headers, library
 # headers, and finally the project headers.
 #
 # To obtain updated lists of system headers used in the below expressions, see:

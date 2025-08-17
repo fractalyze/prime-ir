@@ -40,4 +40,4 @@ Type ShapedTypeConverter::convertShapedType(ShapedType oldType,
   return oldType;
 }
 
-}  // namespace mlir::zkir
+} // namespace mlir::zkir

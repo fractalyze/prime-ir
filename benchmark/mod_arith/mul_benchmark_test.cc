@@ -23,7 +23,7 @@ extern "C" void _mlir_ciface_mont_mul(StridedMemRefType<i256, 1> *input1,
                                       StridedMemRefType<i256, 0> *output);
 
 // Set up the random number generator.
-std::mt19937_64 rng(std::random_device{}());  // NOLINT(whitespace/braces)
+std::mt19937_64 rng(std::random_device{}()); // NOLINT(whitespace/braces)
 std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
 
 // Set each element to a random number in [0, `kPrime`).
@@ -54,8 +54,8 @@ BENCHMARK_TEMPLATE(BM_mul_benchmark, /*kIsMont=*/true)
     ->Unit(::benchmark::kMillisecond)
     ->Name("mont_mul");
 
-}  // namespace
-}  // namespace mlir::zkir::benchmark
+} // namespace
+} // namespace mlir::zkir::benchmark
 
 // clang-format off
 // NOLINTBEGIN(whitespace/line_length)

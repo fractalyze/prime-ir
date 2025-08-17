@@ -17,12 +17,9 @@ struct PrimitiveRootAttrStorage : public AttributeStorage {
                            field::PrimeFieldAttr invRoot,
                            DenseElementsAttr roots, DenseElementsAttr invRoots,
                            mod_arith::MontgomeryAttr montgomery)
-      : rootOfUnity(std::move(rootOfUnity)),
-        root(std::move(root)),
-        invDegree(std::move(invDegree)),
-        invRoot(std::move(invRoot)),
-        roots(std::move(roots)),
-        invRoots(std::move(invRoots)),
+      : rootOfUnity(std::move(rootOfUnity)), root(std::move(root)),
+        invDegree(std::move(invDegree)), invRoot(std::move(invRoot)),
+        roots(std::move(roots)), invRoots(std::move(invRoots)),
         montgomery(std::move(montgomery)) {}
 
   KeyTy getAsKey() const { return KeyTy(rootOfUnity, montgomery); }
@@ -35,8 +32,8 @@ struct PrimitiveRootAttrStorage : public AttributeStorage {
     return llvm::hash_combine(std::get<0>(key), std::get<1>(key));
   }
 
-  static PrimitiveRootAttrStorage *construct(
-      AttributeStorageAllocator &allocator, KeyTy &&key);
+  static PrimitiveRootAttrStorage *
+  construct(AttributeStorageAllocator &allocator, KeyTy &&key);
 
   field::RootOfUnityAttr rootOfUnity;
   field::PrimeFieldAttr root;
@@ -47,9 +44,9 @@ struct PrimitiveRootAttrStorage : public AttributeStorage {
   mod_arith::MontgomeryAttr montgomery;
 };
 
-}  // namespace mlir::zkir::poly::detail
+} // namespace mlir::zkir::poly::detail
 
 #define GET_ATTRDEF_CLASSES
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h.inc"
 
-#endif  // ZKIR_DIALECT_POLY_IR_POLYATTRIBUTES_H_
+#endif // ZKIR_DIALECT_POLY_IR_POLYATTRIBUTES_H_

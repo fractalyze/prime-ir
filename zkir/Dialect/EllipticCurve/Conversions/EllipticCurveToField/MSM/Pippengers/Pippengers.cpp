@@ -42,7 +42,7 @@ constexpr size_t computeWindowsCount(size_t scalarBitWidth,
   return (scalarBitWidth + bitsPerWindow - 1) / bitsPerWindow;
 }
 
-}  // namespace
+} // namespace
 
 Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
                        Type outputType, ImplicitLocOpBuilder &b, int32_t degree,
@@ -63,9 +63,10 @@ Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
 
   size_t scalarBitWidth =
       scalarFieldType_.getModulus().getValue().getBitWidth();
-  bitsPerWindow_ = windowBits > 0 ? windowBits
-                                  : estimateOptimalWindowBits(
-                                        scalarBitWidth, size_t{1} << degree);
+  bitsPerWindow_ =
+      windowBits > 0
+          ? windowBits
+          : estimateOptimalWindowBits(scalarBitWidth, size_t{1} << degree);
   size_t numWindows = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
 
   numScalarMuls_ = b.create<tensor::DimOp>(scalars_, 0);
@@ -159,4 +160,4 @@ Value Pippengers::windowReduction() {
       outputType_, windowsForOp.getResult(0), windowSumsAtZero);
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve

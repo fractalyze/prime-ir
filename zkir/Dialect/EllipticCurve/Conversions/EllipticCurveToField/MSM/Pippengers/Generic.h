@@ -8,7 +8,7 @@ namespace mlir::zkir::elliptic_curve {
 
 // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm
 class PippengersGeneric : public Pippengers {
- public:
+public:
   PippengersGeneric(Value scalars, Value points, Type baseFieldType,
                     Type outputType, ImplicitLocOpBuilder &b, bool parallel,
                     int32_t degree, int32_t windowBits)
@@ -43,7 +43,7 @@ class PippengersGeneric : public Pippengers {
     return windowReduction();
   }
 
- private:
+private:
   ValueRange scalarIsOneBranch(Value point, Value windowOffset, Value windowSum,
                                ImplicitLocOpBuilder &b);
 
@@ -66,6 +66,6 @@ class PippengersGeneric : public Pippengers {
   bool parallel_;
 };
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve
 
-#endif  // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_MSM_PIPPENGERS_GENERIC_H_
+#endif // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_MSM_PIPPENGERS_GENERIC_H_

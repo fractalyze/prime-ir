@@ -149,4 +149,4 @@ void registerFieldPipelines() {
       buildFieldToGPU);
 }
 
-}  // namespace mlir::zkir::field
+} // namespace mlir::zkir::field

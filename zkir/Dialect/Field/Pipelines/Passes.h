@@ -134,6 +134,6 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options);
 
 void registerFieldPipelines();
 
-}  // namespace mlir::zkir::field
+} // namespace mlir::zkir::field
 
-#endif  // ZKIR_DIALECT_FIELD_PIPELINES_PASSES_H_
+#endif // ZKIR_DIALECT_FIELD_PIPELINES_PASSES_H_

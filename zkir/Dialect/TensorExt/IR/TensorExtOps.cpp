@@ -46,4 +46,4 @@ void BitReverseOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                MLIRContext *context) {
   patterns.add<BitReverseIsInvolution>(context);
 }
-}  // namespace mlir::zkir::tensor_ext
+} // namespace mlir::zkir::tensor_ext

@@ -120,9 +120,10 @@ LogicalResult MSMOp::verify() {
 LogicalResult ConvertPointTypeOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
-  if (inputType == outputType) return emitError() << "Converting on same types";
+  if (inputType == outputType)
+    return emitError() << "Converting on same types";
   // TODO(ashjeong): check curves are the same
   return success();
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve

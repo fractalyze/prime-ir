@@ -12,6 +12,6 @@ namespace mlir::zkir::elliptic_curve {
 SmallVector<Value> xyzzDouble(ValueRange point, ShortWeierstrassAttr curve,
                               ImplicitLocOpBuilder &b);
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve
 
-#endif  // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_POINTOPERATIONS_XYZZ_DOUBLE_H_
+#endif // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_POINTOPERATIONS_XYZZ_DOUBLE_H_

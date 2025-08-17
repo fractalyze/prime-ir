@@ -8,7 +8,7 @@
 namespace mlir::zkir::mod_arith {
 
 class BYInverter {
- public:
+public:
   struct DEResult {
     Value d;
     Value e;
@@ -40,7 +40,7 @@ class BYInverter {
   DEResult GenerateDE(Value d, Value e, TMatrix t);
   Value GenerateNorm(Value value, Value antiunit);
 
- private:
+private:
   ImplicitLocOpBuilder &b_;
 
   IntegerType intType_;
@@ -59,6 +59,6 @@ class BYInverter {
   Value limbTypeN_;
 };
 
-}  // namespace mlir::zkir::mod_arith
+} // namespace mlir::zkir::mod_arith
 
-#endif  // ZKIR_DIALECT_MODARITH_CONVERSIONS_MODARITHTOARITH_INVERTER_BYINVERTER_H_
+#endif // ZKIR_DIALECT_MODARITH_CONVERSIONS_MODARITHTOARITH_INVERTER_BYINVERTER_H_

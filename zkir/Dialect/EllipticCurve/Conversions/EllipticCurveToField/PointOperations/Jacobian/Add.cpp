@@ -220,7 +220,7 @@ SmallVector<Value> jacobianAndJacobian(ValueRange p1, ValueRange p2,
   return ifOp.getResults();
 }
 
-}  // namespace
+} // namespace
 
 SmallVector<Value> jacobianAdd(ValueRange p1, ValueRange p2,
                                ShortWeierstrassAttr curve,
@@ -240,4 +240,4 @@ SmallVector<Value> jacobianAdd(ValueRange p1, ValueRange p2,
   }
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve

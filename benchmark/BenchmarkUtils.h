@@ -14,11 +14,11 @@
 #elif defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 #define HOST_IS_LITTLE_ENDIAN 0
 #define HOST_IS_BIG_ENDIAN 1
-#elif defined(_WIN32)  // Check Windows after standard macros
+#elif defined(_WIN32) // Check Windows after standard macros
 #define HOST_IS_LITTLE_ENDIAN 1
 #define HOST_IS_BIG_ENDIAN 0
 #else
-#warning \
+#warning                                                                       \
     "Cannot determine host endianness at compile time. Assuming little-endian."
 #define HOST_IS_LITTLE_ENDIAN 1
 #define HOST_IS_BIG_ENDIAN 0
@@ -41,7 +41,7 @@ inline uint8_t parseHexDigit(char c) {
   throw std::invalid_argument(
       "Invalid hexadecimal character encountered in string.");
 }
-}  // namespace
+} // namespace
 
 // Represents a large unsigned integer using an array of 64-bit limbs.
 // Uses the platform's native endianness for limb storage and operations,
@@ -90,7 +90,7 @@ struct BigInt {
     // Calculate how many limbs will be needed based on actual digits
     // and start writing to the array index corresponding to the
     // most significant limb that will be filled.
-    size_t numLimbsToFill = (numDigits + 15) / 16;  // Ceiling division
+    size_t numLimbsToFill = (numDigits + 15) / 16; // Ceiling division
     assert(numLimbsToFill <= kLimbCount &&
            "Logic error: numLimbsToFill exceeds kLimbCount");
     currentLimbWriteIndex = kLimbCount - numLimbsToFill;
@@ -153,7 +153,7 @@ struct BigInt {
         return false;
       }
     }
-#else  // HOST_IS_BIG_ENDIAN
+#else // HOST_IS_BIG_ENDIAN
     // Big-Endian: Compare from MOST significant limb (lowest index) up
     for (size_t i = 0; i < kLimbCount; ++i) {
       if (limbs[i] < other.limbs[i]) {
@@ -212,23 +212,26 @@ struct BigInt {
 
 #if HOST_IS_BIG_ENDIAN
     for (size_t i = 0; i < kLimbCount; ++i) {
-      if (leadingZeros && limbs[i] == 0 && i < kLimbCount - 1) continue;
+      if (leadingZeros && limbs[i] == 0 && i < kLimbCount - 1)
+        continue;
       leadingZeros = false;
       s << std::hex << std::setw(16) << std::setfill('0') << limbs[i];
     }
-#else  // HOST_IS_LITTLE_ENDIAN
+#else // HOST_IS_LITTLE_ENDIAN
     for (int i = kLimbCount - 1; i >= 0; --i) {
-      if (leadingZeros && limbs[i] == 0 && i > 0) continue;
+      if (leadingZeros && limbs[i] == 0 && i > 0)
+        continue;
       leadingZeros = false;
       s << std::hex << std::setw(16) << std::setfill('0') << limbs[i];
     }
 #endif
     // Handle case where value is exactly 0
-    if (leadingZeros) s << "0";
+    if (leadingZeros)
+      s << "0";
     return s.str();
   }
 };
 
-}  // namespace mlir::zkir::benchmark
+} // namespace mlir::zkir::benchmark
 
-#endif  // BENCHMARK_BENCHMARKUTILS_H_
+#endif // BENCHMARK_BENCHMARKUTILS_H_

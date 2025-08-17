@@ -401,4 +401,4 @@ Value BYInverter::BatchGenerate(Value input, bool isMont,
   return b_.create<tensor::InsertOp>(invertedProduct, result, zeroIndex);
 }
 
-}  // namespace mlir::zkir::mod_arith
+} // namespace mlir::zkir::mod_arith

@@ -102,7 +102,7 @@ SmallVector<Value> jacobianToJacobian(ValueRange point, Value a,
   return {x3, y3, z3};
 }
 
-}  // namespace
+} // namespace
 
 SmallVector<Value> jacobianDouble(ValueRange point, ShortWeierstrassAttr curve,
                                   ImplicitLocOpBuilder &b) {
@@ -117,4 +117,4 @@ SmallVector<Value> jacobianDouble(ValueRange point, ShortWeierstrassAttr curve,
   }
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve

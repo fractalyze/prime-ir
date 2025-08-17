@@ -32,7 +32,7 @@ static RankedTensorType convertPolyType(PolyType type) {
 }
 
 class PolyToFieldTypeConverter : public TypeConverter {
- public:
+public:
   explicit PolyToFieldTypeConverter(MLIRContext *ctx) {
     addConversion([](Type type) { return type; });
     addConversion([](PolyType type) -> Type { return convertPolyType(type); });
@@ -48,15 +48,14 @@ struct CommonConversionInfo {
   RankedTensorType tensorType;
 };
 
-static FailureOr<CommonConversionInfo> getCommonConversionInfo(
-    Operation *op, const TypeConverter *typeConverter) {
+static FailureOr<CommonConversionInfo>
+getCommonConversionInfo(Operation *op, const TypeConverter *typeConverter) {
   // Most ops have a single result type that is a polynomial
   PolyType polyTy = dyn_cast<PolyType>(op->getResult(0).getType());
 
   if (!polyTy) {
-    op->emitError(
-        "Can't directly lower for a tensor of polynomials. "
-        "First run --convert-elementwise-to-affine.");
+    op->emitError("Can't directly lower for a tensor of polynomials. "
+                  "First run --convert-elementwise-to-affine.");
     return failure();
   }
 
@@ -79,9 +78,9 @@ struct ConvertPolyBinOp : public OpConversionPattern<SourceOp> {
 
   using OpConversionPattern<SourceOp>::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      SourceOp op, typename SourceOp::Adaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     if (PolyType poly_ty = dyn_cast<PolyType>(op.getResult().getType())) {
       ImplicitLocOpBuilder b(op.getLoc(), rewriter);
       auto result = b.create<TargetFieldOp>(adaptor.getLhs(), adaptor.getRhs());
@@ -98,9 +97,9 @@ struct ConvertToTensor : public OpConversionPattern<ToTensorOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      ToTensorOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(ToTensorOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }
@@ -112,11 +111,12 @@ struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      FromTensorOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(FromTensorOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     auto res = getCommonConversionInfo(op, typeConverter);
-    if (failed(res)) return failure();
+    if (failed(res))
+      return failure();
     auto typeInfo = res.value();
 
     auto resultShape = typeInfo.tensorType.getShape()[0];
@@ -208,10 +208,11 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
     // Create a tensor constant of precomputed roots for fast access during the
     // NTT.
     auto rootsType = intTensorType.clone({degree});
-    roots = !kInverse ? b.create<arith::ConstantOp>(
-                            rootsType, primitiveRootsAttr.getRoots())
-                      : b.create<arith::ConstantOp>(
-                            rootsType, primitiveRootsAttr.getInvRoots());
+    roots = !kInverse
+                ? b.create<arith::ConstantOp>(rootsType,
+                                              primitiveRootsAttr.getRoots())
+                : b.create<arith::ConstantOp>(rootsType,
+                                              primitiveRootsAttr.getInvRoots());
 
     // Wrap the roots in a field encapsulation for further field operations.
     roots = b.create<field::EncapsulateOp>(tensorType, roots);
@@ -417,9 +418,9 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
 
   using OpConversionPattern::OpConversionPattern;
 
-  LogicalResult matchAndRewrite(
-      NTTOp op, OpAdaptor adaptor,
-      ConversionPatternRewriter &rewriter) const override {
+  LogicalResult
+  matchAndRewrite(NTTOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value nttResult;
@@ -512,4 +513,4 @@ void PolyToField::runOnOperation() {
   }
 }
 
-}  // namespace mlir::zkir::poly
+} // namespace mlir::zkir::poly

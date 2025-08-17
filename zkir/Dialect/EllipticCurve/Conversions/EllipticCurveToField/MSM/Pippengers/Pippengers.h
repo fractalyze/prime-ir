@@ -7,12 +7,12 @@
 namespace mlir::zkir::elliptic_curve {
 
 class Pippengers {
- public:
+public:
   Pippengers(Value scalars, Value points, Type baseFieldType, Type outputType,
              ImplicitLocOpBuilder &b, int32_t degree, int32_t windowBits);
   Value generate();
 
- protected:
+protected:
   // Bucket Reduction - reduce buckets to one window sum
   void bucketReduction(Value j, Value initialPoint, Value buckets,
                        ImplicitLocOpBuilder &b);
@@ -22,11 +22,11 @@ class Pippengers {
 
   size_t numBuckets_;
   size_t bitsPerWindow_;
-  Value numScalarMuls_;  // Index
-  Value numWindows_;     // Index
+  Value numScalarMuls_; // Index
+  Value numWindows_;    // Index
 
-  Value zero_;  // Index
-  Value one_;   // Index
+  Value zero_; // Index
+  Value one_;  // Index
   Value zeroPoint_;
   Value scalars_;
   Value points_;
@@ -38,6 +38,6 @@ class Pippengers {
   ImplicitLocOpBuilder &b_;
 };
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve
 
-#endif  // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_MSM_PIPPENGERS_PIPPENGERS_H_
+#endif // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_MSM_PIPPENGERS_PIPPENGERS_H_

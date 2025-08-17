@@ -53,7 +53,7 @@ ShortWeierstrassAttr getCurveFromPointLike(Type pointLike) {
   }
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve
 
 // Generated definitions
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.cpp.inc"
@@ -70,7 +70,7 @@ ShortWeierstrassAttr getCurveFromPointLike(Type pointLike) {
 namespace mlir::zkir::elliptic_curve {
 
 class EllipticCurveOpAsmDialectInterface : public OpAsmDialectInterface {
- public:
+public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
   // ex. !affine_curve-a3-b2-gx4-gy5_pf7_
@@ -96,18 +96,18 @@ class EllipticCurveOpAsmDialectInterface : public OpAsmDialectInterface {
 void EllipticCurveDialect::initialize() {
   addAttributes<
 #define GET_ATTRDEF_LIST
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.cpp.inc" // NOLINT(build/include)
       >();
   addTypes<
 #define GET_TYPEDEF_LIST
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.cpp.inc" // NOLINT(build/include)
       >();
   addOperations<
 #define GET_OP_LIST
-#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.cpp.inc" // NOLINT(build/include)
       >();
 
   addInterface<EllipticCurveOpAsmDialectInterface>();
 }
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve

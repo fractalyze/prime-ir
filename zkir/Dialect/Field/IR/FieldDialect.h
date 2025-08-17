@@ -12,4 +12,4 @@
 // Generated headers (block clang-format from messing up order)
 #include "zkir/Dialect/Field/IR/FieldDialect.h.inc"
 
-#endif  // ZKIR_DIALECT_FIELD_IR_FIELDDIALECT_H_
+#endif // ZKIR_DIALECT_FIELD_IR_FIELDDIALECT_H_

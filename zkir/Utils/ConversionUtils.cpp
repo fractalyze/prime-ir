@@ -199,4 +199,4 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
                                                        target);
 }
 
-}  // namespace mlir::zkir
+} // namespace mlir::zkir

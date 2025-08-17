@@ -13,4 +13,4 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h.inc"
 
-#endif  // ZKIR_DIALECT_TENSOREXT_IR_TENSOREXTOPS_H_
+#endif // ZKIR_DIALECT_TENSOREXT_IR_TENSOREXTOPS_H_

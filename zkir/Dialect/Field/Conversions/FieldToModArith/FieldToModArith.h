@@ -13,8 +13,8 @@ namespace mlir::zkir::field {
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc"
 
 #define GEN_PASS_REGISTRATION
-#include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc" // NOLINT(build/include)
 
-}  // namespace mlir::zkir::field
+} // namespace mlir::zkir::field
 
-#endif  // ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_FIELDTOMODARITH_H_
+#endif // ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_FIELDTOMODARITH_H_

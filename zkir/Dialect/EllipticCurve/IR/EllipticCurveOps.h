@@ -10,4 +10,4 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h.inc"
 
-#endif  // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEOPS_H_
+#endif // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEOPS_H_

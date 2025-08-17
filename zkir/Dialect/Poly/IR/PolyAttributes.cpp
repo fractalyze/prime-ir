@@ -42,11 +42,12 @@ static void precomputeRoots(APInt root, const APInt &mod, unsigned degree,
   // representation.
   for (unsigned i = 1; i < degree; i++) {
     pool.async([&, i] {
-      APInt result(root.getBitWidth(), 1);  // Identity element.
+      APInt result(root.getBitWidth(), 1); // Identity element.
       unsigned exp = i;
       unsigned bit = 0;
       while (exp > 0) {
-        if (exp & 1) result = mulMod(result, powerOfTwo[bit], mod);
+        if (exp & 1)
+          result = mulMod(result, powerOfTwo[bit], mod);
         exp >>= 1;
         bit++;
       }
@@ -94,8 +95,9 @@ mod_arith::MontgomeryAttr PrimitiveRootAttr::getMontgomery() const {
 
 namespace detail {
 
-PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
-    AttributeStorageAllocator &allocator, KeyTy &&key) {
+PrimitiveRootAttrStorage *
+PrimitiveRootAttrStorage::construct(AttributeStorageAllocator &allocator,
+                                    KeyTy &&key) {
   // Extract the root and degree from the key.
   field::RootOfUnityAttr rootOfUnity = std::get<0>(key);
   field::PrimeFieldAttr root = rootOfUnity.getRoot();
@@ -147,5 +149,5 @@ PrimitiveRootAttrStorage *PrimitiveRootAttrStorage::construct(
                                std::move(montgomery));
 }
 
-}  // namespace detail
-}  // namespace mlir::zkir::poly
+} // namespace detail
+} // namespace mlir::zkir::poly

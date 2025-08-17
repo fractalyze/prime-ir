@@ -22,4 +22,4 @@ bool isMontgomery(Type type) {
   }
 }
 
-}  // namespace mlir::zkir::field
+} // namespace mlir::zkir::field

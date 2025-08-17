@@ -15,4 +15,4 @@
 #define GET_OP_CLASSES
 #include "zkir/Dialect/Poly/IR/PolyOps.h.inc"
 
-#endif  // ZKIR_DIALECT_POLY_IR_POLYOPS_H_
+#endif // ZKIR_DIALECT_POLY_IR_POLYOPS_H_

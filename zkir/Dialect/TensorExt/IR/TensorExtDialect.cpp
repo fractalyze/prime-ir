@@ -19,8 +19,8 @@ namespace mlir::zkir::tensor_ext {
 void TensorExtDialect::initialize() {
   addOperations<
 #define GET_OP_LIST
-#include "zkir/Dialect/TensorExt/IR/TensorExtOps.cpp.inc"  // NOLINT(build/include)
+#include "zkir/Dialect/TensorExt/IR/TensorExtOps.cpp.inc" // NOLINT(build/include)
       >();
 }
 
-}  // namespace mlir::zkir::tensor_ext
+} // namespace mlir::zkir::tensor_ext

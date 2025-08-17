@@ -10,4 +10,4 @@
 #define GET_TYPEDEF_CLASSES
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h.inc"
 
-#endif  // ZKIR_DIALECT_MODARITH_IR_MODARITHTYPES_H_
+#endif // ZKIR_DIALECT_MODARITH_IR_MODARITHTYPES_H_

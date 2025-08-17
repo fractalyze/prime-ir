@@ -16,8 +16,9 @@ IntegerAttr MontgomeryAttr::getRSquared() const { return getImpl()->rSquared; }
 
 namespace detail {
 
-MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
-    AttributeStorageAllocator &allocator, KeyTy &&key) {
+MontgomeryAttrStorage *
+MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
+                                 KeyTy &&key) {
   // Extract `modulus` from the key
   IntegerAttr modAttr = key;
   APInt modulus = modAttr.getValue();
@@ -80,7 +81,7 @@ MontgomeryAttrStorage *MontgomeryAttrStorage::construct(
                             std::move(bInvAttr), std::move(rSquaredAttr));
 }
 
-}  // namespace detail
+} // namespace detail
 
 IntegerAttr BYAttr::getModulus() const { return getImpl()->modulus; }
 IntegerAttr BYAttr::getDivsteps() const { return getImpl()->divsteps; }
@@ -124,7 +125,7 @@ BYAttrStorage *BYAttrStorage::construct(AttributeStorageAllocator &allocator,
                     std::move(mInvAttr), std::move(newBitWidthAttr));
 }
 
-}  // namespace detail
-}  // namespace mlir::zkir::mod_arith
+} // namespace detail
+} // namespace mlir::zkir::mod_arith
 
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"

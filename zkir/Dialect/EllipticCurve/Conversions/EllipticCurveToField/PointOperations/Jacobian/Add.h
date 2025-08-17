@@ -13,6 +13,6 @@ SmallVector<Value> jacobianAdd(ValueRange p1, ValueRange p2,
                                ShortWeierstrassAttr curve,
                                ImplicitLocOpBuilder &b);
 
-}  // namespace mlir::zkir::elliptic_curve
+} // namespace mlir::zkir::elliptic_curve
 
-#endif  // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_POINTOPERATIONS_JACOBIAN_ADD_H_
+#endif // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_POINTOPERATIONS_JACOBIAN_ADD_H_

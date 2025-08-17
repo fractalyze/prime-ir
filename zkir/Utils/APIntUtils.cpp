@@ -42,13 +42,15 @@ APInt multiplicativeInverse(const APInt &x, const APInt &modulus) {
   // inverse, so return 0. We check this by looking at the next-to-last
   // remainder, which is the gcd(*this,modulus) as calculated by the Euclidean
   // algorithm.
-  if (r[i] != 1) return APInt(BitWidth, 0);
+  if (r[i] != 1)
+    return APInt(BitWidth, 0);
 
   // The next-to-last t is the multiplicative inverse.  However, we are
   // interested in a positive inverse. Calculate a positive one from a negative
   // one if necessary. A simple addition of the modulus suffices because
   // abs(t[i]) is known to be less than *this/2 (see the link above).
-  if (t[i].isNegative()) t[i] += modulus;
+  if (t[i].isNegative())
+    t[i] += modulus;
 
   return std::move(t[i]);
 }
@@ -79,11 +81,13 @@ APInt expMod(const APInt &_base, unsigned exp, const APInt &_modulus) {
   APInt result(intermediateBitwidth, 1);
   while (true) {
     // If the lowest bit of exp is 1, multiply result with the current base.
-    if (exp % 2 == 1) result = (result * base).urem(modulus);
+    if (exp % 2 == 1)
+      result = (result * base).urem(modulus);
 
     // Right-shift exponent by 1 (divide by 2).
     exp = exp >> 1;
-    if (exp == 0) break;
+    if (exp == 0)
+      break;
     // Square the `base` (mod `modulus`).
     base = (base * base).urem(modulus);
   }
@@ -91,4 +95,4 @@ APInt expMod(const APInt &_base, unsigned exp, const APInt &_modulus) {
   return result.trunc(_modulus.getBitWidth());
 }
 
-}  // namespace mlir::zkir
+} // namespace mlir::zkir
