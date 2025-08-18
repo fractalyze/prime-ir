@@ -1,0 +1,13 @@
+---
+description: Testing Rules
+globs: *_test.cc
+alwaysApply: false
+---
+
+# Testing Rules
+
+- **Framework**: Use gtest/gmock.
+- **Coverage**: New features must include tests whenever applicable.
+- **Completeness**: Always include boundary cases and error paths.
+- **Determinism**: Tests must be deterministic and runnable independently (no hidden state dependencies).
+- **Performance**: Add benchmarks for performance-critical code paths when appropriate.

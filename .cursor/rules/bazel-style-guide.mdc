@@ -1,0 +1,9 @@
+---
+description: Bazel Style Rules
+globs: *.bazel,*.bzl
+alwaysApply: false
+---
+
+# Bazel Style Rules
+
+- Every header included in a Bazel target must also be declared as a Bazel dependency.

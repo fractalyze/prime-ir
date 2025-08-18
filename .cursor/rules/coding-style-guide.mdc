@@ -1,0 +1,75 @@
+---
+description: C++ Style Rules
+globs: *.cc,*.h
+alwaysApply: false
+---
+
+# C++ Style Rules
+
+The following are project-specific deviations and clarifications from the [LLVM Coding Standard].
+
+## Static Methods
+
+- For **static methods** implemented in `.cc` files, explicitly annotate with `// static`.
+
+  ```c++
+  // static
+  uint64_t EnvTime::NowNanos() {
+    // ...
+  }
+  ```
+
+## File-Scoped Symbols
+
+- Wrap **file-scoped functions, constants, and variables** inside an **anonymous namespace**.
+
+  ```c++
+  namespace {
+
+  constexpr int kBufferSize = 1024;
+
+  void HelperFunction() {
+    // ...
+  }
+
+  }  // namespace
+  ```
+
+## Abseil
+
+- Prefer **`std::string_view`** instead of `absl::string_view`.
+
+## Header Inclusion
+
+- **Avoid redundant includes**: Do not repeat headers in `.cc` files that are already included in the corresponding `.h`.
+
+  ```c++
+  // in a.h
+  #include <stdint.h>
+
+  // in a.cc
+  #include "a.h"
+  // #include <stdint.h>  // ❌ redundant
+  ```
+
+- **Include only required headers**. Remove unused includes.
+
+## Raw Pointer Ownership
+
+- When using a **raw pointer** (`T*`) in **class or struct members**, explicitly document ownership by adding an inline comment `// not owned` or `// owned`.
+- Prefer `std::unique_ptr` or `std::shared_ptr` for owned resources.
+
+Example:
+
+```c++
+class Prover {
+ public:
+  explicit Prover(Context* ctx) : ctx_(ctx) {}
+
+ private:
+  Context* ctx_; // not owned
+  std::unique_ptr<Engine> engine_;
+};
+```
+
+[LLVM Coding Standard]: https://llvm.org/docs/CodingStandards.html
