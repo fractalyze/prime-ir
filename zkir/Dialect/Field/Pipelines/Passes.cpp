@@ -96,6 +96,7 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   // VecOps will not be lowered to GPU dialect.
   if (options.parallelizeAffine) {
     pm.addPass(affine::createAffineParallelize());
+    pm.addPass(createLowerAffinePass());
   }
   pm.addNestedPass<func::FuncOp>(createLoopInvariantCodeMotionPass());
   pm.addNestedPass<func::FuncOp>(createConvertAffineForToGPUPass());
