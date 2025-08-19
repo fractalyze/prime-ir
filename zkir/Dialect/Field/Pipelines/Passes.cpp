@@ -124,10 +124,10 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   pm.addPass(createGpuToLLVMConversionPass(opt));
   pm.addPass(createSCFToControlFlowPass());
   pm.addPass(createConvertControlFlowToLLVMPass());
-  pm.addPass(
-      createGpuModuleToBinaryPass(options.gpuModuleToBinaryPassOptions()));
   pm.addPass(createConvertToLLVMPass());
   pm.addPass(createCanonicalizerPass());
+  pm.addPass(
+      createGpuModuleToBinaryPass(options.gpuModuleToBinaryPassOptions()));
 }
 
 //===----------------------------------------------------------------------===//
