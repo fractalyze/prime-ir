@@ -30,6 +30,7 @@ http_archive(
     patches = [
         "//third_party/llvm-project:cuda_runtime.patch",
         "//third_party/llvm-project:linalg_type_support.patch",
+        "//third_party/llvm-project:kernel_outlining.patch",
         "//third_party/llvm-project:owning_memref.patch",
         "//third_party/llvm-project:tensor_type_support.patch",
         "//third_party/llvm-project:memref_folding.patch",

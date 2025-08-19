@@ -1,0 +1,59 @@
+diff --git i/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp w/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
+index a64ec8d52daf..af7884c7b2ca 100644
+--- mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
++++ mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
+@@ -188,6 +188,54 @@ static gpu::GPUFuncOp outlineKernelFuncImpl(gpu::LaunchOp launchOp,
+   // operation.
+   getUsedValuesDefinedAbove(launchOpBody, operands);
+
++  // Remove unsupported integer types from operands and just duplicate inside
++  // launch body if defining operation is constant. This does not work if the
++  // defining operation is not constant which will leave the resulting kernel
++  // not compilable.
++  for (auto it = operands.begin(); it != operands.end();) {
++    if (it->getType().isInteger(128) || it->getType().isInteger(256) ||
++        it->getType().isInteger(512)) {
++      Value operandValue = *it;
++      Operation *definingOp = operandValue.getDefiningOp();
++
++      // Check if the defining operation is a constant
++      if (definingOp && isa<arith::ConstantOp>(definingOp)) {
++        // Get the constant attribute from the defining operation
++        auto constantOp = cast<arith::ConstantOp>(definingOp);
++        TypedAttr constantAttr = cast<TypedAttr>(constantOp.getValue());
++
++        // Set insertion point to the beginning of the launch op body
++        builder.setInsertionPointToStart(&launchOpBody.getBlocks().front());
++
++        // Duplicate the constant operation inside launch op body
++        auto duplicatedOperand =
++            builder.create<arith::ConstantOp>(loc, constantAttr);
++
++        // Replace all uses of the original operand within the launch op body
++        operandValue.replaceUsesWithIf(
++            duplicatedOperand.getResult(), [&](OpOperand &use) {
++              return launchOpBody.isAncestor(use.getOwner()->getParentRegion());
++            });
++
++        // Remove the operand from the list
++        it = operands.erase(it);
++      } else {
++        launchOp.emitError(
++            "large int operand is not a constant and could not be duplicated "
++            "inside the launch op body. This will cause the kernel to be "
++            "invalid.");
++        ++it;
++      }
++    } else {
++      ++it;
++    }
++  }
++
++  // NOTE(batzor): Clear the insertion point to avoid inserting into the launch
++  // op body. Not sure what's the proper way to do this but without this, the
++  // `gpu.func` is inserted inside the launch body causing error.
++  builder.clearInsertionPoint();
++
+   // Create the gpu.func operation.
+   SmallVector<Type, 4> kernelOperandTypes;
+   kernelOperandTypes.reserve(operands.size());
