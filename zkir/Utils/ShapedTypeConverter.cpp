@@ -24,8 +24,14 @@ Type ShapedTypeConverter::convertShapedType(ShapedType oldType,
         stride *= newDimension;
       }
       strides.push_back(1);
-      auto layout = StridedLayoutAttr::get(memrefType.getContext(),
-                                           offset * newDimension, strides);
+
+      // If the offset is dynamic, we don't need to multiply by the new
+      // dimension.
+      if (offset != ShapedType::kDynamic) {
+        offset *= newDimension;
+      }
+      auto layout =
+          StridedLayoutAttr::get(memrefType.getContext(), offset, strides);
       return MemRefType::get(shape, elementType, layout,
                              memrefType.getMemorySpace())
           .canonicalizeStridedLayout();

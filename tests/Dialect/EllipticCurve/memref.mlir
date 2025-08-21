@@ -85,3 +85,12 @@ func.func @test_memref_subview(%input : memref<8x!affine>) -> memref<4x!affine, 
   // CHECK: return %[[SUBVIEW]] : [[T]]
   return %subview : memref<4x!affine, strided<[1], offset: 2>>
 }
+
+// CHECK-LABEL: @test_memref_subview_rank_reduce
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]], %[[ROW:.*]]: index) -> [[T:.*]] {
+func.func @test_memref_subview_rank_reduce(%input : memref<2x4x!affine>, %row: index) -> memref<4x!affine, strided<[1], offset: ?>> {
+  // CHECK: %[[SUBVIEW:.*]] = memref.subview %[[INPUT]][%[[ROW]], 0, 0] [1, 4, 2] [1, 1, 1] : [[INPUT_TYPE]] to [[T]]
+  %subview = memref.subview %input[%row, 0] [1,4] [1, 1] : memref<2x4x!affine> to memref<4x!affine, strided<[1], offset: ?>>
+  // CHECK: return %[[SUBVIEW]] : [[T]]
+  return %subview : memref<4x!affine, strided<[1], offset: ?>>
+}
