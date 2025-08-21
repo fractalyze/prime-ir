@@ -21,19 +21,19 @@ repos:
             "--filter=-whitespace/indent_namespace, -legal/copyright, -build/namespaces, -runtime/references",
           ]
 
-  # clang-tidy
+  # FIXME(ashjeong): clang-tidy currently fails on CI. See https://github.com/zk-rabbit/zkir/actions/runs/16904324348/job/47890440254 for more details.
   # This hook now relies on a local shell script.
-  - repo: local
-    hooks:
-      - id: clang-tidy
-        name: clang-tidy
-        entry: ./run_clang_tidy.sh
-        language: script
-        files: '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
-        exclude: |
-          (?x)
-          (^|/)(bazel-.*|bazel-out/|build/|out/|third_party/|external/)
-        pass_filenames: true
+  # - repo: local
+  #   hooks:
+  #     - id: clang-tidy
+  #       name: clang-tidy
+  #       entry: ./run_clang_tidy.sh
+  #       language: script
+  #       files: '\.(c|cc|cpp|cxx|h|hh|hpp|hxx)$'
+  #       exclude: |
+  #         (?x)
+  #         (^|/)(bazel-.*|bazel-out/|build/|out/|third_party/|external/)
+  #       pass_filenames: true
 
   # clang-format
   - repo: https://github.com/pre-commit/mirrors-clang-format
