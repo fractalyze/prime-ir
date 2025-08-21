@@ -18,7 +18,10 @@ repos:
       - id: cpplint
         args:
           [
-            "--filter=-whitespace/indent_namespace, -legal/copyright, -build/namespaces, -runtime/references",
+            # NOTE(chokobole): Disabled rules that conflict with LLVM style.
+            # -whitespace/comments, -whitespace/indent are explicitly disabled
+            # because LLVM formatting is not compatible with Google style.
+            "--filter=-whitespace/indent_namespace, -legal/copyright, -build/namespaces, -runtime/references, -whitespace/comments, -whitespace/indent",
           ]
 
   # FIXME(ashjeong): clang-tidy currently fails on CI. See https://github.com/zk-rabbit/zkir/actions/runs/16904324348/job/47890440254 for more details.
