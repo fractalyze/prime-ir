@@ -68,4 +68,5 @@ private:
 
 } // namespace mlir::zkir::elliptic_curve
 
+// NOLINTNEXTLINE(whitespace/line_length)
 #endif // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_MSM_PIPPENGERS_GENERIC_H_

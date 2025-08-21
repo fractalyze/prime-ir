@@ -61,4 +61,5 @@ private:
 
 } // namespace mlir::zkir::mod_arith
 
+// NOLINTNEXTLINE(whitespace/line_length)
 #endif // ZKIR_DIALECT_MODARITH_CONVERSIONS_MODARITHTOARITH_INVERTER_BYINVERTER_H_

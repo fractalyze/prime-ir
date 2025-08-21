@@ -14,4 +14,5 @@ SmallVector<Value> xyzzAdd(ValueRange p1, ValueRange p2,
 
 } // namespace mlir::zkir::elliptic_curve
 
+// NOLINTNEXTLINE(whitespace/line_length)
 #endif // ZKIR_DIALECT_ELLIPTICCURVE_CONVERSIONS_ELLIPTICCURVETOFIELD_POINTOPERATIONS_XYZZ_ADD_H_
