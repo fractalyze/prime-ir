@@ -67,10 +67,8 @@ Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
       windowBits > 0
           ? windowBits
           : estimateOptimalWindowBits(scalarBitWidth, size_t{1} << degree);
-  size_t numWindows = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
-
+  numWindows_ = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
   numScalarMuls_ = b.create<tensor::DimOp>(scalars_, 0);
-  numWindows_ = b.create<arith::ConstantIndexOp>(numWindows);
 
   auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
   Value oneBF = field::isMontgomery(baseFieldType)
@@ -87,11 +85,12 @@ Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
                          outputType, ValueRange{oneBF, oneBF, zeroBF});
 
   auto windowSumsType =
-      MemRefType::get({static_cast<int64_t>(numWindows)}, outputType_);
+      MemRefType::get({static_cast<int64_t>(numWindows_)}, outputType_);
   windowSums_ = b.create<memref::AllocaOp>(windowSumsType);
 
+  Value numWindows = b.create<arith::ConstantIndexOp>(numWindows_);
   b.create<scf::ForOp>(
-      zero_, numWindows_, one_, std::nullopt,
+      zero_, numWindows, one_, std::nullopt,
       [&](OpBuilder &builder, Location loc, Value i, ValueRange args) {
         ImplicitLocOpBuilder b0(loc, builder);
         b0.create<memref::StoreOp>(zeroPoint_, windowSums_, i);
@@ -127,16 +126,17 @@ void Pippengers::bucketReduction(Value j, Value initialPoint, Value buckets,
 
 // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-4.-window-reduction-final-msm-result
 Value Pippengers::windowReduction() {
+  Value numWindows = b_.create<arith::ConstantIndexOp>(numWindows_);
   // We're traversing windows from high to low.
   auto windowsForOp = b_.create<scf::ForOp>(
-      one_, numWindows_, one_, ValueRange{/*accumulator=*/zeroPoint_},
+      one_, numWindows, one_, ValueRange{/*accumulator=*/zeroPoint_},
       [&](OpBuilder &winReducBuilder, Location winReducLoc, Value j,
           ValueRange winReducArgs) {
         ImplicitLocOpBuilder b1(winReducLoc, winReducBuilder);
         // scf::ForOp does not support reverse traversal. Reverse traversal
         // must be simulated using arithmetic with the for op index
         // (numWindows - j)
-        Value idx = b1.create<arith::SubIOp>(numWindows_, j);
+        Value idx = b1.create<arith::SubIOp>(numWindows, j);
         Value bitsPerWindow = b1.create<arith::ConstantIndexOp>(bitsPerWindow_);
 
         auto accumulator = winReducArgs[0];

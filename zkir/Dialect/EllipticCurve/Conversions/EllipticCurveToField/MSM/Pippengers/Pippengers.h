@@ -22,8 +22,8 @@ protected:
 
   size_t numBuckets_;
   size_t bitsPerWindow_;
+  size_t numWindows_;
   Value numScalarMuls_; // Index
-  Value numWindows_;    // Index
 
   Value zero_; // Index
   Value one_;  // Index
@@ -32,6 +32,7 @@ protected:
   Value points_;
 
   Value windowSums_;
+  Value allBuckets_;
 
   field::PrimeFieldType scalarFieldType_;
   Type outputType_;

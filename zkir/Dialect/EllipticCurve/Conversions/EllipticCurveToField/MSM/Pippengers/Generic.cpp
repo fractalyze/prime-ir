@@ -134,14 +134,41 @@ ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
 void PippengersGeneric::bucketAccReduc() {
   Operation *windowsForOp = nullptr;
   Value j;
+  Value numBuckets = b_.create<arith::ConstantIndexOp>(numBuckets_);
+  Value numWindows = b_.create<arith::ConstantIndexOp>(numWindows_);
 
   if (parallel_) {
-    auto parOp = b_.create<scf::ParallelOp>(zero_, numWindows_, one_);
+    auto bucketsType = MemRefType::get(
+        {static_cast<int64_t>(numWindows_), static_cast<int64_t>(numBuckets_)},
+        outputType_);
+    allBuckets_ = b_.create<memref::AllocOp>(bucketsType);
+    // Initialize all buckets to zero point
+    b_.create<scf::ParallelOp>(
+        ValueRange{zero_, zero_}, ValueRange{numWindows, numBuckets},
+        ValueRange{one_, one_},
+        [&](OpBuilder &parallelBuilder, Location parallelLoc, ValueRange ivs) {
+          ImplicitLocOpBuilder b0(parallelLoc, parallelBuilder);
+          Value windowIdx = ivs[0];
+          Value bucketIdx = ivs[1];
+          b0.create<memref::StoreOp>(zeroPoint_, allBuckets_,
+                                     ValueRange{windowIdx, bucketIdx});
+          b0.create<scf::ReduceOp>();
+        });
+  } else {
+    auto bucketsType =
+        MemRefType::get({static_cast<int64_t>(numBuckets_)}, outputType_);
+    allBuckets_ = b_.create<memref::AllocOp>(bucketsType);
+    // Initialization should be done per window since we reuse same buffer in
+    // the serial case.
+  }
+
+  if (parallel_) {
+    auto parOp = b_.create<scf::ParallelOp>(zero_, numWindows, one_);
     b_.setInsertionPointToStart(parOp.getBody());
     j = parOp.getInductionVars()[0];
     windowsForOp = parOp;
   } else {
-    auto forOp = b_.create<scf::ForOp>(zero_, numWindows_, one_);
+    auto forOp = b_.create<scf::ForOp>(zero_, numWindows, one_);
     b_.setInsertionPointToStart(forOp.getBody());
     j = forOp.getInductionVar();
     windowsForOp = forOp;
@@ -150,18 +177,35 @@ void PippengersGeneric::bucketAccReduc() {
   // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-2.-bucket-accumulation
   Value bitsPerWindow = b_.create<arith::ConstantIndexOp>(bitsPerWindow_);
   Value windowOffset = b_.create<arith::MulIOp>(bitsPerWindow, j);
-  MemRefType bucketsType =
-      MemRefType::get({static_cast<int64_t>(numBuckets_)}, outputType_);
-  auto buckets = b_.create<memref::AllocOp>(bucketsType);
 
-  Value numBuckets = b_.create<arith::ConstantIndexOp>(numBuckets_);
-  b_.create<scf::ForOp>(zero_, numBuckets, one_, std::nullopt,
-                        [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                            Value i, ValueRange args) {
-                          ImplicitLocOpBuilder b0(nestedLoc, nestedBuilder);
-                          b0.create<memref::StoreOp>(zeroPoint_, buckets, i);
-                          b0.create<scf::YieldOp>();
-                        });
+  Value buckets;
+  if (parallel_) {
+    SmallVector<OpFoldResult> offsets = {Value(j), b_.getIndexAttr(0)};
+    SmallVector<OpFoldResult> sizes = {b_.getIndexAttr(1),
+                                       b_.getIndexAttr(numBuckets_)};
+    SmallVector<OpFoldResult> strides = {b_.getIndexAttr(1),
+                                         b_.getIndexAttr(1)};
+
+    // Create subview for current window's buckets
+    auto layout =
+        StridedLayoutAttr::get(b_.getContext(), ShapedType::kDynamic, {1});
+    MemRefType bucketsType = MemRefType::get(
+        {static_cast<int64_t>(numBuckets_)}, outputType_, layout);
+    buckets = b_.create<memref::SubViewOp>(bucketsType, allBuckets_,
+                                           /*offsets=*/offsets,
+                                           /*sizes=*/sizes,
+                                           /*strides=*/strides);
+  } else {
+    buckets = allBuckets_;
+    // Initialize the buckets to zero point
+    b_.create<scf::ForOp>(zero_, numBuckets, one_, std::nullopt,
+                          [&](OpBuilder &nestedBuilder, Location nestedLoc,
+                              Value i, ValueRange args) {
+                            ImplicitLocOpBuilder b0(nestedLoc, nestedBuilder);
+                            b0.create<memref::StoreOp>(zeroPoint_, buckets, i);
+                            b0.create<scf::YieldOp>();
+                          });
+  }
 
   auto scalarMulsForOp = b_.create<scf::ForOp>(
       zero_, numScalarMuls_, one_,
