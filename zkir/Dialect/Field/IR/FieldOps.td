@@ -317,7 +317,7 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
 
     Example:
     ```
-    %power = field.pow %a, %b : field.pf<primeModulus>, i32
+    %power = field.powui %a, %b : field.pf<primeModulus>, i32
     ```
   }];
   let arguments = (ins FieldLike:$base, SignlessIntegerLike:$exp);
