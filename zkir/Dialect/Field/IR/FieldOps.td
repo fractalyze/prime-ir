@@ -308,7 +308,7 @@ def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
   let hasCanonicalizer = 1;
 }
 
-// Field power.
+// Field power with unsigned integer exponent.
 def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
   "base and output must have same type", "base", "output", "$_self">]> {
   let summary = "Field power with unsigned integer exponent";
@@ -321,6 +321,24 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
     ```
   }];
   let arguments = (ins FieldLike:$base, SignlessIntegerLike:$exp);
+  let results = (outs FieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($base) `,` type($exp)";
+  let hasVerifier = 1;
+}
+
+// Field power with prime field exponent.
+def Field_PowPFOp : Field_Op<"powpf", [TypesMatchWith<
+  "base and output must have same type", "base", "output", "$_self">]> {
+  let summary = "Field power with prime field exponent";
+  let description = [{
+    Computes the field element a raised to the power of prime field b.
+
+    Example:
+    ```
+    %power = field.powpf %a, %b : field.pf<primeModulus>, field.pf<primeModulus>
+    ```
+  }];
+  let arguments = (ins FieldLike:$base, Field_PrimeFieldType:$exp);
   let results = (outs FieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($base) `,` type($exp)";
   let hasVerifier = 1;
