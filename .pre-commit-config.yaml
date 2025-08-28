@@ -17,12 +17,18 @@ repos:
     hooks:
       - id: cpplint
         args:
-          [
-            # NOTE(chokobole): Disabled rules that conflict with LLVM style.
-            # -whitespace/comments, -whitespace/indent are explicitly disabled
-            # because LLVM formatting is not compatible with Google style.
-            "--filter=-whitespace/indent_namespace, -legal/copyright, -build/namespaces, -runtime/references, -whitespace/comments, -whitespace/indent",
-          ]
+          # NOTE(chokobole): Disabled rules that conflict with LLVM style.
+          # -build/include_what_you_use, -whitespace/comments,
+          # -whitespace/indent are explicitly disabled
+          # because LLVM formatting is not compatible with Google style.
+          - --filter=
+            -build/include_what_you_use,
+            -build/namespaces,
+            -legal/copyright,
+            -runtime/references,
+            -whitespace/comments,
+            -whitespace/indent,
+            -whitespace/indent_namespace
 
   # FIXME(ashjeong): clang-tidy currently fails on CI. See https://github.com/zk-rabbit/zkir/actions/runs/16904324348/job/47890440254 for more details.
   # This hook now relies on a local shell script.
