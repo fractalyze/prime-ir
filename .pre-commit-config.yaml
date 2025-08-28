@@ -18,9 +18,11 @@ repos:
       - id: cpplint
         args:
           # NOTE(chokobole): Disabled rules that conflict with LLVM style.
-          # -whitespace/comments, -whitespace/indent are explicitly disabled
+          # -build/include_what_you_use, -whitespace/comments,
+          # -whitespace/indent are explicitly disabled
           # because LLVM formatting is not compatible with Google style.
           - --filter=
+            -build/include_what_you_use,
             -build/namespaces,
             -legal/copyright,
             -runtime/references,
