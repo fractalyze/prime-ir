@@ -494,23 +494,7 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
         b.create<field::ExtractOp>(TypeRange{scalarIntType}, scalarReduced)
             .getResult(0);
 
-    Type baseFieldType =
-        getCurveFromPointLike(op.getPoint().getType()).getBaseField();
-    auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
-    Value oneBF = field::isMontgomery(baseFieldType)
-                      ? b.create<field::ToMontOp>(
-                             baseFieldType,
-                             b.create<field::ConstantOp>(
-                                 field::getStandardFormType(baseFieldType), 1))
-                            .getResult()
-                      : b.create<field::ConstantOp>(baseFieldType, 1);
-
-    Value zeroPoint =
-        isa<XYZZType>(outputType)
-            ? b.create<elliptic_curve::PointOp>(
-                  outputType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-            : b.create<elliptic_curve::PointOp>(
-                  outputType, ValueRange{oneBF, oneBF, zeroBF});
+    Value zeroPoint = createZeroPoint(b, outputType);
 
     Value initialPoint =
         isa<AffineType>(pointType)
