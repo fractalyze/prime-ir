@@ -171,6 +171,8 @@ def EllipticCurve_DoubleOp : EllipticCurve_UnaryOp<"double"> {
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
+////////////// MSM FUNCTIONS //////////////
+
 // Elliptic curve point scalar multiplication.
 def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutative, ElementwiseMappable]> {
   let summary = "Elliptic curve point scalar multiplication";
