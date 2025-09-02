@@ -29,6 +29,8 @@ filegroup(
     name = "test_utilities",
     testonly = True,
     data = [
+        "bn254_ec_utils.mlir",
+        "bn254_field_utils.mlir",
         ":lit.cfg.py",
         ":printI256.so",
         "//tools:zkir-opt",
@@ -47,7 +49,10 @@ glob_lit_tests(
     # macro, replacing it with a standard invocation of lit whose config is in
     # lit.cfg.py
     driver = "//tests:run_lit.sh",
-    exclude = ["bn254_utils.mlir"],
+    exclude = [
+        "bn254_ec_utils.mlir",
+        "bn254_field_utils.mlir",
+    ],
     test_file_exts = ["mlir"],
 )
 
