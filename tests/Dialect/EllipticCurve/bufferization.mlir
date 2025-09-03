@@ -1,14 +1,7 @@
-// RUN: zkir-opt -elliptic-curve-to-field %s | FileCheck %s -enable-var-scope
+// RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_defs.mlir %s \
+// RUN:   | zkir-opt -elliptic-curve-to-field \
+// RUN:   | FileCheck %s -enable-var-scope
 
-!PF = !field.pf<97:i32>
-
-#1 = #field.pf.elem<1:i32> : !PF
-#2 = #field.pf.elem<2:i32> : !PF
-#3 = #field.pf.elem<3:i32> : !PF
-#4 = #field.pf.elem<4:i32> : !PF
-
-#curve = #elliptic_curve.sw<#1, #2, (#3, #4)>
-!affine = !elliptic_curve.affine<#curve>
 
 // CHECK-LABEL: @test_bufferization_alloc_tensor
 // CHECK-SAME: () -> [[T:.*]] {

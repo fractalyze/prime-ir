@@ -1,28 +1,6 @@
-// RUN: zkir-opt -convert-linalg-to-parallel-loops -elliptic-curve-to-field -split-input-file %s | FileCheck %s -enable-var-scope
-
-!PF = !field.pf<97:i32>
-!PFm = !field.pf<97:i32, true>
-
-#1 = #field.pf.elem<1:i32> : !PFm
-#2 = #field.pf.elem<2:i32> : !PFm
-#3 = #field.pf.elem<3:i32> : !PFm
-#4 = #field.pf.elem<4:i32> : !PFm
-
-#curve = #elliptic_curve.sw<#1, #2, (#3, #4)>
-!affine = !elliptic_curve.affine<#curve>
-!jacobian = !elliptic_curve.jacobian<#curve>
-!xyzz = !elliptic_curve.xyzz<#curve>
-
-#beta = #field.pf.elem<96:i32> : !PF
-#beta_mont = #field.pf.elem<96:i32> : !PFm
-!QF = !field.f2<!PF, #beta>
-!QFm = !field.f2<!PFm, #beta_mont>
-
-#f2_elem = #field.f2.elem<#1, #2> : !QFm
-#g2curve = #elliptic_curve.sw<#f2_elem, #f2_elem, (#f2_elem, #f2_elem)>
-!g2affine = !elliptic_curve.affine<#g2curve>
-!g2jacobian = !elliptic_curve.jacobian<#g2curve>
-!g2xyzz = !elliptic_curve.xyzz<#g2curve>
+// RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %s \
+// RUN:   | zkir-opt -convert-linalg-to-parallel-loops -elliptic-curve-to-field -split-input-file \
+// RUN:   | FileCheck %s -enable-var-scope
 
 // CHECK-LABEL: @test_intialization_and_conversion
 func.func @test_intialization_and_conversion() {
