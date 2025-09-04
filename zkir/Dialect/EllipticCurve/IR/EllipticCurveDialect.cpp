@@ -3,12 +3,14 @@
 #include <cassert>
 
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LLVM.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "zkir/Dialect/Field/IR/FieldOps.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveAttributes.cpp.inc
@@ -51,6 +53,24 @@ ShortWeierstrassAttr getCurveFromPointLike(Type pointLike) {
     llvm_unreachable("Unsupported point-like type for curve extraction");
     return ShortWeierstrassAttr();
   }
+}
+
+// WARNING: Assumes Jacobian or XYZZ point types
+Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
+  auto baseFieldType = getCurveFromPointLike(pointType).getBaseField();
+  auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
+  Value oneBF = field::isMontgomery(baseFieldType)
+                    ? b.create<field::ToMontOp>(
+                           baseFieldType,
+                           b.create<field::ConstantOp>(
+                               field::getStandardFormType(baseFieldType), 1))
+                          .getResult()
+                    : b.create<field::ConstantOp>(baseFieldType, 1);
+  return isa<XYZZType>(pointType)
+             ? b.create<elliptic_curve::PointOp>(
+                   pointType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
+             : b.create<elliptic_curve::PointOp>(
+                   pointType, ValueRange{oneBF, oneBF, zeroBF});
 }
 
 } // namespace mlir::zkir::elliptic_curve

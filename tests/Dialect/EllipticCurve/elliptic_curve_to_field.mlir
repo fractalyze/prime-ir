@@ -221,3 +221,8 @@ func.func @test_memref(%arg0: memref<3x!affine>, %arg1: memref<3x!affine>) {
   memref.store %affine, %arg0[%c0] : memref<3x!affine>
   return
 }
+
+func.func @test_bucket_acc(%points: tensor<3x!affine>, %sorted_point_indices: tensor<6xindex>, %sorted_unique_bucket_indices: tensor<4xindex>, %bucket_offsets: tensor<5xindex>) {
+  %msm_result = elliptic_curve.bucket_acc %points, %sorted_point_indices, %sorted_unique_bucket_indices, %bucket_offsets: (tensor<3x!affine>, tensor<6xindex>, tensor<4xindex>, tensor<5xindex>) -> tensor<8x!jacobian>
+  return
+}

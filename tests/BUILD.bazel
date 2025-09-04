@@ -1,3 +1,4 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
 load("//bazel:lit.bzl", "glob_lit_tests")
 
 package(
@@ -5,12 +6,33 @@ package(
     licenses = ["notice"],
 )
 
+cc_binary(
+    name = "printI256.so",
+    linkshared = True,
+    linkstatic = False,
+    deps = [":printI256"],
+)
+
+cc_library(
+    name = "printI256",
+    srcs = ["printI256.cpp"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ExecutionEngine",
+        "@llvm-project//mlir:mlir_runner_utils",
+    ],
+    alwayslink = True,
+)
+
 # Bundle together all of the test utilities that are used by tests.
 filegroup(
     name = "test_utilities",
     testonly = True,
     data = [
+        "bn254_ec_utils.mlir",
+        "bn254_field_utils.mlir",
         ":lit.cfg.py",
+        ":printI256.so",
         "//tools:zkir-opt",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:lit",
@@ -27,6 +49,10 @@ glob_lit_tests(
     # macro, replacing it with a standard invocation of lit whose config is in
     # lit.cfg.py
     driver = "//tests:run_lit.sh",
+    exclude = [
+        "bn254_ec_utils.mlir",
+        "bn254_field_utils.mlir",
+    ],
     test_file_exts = ["mlir"],
 )
 

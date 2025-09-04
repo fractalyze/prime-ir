@@ -9,11 +9,10 @@ namespace mlir::zkir::elliptic_curve {
 // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm
 class PippengersGeneric : public Pippengers {
 public:
-  PippengersGeneric(Value scalars, Value points, Type baseFieldType,
-                    Type outputType, ImplicitLocOpBuilder &b, bool parallel,
-                    int32_t degree, int32_t windowBits)
-      : Pippengers(scalars, points, baseFieldType, outputType, b, degree,
-                   windowBits),
+  PippengersGeneric(Value scalars, Value points, Type outputType,
+                    ImplicitLocOpBuilder &b, bool parallel, int32_t degree,
+                    int32_t windowBits)
+      : Pippengers(scalars, points, outputType, b, degree, windowBits),
         parallel_(parallel) {
     // Note that the required number of buckets per window is 2^{bitsPerWindow}
     // - 1 since we don't need the "zero" bucket.

@@ -1,6 +1,7 @@
 #ifndef ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_H_
 #define ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_H_
 
+#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Types.h"
 
 // IWYU pragma: begin_keep
@@ -17,6 +18,8 @@ class ShortWeierstrassAttr;
 
 size_t getNumCoordsFromPointLike(Type pointLike);
 ShortWeierstrassAttr getCurveFromPointLike(Type pointLike);
+// WARNING: Assumes Jacobian or XYZZ point types
+Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType);
 } // namespace mlir::zkir::elliptic_curve
 
 #endif // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_H_

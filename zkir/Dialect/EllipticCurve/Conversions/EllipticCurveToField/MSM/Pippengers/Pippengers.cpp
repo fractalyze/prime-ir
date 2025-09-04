@@ -8,6 +8,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
@@ -44,8 +45,8 @@ constexpr size_t computeWindowsCount(size_t scalarBitWidth,
 
 } // namespace
 
-Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
-                       Type outputType, ImplicitLocOpBuilder &b, int32_t degree,
+Pippengers::Pippengers(Value scalars, Value points, Type outputType,
+                       ImplicitLocOpBuilder &b, int32_t degree,
                        int32_t windowBits)
     : points_(points), outputType_(outputType), b_(b) {
   zero_ = b.create<arith::ConstantIndexOp>(0);
@@ -70,19 +71,7 @@ Pippengers::Pippengers(Value scalars, Value points, Type baseFieldType,
   numWindows_ = computeWindowsCount(scalarBitWidth, bitsPerWindow_);
   numScalarMuls_ = b.create<tensor::DimOp>(scalars_, 0);
 
-  auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
-  Value oneBF = field::isMontgomery(baseFieldType)
-                    ? b.create<field::ToMontOp>(
-                           baseFieldType,
-                           b.create<field::ConstantOp>(
-                               field::getStandardFormType(baseFieldType), 1))
-                          .getResult()
-                    : b.create<field::ConstantOp>(baseFieldType, 1);
-  zeroPoint_ = isa<XYZZType>(outputType)
-                   ? b.create<elliptic_curve::PointOp>(
-                         outputType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-                   : b.create<elliptic_curve::PointOp>(
-                         outputType, ValueRange{oneBF, oneBF, zeroBF});
+  zeroPoint_ = createZeroPoint(b, outputType);
 
   auto windowSumsType =
       MemRefType::get({static_cast<int64_t>(numWindows_)}, outputType_);

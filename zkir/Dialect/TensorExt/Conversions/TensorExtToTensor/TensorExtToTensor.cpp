@@ -44,7 +44,7 @@ struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
         b.create<bufferization::ToBufferOp>(memrefType, adaptor.getDest());
     auto parallelOp = b.create<scf::ParallelOp>(
         /*lowerBound=*/ValueRange{c0},
-        /*lowerBound=*/ValueRange{cN},
+        /*upperBound=*/ValueRange{cN},
         /*steps=*/ValueRange{c1},
         /*bodyBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {

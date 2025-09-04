@@ -171,6 +171,8 @@ def EllipticCurve_DoubleOp : EllipticCurve_UnaryOp<"double"> {
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
+////////////// MSM FUNCTIONS //////////////
+
 // Elliptic curve point scalar multiplication.
 def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutative, ElementwiseMappable]> {
   let summary = "Elliptic curve point scalar multiplication";
@@ -247,6 +249,43 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
   let results = (outs PointType:$output);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `degree` `=` $degree (`window_bits` `=` $windowBits^)? (`parallel` $parallel^)? `:` type($scalars) `,` type($points) `->` type($output)";
+}
+
+// Elliptic curve MSM bucket accumulation for GPU.
+// Note that parameters differ from the bucket accumulation inside the other MSMOp.
+def EllipticCurve_BucketAccOp : EllipticCurve_Op<"bucket_acc", []> {
+  let summary = "MSM Bucket Accumulation";
+  let description = [{
+    Computes the accumulation of points for each bucket given a set of points, sorted point indices, sorted unique bucket indices, and bucket offsets.
+
+    The sorted point indices are the indices of the points in the original set sorted by unique bucket indices and bucket sizes.
+    The sorted unique bucket indices are unique indices of the buckets in the original set in ascending order.
+    The bucket offsets are the starting and ending indices of the points for each bucket.
+
+    Returns a tensor of accumulated points for each bucket.
+
+    Example:
+    ```
+    %bucket_results = elliptic_curve.bucket_acc %points, %sorted_point_indices, %sorted_unique_bucket_indices, %bucket_offsets: (tensor<3x!affine>, tensor<6xindex>, tensor<4xindex>, tensor<5xindex>) -> tensor<8x!jacobian>
+    ```
+
+    Allowed input/output point type combinations:
+
+    points    |   return type
+    --------------------------
+    affine    |   jacobian, xyzz
+    jacobian  |   jacobian, xyzz
+    xyzz      |   xyzz
+  }];
+  let arguments = (ins
+    RankedTensorOf<[PointType]>:$points,
+    RankedTensorOf<[Index]>:$sortedPointIndices,
+    RankedTensorOf<[Index]>:$sortedUniqueBucketIndices,
+    RankedTensorOf<[Index]>:$bucketOffsets
+  );
+  let results = (outs RankedTensorOf<[PointType]>:$bucketResults);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
 ////////////// POINT CONVERSIONS //////////////

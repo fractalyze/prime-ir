@@ -8,7 +8,7 @@ namespace mlir::zkir::elliptic_curve {
 
 class Pippengers {
 public:
-  Pippengers(Value scalars, Value points, Type baseFieldType, Type outputType,
+  Pippengers(Value scalars, Value points, Type outputType,
              ImplicitLocOpBuilder &b, int32_t degree, int32_t windowBits);
   Value generate();
 
