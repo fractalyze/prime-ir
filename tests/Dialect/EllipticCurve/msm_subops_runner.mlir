@@ -1,4 +1,4 @@
-// RUN: cat %S/../../bn254_field_utils.mlir %S/../../bn254_ec_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_mont_utils.mlir %s \
 // RUN:   | zkir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_bucket_acc -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../printI256%shlibext" > %t
