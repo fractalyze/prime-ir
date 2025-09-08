@@ -3,6 +3,7 @@
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LogicalResult.h"
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 
 namespace mlir::zkir::elliptic_curve {
@@ -21,6 +22,26 @@ LogicalResult verifyMSMPointTypes(OpType op, Type inputType, Type outputType) {
 } // namespace
 
 /////////////// VERIFY OPS /////////////////
+
+LogicalResult PointOp::verify() {
+  Type outputType = getOutput().getType();
+  if (getNumCoordsFromPointLike(outputType) != getCoords().size()) {
+    return emitError() << outputType << " should have "
+                       << getNumCoordsFromPointLike(outputType)
+                       << " coordinates";
+  }
+  return success();
+}
+
+LogicalResult ExtractOp::verify() {
+  Type inputType = getInput().getType();
+  if (getNumCoordsFromPointLike(inputType) != getOutput().size()) {
+    return emitError() << inputType << " should have "
+                       << getNumCoordsFromPointLike(inputType)
+                       << " coordinates";
+  }
+  return success();
+}
 
 LogicalResult IsZeroOp::verify() {
   Type inputType = getInput().getType();

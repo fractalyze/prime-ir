@@ -44,7 +44,7 @@ func.func @printAffineFromXYZZ(%xyzz: !xyzz) {
 func.func @getGeneratorMultiple(%k: !SF) -> !affine {
   %onePF = field.constant 1 : !PF
   %twoPF = field.constant 2 : !PF
-  %g = elliptic_curve.point %onePF, %twoPF : !affine
+  %g = elliptic_curve.point %onePF, %twoPF : (!PF, !PF) -> !affine
   %g_multiple = elliptic_curve.scalar_mul %k, %g : !SF, !affine -> !jacobian
   %g_multiple_affine = elliptic_curve.convert_point_type %g_multiple : !jacobian -> !affine
   return %g_multiple_affine : !affine

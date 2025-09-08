@@ -22,6 +22,7 @@
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 // Headers needed for EllipticCurveOps.cpp.inc
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/OpUtils.h"
 // IWYU pragma: end_keep
 
