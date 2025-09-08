@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -546,17 +547,7 @@ struct ConvertBucketAcc : public OpConversionPattern<BucketAccOp> {
         MemRefType::get(bucketResultsType.getShape(), outputType);
     Value bucketResults = b.create<memref::AllocOp>(memrefBucketResultsType);
     Value zeroPoint = createZeroPoint(b, outputType);
-    Value nofBuckets =
-        b.create<arith::ConstantIndexOp>(bucketResultsType.getShape()[0]);
-    // TODO(ashjeong): Replace with linalg::FillOp once supported on the EC
-    // level
-    b.create<scf::ForOp>(
-        zero, nofBuckets, one, std::nullopt,
-        [&](OpBuilder &builder, Location loc, Value i, ValueRange args) {
-          ImplicitLocOpBuilder b0(loc, builder);
-          b0.create<memref::StoreOp>(zeroPoint, bucketResults, i);
-          b0.create<scf::YieldOp>();
-        });
+    b.create<linalg::FillOp>(zeroPoint, bucketResults);
 
     // Compute bucket accumulation across all buckets
     Value nofBucketsToCompute = b.create<arith::ConstantIndexOp>(
@@ -642,6 +633,7 @@ void EllipticCurveToField::runOnOperation() {
       arith::ArithDialect,
       bufferization::BufferizationDialect,
       field::FieldDialect,
+      linalg::LinalgDialect,
       memref::MemRefDialect,
       scf::SCFDialect,
       tensor::TensorDialect

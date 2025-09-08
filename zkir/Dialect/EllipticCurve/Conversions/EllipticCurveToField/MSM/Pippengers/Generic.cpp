@@ -1,6 +1,7 @@
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Generic.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -198,13 +199,7 @@ void PippengersGeneric::bucketAccReduc() {
   } else {
     buckets = allBuckets_;
     // Initialize the buckets to zero point
-    b_.create<scf::ForOp>(zero_, numBuckets, one_, std::nullopt,
-                          [&](OpBuilder &nestedBuilder, Location nestedLoc,
-                              Value i, ValueRange args) {
-                            ImplicitLocOpBuilder b0(nestedLoc, nestedBuilder);
-                            b0.create<memref::StoreOp>(zeroPoint_, buckets, i);
-                            b0.create<scf::YieldOp>();
-                          });
+    b_.create<linalg::FillOp>(zeroPoint_, buckets);
   }
 
   auto scalarMulsForOp = b_.create<scf::ForOp>(
