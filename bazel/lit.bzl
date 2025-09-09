@@ -5,7 +5,7 @@ load("@rules_python//python:py_test.bzl", "py_test")
 
 _DEFAULT_FILE_EXTS = ["mlir"]
 
-def lit_test(name = None, src = None, size = "small", timeout = "short", tags = None, data = None):
+def lit_test(name = None, src = None, size = "small", timeout = "short", tags = None, target_compatible_with = None, data = None):
     """Define a lit test.
 
     In its simplest form, a manually defined lit test would look like this:
@@ -34,6 +34,7 @@ def lit_test(name = None, src = None, size = "small", timeout = "short", tags = 
       size: the size of the test.
       timeout: the timeout of the test.
       tags: tags to pass to the target.
+      target_compatible_with: target compatible with to pass to the target.
       data: the data to pass to the target.
     """
     if not src:
@@ -60,7 +61,41 @@ def lit_test(name = None, src = None, size = "small", timeout = "short", tags = 
         srcs = ["@llvm-project//llvm:lit"],
         main = "lit.py",
         tags = tags,
+        target_compatible_with = target_compatible_with,
     )
+
+def run_lit_tests(
+        name = None,  # buildifier: disable=unused-variable
+        tests = [],
+        data = [],
+        size_override = {},
+        timeout_override = {},
+        tags = [],
+        tags_override = {},
+        target_compatible_with = None):
+    """Creates lit tests that require CUDA.
+
+    Args:
+      name: unused (required by Bazel macro convention)
+      tests: list of test file names (e.g., ["test1.mlir", "test2.mlir"])
+      data: the data to pass to each test
+      size_override: a dictionary giving per-source-file test size overrides
+      timeout_override: a dictionary giving per-source-file test timeout overrides
+      tags: [str] tags to add to each test
+      tags_override: tags to pass to each generated target.
+      target_compatible_with: target compatible with to pass to each test
+    """
+
+    for test in tests:
+        lit_test(
+            name = test.replace(".mlir", ""),
+            src = test,
+            data = data,
+            size = size_override.get(test, "small"),
+            timeout = timeout_override.get(test, "short"),
+            tags = tags + tags_override.get(test, []),
+            target_compatible_with = target_compatible_with,
+        )
 
 def glob_lit_tests(
         # these unused args are kept for API compatibility with the corresponding
@@ -73,7 +108,8 @@ def glob_lit_tests(
         timeout_override = None,
         test_file_exts = None,
         default_tags = None,
-        tags_override = None):
+        tags_override = None,
+        target_compatible_with = None):
     """Searches the caller's directory for files to run as lit tests.
 
     Args:
@@ -88,6 +124,7 @@ def glob_lit_tests(
         that should be defined as tests.
       default_tags: [str] tags to add to each test
       tags_override: tags to pass to each generated target.
+      target_compatible_with: target compatible with to pass to each test
     """
     exclude = exclude or []
     test_file_exts = test_file_exts or _DEFAULT_FILE_EXTS
@@ -97,11 +134,12 @@ def glob_lit_tests(
     default_tags = default_tags or []
     tests = native.glob(["*." + ext for ext in test_file_exts], exclude = exclude)
 
-    for curr_test in tests:
-        lit_test(
-            src = curr_test,
-            size = size_override.get(curr_test, "small"),
-            timeout = timeout_override.get(curr_test, "short"),
-            tags = default_tags + tags_override.get(curr_test, []),
-            data = data,
-        )
+    run_lit_tests(
+        tests = tests,
+        data = data,
+        size_override = size_override,
+        timeout_override = timeout_override,
+        tags = default_tags,
+        tags_override = tags_override,
+        target_compatible_with = target_compatible_with,
+    )
