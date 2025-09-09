@@ -263,7 +263,7 @@ def EllipticCurve_BucketAccOp : EllipticCurve_Op<"bucket_acc", []> {
     The sorted unique bucket indices are unique indices of the buckets in the original set in ascending order.
     The bucket offsets are the starting and ending indices of the points for each bucket.
 
-    Returns a tensor of accumulated points for each bucket.
+    Returns a tensor of accumulated points for each bucket. All buckets are in a 1D tensor.
 
     Example:
     ```
