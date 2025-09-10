@@ -22,9 +22,9 @@ func.func @test_ops_in_order() {
   %var7 = field.to_mont %c7 : !SFm
 
   // (1,2)
-  %affine1 = elliptic_curve.point %var1, %var2 : !affine
+  %affine1 = elliptic_curve.point %var1, %var2 : (!PFm, !PFm) -> !affine
   // (1,2,1)
-  %jacobian1 = elliptic_curve.point %var1, %var2, %var1 : !jacobian
+  %jacobian1 = elliptic_curve.point %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobian
 
   %jacobian2 = elliptic_curve.add %affine1, %jacobian1 : !affine, !jacobian -> !jacobian
   func.call @printJacobian(%jacobian2) : (!jacobian) -> ()

@@ -10,6 +10,7 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "zkir/Dialect/Field/IR/FieldAttributes.td"
 include "zkir/Dialect/Field/IR/FieldTypes.td"
+include "zkir/Dialect/ModArith/IR/ModArithTypes.td"
 
 // Base class for elliptic curve operations.
 class EllipticCurve_Op<string mnemonic, list<Trait> traits = [Pure]> :
@@ -33,9 +34,7 @@ class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
 
 ////////////// POINT INITIALIZATIONS //////////////
 
-def EllipticCurve_PointOp : EllipticCurve_Op<"point", [TypesMatchWith<
-  "result type has point-like element type and same shape as operands",
-  "output", "coords", "SmallVector<Type, 2>(getNumCoordsFromPointLike($_self), getCurveFromPointLike($_self).getBaseField())">]> {
+def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
   let summary = "An elliptic curve point";
   let description = [{
     Defines an elliptic curve point in affine(x, y), jacobian(x, y, z), or xyzz(x, y, z², z³) form.
@@ -47,9 +46,10 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point", [TypesMatchWith<
     %2 = elliptic_curve.point %x, %y, %zz, %zzz : elliptic_curve.xyzz<#curve>
     ```
   }];
-  let arguments = (ins Variadic<Field_AnyFieldType>:$coords);
+  let arguments = (ins Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, SignlessIntegerLike]>>:$coords);
   let results = (outs PointLike:$output);
-  let assemblyFormat = "$coords attr-dict `:` type($output)";
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
 }
 
 ////////////// POINT CHECKS //////////////
@@ -86,8 +86,9 @@ def EllipticCurve_ExtractOp : EllipticCurve_Op<"extract"> {
   }];
 
   let arguments = (ins PointLike:$input);
-  let results = (outs Variadic<Field_AnyFieldType>:$output);
+  let results = (outs Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, SignlessIntegerLike]>>:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+  let hasVerifier = 1;
 }
 
 ////////////// POINT ARITHMETIC OPERATIONS //////////////
@@ -174,7 +175,7 @@ def EllipticCurve_DoubleOp : EllipticCurve_UnaryOp<"double"> {
 ////////////// MSM FUNCTIONS //////////////
 
 // Elliptic curve point scalar multiplication.
-def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, Commutative, ElementwiseMappable]> {
+def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [Pure, ElementwiseMappable]> {
   let summary = "Elliptic curve point scalar multiplication";
   let description = [{
     Computes the product of an elliptic curve point and a scalar prime field value.

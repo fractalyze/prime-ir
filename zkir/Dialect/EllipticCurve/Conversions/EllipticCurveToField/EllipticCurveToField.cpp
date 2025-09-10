@@ -3,6 +3,7 @@
 #include <utility>
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -21,91 +22,33 @@
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
-#include "zkir/Utils/ConversionUtils.h"
-#include "zkir/Utils/ShapedTypeConverter.h"
 
 namespace mlir::zkir::elliptic_curve {
 
 #define GEN_PASS_DEF_ELLIPTICCURVETOFIELD
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h.inc"
 
-//////////////// TYPE CONVERSION ////////////////
-
-class EllipticCurveToFieldTypeConverter : public ShapedTypeConverter {
-public:
-  explicit EllipticCurveToFieldTypeConverter(MLIRContext *ctx) {
-    addConversion([](Type type) { return type; });
-    addConversion(
-        [](AffineType type, SmallVectorImpl<Type> &converted) -> LogicalResult {
-          return convertPointType(type, converted);
-        });
-    addConversion([](JacobianType type,
-                     SmallVectorImpl<Type> &converted) -> LogicalResult {
-      return convertPointType(type, converted);
-    });
-    addConversion(
-        [](XYZZType type, SmallVectorImpl<Type> &converted) -> LogicalResult {
-          return convertPointType(type, converted);
-        });
-    addConversion([](ShapedType type) -> Type {
-      Type elementType = type.getElementType();
-      Type baseFieldType;
-      size_t numCoords = 0;
-      if (auto pointType = dyn_cast<AffineType>(elementType)) {
-        baseFieldType = pointType.getCurve().getBaseField();
-        numCoords = 2;
-      } else if (auto pointType = dyn_cast<JacobianType>(elementType)) {
-        baseFieldType = pointType.getCurve().getBaseField();
-        numCoords = 3;
-      } else if (auto pointType = dyn_cast<XYZZType>(elementType)) {
-        baseFieldType = pointType.getCurve().getBaseField();
-        numCoords = 4;
-      } else {
-        return type;
-      }
-      SmallVector<int64_t> newShape(type.getShape());
-      newShape.push_back(numCoords);
-      return convertShapedType(type, newShape, baseFieldType);
-    });
+namespace {
+SmallVector<Type> coordsTypeRange(Type type) {
+  if (auto affineType = dyn_cast<AffineType>(type)) {
+    return SmallVector<Type>(2, affineType.getCurve().getBaseField());
+  } else if (auto jacobianType = dyn_cast<JacobianType>(type)) {
+    return SmallVector<Type>(3, jacobianType.getCurve().getBaseField());
+  } else if (auto xyzzType = dyn_cast<XYZZType>(type)) {
+    return SmallVector<Type>(4, xyzzType.getCurve().getBaseField());
+  } else {
+    llvm_unreachable("Unsupported point-like type for coords type range");
+    return SmallVector<Type>();
   }
+}
 
-private:
-  template <typename T>
-  static LogicalResult convertPointType(T type,
-                                        SmallVectorImpl<Type> &converted) {
-    Type baseFieldType = type.getCurve().getBaseField();
-    size_t numCoords = 0;
-    if constexpr (std::is_same_v<T, AffineType>) {
-      numCoords = 2;
-    } else if constexpr (std::is_same_v<T, JacobianType>) {
-      numCoords = 3;
-    } else if constexpr (std::is_same_v<T, XYZZType>) {
-      numCoords = 4;
-    } else {
-      return failure();
-    }
-    for (size_t i = 0; i < numCoords; ++i) {
-      converted.push_back(baseFieldType);
-    }
-    return success();
-  }
-};
-
-struct ConvertPoint : public OpConversionPattern<PointOp> {
-  explicit ConvertPoint(MLIRContext *context)
-      : OpConversionPattern<PointOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(PointOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    rewriter.replaceOpWithMultiple(op, {adaptor.getCoords()});
-    return success();
-  }
-};
+Operation::result_range extractCoords(ImplicitLocOpBuilder &b, Value point) {
+  return b
+      .create<elliptic_curve::ExtractOp>(coordsTypeRange(point.getType()),
+                                         point)
+      .getOutput();
+}
+} // namespace
 
 struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
   explicit ConvertIsZero(MLIRContext *context)
@@ -114,11 +57,11 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(IsZeroOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(IsZeroOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    ValueRange coords = adaptor.getInput();
+    Operation::result_range coords = extractCoords(b, op.getInput());
     Type baseFieldType =
         getCurveFromPointLike(op.getInput().getType()).getBaseField();
     Value zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
@@ -139,32 +82,6 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
   }
 };
 
-struct ConvertExtract : public OpConversionPattern<ExtractOp> {
-  explicit ConvertExtract(MLIRContext *context)
-      : OpConversionPattern<ExtractOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ExtractOp op, OneToNOpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ValueRange coordsTmp = adaptor.getInput();
-
-    // NOTE(ashjeong): Here we attempt to restructure the input coordinates like
-    // so: [[x,y,z]] to [[x],[y],[z]] (i.e. for jacobian). A naive copy of the
-    // coordinate values into a `SmallVector<ValueRange>` does not work given
-    // `ValueRange's` nature, so a deep copy is needed beforehand.
-    SmallVector<SmallVector<Value>> coords_copy(coordsTmp.size());
-    for (size_t i = 0; i < coordsTmp.size(); ++i) {
-      coords_copy[i].push_back(coordsTmp[i]);
-    }
-    SmallVector<ValueRange> coords(coords_copy.begin(), coords_copy.end());
-
-    rewriter.replaceOpWithMultiple(op, coords);
-    return success();
-  }
-};
-
 struct ConvertConvertPointType
     : public OpConversionPattern<ConvertPointTypeOp> {
   explicit ConvertConvertPointType(MLIRContext *context)
@@ -173,11 +90,11 @@ struct ConvertConvertPointType
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ConvertPointTypeOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(ConvertPointTypeOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    ValueRange coords = adaptor.getInput();
+    Operation::result_range coords = extractCoords(b, op.getInput());
     Type inputType = op.getInput().getType();
     Type outputType = op.getOutput().getType();
     Type baseFieldType = getCurveFromPointLike(inputType).getBaseField();
@@ -308,7 +225,8 @@ struct ConvertConvertPointType
         outputCoords.push_back(output.getResult(0));
       }
     }
-    rewriter.replaceOpWithMultiple(op, {outputCoords});
+    auto outputPt = b.create<elliptic_curve::PointOp>(outputType, outputCoords);
+    rewriter.replaceOp(op, outputPt);
     return success();
   }
 };
@@ -322,14 +240,14 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(AddOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(AddOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value p1 = op.getLhs();
     Value p2 = op.getRhs();
-    ValueRange p1Coords = adaptor.getLhs();
-    ValueRange p2Coords = adaptor.getRhs();
+    Operation::result_range p1Coords = extractCoords(b, op.getLhs());
+    Operation::result_range p2Coords = extractCoords(b, op.getRhs());
     Type p1Type = p1.getType();
     Type p2Type = p2.getType();
     Type outputType = op.getOutput().getType();
@@ -341,10 +259,10 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
         /*thenBuilder=*/
         [&](OpBuilder &builder, Location loc) {
           ImplicitLocOpBuilder b(loc, builder);
-          ValueRange retP2 = p2Coords;
+          Value retP2 = p2;
           if (isa<AffineType>(p2Type)) {
-            retP2 = {
-                b.create<elliptic_curve::ConvertPointTypeOp>(outputType, p2)};
+            retP2 =
+                b.create<elliptic_curve::ConvertPointTypeOp>(outputType, p2);
           }
 
           b.create<scf::YieldOp>(retP2);
@@ -360,10 +278,10 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
               /*thenBuilder=*/
               [&](OpBuilder &builder, Location loc) {
                 ImplicitLocOpBuilder b(loc, builder);
-                ValueRange retP1 = p1Coords;
+                Value retP1 = p1;
                 if (isa<AffineType>(p1Type)) {
-                  retP1 = {b.create<elliptic_curve::ConvertPointTypeOp>(
-                      outputType, p1)};
+                  retP1 = b.create<elliptic_curve::ConvertPointTypeOp>(
+                      outputType, p1);
                 }
 
                 b.create<scf::YieldOp>(retP1);
@@ -382,11 +300,13 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
                 } else {
                   llvm_unreachable("Unsupported point types for addition");
                 }
-                b.create<scf::YieldOp>(loc, sum);
+                Value outputPt = b.create<elliptic_curve::PointOp>(
+                    op.getOutput().getType(), sum);
+                b.create<scf::YieldOp>(outputPt);
               });
           b.create<scf::YieldOp>(output.getResults());
         });
-    rewriter.replaceOpWithMultiple(op, {output.getResults()});
+    rewriter.replaceOp(op, output.getResults());
     return success();
   }
 };
@@ -398,12 +318,12 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(DoubleOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(DoubleOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type outputType = op.getOutput().getType();
-    ValueRange coords = adaptor.getInput();
+    Operation::result_range coords = extractCoords(b, op.getInput());
     SmallVector<Value> doubled;
 
     if (auto xyzzType = dyn_cast<XYZZType>(outputType)) {
@@ -414,7 +334,8 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
       llvm_unreachable("Unsupported point type for doubling");
     }
 
-    rewriter.replaceOpWithMultiple(op, {doubled});
+    auto outputPt = b.create<elliptic_curve::PointOp>(outputType, doubled);
+    rewriter.replaceOp(op, outputPt);
     return success();
   }
 };
@@ -426,17 +347,19 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(NegateOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(NegateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    ValueRange coords = adaptor.getInput();
+    Operation::result_range coords = extractCoords(b, op.getInput());
 
     auto negatedY = b.create<field::NegateOp>(coords[1]);
     SmallVector<Value> outputCoords(coords);
     outputCoords[1] = negatedY;
 
-    rewriter.replaceOpWithMultiple(op, {outputCoords});
+    auto outputPt = b.create<elliptic_curve::PointOp>(op.getOutput().getType(),
+                                                      outputCoords);
+    rewriter.replaceOp(op, outputPt);
     return success();
   }
 };
@@ -448,7 +371,7 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(SubOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(SubOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -470,7 +393,7 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ScalarMulOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(ScalarMulOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -510,13 +433,13 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
                                 arithZero),
         [&](OpBuilder &builder, Location loc) {
           ImplicitLocOpBuilder b(loc, builder);
-          auto newResult =
+          Value newResult =
               b.create<elliptic_curve::AddOp>(outputType, result, initialPoint);
-          b.create<scf::YieldOp>(ValueRange{newResult});
+          b.create<scf::YieldOp>(newResult);
         },
         [&](OpBuilder &builder, Location loc) {
           ImplicitLocOpBuilder b(loc, builder);
-          b.create<scf::YieldOp>(ValueRange{result});
+          b.create<scf::YieldOp>(result);
         });
     result = ifOp.getResult(0);
     scalarInt = b.create<arith::ShRUIOp>(scalarInt, arithOne);
@@ -580,7 +503,7 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(MSMOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(MSMOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -605,7 +528,7 @@ struct ConvertBucketAcc : public OpConversionPattern<BucketAccOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(BucketAccOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(BucketAccOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -624,16 +547,7 @@ struct ConvertBucketAcc : public OpConversionPattern<BucketAccOp> {
         MemRefType::get(bucketResultsType.getShape(), outputType);
     Value bucketResults = b.create<memref::AllocOp>(memrefBucketResultsType);
     Value zeroPoint = createZeroPoint(b, outputType);
-    Value nofBuckets = b.create<tensor::DimOp>(op.getBucketResults(), 0);
-    // TODO(ashjeong): Replace with linalg::FillOp once supported on the EC
-    // level
-    b.create<scf::ForOp>(
-        zero, nofBuckets, one, std::nullopt,
-        [&](OpBuilder &builder, Location loc, Value i, ValueRange args) {
-          ImplicitLocOpBuilder b0(loc, builder);
-          b0.create<memref::StoreOp>(zeroPoint, bucketResults, i);
-          b0.create<scf::YieldOp>();
-        });
+    b.create<linalg::FillOp>(zeroPoint, bucketResults);
 
     // Compute bucket accumulation across all buckets
     Value nofBucketsToCompute = b.create<arith::ConstantIndexOp>(
@@ -699,11 +613,39 @@ struct EllipticCurveToField
 void EllipticCurveToField::runOnOperation() {
   MLIRContext *context = &getContext();
   ModuleOp module = getOperation();
-  EllipticCurveToFieldTypeConverter typeConverter(context);
 
   ConversionTarget target(*context);
-  target.addIllegalDialect<EllipticCurveDialect>();
-  target.addLegalDialect<field::FieldDialect>();
+  target.addIllegalOp<
+      // clang-format off
+      AddOp,
+      BucketAccOp,
+      ConvertPointTypeOp,
+      DoubleOp,
+      IsZeroOp,
+      MSMOp,
+      ScalarMulOp,
+      SubOp
+      // clang-format on
+      >();
+
+  target.addLegalDialect<
+      // clang-format off
+      arith::ArithDialect,
+      bufferization::BufferizationDialect,
+      field::FieldDialect,
+      linalg::LinalgDialect,
+      memref::MemRefDialect,
+      scf::SCFDialect,
+      tensor::TensorDialect
+      // clang-format on
+      >();
+
+  target.addLegalOp<
+      // clang-format off
+      elliptic_curve::ExtractOp,
+      elliptic_curve::PointOp
+      // clang-format on
+      >();
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
@@ -713,51 +655,13 @@ void EllipticCurveToField::runOnOperation() {
       ConvertBucketAcc,
       ConvertConvertPointType,
       ConvertDouble,
-      ConvertExtract,
       ConvertIsZero,
       ConvertMSM,
       ConvertNegate,
-      ConvertPoint,
       ConvertScalarMul,
-      ConvertSub,
-      ConvertAny<bufferization::AllocTensorOp>,
-      ConvertAny<bufferization::MaterializeInDestinationOp>,
-      ConvertAny<bufferization::ToBufferOp>,
-      ConvertAny<bufferization::ToTensorOp>,
-      ConvertAny<memref::AllocOp>,
-      ConvertAny<memref::AllocaOp>,
-      ConvertAny<memref::CastOp>,
-      ConvertAny<memref::DimOp>,
-      ConvertAny<memref::LoadOp>,
-      ConvertAny<memref::StoreOp>,
-      ConvertAny<memref::SubViewOp>,
-      ConvertAny<tensor::DimOp>,
-      ConvertAny<tensor::ExtractOp>,
-      ConvertAny<tensor::ExtractSliceOp>,
-      ConvertAny<tensor::FromElementsOp>
+      ConvertSub
       // clang-format on
-      >(typeConverter, context);
-  target.addDynamicallyLegalOp<
-      // clang-format off
-      bufferization::AllocTensorOp,
-      bufferization::MaterializeInDestinationOp,
-      bufferization::ToBufferOp,
-      bufferization::ToTensorOp,
-      memref::AllocOp,
-      memref::AllocaOp,
-      memref::CastOp,
-      memref::DimOp,
-      memref::LoadOp,
-      memref::StoreOp,
-      memref::SubViewOp,
-      tensor::DimOp,
-      tensor::ExtractOp,
-      tensor::ExtractSliceOp,
-      tensor::FromElementsOp
-      // clang-format on
-      >([&](auto op) { return typeConverter.isLegal(op); });
-
-  addStructuralConversionPatterns(typeConverter, patterns, target);
+      >(context);
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();

@@ -33,8 +33,8 @@ func.func @test_bucket_acc() {
   %jacobian_sum_13 = elliptic_curve.add %affine1, %affine3 : !affine, !affine -> !jacobian
   func.call @printAffineFromJacobian(%jacobian_sum_13) : (!jacobian) -> ()
 
-  %jacobian_sum12 = elliptic_curve.add %affine1, %affine2 : !affine, !affine -> !jacobian
-  func.call @printAffineFromJacobian(%jacobian_sum12) : (!jacobian) -> ()
+  %jacobian_sum_12 = elliptic_curve.add %affine1, %affine2 : !affine, !affine -> !jacobian
+  func.call @printAffineFromJacobian(%jacobian_sum_12) : (!jacobian) -> ()
 
   func.call @printAffine(%affine2) : (!affine) -> ()
   func.call @printAffine(%affine3) : (!affine) -> ()

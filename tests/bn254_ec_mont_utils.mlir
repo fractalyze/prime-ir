@@ -49,7 +49,7 @@ func.func @getGeneratorMultiple(%k: !SF) -> !affine {
   %twoPF = field.constant 2 : !PF
   %onePFm = field.to_mont %onePF : !PFm
   %twoPFm = field.to_mont %twoPF : !PFm
-  %g = elliptic_curve.point %onePFm, %twoPFm : !affine
+  %g = elliptic_curve.point %onePFm, %twoPFm : (!PFm, !PFm) -> !affine
   %g_multiple = elliptic_curve.scalar_mul %k, %g : !SF, !affine -> !jacobian
   %g_multiple_affine = elliptic_curve.convert_point_type %g_multiple : !jacobian -> !affine
   return %g_multiple_affine : !affine

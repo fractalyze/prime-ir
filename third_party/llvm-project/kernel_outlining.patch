@@ -1,59 +1,75 @@
 diff --git i/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp w/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
-index a64ec8d52daf..af7884c7b2ca 100644
+index a64ec8d52daf..9a29005e0591 100644
 --- mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
 +++ mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
-@@ -188,6 +188,54 @@ static gpu::GPUFuncOp outlineKernelFuncImpl(gpu::LaunchOp launchOp,
-   // operation.
-   getUsedValuesDefinedAbove(launchOpBody, operands);
-
-+  // Remove unsupported integer types from operands and just duplicate inside
-+  // launch body if defining operation is constant. This does not work if the
-+  // defining operation is not constant which will leave the resulting kernel
-+  // not compilable.
-+  for (auto it = operands.begin(); it != operands.end();) {
-+    if (it->getType().isInteger(128) || it->getType().isInteger(256) ||
-+        it->getType().isInteger(512)) {
-+      Value operandValue = *it;
-+      Operation *definingOp = operandValue.getDefiningOp();
+@@ -19,6 +19,7 @@
+ #include "mlir/Dialect/Func/IR/FuncOps.h"
+ #include "mlir/Dialect/GPU/IR/GPUDialect.h"
+ #include "mlir/Dialect/GPU/Utils/GPUUtils.h"
++#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+ #include "mlir/Dialect/MemRef/IR/MemRef.h"
+ #include "mlir/IR/Builders.h"
+ #include "mlir/IR/BuiltinAttributes.h"
+@@ -37,6 +38,48 @@ namespace mlir {
+ 
+ using namespace mlir;
+ 
++/// Returns true if `value` is produced by a chain of LLVM aggregate
++/// constructions (llvm.insertvalue over llvm.poison/undef) where every inserted
++/// element operand is defined by arith.constant. This is used to ensure we only
++/// clone fully-constant aggregate initializations into the kernel.
++static bool isStructConst(Value value) {
++  Operation *op = value.getDefiningOp();
++  if (!op)
++    return false;
 +
-+      // Check if the defining operation is a constant
-+      if (definingOp && isa<arith::ConstantOp>(definingOp)) {
-+        // Get the constant attribute from the defining operation
-+        auto constantOp = cast<arith::ConstantOp>(definingOp);
-+        TypedAttr constantAttr = cast<TypedAttr>(constantOp.getValue());
++  // Poison/Undef are easily cloneable because they are just placeholders.
++  if (isa<LLVM::PoisonOp>(op) || isa<LLVM::UndefOp>(op))
++    return true;
 +
-+        // Set insertion point to the beginning of the launch op body
-+        builder.setInsertionPointToStart(&launchOpBody.getBlocks().front());
-+
-+        // Duplicate the constant operation inside launch op body
-+        auto duplicatedOperand =
-+            builder.create<arith::ConstantOp>(loc, constantAttr);
-+
-+        // Replace all uses of the original operand within the launch op body
-+        operandValue.replaceUsesWithIf(
-+            duplicatedOperand.getResult(), [&](OpOperand &use) {
-+              return launchOpBody.isAncestor(use.getOwner()->getParentRegion());
-+            });
-+
-+        // Remove the operand from the list
-+        it = operands.erase(it);
-+      } else {
-+        launchOp.emitError(
-+            "large int operand is not a constant and could not be duplicated "
-+            "inside the launch op body. This will cause the kernel to be "
-+            "invalid.");
-+        ++it;
-+      }
-+    } else {
-+      ++it;
++  if (auto insertOp = dyn_cast<LLVM::InsertValueOp>(op)) {
++    Value aggregate = op->getOperand(0);
++    Value inserted = op->getOperand(1);
++    Operation *insertedDef = inserted.getDefiningOp();
++    if (!(isa_and_nonnull<arith::ConstantOp>(insertedDef) ||
++          isa_and_nonnull<LLVM::ConstantOp>(insertedDef))) {
++      return false;
 +    }
++    return isStructConst(aggregate);
 +  }
 +
-+  // NOTE(batzor): Clear the insertion point to avoid inserting into the launch
-+  // op body. Not sure what's the proper way to do this but without this, the
-+  // `gpu.func` is inserted inside the launch body causing error.
-+  builder.clearInsertionPoint();
++  return false;
++}
 +
-   // Create the gpu.func operation.
-   SmallVector<Type, 4> kernelOperandTypes;
-   kernelOperandTypes.reserve(operands.size());
++/// Returns true if the operation produces at least one result that is either
++/// a constant or an aggregate containing constants, suitable for sinking.
++static bool isAggregateConst(Operation *op) {
++  if (!op || op->getNumResults() == 0)
++    return false;
++
++  // Sink any aggregate that is fully composed from constants, regardless of
++  // element bitwidth. This captures constant structs as well.
++  // TODO(batzor): Add support for LLVM array types and nested structs.
++  if (isStructConst(op->getResult(0)))
++      return true;
++
++  return false;
++}
++
+ template <typename OpTy>
+ static void createForAllDimensions(OpBuilder &builder, Location loc,
+                                    SmallVectorImpl<Value> &values) {
+@@ -184,6 +227,13 @@ static gpu::GPUFuncOp outlineKernelFuncImpl(gpu::LaunchOp launchOp,
+   OpBuilder builder(launchOp.getContext());
+   Region &launchOpBody = launchOp.getBody();
+ 
++  // Sink constants and constant aggregates into the launch body so they don't
++  // become kernel arguments when outlining the kernel.
++  std::ignore = sinkOperationsIntoLaunchOp(launchOp, [&](Operation *op) {
++    return isa<arith::ConstantOp>(op) || isa<LLVM::ConstantOp>(op) ||
++           isAggregateConst(op);
++  });
++
+   // Identify uses from values defined outside of the scope of the launch
+   // operation.
+   getUsedValuesDefinedAbove(launchOpBody, operands);

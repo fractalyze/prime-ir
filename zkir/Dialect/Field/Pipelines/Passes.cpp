@@ -1,7 +1,6 @@
 #include "zkir/Dialect/Field/Pipelines/Passes.h"
 
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
-#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/ConvertToLLVM/ToLLVMPass.h"
 #include "mlir/Conversion/GPUCommon/GPUCommonPass.h"
 #include "mlir/Conversion/GPUToNVVM/GPUToNVVMPass.h"
@@ -18,6 +17,7 @@
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
+#include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "zkir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
@@ -107,6 +107,7 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   // it's not already mapped.
   pm.addPass(createGpuMapParallelLoopsPass());
   pm.addNestedPass<func::FuncOp>(createConvertParallelLoopToGpuPass());
+  pm.addPass(elliptic_curve::createEllipticCurveToLLVM());
   pm.addPass(createGpuKernelOutliningPass());
   pm.addPass(createLowerAffinePass());
   pm.addPass(createGpuDecomposeMemrefsPass());
@@ -129,7 +130,6 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   opt.kernelBarePtrCallConv = options.nvvmUseBarePtrCallConv;
   pm.addPass(createGpuToLLVMConversionPass(opt));
   pm.addPass(createSCFToControlFlowPass());
-  pm.addPass(createConvertControlFlowToLLVMPass());
   pm.addPass(createConvertToLLVMPass());
   pm.addPass(createCanonicalizerPass());
   pm.addPass(
