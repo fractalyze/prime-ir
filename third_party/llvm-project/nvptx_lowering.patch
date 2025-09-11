@@ -1,0 +1,22 @@
+diff --git i/llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp w/llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
+index d817a3c6a877..480e1c676dc1 100644
+--- llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
++++ llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
+@@ -308,6 +308,17 @@ static void ComputePTXValueVTs(const TargetLowering &TLI, const DataLayout &DL,
+     return;
+   }
+ 
++  // Special case for i256 - decompose to (i64, i64, i64, i64)
++  if (Ty->isIntegerTy(256)) {
++    ValueVTs.append({MVT::i64, MVT::i64, MVT::i64, MVT::i64});
++
++    if (Offsets)
++      Offsets->append({StartingOffset + 0, StartingOffset + 8,
++                       StartingOffset + 16, StartingOffset + 24});
++
++    return;
++  }
++
+   // Given a struct type, recursively traverse the elements with custom ComputePTXValueVTs.
+   if (StructType *STy = dyn_cast<StructType>(Ty)) {
+     auto const *SL = DL.getStructLayout(STy);
