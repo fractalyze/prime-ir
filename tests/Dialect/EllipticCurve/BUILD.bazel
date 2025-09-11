@@ -7,6 +7,7 @@ package(
 
 GPU_TESTS = [
     "bucket_acc_runner.mlir",
+    "bucket_reduce_runner.mlir",
 ]
 
 glob_lit_tests(
