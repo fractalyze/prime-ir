@@ -1,0 +1,15 @@
+diff --git a/mlir/include/mlir/ExecutionEngine/MemRefUtils.h b/mlir/include/mlir/ExecutionEngine/MemRefUtils.h
+index f355dfb8648e..1b2cd162ff5d 100644
+--- mlir/include/mlir/ExecutionEngine/MemRefUtils.h
++++ mlir/include/mlir/ExecutionEngine/MemRefUtils.h
+@@ -174,9 +174,7 @@ public:
+            it != end; ++it)
+         init(*it, it.getIndices());
+     } else {
+-      memset(descriptor.data, 0,
+-             nElements * sizeof(T) +
+-                 alignment.value_or(detail::nextPowerOf2(sizeof(T))));
++      memset(descriptor.data, 0, nElements * sizeof(T));
+     }
+   }
+   /// Take ownership of an existing descriptor with a custom deleter.
