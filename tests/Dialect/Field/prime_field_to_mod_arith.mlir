@@ -21,7 +21,7 @@ func.func @test_lower_constant() -> !PF1 {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[F:.*]] {
 func.func @test_lower_encapsulate(%lhs : i32) -> !PF1 {
   // CHECK-NOT: field.encapsulate
-  // CHECK: %[[RES:.*]] = mod_arith.encapsulate %[[LHS]] : [[T]] -> [[F]]
+  // CHECK: %[[RES:.*]] = mod_arith.bitcast %[[LHS]] : [[T]] -> [[F]]
   %res = field.encapsulate %lhs : i32 -> !PF1
   // CHECK: return %[[RES]] : [[F]]
   return %res : !PF1
@@ -31,7 +31,7 @@ func.func @test_lower_encapsulate(%lhs : i32) -> !PF1 {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[TF:.*]] {
 func.func @test_lower_encapsulate_vec(%lhs : tensor<4xi32>) -> tensor<4x!PF1> {
   // CHECK-NOT: field.encapsulate
-  // CHECK: %[[RES:.*]] = mod_arith.encapsulate %[[LHS]] : [[T]] -> [[TF]]
+  // CHECK: %[[RES:.*]] = mod_arith.bitcast %[[LHS]] : [[T]] -> [[TF]]
   %res = field.encapsulate %lhs : tensor<4xi32> -> tensor<4x!PF1>
   // CHECK: return %[[RES]] : [[TF]]
   return %res : tensor<4x!PF1>
@@ -41,7 +41,7 @@ func.func @test_lower_encapsulate_vec(%lhs : tensor<4xi32>) -> tensor<4x!PF1> {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[F:.*]] {
 func.func @test_lower_extract(%lhs : !PF1) -> i32 {
   // CHECK-NOT: field.extract
-  // CHECK: %[[RES:.*]] = mod_arith.extract %[[LHS]] : [[T]] -> [[F]]
+  // CHECK: %[[RES:.*]] = mod_arith.bitcast %[[LHS]] : [[T]] -> [[F]]
   %res = field.extract %lhs : !PF1 -> i32
   // CHECK: return %[[RES]] : [[F]]
   return %res : i32
@@ -51,7 +51,7 @@ func.func @test_lower_extract(%lhs : !PF1) -> i32 {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[TF:.*]] {
 func.func @test_lower_extract_vec(%lhs : tensor<4x!PF1>) -> tensor<4xi32> {
   // CHECK-NOT: field.extract
-  // CHECK: %[[RES:.*]] = mod_arith.extract %[[LHS]] : [[T]] -> [[TF]]
+  // CHECK: %[[RES:.*]] = mod_arith.bitcast %[[LHS]] : [[T]] -> [[TF]]
   %res = field.extract %lhs : tensor<4x!PF1> -> tensor<4xi32>
   // CHECK: return %[[RES]] : [[TF]]
   return %res : tensor<4xi32>

@@ -38,7 +38,7 @@ func.func @test_lower_inverse() {
   %p_inv = mod_arith.mont_inverse %p_mont : !Fqm
   %mul = mod_arith.mul %p_inv, %p_mont : !Fqm
   %from_mont = mod_arith.from_mont %mul : !Fq
-  %2 = mod_arith.extract %from_mont : !Fq -> i256
+  %2 = mod_arith.bitcast %from_mont : !Fq -> i256
   %3 = arith.trunci %2 : i256 to i32
   %4 = tensor.from_elements %3 : tensor<1xi32>
   %5 = bufferization.to_buffer %4 : tensor<1xi32> to memref<1xi32>
@@ -47,7 +47,7 @@ func.func @test_lower_inverse() {
 
   %inv = mod_arith.inverse %p : !Fq
   %mul2 = mod_arith.mul %inv, %p : !Fq
-  %6 = mod_arith.extract %mul2 : !Fq -> i256
+  %6 = mod_arith.bitcast %mul2 : !Fq -> i256
   %7 = arith.trunci %6 : i256 to i32
   %8 = tensor.from_elements %7 : tensor<1xi32>
   %9 = bufferization.to_buffer %8 : tensor<1xi32> to memref<1xi32>
@@ -59,7 +59,7 @@ func.func @test_lower_inverse() {
   %p_r_inv = mod_arith.mont_inverse %p_r_mont : !Frm
   %mul_r = mod_arith.mul %p_r_inv, %p_r_mont : !Frm
   %from_mont_r = mod_arith.from_mont %mul_r : !Fr
-  %r_ext = mod_arith.extract %from_mont_r : !Fr -> i32
+  %r_ext = mod_arith.bitcast %from_mont_r : !Fr -> i32
   %r_tensor = tensor.from_elements %r_ext : tensor<1xi32>
   %r_mem = bufferization.to_buffer %r_tensor : tensor<1xi32> to memref<1xi32>
   %r_mem_cast = memref.cast %r_mem : memref<1xi32> to memref<*xi32>
@@ -79,10 +79,10 @@ func.func @test_lower_inverse_tensor() {
   %p2 = arith.constant 3724 : i256
   %p3 = arith.constant 3725 : i256
   %tensor1 = tensor.from_elements %p1, %p2, %p3 : tensor<3xi256>
-  %tensor2 = mod_arith.encapsulate %tensor1 : tensor<3xi256> -> tensor<3x!Fq>
+  %tensor2 = mod_arith.bitcast %tensor1 : tensor<3xi256> -> tensor<3x!Fq>
   %inv = mod_arith.inverse %tensor2 : tensor<3x!Fq>
   %mul = mod_arith.mul %inv, %tensor2 : tensor<3x!Fq>
-  %ext = mod_arith.extract %mul : tensor<3x!Fq> -> tensor<3xi256>
+  %ext = mod_arith.bitcast %mul : tensor<3x!Fq> -> tensor<3xi256>
   %trunc = arith.trunci %ext : tensor<3xi256> to tensor<3xi32>
   %1 = bufferization.to_buffer %trunc : tensor<3xi32> to memref<3xi32>
   %U1 = memref.cast %1 : memref<3xi32> to memref<*xi32>
@@ -92,7 +92,7 @@ func.func @test_lower_inverse_tensor() {
   %inv_mont = mod_arith.inverse %tensor_mont : tensor<3x!Fqm>
   %mul_mont = mod_arith.mul %inv_mont, %tensor_mont : tensor<3x!Fqm>
   %from_mont = mod_arith.from_mont %mul_mont : tensor<3x!Fq>
-  %ext2 = mod_arith.extract %from_mont : tensor<3x!Fq> -> tensor<3xi256>
+  %ext2 = mod_arith.bitcast %from_mont : tensor<3x!Fq> -> tensor<3xi256>
   %trunc2 = arith.trunci %ext2 : tensor<3xi256> to tensor<3xi32>
   %2 = bufferization.to_buffer %trunc2 : tensor<3xi32> to memref<3xi32>
   %U2 = memref.cast %2 : memref<3xi32> to memref<*xi32>
@@ -109,7 +109,7 @@ func.func @test_lower_mont_reduce() {
   // `pR` is `p` << 256 so just give `p` as `high` and set `low` to 0
   %p_mont = mod_arith.mont_reduce %zero, %p : i256 -> !Fq
 
-  %2 = mod_arith.extract %p_mont : !Fq -> i256
+  %2 = mod_arith.bitcast %p_mont : !Fq -> i256
   // check if mod_arith.mont_reduce(pR) == p
   %true = arith.cmpi eq, %2, %p : i256
   %trueExt = arith.extui %true : i1 to i32
@@ -132,7 +132,7 @@ func.func @test_lower_mont_mul() {
   %p_mont_sq = mod_arith.mont_mul %p_mont, %p_mont : !Fqm
   %p_sq = mod_arith.from_mont %p_mont_sq : !Fq
 
-  %2 = mod_arith.extract %p_sq : !Fq -> i256
+  %2 = mod_arith.bitcast %p_sq : !Fq -> i256
   %3 = vector.from_elements %2 : vector<1xi256>
   %4 = vector.bitcast %3 : vector<1xi256> to vector<8xi32>
   %mem = memref.alloc() : memref<8xi32>
@@ -152,7 +152,7 @@ func.func @test_lower_mont_square() {
   %p_mont_sq = mod_arith.mont_square %p_mont : !Fqm
   %p_sq = mod_arith.from_mont %p_mont_sq : !Fq
 
-  %2 = mod_arith.extract %p_sq : !Fq -> i256
+  %2 = mod_arith.bitcast %p_sq : !Fq -> i256
   %3 = vector.from_elements %2 : vector<1xi256>
   %4 = vector.bitcast %3 : vector<1xi256> to vector<8xi32>
   %mem = memref.alloc() : memref<8xi32>

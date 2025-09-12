@@ -143,16 +143,16 @@ struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
     Type fieldType = getElementTypeOrSelf(op.getOutput().getType());
     if (isa<PrimeFieldType>(fieldType)) {
       Type resultType = typeConverter->convertType(op.getResult().getType());
-      auto enc = b.create<mod_arith::EncapsulateOp>(resultType,
-                                                    adaptor.getOperands()[0]);
+      auto enc =
+          b.create<mod_arith::BitcastOp>(resultType, adaptor.getOperands()[0]);
       rewriter.replaceOp(op, enc);
       return success();
     } else if (auto extFieldType = dyn_cast<QuadraticExtFieldType>(fieldType)) {
       Type resultType = typeConverter->convertType(extFieldType.getBaseField());
-      auto low = b.create<mod_arith::EncapsulateOp>(resultType,
-                                                    adaptor.getOperands()[0]);
-      auto high = b.create<mod_arith::EncapsulateOp>(resultType,
-                                                     adaptor.getOperands()[1]);
+      auto low =
+          b.create<mod_arith::BitcastOp>(resultType, adaptor.getOperands()[0]);
+      auto high =
+          b.create<mod_arith::BitcastOp>(resultType, adaptor.getOperands()[1]);
       rewriter.replaceOpWithMultiple(op, {{low, high}});
       return success();
     } else {
@@ -177,12 +177,12 @@ struct ConvertExtract : public OpConversionPattern<ExtractOp> {
     auto resultType = typeConverter->convertType(op.getResult(0).getType());
     if (isa<PrimeFieldType>(fieldType)) {
       auto extracted =
-          b.create<mod_arith::ExtractOp>(resultType, adaptor.getOperands()[0]);
+          b.create<mod_arith::BitcastOp>(resultType, adaptor.getInput());
       rewriter.replaceOp(op, extracted);
     } else if (isa<QuadraticExtFieldType>(fieldType)) {
-      auto low = b.create<mod_arith::ExtractOp>(resultType,
+      auto low = b.create<mod_arith::BitcastOp>(resultType,
                                                 adaptor.getOperands()[0][0]);
-      auto high = b.create<mod_arith::ExtractOp>(resultType,
+      auto high = b.create<mod_arith::BitcastOp>(resultType,
                                                  adaptor.getOperands()[0][1]);
       rewriter.replaceOpWithMultiple(op, {{low}, {high}});
     } else {

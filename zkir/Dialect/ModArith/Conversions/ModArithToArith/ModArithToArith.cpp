@@ -93,28 +93,14 @@ static inline Type modulusType(Op op, bool mul = false) {
   return modulusAttr(op, mul).getType();
 }
 
-struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
-  explicit ConvertEncapsulate(MLIRContext *context)
-      : OpConversionPattern<EncapsulateOp>(context) {}
+struct ConvertBitcast : public OpConversionPattern<BitcastOp> {
+  explicit ConvertBitcast(MLIRContext *context)
+      : OpConversionPattern<BitcastOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(EncapsulateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.getInput());
-    return success();
-  }
-};
-
-struct ConvertExtract : public OpConversionPattern<ExtractOp> {
-  explicit ConvertExtract(MLIRContext *context)
-      : OpConversionPattern<ExtractOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
+  matchAndRewrite(BitcastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
@@ -823,9 +809,9 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
     auto signlessIntType =
         IntegerType::get(b.getContext(), outputBitWidth, IntegerType::Signless);
     auto extractedLHS =
-        b.create<mod_arith::ExtractOp>(signlessIntType, op.getLhs());
+        b.create<mod_arith::BitcastOp>(signlessIntType, op.getLhs());
     auto extractedRHS =
-        b.create<mod_arith::ExtractOp>(signlessIntType, op.getRhs());
+        b.create<mod_arith::BitcastOp>(signlessIntType, op.getRhs());
 
     auto cmpOp =
         b.create<arith::CmpIOp>(op.getPredicate(), extractedLHS, extractedRHS);
@@ -859,11 +845,10 @@ void ModArithToArith::runOnOperation() {
   patterns.add<
       // clang-format off
       ConvertAdd,
+      ConvertBitcast,
       ConvertCmp,
       ConvertConstant,
       ConvertDouble,
-      ConvertEncapsulate,
-      ConvertExtract,
       ConvertFromMont,
       ConvertInverse,
       ConvertMac,

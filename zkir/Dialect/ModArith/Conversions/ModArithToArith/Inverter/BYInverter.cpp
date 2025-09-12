@@ -344,8 +344,8 @@ Value BYInverter::BatchGenerate(Value input, bool isMont,
 
   // (a₁*a₂* ... *aᵢ)⁻¹
   Value invertedProduct =
-      Generate(b_.create<ExtractOp>(intType_, product), isMont);
-  invertedProduct = b_.create<EncapsulateOp>(modArithType_, invertedProduct);
+      Generate(b_.create<BitcastOp>(intType_, product), isMont);
+  invertedProduct = b_.create<BitcastOp>(modArithType_, invertedProduct);
 
   // calculate [a₁⁻¹, a₂⁻¹, ..., aₙ⁻¹]
   // TODO(quanxi1): Currently this is lowered to allocating a new buffer. Change

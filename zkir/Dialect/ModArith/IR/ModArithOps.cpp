@@ -82,13 +82,12 @@ LogicalResult NegateOp::verify() {
   return verifyModArithType(*this, getResultModArithType(*this));
 }
 
-LogicalResult ExtractOp::verify() {
-  auto modArithType = getOperandModArithType(*this);
-  auto integerType = getResultIntegerType(*this);
-  auto result = verifySameWidth(*this, modArithType, integerType);
-  if (result.failed())
-    return result;
-  return verifyModArithType(*this, modArithType);
+bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+  Type inputType = getElementTypeOrSelf(inputs.front());
+  Type outputType = getElementTypeOrSelf(outputs.front());
+
+  return getIntOrModArithBitWidth(inputType) ==
+         getIntOrModArithBitWidth(outputType);
 }
 
 LogicalResult MontReduceOp::verify() {

@@ -5,6 +5,7 @@ include "zkir/Dialect/ModArith/IR/ModArithAttributes.td"
 include "zkir/Dialect/ModArith/IR/ModArithDialect.td"
 include "zkir/Dialect/ModArith/IR/ModArithTypes.td"
 include "mlir/Dialect/Arith/IR/ArithBase.td"
+include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
@@ -58,45 +59,25 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [ConstantLike, Pure]>
   let hasFolder = 1;
 }
 
-// type conversion operations
-def ModArith_EncapsulateOp : Op<ModArith_Dialect, "encapsulate", [Pure]> {
-  let summary = "Encapsulate an integer into a modular type integer";
+def ModArith_BitcastOp : Op<ModArith_Dialect, "bitcast", [Pure,
+ SameOperandsAndResultShape, DeclareOpInterfaceMethods<CastOpInterface>]> {
+  let summary = "Bitcast between modular types and to/from integer types";
   let description = [{
-    Converts the integer to be of modular type integer.
+    Bitcasts between modular types and to/from integer types.
 
-    It is required that the bitwidth of the input integer type is the same
-    as that of the storage type of the output modular integer type.
+    The storage bitwidth of the input type is required to be the same storage
+    bitwidth of the output type. Integer to integer bitcast is disallowed as it
+    should be handled by `arith.bitcast`.
 
     Example:
     ```
-    mod_arith.encapsulate %c0 : i32 -> mod_arith.int<65537 : i32>
-    mod_arith.encapsulate %c1 : i64 -> mod_arith.int<65537>
+    mod_arith.bitcast %c0 : i32 -> mod_arith.int<65537 : i32>
+    mod_arith.bitcast %m1 : mod_arith.int<65537 : i64> -> i64
+    mod_arith.bitcast %m2 : mod_arith.int<65537 : i64> -> mod_arith.int<7 : i64>
     ```
   }];
-  let arguments = (ins SignlessIntegerLike:$input);
-  let results = (outs ModArithLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
-}
-
-def ModArith_ExtractOp : Op<ModArith_Dialect, "extract", [Pure]> {
-  let summary = "Extract the integer from inside modular type integer";
-  let description = [{
-    Extracts the integer inside the modular type integer.
-
-    It is required that the bitwidth of the output integer type is the same
-    as that of the storage type of the input modular type integer.
-
-    Example:
-    ```
-    %m0 = mod_arith.encapsulate %c0 : i32 -> mod_arith.int<65537 : i32>
-    %m1 = mod_arith.encapsulate %c1 : i64 -> mod_arith.int<65537>
-    %c2 = mod_arith.extract %m0 : mod_arith.int<65537 : i32> -> i32
-    %c3 = mod_arith.extract %m1 : mod_arith.int<65537> -> i64
-    ```
-  }];
-  let arguments = (ins ModArithLike:$input);
-  let results = (outs SignlessIntegerLike:$output);
-  let hasVerifier = 1;
+  let arguments = (ins AnyTypeOf<[ModArithLike, SignlessIntegerLike]>:$input);
+  let results = (outs AnyTypeOf<[ModArithLike, SignlessIntegerLike]>:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 

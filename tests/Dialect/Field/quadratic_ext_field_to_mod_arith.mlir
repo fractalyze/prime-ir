@@ -114,8 +114,8 @@ func.func @test_lower_memref(%arg0: memref<3x2x!QF>) -> !QF {
 // CHECK-LABEL: @test_lower_extract
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[F:.*]], [[F]]) {
 func.func @test_lower_extract(%arg0: !QF) -> (i32, i32) {
-    // CHECK: %[[LO:.*]] = mod_arith.extract %[[ARG0]] : [[T]] -> [[F]]
-    // CHECK: %[[HI:.*]] = mod_arith.extract %[[ARG1]] : [[T]] -> [[F]]
+    // CHECK: %[[LO:.*]] = mod_arith.bitcast %[[ARG0]] : [[T]] -> [[F]]
+    // CHECK: %[[HI:.*]] = mod_arith.bitcast %[[ARG1]] : [[T]] -> [[F]]
     %0, %1 = field.extract %arg0 : !QF -> i32, i32
     // CHECK: return %[[LO]], %[[HI]] : [[F]], [[F]]
     return %0, %1 : i32, i32
@@ -124,8 +124,8 @@ func.func @test_lower_extract(%arg0: !QF) -> (i32, i32) {
 // CHECK-LABEL: @test_lower_encapsulate
 // CHECK-SAME: (%[[ARG0:.*]]: [[F:.*]], %[[ARG1:.*]]: [[F]]) -> ([[T:.*]], [[T]]) {
 func.func @test_lower_encapsulate(%arg0: i32, %arg1: i32) -> !QF {
-    // CHECK: %[[LO:.*]] = mod_arith.encapsulate %[[ARG0]] : [[F]] -> [[T]]
-    // CHECK: %[[HI:.*]] = mod_arith.encapsulate %[[ARG1]] : [[F]] -> [[T]]
+    // CHECK: %[[LO:.*]] = mod_arith.bitcast %[[ARG0]] : [[F]] -> [[T]]
+    // CHECK: %[[HI:.*]] = mod_arith.bitcast %[[ARG1]] : [[F]] -> [[T]]
     %0 = field.encapsulate %arg0, %arg1 : i32, i32 -> !QF
     // CHECK: return %[[LO]], %[[HI]] : [[T]], [[T]]
     return %0 : !QF
