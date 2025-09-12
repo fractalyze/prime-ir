@@ -32,7 +32,7 @@ index ca7f31dd6b51..5b0e32f98e8e 100644
          arith::MulIOp, arith::AddIOp,
          complex::MulOp, complex::AddOp,
 diff --git mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp w/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
-index 8075df730ccc..eed50cf6fb63 100644
+index 8075df730ccc..0da75c4c81cc 100644
 --- mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
 +++ mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
 @@ -51,6 +51,14 @@
@@ -67,7 +67,7 @@ index 8075df730ccc..eed50cf6fb63 100644
    RegionBuilderHelper(OpBuilder &builder, Block &block)
        : builder(builder), block(block) {}
 
-@@ -506,7 +522,14 @@ public:
+@@ -506,11 +522,20 @@ public:
      bool allInteger = isInteger(arg0) && isInteger(arg1);
      bool allBool = allInteger && arg0.getType().getIntOrFloatBitWidth() == 1 &&
                     arg1.getType().getIntOrFloatBitWidth() == 1;
@@ -75,7 +75,8 @@ index 8075df730ccc..eed50cf6fb63 100644
 +
 +    bool allModular = isModular(arg0) && isModular(arg1);
 +    bool allField = isField(arg0) && isField(arg1);
-+    bool scalarByPoint = isPrimeField(arg0) && isECPoint(arg1);
++    bool scalarByPoint = (isPrimeField(arg0) && isECPoint(arg1)) ||
++                         (isECPoint(arg0) && isPrimeField(arg1));
 +    bool allECPoint = isECPoint(arg0) && isECPoint(arg1);
 +
 +    if (!allComplex && !allFloatingPoint && !allInteger && !allModular &&
@@ -83,15 +84,13 @@ index 8075df730ccc..eed50cf6fb63 100644
        if (emitError) {
          emitError()
              << "Cannot build binary Linalg operation: expects allComplex, "
-@@ -516,6 +539,7 @@ public:
+-               "allFloatingPoint, or allInteger, got "
++               "allFloatingPoint, allInteger, allModular, allField, "
++               "scalarByPoint, or allECPoint, got "
+             << arg0.getType() << " and " << arg1.getType();
+         return nullptr;
        }
-       llvm_unreachable("unsupported non numeric type");
-     }
-+
-     OpBuilder::InsertionGuard g(builder);
-     builder.setInsertionPointToEnd(&block);
-     switch (binaryFn) {
-@@ -526,6 +550,15 @@ public:
+@@ -526,6 +551,15 @@ public:
          return builder.create<arith::AddFOp>(arg0.getLoc(), arg0, arg1);
        if (allBool)
          return builder.create<arith::OrIOp>(arg0.getLoc(), arg0, arg1);
@@ -107,7 +106,7 @@ index 8075df730ccc..eed50cf6fb63 100644
        return builder.create<arith::AddIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::sub:
        if (allComplex)
-@@ -539,6 +572,15 @@ public:
+@@ -539,6 +573,15 @@ public:
          }
          llvm_unreachable("unsupported operation: sub with bools");
        }
@@ -123,7 +122,7 @@ index 8075df730ccc..eed50cf6fb63 100644
        return builder.create<arith::SubIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::mul:
        if (allComplex)
-@@ -547,6 +589,15 @@ public:
+@@ -547,6 +590,19 @@ public:
          return builder.create<arith::MulFOp>(arg0.getLoc(), arg0, arg1);
        if (allBool)
          return builder.create<arith::AndIOp>(arg0.getLoc(), arg0, arg1);
@@ -131,15 +130,19 @@ index 8075df730ccc..eed50cf6fb63 100644
 +        return builder.create<mod_arith::MulOp>(arg0.getLoc(), arg0, arg1);
 +      if (allField)
 +        return builder.create<field::MulOp>(arg0.getLoc(), arg0, arg1);
-+      if (scalarByPoint)
++      if (scalarByPoint) {
++        if (isECPoint(arg0))
++          return builder.create<elliptic_curve::ScalarMulOp>(
++              arg0.getLoc(), arg0.getType(), arg1, arg0);
 +        return builder.create<elliptic_curve::ScalarMulOp>(
 +            arg0.getLoc(), arg1.getType(), arg0, arg1);
++      }
 +      if (allECPoint)
 +        llvm_unreachable("unsupported operation: mul with two EC points");
        return builder.create<arith::MulIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::div:
        if (allComplex)
-@@ -560,6 +611,14 @@ public:
+@@ -560,6 +616,14 @@ public:
          }
          llvm_unreachable("unsupported operation: div with bools");
        }
@@ -154,7 +157,7 @@ index 8075df730ccc..eed50cf6fb63 100644
        return builder.create<arith::DivSIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::div_unsigned:
        if (!allInteger || allBool) {
-@@ -569,26 +628,84 @@ public:
+@@ -569,26 +633,84 @@ public:
          }
          llvm_unreachable("unsupported operation: unsigned div not on uint");
        }
@@ -239,7 +242,7 @@ index 8075df730ccc..eed50cf6fb63 100644
        return builder.create<arith::MinUIOp>(arg0.getLoc(), arg0, arg1);
      case BinaryFn::powf:
        assert(allFloatingPoint);
-@@ -627,6 +744,9 @@ public:
+@@ -627,6 +749,9 @@ public:
    // Build the type functions defined by OpDSL.
    Value buildTypeFn(TypeFn typeFn, Type toType, Value operand,
                      function_ref<InFlightDiagnostic()> emitError = {}) {
@@ -249,7 +252,7 @@ index 8075df730ccc..eed50cf6fb63 100644
      switch (typeFn) {
      case TypeFn::cast_signed:
        return cast(toType, operand, false);
-@@ -696,6 +816,21 @@ private:
+@@ -696,6 +821,21 @@ private:
    bool isInteger(Value value) {
      return llvm::isa<IntegerType>(value.getType());
    }
@@ -275,12 +278,13 @@ diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel w/utils/bazel/llvm-
 index cc266c2fe3a7..13b7e256ea64 100644
 --- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -10544,5 +10544,8 @@ cc_library(
+@@ -10544,6 +10544,9 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",
-+        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
-+        "@zkir//zkir/Dialect/Field/IR:Field",
 +        "@zkir//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
++        "@zkir//zkir/Dialect/Field/IR:Field",
++        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
      ],
  )
+

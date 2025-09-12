@@ -5,6 +5,7 @@
 // Headers needed for EllipticCurveOps.h.inc
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
+#include "zkir/Dialect/Field/IR/FieldTypes.h"
 // IWYU pragma: end_keep
 
 #define GET_OP_CLASSES

@@ -4,6 +4,7 @@
 
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -598,6 +599,67 @@ struct ConvertBucketAcc : public OpConversionPattern<BucketAccOp> {
   }
 };
 
+struct ConvertBucketReduce : public OpConversionPattern<BucketReduceOp> {
+  explicit ConvertBucketReduce(mlir::MLIRContext *context)
+      : OpConversionPattern<BucketReduceOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(BucketReduceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    Value buckets = op.getBuckets();
+    RankedTensorType bucketsType = cast<RankedTensorType>(buckets.getType());
+    Type pointType = bucketsType.getElementType();
+    Type standardScalarType = field::getStandardFormType(op.getScalarType());
+    Type integerScalarType = b.getIntegerType(
+        op.getScalarType().getModulus().getValue().getBitWidth());
+
+    // Create bucket weights vector
+    int64_t numBucketsPerWindow = bucketsType.getShape()[1];
+    RankedTensorType arithWeightsType =
+        bucketsType.clone({numBucketsPerWindow}, integerScalarType);
+    SmallVector<Value> weightDims =
+        numBucketsPerWindow == ShapedType::kDynamic
+            ? SmallVector<Value>{b.create<tensor::DimOp>(buckets, 1)}
+            : SmallVector<Value>{};
+    Value arithWeights = b.create<tensor::GenerateOp>(
+        arithWeightsType, weightDims,
+        [&](OpBuilder &builder, Location loc, ValueRange args) {
+          ImplicitLocOpBuilder b0(loc, builder);
+          Value arithScalar =
+              b0.create<arith::IndexCastOp>(integerScalarType, args[0]);
+          b0.create<tensor::YieldOp>(arithScalar);
+        });
+    RankedTensorType weightsType = arithWeightsType.clone(standardScalarType);
+    Value fieldWeights =
+        b.create<field::EncapsulateOp>(weightsType, arithWeights);
+
+    // Create output windows tensor
+    int64_t numWindows = bucketsType.getShape()[0];
+    RankedTensorType windowsType = bucketsType.clone({numWindows}, pointType);
+    SmallVector<Value> windowDims =
+        numWindows == ShapedType::kDynamic
+            ? SmallVector<Value>{b.create<tensor::DimOp>(buckets, 0)}
+            : SmallVector<Value>{};
+    Value zeroPoint = createZeroPoint(b, pointType);
+    Value windows = b.create<tensor::GenerateOp>(
+        windowsType, windowDims,
+        [&](OpBuilder &builder, Location loc, ValueRange args) {
+          builder.create<tensor::YieldOp>(loc, zeroPoint);
+        });
+
+    // Calculate windows
+    auto res = b.create<linalg::MatvecOp>(ValueRange{buckets, fieldWeights},
+                                          ValueRange{windows});
+
+    rewriter.replaceOp(op, res.getResult(0));
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.cpp.inc"
@@ -624,7 +686,8 @@ void EllipticCurveToField::runOnOperation() {
       IsZeroOp,
       MSMOp,
       ScalarMulOp,
-      SubOp
+      SubOp,
+      linalg::MatvecOp
       // clang-format on
       >();
 
@@ -648,11 +711,13 @@ void EllipticCurveToField::runOnOperation() {
       >();
 
   RewritePatternSet patterns(context);
+  linalg::populateLinalgNamedOpsGeneralizationPatterns(patterns);
   rewrites::populateWithGenerated(patterns);
   patterns.add<
       // clang-format off
       ConvertAdd,
       ConvertBucketAcc,
+      ConvertBucketReduce,
       ConvertConvertPointType,
       ConvertDouble,
       ConvertIsZero,

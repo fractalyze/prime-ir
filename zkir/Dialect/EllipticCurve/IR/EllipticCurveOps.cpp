@@ -170,6 +170,28 @@ LogicalResult BucketAccOp::verify() {
   return success();
 }
 
+LogicalResult BucketReduceOp::verify() {
+  RankedTensorType bucketsType = cast<RankedTensorType>(getBuckets().getType());
+  RankedTensorType windowsType = cast<RankedTensorType>(getWindows().getType());
+  if (bucketsType.getRank() != 2)
+    return emitError() << "buckets must be a matrix of rank 2";
+  if (windowsType.getRank() != 1) {
+    return emitError() << "windows must be a vector of rank 1";
+  }
+
+  if (bucketsType.getShape()[0] != windowsType.getShape()[0]) {
+    return emitError() << "dimension 0 of buckets and windows must be the same";
+  }
+
+  Type inputPointType = bucketsType.getElementType();
+  Type outputPointType = windowsType.getElementType();
+  if (inputPointType != outputPointType) {
+    return emitError() << "input and output point types must be the same";
+  }
+
+  return success();
+}
+
 //////////////// VERIFY POINT CONVERSIONS ////////////////
 
 LogicalResult ConvertPointTypeOp::verify() {
