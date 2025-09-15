@@ -8,6 +8,7 @@
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "zkir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Utils/SimpleStructBuilder.h"
 
@@ -23,21 +24,24 @@ using namespace mlir::LLVM;
 //===----------------------------------------------------------------------===//
 namespace {
 template <typename T>
-Type convertPointType(T type) {
+Type convertPointType(T type, LLVMTypeConverter &typeConverter) {
   Type baseFieldType = type.getCurve().getBaseField();
-  Type integerType =
-      cast<field::PrimeFieldType>(baseFieldType).getStorageType();
+  Type coordType;
+  if (auto pfType = dyn_cast<field::PrimeFieldType>(baseFieldType)) {
+    coordType = pfType.getStorageType();
+  } else {
+    coordType = typeConverter.convertType(baseFieldType);
+  }
   if constexpr (std::is_same_v<T, AffineType>) {
     return LLVM::LLVMStructType::getLiteral(type.getContext(),
-                                            {integerType, integerType});
+                                            {coordType, coordType});
   } else if constexpr (std::is_same_v<T, JacobianType>) {
-    return LLVM::LLVMStructType::getLiteral(
-        type.getContext(), {integerType, integerType, integerType});
+    return LLVM::LLVMStructType::getLiteral(type.getContext(),
+                                            {coordType, coordType, coordType});
 
   } else if constexpr (std::is_same_v<T, XYZZType>) {
     return LLVM::LLVMStructType::getLiteral(
-        type.getContext(),
-        {integerType, integerType, integerType, integerType});
+        type.getContext(), {coordType, coordType, coordType, coordType});
   } else {
     return type;
   }
@@ -98,11 +102,11 @@ struct ConvertExtract : public ConvertOpToLLVMPattern<ExtractOp> {
 void populateEllipticCurveToLLVMTypeConversion(
     LLVMTypeConverter &typeConverter) {
   typeConverter.addConversion(
-      [](AffineType type) { return convertPointType(type); });
+      [&](AffineType type) { return convertPointType(type, typeConverter); });
   typeConverter.addConversion(
-      [](JacobianType type) { return convertPointType(type); });
+      [&](JacobianType type) { return convertPointType(type, typeConverter); });
   typeConverter.addConversion(
-      [](XYZZType type) { return convertPointType(type); });
+      [&](XYZZType type) { return convertPointType(type, typeConverter); });
 }
 
 void populateEllipticCurveToLLVMConversionPatterns(
@@ -130,6 +134,7 @@ struct EllipticCurveToLLVM
     LLVMTypeConverter typeConverter(context);
     RewritePatternSet patterns(context);
 
+    field::populateExtFieldToLLVMTypeConversion(typeConverter);
     populateEllipticCurveToLLVMTypeConversion(typeConverter);
     populateFinalizeMemRefToLLVMConversionPatterns(typeConverter, patterns);
     populateEllipticCurveToLLVMConversionPatterns(typeConverter, patterns);
