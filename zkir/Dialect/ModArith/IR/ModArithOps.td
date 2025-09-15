@@ -13,8 +13,7 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 
 // Base class for modular operations.
 class ModArith_Op<string mnemonic, list<Trait> traits = []> :
-  Op<ModArith_Dialect, mnemonic, traits #
-   [NoMemoryEffect, Pure] # ElementwiseMappable.traits>;
+  Op<ModArith_Dialect, mnemonic, traits #[Pure] # ElementwiseMappable.traits>;
 
 // Base class for modular arithmetic ops. All ops have one result,
 // and the result type is the same as the operand type.
