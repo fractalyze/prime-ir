@@ -105,8 +105,8 @@ LogicalResult ScalarMulOp::verify() {
 }
 
 LogicalResult MSMOp::verify() {
-  TensorType scalarsType = cast<TensorType>(getScalars().getType());
-  TensorType pointsType = cast<TensorType>(getPoints().getType());
+  TensorType scalarsType = getScalars().getType();
+  TensorType pointsType = getPoints().getType();
   if (scalarsType.getRank() != pointsType.getRank()) {
     return emitError() << "scalars and points must have the same rank";
   }
@@ -146,10 +146,10 @@ LogicalResult MSMOp::verify() {
 
 LogicalResult BucketAccOp::verify() {
   TensorType sortedUniqueBucketIndices =
-      cast<TensorType>(getSortedUniqueBucketIndices().getType());
-  TensorType bucketOffsets = cast<TensorType>(getBucketOffsets().getType());
-  TensorType bucketResults = cast<TensorType>(getBucketResults().getType());
-  TensorType points = cast<TensorType>(getPoints().getType());
+      getSortedUniqueBucketIndices().getType();
+  TensorType bucketOffsets = getBucketOffsets().getType();
+  TensorType bucketResults = getBucketResults().getType();
+  TensorType points = getPoints().getType();
 
   if (sortedUniqueBucketIndices.getNumElements() !=
       bucketOffsets.getNumElements() - 1) {
