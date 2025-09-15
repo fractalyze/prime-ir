@@ -176,13 +176,6 @@ LogicalResult BucketReduceOp::verify() {
   if (bucketsType.getShape()[0] != windowsType.getShape()[0]) {
     return emitError() << "dimension 0 of buckets and windows must be the same";
   }
-
-  Type inputPointType = bucketsType.getElementType();
-  Type outputPointType = windowsType.getElementType();
-  if (inputPointType != outputPointType) {
-    return emitError() << "input and output point types must be the same";
-  }
-
   return success();
 }
 

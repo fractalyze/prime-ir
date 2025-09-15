@@ -290,7 +290,7 @@ def EllipticCurve_BucketAccOp : EllipticCurve_Op<"bucket_acc", []> {
 }
 
 // Elliptic curve MSM bucket reduction.
-def EllipticCurve_BucketReduceOp : EllipticCurve_Op<"bucket_reduce", []> {
+def EllipticCurve_BucketReduceOp : EllipticCurve_Op<"bucket_reduce", [SameOperandsAndResultElementType]> {
   let summary = "MSM Bucket Reduction";
   let description = [{
     Computes the reduction of buckets into windows given all buckets and the scalar field type as an attribute.
