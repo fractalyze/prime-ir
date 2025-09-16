@@ -15,6 +15,12 @@ cc_library(
 )
 
 td_library(
+    name = "CommonTraits",
+    srcs = ["CommonTraits.td"],
+    deps = ["@llvm-project//mlir:OpBaseTdFiles"],
+)
+
+td_library(
     name = "CommonTypeConstraints",
     srcs = ["CommonTypeConstraints.td"],
     deps = ["@llvm-project//mlir:BuiltinDialectTdFiles"],
