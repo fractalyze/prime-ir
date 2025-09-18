@@ -44,6 +44,7 @@ td_library(
         "ModArithTypes.td",
     ],
     deps = [
+        "//zkir/Utils:CommonTraits",
         "@llvm-project//mlir:ArithOpsTdFiles",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",

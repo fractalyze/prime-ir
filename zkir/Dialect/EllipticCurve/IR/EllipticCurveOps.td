@@ -4,6 +4,7 @@
 include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.td"
 include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.td"
 
+include "mlir/Dialect/LLVMIR/LLVMTypes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -48,7 +49,7 @@ def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
     %2 = elliptic_curve.point %x, %y, %zz, %zzz : elliptic_curve.xyzz<#curve>
     ```
   }];
-  let arguments = (ins Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, SignlessIntegerLike]>>:$coords);
+  let arguments = (ins Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, LLVMStructType, AnySignlessInteger]>>:$coords);
   let results = (outs PointLike:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -88,7 +89,7 @@ def EllipticCurve_ExtractOp : EllipticCurve_Op<"extract"> {
   }];
 
   let arguments = (ins PointLike:$input);
-  let results = (outs Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, SignlessIntegerLike]>>:$output);
+  let results = (outs Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, LLVMStructType, AnySignlessInteger]>>:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
   let hasVerifier = 1;
 }
@@ -320,7 +321,7 @@ def EllipticCurve_BucketReduceOp : EllipticCurve_Op<"bucket_reduce", [SameOperan
 def EllipticCurve_WindowReduceOp : EllipticCurve_Op<"window_reduce", [TypesMatchWith<
   "output type must be the same as the element type of the windows",
   "windows", "output", "::mlir::getElementTypeOrSelf($_self)">,
-  VarPositiveAndBounded<"getBitsPerWindow()", "getScalarType().getModulus().getValue().getBitWidth()">]> {
+  VarPositiveAndBounded<"getBitsPerWindow()", "getScalarType().getStorageBitWidth()">]> {
   let summary = "MSM Window Reduction";
   let description = [{
     Computes the weighted reduction of windows into a point given all windows, the number of bits per window, and the scalar field type.

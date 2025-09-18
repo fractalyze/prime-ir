@@ -13,9 +13,9 @@ func.func @test_g2_msm_by_dot_product(%scalars: tensor<3x!PF>, %points: tensor<3
 // CHECK-LABEL: @test_affine_tensor_reduce_to_jacobian
 func.func @test_affine_tensor_reduce_to_jacobian(%points: tensor<4x!affine>) -> tensor<!jacobian> {
   // Create zero point for jacobian accumulation
-  %zeroPF = field.constant 0 : !PF
-  %onePF = field.constant 1 : !PF
-  %zero_jacobian = elliptic_curve.point %onePF, %onePF, %zeroPF : (!PF, !PF, !PF) -> !jacobian
+  %zeroPF = field.constant 0 : !PFm
+  %onePF = field.constant 1 : !PFm
+  %zero_jacobian = elliptic_curve.point %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobian
 
   // Initialize output tensor with zero point
   %init = tensor.from_elements %zero_jacobian : tensor<!jacobian>

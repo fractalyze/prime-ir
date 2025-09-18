@@ -8,7 +8,9 @@
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "zkir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
+#include "zkir/Utils/SimpleStructBuilder.h"
 
 namespace mlir::zkir::elliptic_curve {
 
@@ -18,130 +20,28 @@ namespace mlir::zkir::elliptic_curve {
 using namespace mlir::LLVM;
 
 //===----------------------------------------------------------------------===//
-// StructBuilder implementations.
-//===----------------------------------------------------------------------===//
-
-namespace {
-constexpr unsigned kXPosInPointStruct = 0;
-constexpr unsigned kYPosInPointStruct = 1;
-constexpr unsigned kZPosInPointStruct = 2;
-constexpr unsigned kZzPosInPointStruct = 2;
-constexpr unsigned kZzzPosInPointStruct = 3;
-} // namespace
-
-// static
-AffineStructBuilder AffineStructBuilder::poison(OpBuilder &builder,
-                                                Location loc, Type type) {
-  Value val = builder.create<LLVM::PoisonOp>(loc, type);
-  return AffineStructBuilder(val);
-}
-
-void AffineStructBuilder::setX(OpBuilder &builder, Location loc, Value x) {
-  setPtr(builder, loc, kXPosInPointStruct, x);
-}
-
-Value AffineStructBuilder::x(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kXPosInPointStruct);
-}
-
-void AffineStructBuilder::setY(OpBuilder &builder, Location loc, Value y) {
-  setPtr(builder, loc, kYPosInPointStruct, y);
-}
-
-Value AffineStructBuilder::y(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kYPosInPointStruct);
-}
-
-// static
-JacobianStructBuilder JacobianStructBuilder::poison(OpBuilder &builder,
-                                                    Location loc, Type type) {
-  Value val = builder.create<LLVM::PoisonOp>(loc, type);
-  return JacobianStructBuilder(val);
-}
-
-void JacobianStructBuilder::setX(OpBuilder &builder, Location loc, Value x) {
-  setPtr(builder, loc, kXPosInPointStruct, x);
-}
-
-Value JacobianStructBuilder::x(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kXPosInPointStruct);
-}
-
-void JacobianStructBuilder::setY(OpBuilder &builder, Location loc, Value y) {
-  setPtr(builder, loc, kYPosInPointStruct, y);
-}
-
-Value JacobianStructBuilder::y(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kYPosInPointStruct);
-}
-
-void JacobianStructBuilder::setZ(OpBuilder &builder, Location loc, Value z) {
-  setPtr(builder, loc, kZPosInPointStruct, z);
-}
-
-Value JacobianStructBuilder::z(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kZPosInPointStruct);
-}
-
-// static
-XYZZStructBuilder XYZZStructBuilder::poison(OpBuilder &builder, Location loc,
-                                            Type type) {
-  Value val = builder.create<LLVM::PoisonOp>(loc, type);
-  return XYZZStructBuilder(val);
-}
-
-void XYZZStructBuilder::setX(OpBuilder &builder, Location loc, Value x) {
-  setPtr(builder, loc, kXPosInPointStruct, x);
-}
-
-Value XYZZStructBuilder::x(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kXPosInPointStruct);
-}
-
-void XYZZStructBuilder::setY(OpBuilder &builder, Location loc, Value y) {
-  setPtr(builder, loc, kYPosInPointStruct, y);
-}
-
-Value XYZZStructBuilder::y(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kYPosInPointStruct);
-}
-
-void XYZZStructBuilder::setZz(OpBuilder &builder, Location loc, Value zz) {
-  setPtr(builder, loc, kZzPosInPointStruct, zz);
-}
-
-Value XYZZStructBuilder::zz(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kZzPosInPointStruct);
-}
-
-void XYZZStructBuilder::setZzz(OpBuilder &builder, Location loc, Value zzz) {
-  setPtr(builder, loc, kZzzPosInPointStruct, zzz);
-}
-
-Value XYZZStructBuilder::zzz(OpBuilder &builder, Location loc) {
-  return extractPtr(builder, loc, kZzzPosInPointStruct);
-}
-
-//===----------------------------------------------------------------------===//
 // Conversion patterns.
 //===----------------------------------------------------------------------===//
 namespace {
 template <typename T>
-Type convertPointType(T type) {
+Type convertPointType(T type, LLVMTypeConverter &typeConverter) {
   Type baseFieldType = type.getCurve().getBaseField();
-  Type integerType =
-      cast<field::PrimeFieldType>(baseFieldType).getModulus().getType();
+  Type coordType;
+  if (auto pfType = dyn_cast<field::PrimeFieldType>(baseFieldType)) {
+    coordType = pfType.getStorageType();
+  } else {
+    coordType = typeConverter.convertType(baseFieldType);
+  }
   if constexpr (std::is_same_v<T, AffineType>) {
     return LLVM::LLVMStructType::getLiteral(type.getContext(),
-                                            {integerType, integerType});
+                                            {coordType, coordType});
   } else if constexpr (std::is_same_v<T, JacobianType>) {
-    return LLVM::LLVMStructType::getLiteral(
-        type.getContext(), {integerType, integerType, integerType});
+    return LLVM::LLVMStructType::getLiteral(type.getContext(),
+                                            {coordType, coordType, coordType});
 
   } else if constexpr (std::is_same_v<T, XYZZType>) {
     return LLVM::LLVMStructType::getLiteral(
-        type.getContext(),
-        {integerType, integerType, integerType, integerType});
+        type.getContext(), {coordType, coordType, coordType, coordType});
   } else {
     return type;
   }
@@ -156,23 +56,16 @@ struct ConvertPoint : public ConvertOpToLLVMPattern<PointOp> {
     auto loc = op.getLoc();
     auto structType = typeConverter->convertType(op.getType());
     if (isa<AffineType>(op.getType())) {
-      auto pointStruct = AffineStructBuilder::poison(rewriter, loc, structType);
-      pointStruct.setX(rewriter, loc, adaptor.getCoords()[0]);
-      pointStruct.setY(rewriter, loc, adaptor.getCoords()[1]);
+      auto pointStruct = SimpleStructBuilder<2>::initialized(
+          rewriter, loc, structType, adaptor.getCoords());
       rewriter.replaceOp(op, {pointStruct});
     } else if (isa<JacobianType>(op.getType())) {
-      auto pointStruct =
-          JacobianStructBuilder::poison(rewriter, loc, structType);
-      pointStruct.setX(rewriter, loc, adaptor.getCoords()[0]);
-      pointStruct.setY(rewriter, loc, adaptor.getCoords()[1]);
-      pointStruct.setZ(rewriter, loc, adaptor.getCoords()[2]);
+      auto pointStruct = SimpleStructBuilder<3>::initialized(
+          rewriter, loc, structType, adaptor.getCoords());
       rewriter.replaceOp(op, {pointStruct});
     } else if (isa<XYZZType>(op.getType())) {
-      auto pointStruct = XYZZStructBuilder::poison(rewriter, loc, structType);
-      pointStruct.setX(rewriter, loc, adaptor.getCoords()[0]);
-      pointStruct.setY(rewriter, loc, adaptor.getCoords()[1]);
-      pointStruct.setZz(rewriter, loc, adaptor.getCoords()[2]);
-      pointStruct.setZzz(rewriter, loc, adaptor.getCoords()[3]);
+      auto pointStruct = SimpleStructBuilder<4>::initialized(
+          rewriter, loc, structType, adaptor.getCoords());
       rewriter.replaceOp(op, {pointStruct});
     }
     return success();
@@ -186,23 +79,18 @@ struct ConvertExtract : public ConvertOpToLLVMPattern<ExtractOp> {
   matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     if (isa<AffineType>(op.getInput().getType())) {
-      AffineStructBuilder affineStruct(adaptor.getInput());
-      Value x = affineStruct.x(rewriter, op.getLoc());
-      Value y = affineStruct.y(rewriter, op.getLoc());
-      rewriter.replaceOpWithMultiple(op, {x, y});
+      SimpleStructBuilder<2> affineStruct(adaptor.getInput());
+      SmallVector<Value> coords = affineStruct.getValues(rewriter, op.getLoc());
+      rewriter.replaceOpWithMultiple(op, coords);
     } else if (isa<JacobianType>(op.getInput().getType())) {
-      JacobianStructBuilder jacobianStruct(adaptor.getInput());
-      Value x = jacobianStruct.x(rewriter, op.getLoc());
-      Value y = jacobianStruct.y(rewriter, op.getLoc());
-      Value z = jacobianStruct.z(rewriter, op.getLoc());
-      rewriter.replaceOpWithMultiple(op, {x, y, z});
+      SimpleStructBuilder<3> jacobianStruct(adaptor.getInput());
+      SmallVector<Value> coords =
+          jacobianStruct.getValues(rewriter, op.getLoc());
+      rewriter.replaceOpWithMultiple(op, coords);
     } else if (isa<XYZZType>(op.getInput().getType())) {
-      XYZZStructBuilder xyzzStruct(adaptor.getInput());
-      Value x = xyzzStruct.x(rewriter, op.getLoc());
-      Value y = xyzzStruct.y(rewriter, op.getLoc());
-      Value zz = xyzzStruct.zz(rewriter, op.getLoc());
-      Value zzz = xyzzStruct.zzz(rewriter, op.getLoc());
-      rewriter.replaceOpWithMultiple(op, {x, y, zz, zzz});
+      SimpleStructBuilder<4> xyzzStruct(adaptor.getInput());
+      SmallVector<Value> coords = xyzzStruct.getValues(rewriter, op.getLoc());
+      rewriter.replaceOpWithMultiple(op, coords);
     }
     return success();
   }
@@ -214,11 +102,11 @@ struct ConvertExtract : public ConvertOpToLLVMPattern<ExtractOp> {
 void populateEllipticCurveToLLVMTypeConversion(
     LLVMTypeConverter &typeConverter) {
   typeConverter.addConversion(
-      [](AffineType type) { return convertPointType(type); });
+      [&](AffineType type) { return convertPointType(type, typeConverter); });
   typeConverter.addConversion(
-      [](JacobianType type) { return convertPointType(type); });
+      [&](JacobianType type) { return convertPointType(type, typeConverter); });
   typeConverter.addConversion(
-      [](XYZZType type) { return convertPointType(type); });
+      [&](XYZZType type) { return convertPointType(type, typeConverter); });
 }
 
 void populateEllipticCurveToLLVMConversionPatterns(
@@ -246,6 +134,7 @@ struct EllipticCurveToLLVM
     LLVMTypeConverter typeConverter(context);
     RewritePatternSet patterns(context);
 
+    field::populateExtFieldToLLVMTypeConversion(typeConverter);
     populateEllipticCurveToLLVMTypeConversion(typeConverter);
     populateFinalizeMemRefToLLVMConversionPatterns(typeConverter, patterns);
     populateEllipticCurveToLLVMConversionPatterns(typeConverter, patterns);

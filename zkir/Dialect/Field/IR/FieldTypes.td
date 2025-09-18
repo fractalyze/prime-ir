@@ -41,6 +41,13 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInte
     bool isMontgomery() {
       return getIsMontgomery();
     }
+    IntegerType getStorageType() {
+      // TODO(batzor): decouple the storage type from the modulus type
+      return cast<IntegerType>(getModulus().getType());
+    }
+    unsigned getStorageBitWidth() {
+      return getStorageType().getWidth();
+    }
   }];
 }
 

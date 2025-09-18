@@ -15,7 +15,7 @@ func.func @test_ops_in_order() {
   %index2 = arith.constant 1 : index
 
   %c_tensor = tensor.from_elements %c1, %c2: tensor<2xi256>
-  %f_tensor = field.encapsulate %c_tensor : tensor<2xi256> -> tensor<2x!PF>
+  %f_tensor = field.bitcast %c_tensor : tensor<2xi256> -> tensor<2x!PF>
   %c_mont_tensor = field.to_mont %f_tensor : tensor<2x!PFm>
   %var1 = tensor.extract %c_mont_tensor[%index1] : tensor<2x!PFm>
   %var2 = tensor.extract %c_mont_tensor[%index2] : tensor<2x!PFm>

@@ -22,4 +22,12 @@ bool isMontgomery(Type type) {
   }
 }
 
+unsigned getIntOrPrimeFieldBitWidth(Type type) {
+  assert(llvm::isa<PrimeFieldType>(type) || llvm::isa<IntegerType>(type));
+  if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
+    return pfType.getStorageBitWidth();
+  }
+  return cast<IntegerType>(type).getWidth();
+}
+
 } // namespace mlir::zkir::field

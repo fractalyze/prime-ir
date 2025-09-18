@@ -17,7 +17,7 @@ namespace mlir::zkir::field {
 
 template <typename OpType>
 PrimeFieldType getResultPrimeFieldType(OpType op) {
-  return cast<PrimeFieldType>(getElementTypeOrSelf(op.getResult().getType()));
+  return cast<PrimeFieldType>(getElementTypeOrSelf(op.getType()));
 }
 
 PrimeFieldAttr getAttrAsStandardForm(PrimeFieldAttr attr);

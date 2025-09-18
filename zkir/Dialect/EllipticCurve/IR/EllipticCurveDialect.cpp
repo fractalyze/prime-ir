@@ -21,6 +21,7 @@
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 // Headers needed for EllipticCurveOps.cpp.inc
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/OpUtils.h"

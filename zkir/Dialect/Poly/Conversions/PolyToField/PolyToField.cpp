@@ -67,7 +67,7 @@ getCommonConversionInfo(Operation *op, const TypeConverter *typeConverter) {
     return failure();
   }
   info.tensorType = cast<RankedTensorType>(typeConverter->convertType(polyTy));
-  info.coefficientStorageType = info.coefficientType.getModulus().getType();
+  info.coefficientStorageType = info.coefficientType.getStorageType();
   return std::move(info);
 }
 
@@ -81,7 +81,7 @@ struct ConvertPolyBinOp : public OpConversionPattern<SourceOp> {
   LogicalResult
   matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (PolyType poly_ty = dyn_cast<PolyType>(op.getResult().getType())) {
+    if (PolyType poly_ty = dyn_cast<PolyType>(op.getType())) {
       ImplicitLocOpBuilder b(op.getLoc(), rewriter);
       auto result = b.create<TargetFieldOp>(adaptor.getLhs(), adaptor.getRhs());
       rewriter.replaceOp(op, result);
@@ -167,7 +167,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
   auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
   auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
 
-  auto coeffStorageType = coeffType.getModulus().getType();
+  auto coeffStorageType = coeffType.getStorageType();
   auto intTensorType =
       RankedTensorType::get(tensorType.getShape(), coeffStorageType);
 
@@ -215,7 +215,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
                                               primitiveRootsAttr.getInvRoots());
 
     // Wrap the roots in a field encapsulation for further field operations.
-    roots = b.create<field::EncapsulateOp>(tensorType, roots);
+    roots = b.create<field::BitcastOp>(tensorType, roots);
   }
 
   // -------------------------------------------------------------------------

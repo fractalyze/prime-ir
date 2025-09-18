@@ -39,16 +39,14 @@ ValueRange PippengersGeneric::scalarIsOneBranch(Value point, Value windowOffset,
 Value PippengersGeneric::scalarDecomposition(Value scalar,
                                              Value windowOffsetIndex,
                                              ImplicitLocOpBuilder &b) {
-  size_t scalarBitWidth =
-      scalarFieldType_.getModulus().getValue().getBitWidth();
-  auto scalarIntType = IntegerType::get(b.getContext(), scalarBitWidth);
+  auto scalarIntType = scalarFieldType_.getStorageType();
   Value windowOffset =
       b.create<arith::IndexCastOp>(scalarIntType, windowOffsetIndex);
 
   // We right-shift by `windowOffset`, thus getting rid
   // of the lower bits.
   Value signlessScalar =
-      b.create<field::ExtractOp>(TypeRange{scalarIntType}, scalar).getResult(0);
+      b.create<field::BitcastOp>(TypeRange{scalarIntType}, scalar);
   auto upperBitsScalar = b.create<arith::ShRUIOp>(signlessScalar, windowOffset);
 
   auto windowBitIntType = IntegerType::get(b.getContext(), bitsPerWindow_);

@@ -29,40 +29,24 @@ func.func @test_lower_negate_vec(%lhs : !Zpv) -> !Zpv {
   return %res : !Zpv
 }
 
-// CHECK-LABEL: @test_lower_encapsulate
+// CHECK-LABEL: @test_lower_bitcast
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_encapsulate(%lhs : i32) -> !Zp {
-  // CHECK-NOT: mod_arith.encapsulate
+func.func @test_lower_bitcast(%lhs : !Zp) -> !Zp {
+  // CHECK-NOT: mod_arith.bitcast
   // CHECK: return %[[LHS]] : [[T]]
-  %res = mod_arith.encapsulate %lhs: i32 -> !Zp
-  return %res : !Zp
+  %res = mod_arith.bitcast %lhs: !Zp -> i32
+  %res2 = mod_arith.bitcast %res: i32 -> !Zp
+  return %res2 : !Zp
 }
 
-// CHECK-LABEL: @test_lower_encapsulate_vec
+// CHECK-LABEL: @test_lower_bitcast_vec
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_encapsulate_vec(%lhs : tensor<4xi32>) -> !Zpv {
-  // CHECK-NOT: mod_arith.encapsulate
+func.func @test_lower_bitcast_vec(%lhs : !Zpv) -> !Zpv {
+  // CHECK-NOT: mod_arith.bitcast
   // CHECK: return %[[LHS]] : [[T]]
-  %res = mod_arith.encapsulate %lhs: tensor<4xi32> -> !Zpv
-  return %res : !Zpv
-}
-
-// CHECK-LABEL: @test_lower_extract
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_extract(%lhs : !Zp) -> i32 {
-  // CHECK-NOT: mod_arith.extract
-  // CHECK: return %[[LHS]] : [[T]]
-  %res = mod_arith.extract %lhs: !Zp -> i32
-  return %res : i32
-}
-
-// CHECK-LABEL: @test_lower_extract_vec
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_extract_vec(%lhs : !Zpv) -> tensor<4xi32> {
-  // CHECK-NOT: mod_arith.extract
-  // CHECK: return %[[LHS]] : [[T]]
-  %res = mod_arith.extract %lhs: !Zpv -> tensor<4xi32>
-  return %res : tensor<4xi32>
+  %res = mod_arith.bitcast %lhs: !Zpv -> tensor<4xi32>
+  %res2 = mod_arith.bitcast %res: tensor<4xi32> -> !Zpv
+  return %res2 : !Zpv
 }
 
 // CHECK-LABEL: @test_lower_inverse

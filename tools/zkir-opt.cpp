@@ -9,6 +9,7 @@
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
 #include "zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
+#include "zkir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/Field/Pipelines/Passes.h"
@@ -28,6 +29,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::zkir::tensor_ext::TensorExtDialect>();
   mlir::zkir::elliptic_curve::registerConvertEllipticCurveToLLVMInterface(
       registry);
+  mlir::zkir::field::registerConvertExtFieldToLLVMInterface(registry);
   mlir::registerAllDialects(registry);
   mlir::registerGPUDialectTranslation(registry);
   mlir::registerNVVMDialectTranslation(registry);
@@ -39,6 +41,7 @@ int main(int argc, char **argv) {
   // Dialect conversion passes
   mlir::zkir::mod_arith::registerModArithToArithPasses();
   mlir::zkir::field::registerFieldToModArithPasses();
+  mlir::zkir::field::registerExtFieldToLLVMPasses();
   mlir::zkir::poly::registerPolyToFieldPasses();
   mlir::zkir::elliptic_curve::registerEllipticCurveToFieldPasses();
   mlir::zkir::elliptic_curve::registerEllipticCurveToLLVMPasses();

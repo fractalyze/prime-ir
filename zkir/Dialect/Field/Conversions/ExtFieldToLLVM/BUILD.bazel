@@ -6,15 +6,13 @@ package(
 )
 
 cc_library(
-    name = "EllipticCurveToLLVM",
-    srcs = ["EllipticCurveToLLVM.cpp"],
+    name = "ExtFieldToLLVM",
+    srcs = ["ExtFieldToLLVM.cpp"],
     hdrs = [
-        "EllipticCurveToLLVM.h",
+        "ExtFieldToLLVM.h",
     ],
     deps = [
         ":pass_inc_gen",
-        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "//zkir/Dialect/Field/Conversions/ExtFieldToLLVM",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Utils:SimpleStructBuilder",
         "@llvm-project//mlir:ConvertToLLVMInterface",
@@ -34,23 +32,23 @@ gentbl_cc_library(
         (
             [
                 "-gen-pass-decls",
-                "-name=EllipticCurveToLLVM",
+                "-name=ExtFieldToLLVM",
             ],
-            "EllipticCurveToLLVM.h.inc",
+            "ExtFieldToLLVM.h.inc",
         ),
         (
             ["-gen-rewriters"],
-            "EllipticCurveToLLVM.cpp.inc",
+            "ExtFieldToLLVM.cpp.inc",
         ),
         (
             ["-gen-pass-doc"],
-            "EllipticCurveToLLVM.md",
+            "ExtFieldToLLVM.md",
         ),
     ],
     tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "EllipticCurveToLLVM.td",
+    td_file = "ExtFieldToLLVM.td",
     deps = [
-        "//zkir/Dialect/EllipticCurve/IR:td_files",
+        "//zkir/Dialect/Field/IR:td_files",
         "@llvm-project//mlir:OpBaseTdFiles",
         "@llvm-project//mlir:PassBaseTdFiles",
     ],

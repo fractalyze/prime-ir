@@ -2,7 +2,7 @@ func.func @printAffine(%affine: !affine) {
   %x, %y = elliptic_curve.extract %affine : !affine -> !PFm, !PFm
   %point = tensor.from_elements %x, %y : tensor<2x!PFm>
   %point_standard = field.from_mont %point : tensor<2x!PF>
-  %point_native = field.extract %point_standard : tensor<2x!PF> -> tensor<2xi256>
+  %point_native = field.bitcast %point_standard : tensor<2x!PF> -> tensor<2xi256>
   %mem = bufferization.to_buffer %point_native : tensor<2xi256> to memref<2xi256>
   %point_generic = memref.cast %mem : memref<2xi256> to memref<*xi256>
   func.call @printMemrefI256(%point_generic) : (memref<*xi256>) -> ()
@@ -13,7 +13,7 @@ func.func @printJacobian(%jacobian: !jacobian) {
   %x, %y, %z = elliptic_curve.extract %jacobian : !jacobian -> !PFm, !PFm, !PFm
   %point = tensor.from_elements %x, %y, %z : tensor<3x!PFm>
   %point_standard = field.from_mont %point : tensor<3x!PF>
-  %point_native = field.extract %point_standard : tensor<3x!PF> -> tensor<3xi256>
+  %point_native = field.bitcast %point_standard : tensor<3x!PF> -> tensor<3xi256>
   %mem = bufferization.to_buffer %point_native : tensor<3xi256> to memref<3xi256>
   %point_generic = memref.cast %mem : memref<3xi256> to memref<*xi256>
   func.call @printMemrefI256(%point_generic) : (memref<*xi256>) -> ()
@@ -24,7 +24,7 @@ func.func @printXYZZ(%xyzz: !xyzz) {
   %x, %y, %zz, %zzz = elliptic_curve.extract %xyzz : !xyzz -> !PFm, !PFm, !PFm, !PFm
   %point = tensor.from_elements %x, %y, %zz, %zzz : tensor<4x!PFm>
   %point_standard = field.from_mont %point : tensor<4x!PF>
-  %point_native = field.extract %point_standard : tensor<4x!PF> -> tensor<4xi256>
+  %point_native = field.bitcast %point_standard : tensor<4x!PF> -> tensor<4xi256>
   %mem = bufferization.to_buffer %point_native : tensor<4xi256> to memref<4xi256>
   %point_generic = memref.cast %mem : memref<4xi256> to memref<*xi256>
   func.call @printMemrefI256(%point_generic) : (memref<*xi256>) -> ()

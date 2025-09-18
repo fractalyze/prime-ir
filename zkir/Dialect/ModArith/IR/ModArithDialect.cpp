@@ -47,7 +47,7 @@ public:
                      os << "z";
                      os << modArithType.getModulus().getValue();
                      os << "_";
-                     os << modArithType.getModulus().getType();
+                     os << modArithType.getStorageType();
                      return AliasResult::FinalAlias;
                    })
                    .Default([&](Type) { return AliasResult::NoAlias; });

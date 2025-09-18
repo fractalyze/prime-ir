@@ -37,6 +37,31 @@ namespace mlir::zkir::field {
 #define GEN_PASS_DEF_FIELDTOMODARITH
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc"
 
+namespace {
+mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
+  IntegerAttr modulus = type.getModulus();
+  bool isMontgomery = type.isMontgomery();
+  return mod_arith::ModArithType::get(type.getContext(), modulus, isMontgomery);
+}
+
+SmallVector<Type> coeffsTypeRange(Type type) {
+  if (auto f2Type = dyn_cast<QuadraticExtFieldType>(type)) {
+    return SmallVector<Type>(2, convertPrimeFieldType(f2Type.getBaseField()));
+  } else {
+    llvm_unreachable("Unsupported type for coeffs type range");
+    return SmallVector<Type>();
+  }
+}
+
+Operation::result_range extractCoeffs(ImplicitLocOpBuilder &b,
+                                      Value extFieldElement) {
+  return b
+      .create<field::ExtToCoeffsOp>(coeffsTypeRange(extFieldElement.getType()),
+                                    extFieldElement)
+      .getResults();
+}
+} // namespace
+
 class FieldToModArithTypeConverter : public ShapedTypeConverter {
 public:
   explicit FieldToModArithTypeConverter(MLIRContext *ctx) {
@@ -44,45 +69,14 @@ public:
     addConversion([](PrimeFieldType type) -> Type {
       return convertPrimeFieldType(type);
     });
-    addConversion([](QuadraticExtFieldType type,
-                     SmallVectorImpl<Type> &converted) -> LogicalResult {
-      return convertQuadraticExtFieldType(type, converted);
-    });
     addConversion([](ShapedType type) -> Type {
       if (auto primeFieldType =
               dyn_cast<PrimeFieldType>(type.getElementType())) {
         return convertShapedType(type, type.getShape(),
                                  convertPrimeFieldType(primeFieldType));
       }
-      if (auto quadraticExtFieldType =
-              dyn_cast<QuadraticExtFieldType>(type.getElementType())) {
-        PrimeFieldType baseFieldType = quadraticExtFieldType.getBaseField();
-        mod_arith::ModArithType modArithType =
-            convertPrimeFieldType(baseFieldType);
-        SmallVector<int64_t> newShape(type.getShape());
-        newShape.push_back(2);
-        return convertShapedType(type, newShape, modArithType);
-      }
       return type;
     });
-  }
-
-private:
-  static mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
-    IntegerAttr modulus = type.getModulus();
-    bool isMontgomery = type.isMontgomery();
-    return mod_arith::ModArithType::get(type.getContext(), modulus,
-                                        isMontgomery);
-  }
-
-  static LogicalResult
-  convertQuadraticExtFieldType(QuadraticExtFieldType type,
-                               SmallVectorImpl<Type> &converted) {
-    mod_arith::ModArithType modArithType =
-        convertPrimeFieldType(type.getBaseField());
-    converted.push_back(modArithType);
-    converted.push_back(modArithType);
-    return success();
   }
 };
 
@@ -98,11 +92,10 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     mod_arith::ModArithType modType;
-    if (auto pfType = dyn_cast<PrimeFieldType>(op.getOutput().getType())) {
+    if (auto pfType = dyn_cast<PrimeFieldType>(op.getType())) {
       modType =
           cast<mod_arith::ModArithType>(typeConverter->convertType(pfType));
-    } else if (auto f2Type =
-                   dyn_cast<QuadraticExtFieldType>(op.getOutput().getType())) {
+    } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(op.getType())) {
       modType = cast<mod_arith::ModArithType>(
           typeConverter->convertType(f2Type.getBaseField()));
     } else {
@@ -120,7 +113,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
           b.create<mod_arith::ConstantOp>(modType, f2Attr.getLow().getValue());
       auto high =
           b.create<mod_arith::ConstantOp>(modType, f2Attr.getHigh().getValue());
-      rewriter.replaceOpWithMultiple(op, {{low, high}});
+      auto f2 = b.create<ExtFromCoeffsOp>(TypeRange{f2Attr.getType()},
+                                          ValueRange{low, high});
+      rewriter.replaceOp(op, f2);
       return success();
     } else {
       op.emitOpError("unsupported attribute type");
@@ -129,66 +124,20 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
   }
 };
 
-struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
-  explicit ConvertEncapsulate(MLIRContext *context)
-      : OpConversionPattern<EncapsulateOp>(context) {}
+struct ConvertBitcast : public OpConversionPattern<BitcastOp> {
+  explicit ConvertBitcast(MLIRContext *context)
+      : OpConversionPattern<BitcastOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(EncapsulateOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(BitcastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Type fieldType = getElementTypeOrSelf(op.getOutput().getType());
-    if (isa<PrimeFieldType>(fieldType)) {
-      Type resultType = typeConverter->convertType(op.getResult().getType());
-      auto enc = b.create<mod_arith::EncapsulateOp>(resultType,
-                                                    adaptor.getOperands()[0]);
-      rewriter.replaceOp(op, enc);
-      return success();
-    } else if (auto extFieldType = dyn_cast<QuadraticExtFieldType>(fieldType)) {
-      Type resultType = typeConverter->convertType(extFieldType.getBaseField());
-      auto low = b.create<mod_arith::EncapsulateOp>(resultType,
-                                                    adaptor.getOperands()[0]);
-      auto high = b.create<mod_arith::EncapsulateOp>(resultType,
-                                                     adaptor.getOperands()[1]);
-      rewriter.replaceOpWithMultiple(op, {{low, high}});
-      return success();
-    } else {
-      op.emitOpError("unsupported output type");
-      return failure();
-    }
-  };
-};
-
-struct ConvertExtract : public OpConversionPattern<ExtractOp> {
-  explicit ConvertExtract(MLIRContext *context)
-      : OpConversionPattern<ExtractOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ExtractOp op, OneToNOpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    Type fieldType = getElementTypeOrSelf(op.getInput().getType());
-    auto resultType = typeConverter->convertType(op.getResult(0).getType());
-    if (isa<PrimeFieldType>(fieldType)) {
-      auto extracted =
-          b.create<mod_arith::ExtractOp>(resultType, adaptor.getOperands()[0]);
-      rewriter.replaceOp(op, extracted);
-    } else if (isa<QuadraticExtFieldType>(fieldType)) {
-      auto low = b.create<mod_arith::ExtractOp>(resultType,
-                                                adaptor.getOperands()[0][0]);
-      auto high = b.create<mod_arith::ExtractOp>(resultType,
-                                                 adaptor.getOperands()[0][1]);
-      rewriter.replaceOpWithMultiple(op, {{low}, {high}});
-    } else {
-      op.emitOpError("unsupported output type");
-      return failure();
-    }
+    auto bitcast = b.create<mod_arith::BitcastOp>(
+        typeConverter->convertType(op.getType()), adaptor.getInput());
+    rewriter.replaceOp(op, bitcast);
     return success();
   }
 };
@@ -200,26 +149,26 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(ToMontOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(ToMontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      Type resultType = typeConverter->convertType(op.getResult().getType());
-      auto extracted = b.create<mod_arith::ToMontOp>(
-          resultType, adaptor.getOperands()[0][0]);
+      Type modArithType = typeConverter->convertType(op.getType());
+      auto extracted =
+          b.create<mod_arith::ToMontOp>(modArithType, adaptor.getInput());
       rewriter.replaceOp(op, extracted);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
-      auto extFieldType = cast<QuadraticExtFieldType>(fieldType);
-      Type resultType = typeConverter->convertType(extFieldType.getBaseField());
-      auto c0 = b.create<mod_arith::ToMontOp>(resultType,
-                                              adaptor.getOperands()[0][0]);
-      auto c1 = b.create<mod_arith::ToMontOp>(resultType,
-                                              adaptor.getOperands()[0][1]);
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
+      Type baseModArithType = typeConverter->convertType(f2Type.getBaseField());
+      auto coeffs = extractCoeffs(b, adaptor.getInput());
+      auto c0 = b.create<mod_arith::ToMontOp>(baseModArithType, coeffs[0]);
+      auto c1 = b.create<mod_arith::ToMontOp>(baseModArithType, coeffs[1]);
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -233,26 +182,26 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(FromMontOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(FromMontOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      Type resultType = typeConverter->convertType(op.getResult().getType());
-      auto extracted = b.create<mod_arith::FromMontOp>(
-          resultType, adaptor.getOperands()[0][0]);
+      Type resultType = typeConverter->convertType(op.getType());
+      auto extracted =
+          b.create<mod_arith::FromMontOp>(resultType, adaptor.getInput());
       rewriter.replaceOp(op, extracted);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
-      auto extFieldType = cast<QuadraticExtFieldType>(fieldType);
-      Type resultType = typeConverter->convertType(extFieldType.getBaseField());
-      auto c0 = b.create<mod_arith::FromMontOp>(resultType,
-                                                adaptor.getOperands()[0][0]);
-      auto c1 = b.create<mod_arith::FromMontOp>(resultType,
-                                                adaptor.getOperands()[0][1]);
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
+      Type modArithType = typeConverter->convertType(f2Type.getBaseField());
+      auto coeffs = extractCoeffs(b, adaptor.getInput());
+      auto c0 = b.create<mod_arith::FromMontOp>(modArithType, coeffs[0]);
+      auto c1 = b.create<mod_arith::FromMontOp>(modArithType, coeffs[1]);
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -266,38 +215,39 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(InverseOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(InverseOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto inv = b.create<mod_arith::InverseOp>(adaptor.getInput()[0]);
+      auto inv = b.create<mod_arith::InverseOp>(adaptor.getInput());
       rewriter.replaceOp(op, inv);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
       // construct beta as a mod arith constant
-      auto extFieldType = cast<QuadraticExtFieldType>(fieldType);
       auto beta = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(extFieldType.getBaseField()),
-          extFieldType.getBeta().getValue());
+          typeConverter->convertType(f2Type.getBaseField()),
+          f2Type.getBeta().getValue());
 
       // denominator = a₀² - a₁²β
-      auto lowSquared = b.create<mod_arith::SquareOp>(adaptor.getInput()[0]);
-      auto highSquared = b.create<mod_arith::SquareOp>(adaptor.getInput()[1]);
+      auto coeffs = extractCoeffs(b, adaptor.getInput());
+      auto lowSquared = b.create<mod_arith::SquareOp>(coeffs[0]);
+      auto highSquared = b.create<mod_arith::SquareOp>(coeffs[1]);
       auto betaTimesHighSquared = b.create<mod_arith::MulOp>(beta, highSquared);
       auto denominator =
           b.create<mod_arith::SubOp>(lowSquared, betaTimesHighSquared);
       auto denominatorInv = b.create<mod_arith::InverseOp>(denominator);
 
       // c₀ = a₀ / denominator
-      auto c0 =
-          b.create<mod_arith::MulOp>(adaptor.getInput()[0], denominatorInv);
+      auto c0 = b.create<mod_arith::MulOp>(coeffs[0], denominatorInv);
       // c₁ = -a₁ / denominator
-      auto highNegated = b.create<mod_arith::NegateOp>(adaptor.getInput()[1]);
+      auto highNegated = b.create<mod_arith::NegateOp>(coeffs[1]);
       auto c1 = b.create<mod_arith::MulOp>(highNegated, denominatorInv);
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -311,20 +261,23 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(NegateOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(NegateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto neg = b.create<mod_arith::NegateOp>(adaptor.getInput()[0]);
+      auto neg = b.create<mod_arith::NegateOp>(adaptor.getInput());
       rewriter.replaceOp(op, neg);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
-      auto c0 = b.create<mod_arith::NegateOp>(adaptor.getInput()[0]);
-      auto c1 = b.create<mod_arith::NegateOp>(adaptor.getInput()[1]);
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
+      auto coeffs = extractCoeffs(b, adaptor.getInput());
+      auto c0 = b.create<mod_arith::NegateOp>(coeffs[0]);
+      auto c1 = b.create<mod_arith::NegateOp>(coeffs[1]);
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -338,25 +291,26 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(AddOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(AddOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto add =
-          b.create<mod_arith::AddOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      auto add = b.create<mod_arith::AddOp>(adaptor.getLhs(), adaptor.getRhs());
       rewriter.replaceOp(op, add);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
+      auto lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
+      auto rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
       // c₀ = a₀ + b₀
       // c₁ = a₁ + b₁
-      auto c0 =
-          b.create<mod_arith::AddOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
-      auto c1 =
-          b.create<mod_arith::AddOp>(adaptor.getLhs()[1], adaptor.getRhs()[1]);
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      auto c0 = b.create<mod_arith::AddOp>(lhsCoeffs[0], rhsCoeffs[0]);
+      auto c1 = b.create<mod_arith::AddOp>(lhsCoeffs[1], rhsCoeffs[1]);
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -370,22 +324,25 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(DoubleOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(DoubleOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto doubled = b.create<mod_arith::DoubleOp>(adaptor.getInput()[0]);
+      auto doubled = b.create<mod_arith::DoubleOp>(adaptor.getInput());
       rewriter.replaceOp(op, doubled);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
+      auto coeffs = extractCoeffs(b, adaptor.getInput());
       // c₀ = a₀ + a₀
       // c₁ = a₁ + a₁
-      auto c0 = b.create<mod_arith::DoubleOp>(adaptor.getInput()[0]);
-      auto c1 = b.create<mod_arith::DoubleOp>(adaptor.getInput()[1]);
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      auto c0 = b.create<mod_arith::DoubleOp>(coeffs[0]);
+      auto c1 = b.create<mod_arith::DoubleOp>(coeffs[1]);
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -399,23 +356,24 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(SubOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(SubOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto sub =
-          b.create<mod_arith::SubOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      auto sub = b.create<mod_arith::SubOp>(adaptor.getLhs(), adaptor.getRhs());
       rewriter.replaceOp(op, sub);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
-      auto c0 =
-          b.create<mod_arith::SubOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
-      auto c1 =
-          b.create<mod_arith::SubOp>(adaptor.getLhs()[1], adaptor.getRhs()[1]);
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
+      auto lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
+      auto rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
+      auto c0 = b.create<mod_arith::SubOp>(lhsCoeffs[0], rhsCoeffs[0]);
+      auto c1 = b.create<mod_arith::SubOp>(lhsCoeffs[1], rhsCoeffs[1]);
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -429,45 +387,43 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(MulOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(MulOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto mul =
-          b.create<mod_arith::MulOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
+      auto mul = b.create<mod_arith::MulOp>(adaptor.getLhs(), adaptor.getRhs());
       rewriter.replaceOp(op, mul);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
       // construct beta as a mod arith constant
-      auto extFieldType = cast<QuadraticExtFieldType>(fieldType);
       auto beta = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(extFieldType.getBaseField()),
-          extFieldType.getBeta().getValue());
+          typeConverter->convertType(f2Type.getBaseField()),
+          f2Type.getBeta().getValue());
 
+      Operation::result_range lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
+      Operation::result_range rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
       // v₀ = a₀ * b₀
       // v₁ = a₁ * b₁
-      auto v0 =
-          b.create<mod_arith::MulOp>(adaptor.getLhs()[0], adaptor.getRhs()[0]);
-      auto v1 =
-          b.create<mod_arith::MulOp>(adaptor.getLhs()[1], adaptor.getRhs()[1]);
+      auto v0 = b.create<mod_arith::MulOp>(lhsCoeffs[0], rhsCoeffs[0]);
+      auto v1 = b.create<mod_arith::MulOp>(lhsCoeffs[1], rhsCoeffs[1]);
 
       // c₀ = v₀ + βv₁
       auto betaTimesV1 = b.create<mod_arith::MulOp>(beta, v1);
       auto c0 = b.create<mod_arith::AddOp>(v0, betaTimesV1);
 
       // c₁ = (a₀ + a₁)(b₀ + b₁) - v₀ - v₁
-      auto sumLhs =
-          b.create<mod_arith::AddOp>(adaptor.getLhs()[0], adaptor.getLhs()[1]);
-      auto sumRhs =
-          b.create<mod_arith::AddOp>(adaptor.getRhs()[0], adaptor.getRhs()[1]);
+      auto sumLhs = b.create<mod_arith::AddOp>(lhsCoeffs[0], lhsCoeffs[1]);
+      auto sumRhs = b.create<mod_arith::AddOp>(rhsCoeffs[0], rhsCoeffs[1]);
       auto sumProduct = b.create<mod_arith::MulOp>(sumLhs, sumRhs);
       Value c1 = b.create<mod_arith::SubOp>(sumProduct, v0);
       c1 = b.create<mod_arith::SubOp>(c1, v1);
 
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -481,34 +437,33 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(SquareOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(SquareOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (isa<PrimeFieldType>(fieldType)) {
-      auto square = b.create<mod_arith::SquareOp>(adaptor.getInput()[0]);
+      auto square = b.create<mod_arith::SquareOp>(adaptor.getInput());
       rewriter.replaceOp(op, square);
       return success();
     }
-    if (isa<QuadraticExtFieldType>(fieldType)) {
+    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
       // construct beta as a mod arith constant
-      auto extFieldType = cast<QuadraticExtFieldType>(fieldType);
       auto beta = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(extFieldType.getBaseField()),
-          extFieldType.getBeta().getValue());
+          typeConverter->convertType(f2Type.getBaseField()),
+          f2Type.getBeta().getValue());
+
+      auto coeffs = extractCoeffs(b, adaptor.getInput());
 
       // v₀ = a₀ - a₁
-      Value v0 = b.create<mod_arith::SubOp>(adaptor.getInput()[0],
-                                            adaptor.getInput()[1]);
+      Value v0 = b.create<mod_arith::SubOp>(coeffs[0], coeffs[1]);
 
       // v₁ = a₀ - βa₁
-      auto betaA1 = b.create<mod_arith::MulOp>(beta, adaptor.getInput()[1]);
-      auto v1 = b.create<mod_arith::SubOp>(adaptor.getInput()[0], betaA1);
+      auto betaA1 = b.create<mod_arith::MulOp>(beta, coeffs[1]);
+      auto v1 = b.create<mod_arith::SubOp>(coeffs[0], betaA1);
 
       // v₂ = a₀ * a₁
-      auto v2 = b.create<mod_arith::MulOp>(adaptor.getInput()[0],
-                                           adaptor.getInput()[1]);
+      auto v2 = b.create<mod_arith::MulOp>(coeffs[0], coeffs[1]);
 
       // v₀ = v₀ * v₁ + v₂
       auto v0TimesV1 = b.create<mod_arith::MulOp>(v0, v1);
@@ -519,7 +474,9 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
       // c₀ = v₀ + βv₂
       auto betaV2 = b.create<mod_arith::MulOp>(beta, v2);
       auto c0 = b.create<mod_arith::AddOp>(v0, betaV2);
-      rewriter.replaceOpWithMultiple(op, {{c0, c1}});
+      auto f2 =
+          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
+      rewriter.replaceOp(op, f2);
       return success();
     }
     return failure();
@@ -533,7 +490,7 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(PowUIOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(PowUIOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     auto base = op.getBase();
@@ -660,23 +617,25 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(CmpOp op, OneToNOpAdaptor adaptor,
+  matchAndRewrite(CmpOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getLhs());
     if (isa<PrimeFieldType>(fieldType)) {
       auto cmpOp = b.create<mod_arith::CmpOp>(
-          op.getPredicate(), adaptor.getLhs()[0], adaptor.getRhs()[0]);
+          op.getPredicate(), adaptor.getLhs(), adaptor.getRhs());
       rewriter.replaceOp(op, cmpOp);
       return success();
-    } else if (isa<QuadraticExtFieldType>(fieldType)) {
+    } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
       // For quadratic extension fields, we compare the low and high parts
       // separately.
-      auto cmpLow = b.create<mod_arith::CmpOp>(
-          op.getPredicate(), adaptor.getLhs()[0], adaptor.getRhs()[0]);
-      auto cmpHigh = b.create<mod_arith::CmpOp>(
-          op.getPredicate(), adaptor.getLhs()[1], adaptor.getRhs()[1]);
+      auto lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
+      auto rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
+      auto cmpLow = b.create<mod_arith::CmpOp>(op.getPredicate(), lhsCoeffs[0],
+                                               rhsCoeffs[0]);
+      auto cmpHigh = b.create<mod_arith::CmpOp>(op.getPredicate(), lhsCoeffs[1],
+                                                rhsCoeffs[1]);
       auto result = b.create<arith::AndIOp>(cmpLow, cmpHigh);
       rewriter.replaceOp(op, result);
       return success();
@@ -699,7 +658,9 @@ struct ConvertF2Constant : public OpConversionPattern<F2ConstantOp> {
     SmallVector<ValueRange> values;
     values.push_back({adaptor.getLow(), adaptor.getHigh()});
 
-    rewriter.replaceOpWithMultiple(op, values);
+    auto f2 = b.create<ExtFromCoeffsOp>(
+        op.getType(), ValueRange{adaptor.getLow(), adaptor.getHigh()});
+    rewriter.replaceOp(op, f2);
     return success();
   }
 };
@@ -729,11 +690,10 @@ void FieldToModArith::runOnOperation() {
   patterns.add<
       // clang-format off
       ConvertAdd,
+      ConvertBitcast,
       ConvertConstant,
       ConvertCmp,
       ConvertDouble,
-      ConvertEncapsulate,
-      ConvertExtract,
       ConvertF2Constant,
       ConvertFromMont,
       ConvertInverse,
@@ -752,6 +712,8 @@ void FieldToModArith::runOnOperation() {
       ConvertAny<bufferization::MaterializeInDestinationOp>,
       ConvertAny<bufferization::ToBufferOp>,
       ConvertAny<bufferization::ToTensorOp>,
+      ConvertAny<field::ExtFromCoeffsOp>,
+      ConvertAny<field::ExtToCoeffsOp>,
       ConvertAny<elliptic_curve::ExtractOp>,
       ConvertAny<elliptic_curve::PointOp>,
       ConvertAny<linalg::BroadcastOp>,
@@ -797,6 +759,8 @@ void FieldToModArith::runOnOperation() {
       bufferization::ToTensorOp,
       elliptic_curve::ExtractOp,
       elliptic_curve::PointOp,
+      field::ExtFromCoeffsOp,
+      field::ExtToCoeffsOp,
       linalg::BroadcastOp,
       linalg::GenericOp,
       linalg::MapOp,

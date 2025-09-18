@@ -10,7 +10,7 @@
 #ef = #field.f2.elem<#beta, #beta> : !QF
 
 // CHECK-LABEL: @test_lower_inverse
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_inverse(%arg0: !QF) -> !QF {
     // CHECK-NOT: field.inverse
     %0 = field.inverse %arg0 : !QF
@@ -18,7 +18,7 @@ func.func @test_lower_inverse(%arg0: !QF) -> !QF {
 }
 
 // CHECK-LABEL: @test_lower_double
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_double(%arg0: !QF) -> !QF {
     // CHECK-NOT: field.double
     %0 = field.double %arg0 : !QF
@@ -26,7 +26,7 @@ func.func @test_lower_double(%arg0: !QF) -> !QF {
 }
 
 // CHECK-LABEL: @test_lower_square
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_square(%arg0: !QF) -> !QF {
     // CHECK-NOT: field.square
     %0 = field.square %arg0 : !QF
@@ -34,99 +34,80 @@ func.func @test_lower_square(%arg0: !QF) -> !QF {
 }
 
 // CHECK-LABEL: @test_lower_add
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]], %[[ARG2:.*]]: [[T]], %[[ARG3:.*]]: [[T]]) -> ([[T]], [[T]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_add(%arg0: !QF, %arg1: !QF) -> !QF {
-    // CHECK: %[[C0:.*]] = mod_arith.add %[[ARG0]], %[[ARG2]] : [[T]]
-    // CHECK: %[[C1:.*]] = mod_arith.add %[[ARG1]], %[[ARG3]] : [[T]]
-    // CHECK: return %[[C0]], %[[C1]] : [[T]], [[T]]
+    // CHECK: %[[LHS:.*]]:2 = field.ext_to_coeffs %[[ARG0]] : ([[T]]) -> (!z7_i32, !z7_i32)
+    // CHECK: %[[RHS:.*]]:2 = field.ext_to_coeffs %[[ARG1]] : ([[T]]) -> (!z7_i32, !z7_i32)
+    // CHECK: %[[C0:.*]] = mod_arith.add %[[LHS]]#0, %[[RHS]]#0 : !z7_i32
+    // CHECK: %[[C1:.*]] = mod_arith.add %[[LHS]]#1, %[[RHS]]#1 : !z7_i32
+    // CHECK: %[[RESULT:.*]] = field.ext_from_coeffs %[[C0]], %[[C1]] : (!z7_i32, !z7_i32) -> [[T]]
+    // CHECK: return %[[RESULT]] : [[T]]
     %0 = field.add %arg0, %arg1 : !QF
     return %0 : !QF
 }
 
 // CHECK-LABEL: @test_lower_mul
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]], %[[ARG2:.*]]: [[T]], %[[ARG3:.*]]: [[T]]) -> ([[T]], [[T]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_mul(%arg0: !QF, %arg1: !QF) -> !QF {
-    // CHECK: %[[BETA:.*]] = mod_arith.constant 6 : [[T]]
-    // CHECK: %[[V0:.*]] = mod_arith.mul %[[ARG0]], %[[ARG2]] : [[T]]
-    // CHECK: %[[V1:.*]] = mod_arith.mul %[[ARG1]], %[[ARG3]] : [[T]]
-    // CHECK: %[[BETATIMESV1:.*]] = mod_arith.mul %[[BETA]], %[[V1]] : [[T]]
-    // CHECK: %[[C0:.*]] = mod_arith.add %[[V0]], %[[BETATIMESV1]] : [[T]]
-    // CHECK: %[[SUMLHS:.*]] = mod_arith.add %[[ARG0]], %[[ARG1]] : [[T]]
-    // CHECK: %[[SUMRHS:.*]] = mod_arith.add %[[ARG2]], %[[ARG3]] : [[T]]
-    // CHECK: %[[SUMPRODUCT:.*]] = mod_arith.mul %[[SUMLHS]], %[[SUMRHS]] : [[T]]
-    // CHECK: %[[TMP:.*]] = mod_arith.sub %[[SUMPRODUCT]], %[[V0]] : [[T]]
-    // CHECK: %[[C1:.*]] = mod_arith.sub %[[TMP]], %[[V1]] : [[T]]
-    // CHECK: return %[[C0]], %[[C1]] : [[T]], [[T]]
+    // CHECK: %[[BETA:.*]] = mod_arith.constant 6 : !z7_i32
+    // CHECK: %[[LHS:.*]]:2 = field.ext_to_coeffs %[[ARG0]] : ([[T]]) -> (!z7_i32, !z7_i32)
+    // CHECK: %[[RHS:.*]]:2 = field.ext_to_coeffs %[[ARG1]] : ([[T]]) -> (!z7_i32, !z7_i32)
+    // CHECK: %[[V0:.*]] = mod_arith.mul %[[LHS]]#0, %[[RHS]]#0 : !z7_i32
+    // CHECK: %[[V1:.*]] = mod_arith.mul %[[LHS]]#1, %[[RHS]]#1 : !z7_i32
+    // CHECK: %[[BETATIMESV1:.*]] = mod_arith.mul %[[BETA]], %[[V1]] : !z7_i32
+    // CHECK: %[[C0:.*]] = mod_arith.add %[[V0]], %[[BETATIMESV1]] : !z7_i32
+    // CHECK: %[[SUMLHS:.*]] = mod_arith.add %[[LHS]]#0, %[[LHS]]#1 : !z7_i32
+    // CHECK: %[[SUMRHS:.*]] = mod_arith.add %[[RHS]]#0, %[[RHS]]#1 : !z7_i32
+    // CHECK: %[[SUMPRODUCT:.*]] = mod_arith.mul %[[SUMLHS]], %[[SUMRHS]] : !z7_i32
+    // CHECK: %[[TMP:.*]] = mod_arith.sub %[[SUMPRODUCT]], %[[V0]] : !z7_i32
+    // CHECK: %[[C1:.*]] = mod_arith.sub %[[TMP]], %[[V1]] : !z7_i32
+    // CHECK: %[[RESULT:.*]] = field.ext_from_coeffs %[[C0]], %[[C1]] : (!z7_i32, !z7_i32) -> [[T]]
+    // CHECK: return %[[RESULT]] : [[T]]
     %0 = field.mul %arg0, %arg1 : !QF
     return %0 : !QF
 }
 
 // CHECK-LABEL: @test_lower_from_elements
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> tensor<2x2x[[T]]> {
-func.func @test_lower_from_elements(%arg0: !PF, %arg1: !PF) -> tensor<2x!QF> {
-    %0 = field.f2.constant %arg0, %arg1 : !QF
-    %1 = field.f2.constant %arg1, %arg0 : !QF
-    tensor.from_elements %arg0, %arg1 : tensor<2x!PF>
-    // CHECK: %[[TENSOR:.*]] = tensor.from_elements %[[ARG0]], %[[ARG1]], %[[ARG1]], %[[ARG0]] : tensor<2x2x[[T]]>
-    %2 = tensor.from_elements %0, %1 : tensor<2x!QF>
-    // CHECK: return %[[TENSOR]] : tensor<2x2x[[T]]>
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> tensor<2x[[T]]> {
+func.func @test_lower_from_elements(%arg0: !QF, %arg1: !QF) -> tensor<2x!QF> {
+    // CHECK: %[[TENSOR:.*]] = tensor.from_elements %[[ARG0]], %[[ARG1]] : tensor<2x[[T]]>
+    %2 = tensor.from_elements %arg0, %arg1 : tensor<2x!QF>
+    // CHECK: return %[[TENSOR]] : tensor<2x[[T]]>
     return %2 : tensor<2x!QF>
 }
 
 // CHECK-LABEL: @test_lower_from_mont
-// CHECK-SAME: (%[[ARG0:.*]]: [[Tm:.*]], %[[ARG1:.*]]: [[Tm]]) -> ([[T:.*]], [[T:.*]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: [[Tm:.*]]) -> [[T:.*]] {
 func.func @test_lower_from_mont(%arg0: !QFm) -> !QF {
+    // CHECK-NOT: field.from_mont
     %0 = field.from_mont %arg0 : !QF
     return %0 : !QF
 }
 
 // CHECK-LABEL: @test_lower_to_mont
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[Tm:.*]], [[Tm]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[Tm:.*]] {
 func.func @test_lower_to_mont(%arg0: !QF) -> !QFm {
+    // CHECK-NOT: field.to_mont
     %0 = field.to_mont %arg0 : !QFm
     return %0 : !QFm
 }
 
 // CHECK-LABEL: @test_lower_tensor_extract
-// CHECK-SAME: (%[[ARG0:.*]]: tensor<3x2x2x[[T:.*]]>) -> ([[T]], [[T]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: tensor<3x2x[[T:.*]]>) -> [[T]] {
 func.func @test_lower_tensor_extract(%arg0: tensor<3x2x!QF>) -> !QF {
     // CHECK: %[[I1:.*]] = arith.constant 1 : index
     %i1 = arith.constant 1 : index
-
-    // CHECK: %[[C0:.*]] = arith.constant 0 : index
-    // CHECK: %[[VALUE0:.*]] = tensor.extract %[[ARG0]][%[[I1]], %[[I1]], %[[C0]]] : tensor<3x2x2x[[T]]>
-    // CHECK: %[[C1:.*]] = arith.constant 1 : index
-    // CHECK: %[[VALUE1:.*]] = tensor.extract %[[ARG0]][%[[I1]], %[[I1]], %[[C1]]] : tensor<3x2x2x[[T]]>
+    // CHECK: %[[VALUE:.*]] = tensor.extract %[[ARG0]][%[[I1]], %[[I1]]] : tensor<3x2x[[T]]>
     %1 = tensor.extract %arg0[%i1, %i1] : tensor<3x2x!QF>
-    // CHECK: return %[[VALUE0]], %[[VALUE1]] : [[T]], [[T]]
+    // CHECK: return %[[VALUE]] : [[T]]
     return %1 : !QF
 }
 
 // CHECK-LABEL: @test_lower_memref
-// CHECK-SAME: (%[[ARG0:.*]]: memref<3x2x2x[[T:.*]]>) -> ([[T]], [[T]]) {
+// CHECK-SAME: (%[[ARG0:.*]]: memref<3x2x[[T:.*]]>) -> [[T]] {
 func.func @test_lower_memref(%arg0: memref<3x2x!QF>) -> !QF {
     %t = bufferization.to_tensor %arg0 : memref<3x2x!QF> to tensor<3x2x!QF>
     %i1 = arith.constant 1 : index
     %1 = tensor.extract %t[%i1, %i1] : tensor<3x2x!QF>
     return %1 : !QF
-}
-
-// CHECK-LABEL: @test_lower_extract
-// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[F:.*]], [[F]]) {
-func.func @test_lower_extract(%arg0: !QF) -> (i32, i32) {
-    // CHECK: %[[LO:.*]] = mod_arith.extract %[[ARG0]] : [[T]] -> [[F]]
-    // CHECK: %[[HI:.*]] = mod_arith.extract %[[ARG1]] : [[T]] -> [[F]]
-    %0, %1 = field.extract %arg0 : !QF -> i32, i32
-    // CHECK: return %[[LO]], %[[HI]] : [[F]], [[F]]
-    return %0, %1 : i32, i32
-}
-
-// CHECK-LABEL: @test_lower_encapsulate
-// CHECK-SAME: (%[[ARG0:.*]]: [[F:.*]], %[[ARG1:.*]]: [[F]]) -> ([[T:.*]], [[T]]) {
-func.func @test_lower_encapsulate(%arg0: i32, %arg1: i32) -> !QF {
-    // CHECK: %[[LO:.*]] = mod_arith.encapsulate %[[ARG0]] : [[F]] -> [[T]]
-    // CHECK: %[[HI:.*]] = mod_arith.encapsulate %[[ARG1]] : [[F]] -> [[T]]
-    %0 = field.encapsulate %arg0, %arg1 : i32, i32 -> !QF
-    // CHECK: return %[[LO]], %[[HI]] : [[T]], [[T]]
-    return %0 : !QF
 }

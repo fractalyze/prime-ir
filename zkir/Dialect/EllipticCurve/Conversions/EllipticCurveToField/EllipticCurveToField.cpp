@@ -97,7 +97,7 @@ struct ConvertConvertPointType
 
     Operation::result_range coords = extractCoords(b, op.getInput());
     Type inputType = op.getInput().getType();
-    Type outputType = op.getOutput().getType();
+    Type outputType = op.getType();
     Type baseFieldType = getCurveFromPointLike(inputType).getBaseField();
     Value zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
     // TODO(chokobole): Fix below after attaching montgomery information to
@@ -251,7 +251,7 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
     Operation::result_range p2Coords = extractCoords(b, op.getRhs());
     Type p1Type = p1.getType();
     Type p2Type = p2.getType();
-    Type outputType = op.getOutput().getType();
+    Type outputType = op.getType();
 
     // check p1 == zero point
     Value p1IsZero = b.create<elliptic_curve::IsZeroOp>(p1);
@@ -301,8 +301,8 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
                 } else {
                   llvm_unreachable("Unsupported point types for addition");
                 }
-                Value outputPt = b.create<elliptic_curve::PointOp>(
-                    op.getOutput().getType(), sum);
+                Value outputPt =
+                    b.create<elliptic_curve::PointOp>(op.getType(), sum);
                 b.create<scf::YieldOp>(outputPt);
               });
           b.create<scf::YieldOp>(output.getResults());
@@ -323,7 +323,7 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Type outputType = op.getOutput().getType();
+    Type outputType = op.getType();
     Operation::result_range coords = extractCoords(b, op.getInput());
     SmallVector<Value> doubled;
 
@@ -358,8 +358,8 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
     SmallVector<Value> outputCoords(coords);
     outputCoords[1] = negatedY;
 
-    auto outputPt = b.create<elliptic_curve::PointOp>(op.getOutput().getType(),
-                                                      outputCoords);
+    auto outputPt =
+        b.create<elliptic_curve::PointOp>(op.getType(), outputCoords);
     rewriter.replaceOp(op, outputPt);
     return success();
   }
@@ -377,8 +377,8 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value negP2 = b.create<elliptic_curve::NegateOp>(op.getRhs());
-    Value result = b.create<elliptic_curve::AddOp>(op.getOutput().getType(),
-                                                   op.getLhs(), negP2);
+    Value result =
+        b.create<elliptic_curve::AddOp>(op.getType(), op.getLhs(), negP2);
 
     rewriter.replaceOp(op, result);
     return success();
@@ -402,21 +402,17 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     Value scalarPF = op.getScalar();
 
     Type pointType = op.getPoint().getType();
-    Type outputType = op.getOutput().getType();
+    Type outputType = op.getType();
 
     auto scalarFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
-    unsigned scalarBitWidth =
-        scalarFieldType.getModulus().getValue().getBitWidth();
-    auto scalarIntType =
-        IntegerType::get(b.getContext(), scalarBitWidth, IntegerType::Signless);
+    auto scalarIntType = scalarFieldType.getStorageType();
     Value scalarReduced =
         scalarFieldType.isMontgomery()
             ? b.create<field::FromMontOp>(
                   field::getStandardFormType(scalarFieldType), scalarPF)
             : scalarPF;
     Value scalarInt =
-        b.create<field::ExtractOp>(TypeRange{scalarIntType}, scalarReduced)
-            .getResult(0);
+        b.create<field::BitcastOp>(TypeRange{scalarIntType}, scalarReduced);
 
     Value zeroPoint = createZeroPoint(b, outputType);
 
@@ -511,7 +507,7 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
     Value scalars = op.getScalars();
     Value points = op.getPoints();
 
-    Type outputType = op.getOutput().getType();
+    Type outputType = op.getType();
 
     PippengersGeneric pippengers(scalars, points, outputType, b,
                                  adaptor.getParallel(), adaptor.getDegree(),
@@ -614,13 +610,12 @@ struct ConvertBucketReduce : public OpConversionPattern<BucketReduceOp> {
     RankedTensorType bucketsType = cast<RankedTensorType>(buckets.getType());
     Type pointType = bucketsType.getElementType();
     Type standardScalarType = field::getStandardFormType(op.getScalarType());
-    Type integerScalarType = b.getIntegerType(
-        op.getScalarType().getModulus().getValue().getBitWidth());
+    Type scalarIntType = op.getScalarType().getStorageType();
 
     // Create bucket weights vector
     int64_t numBucketsPerWindow = bucketsType.getShape()[1];
     RankedTensorType arithWeightsType =
-        bucketsType.clone({numBucketsPerWindow}, integerScalarType);
+        bucketsType.clone({numBucketsPerWindow}, scalarIntType);
     SmallVector<Value> weightDims =
         numBucketsPerWindow == ShapedType::kDynamic
             ? SmallVector<Value>{b.create<tensor::DimOp>(buckets, 1)}
@@ -630,12 +625,11 @@ struct ConvertBucketReduce : public OpConversionPattern<BucketReduceOp> {
         [&](OpBuilder &builder, Location loc, ValueRange args) {
           ImplicitLocOpBuilder b0(loc, builder);
           Value arithScalar =
-              b0.create<arith::IndexCastOp>(integerScalarType, args[0]);
+              b0.create<arith::IndexCastOp>(scalarIntType, args[0]);
           b0.create<tensor::YieldOp>(arithScalar);
         });
     RankedTensorType weightsType = arithWeightsType.clone(standardScalarType);
-    Value fieldWeights =
-        b.create<field::EncapsulateOp>(weightsType, arithWeights);
+    Value fieldWeights = b.create<field::BitcastOp>(weightsType, arithWeights);
 
     // Create output windows tensor
     int64_t numWindows = bucketsType.getShape()[0];
@@ -673,9 +667,8 @@ struct ConvertWindowReduce : public OpConversionPattern<WindowReduceOp> {
 
     Value windows = op.getWindows();
     Type pointType = cast<RankedTensorType>(windows.getType()).getElementType();
-    Type scalarType = getStandardFormType(op.getScalarType());
-    Type integerScalarType = b.getIntegerType(
-        op.getScalarType().getModulus().getValue().getBitWidth());
+    Type standardScalarType = getStandardFormType(op.getScalarType());
+    Type scalarIntType = op.getScalarType().getStorageType();
 
     // Create output 0D tensor
     Value zeroPoint = createZeroPoint(b, pointType);
@@ -684,9 +677,9 @@ struct ConvertWindowReduce : public OpConversionPattern<WindowReduceOp> {
 
     // Calculate weighted windows reduction
     SmallVector<int64_t, 1> reductionDims = {0};
-    Value c = b.create<arith::ConstantIntOp>(integerScalarType,
-                                             op.getBitsPerWindow());
-    Value base = b.create<field::ConstantOp>(scalarType, 2);
+    Value c =
+        b.create<arith::ConstantIntOp>(scalarIntType, op.getBitsPerWindow());
+    Value base = b.create<field::ConstantOp>(standardScalarType, 2);
     // TODO(ashjeong): Try benchmarking against creating a separate weights
     // tensor & dot product. We want to test whether calculating  2ᶜⁱ in
     // parallel and reducing is faster than two loops of calculating 2ᶜⁱ
@@ -697,7 +690,7 @@ struct ConvertWindowReduce : public OpConversionPattern<WindowReduceOp> {
           ImplicitLocOpBuilder b0(loc, builder);
           // Current point (args[0]) and accumulator (args[1]).
           Value i = b0.create<linalg::IndexOp>(0);
-          Value arithI = b0.create<arith::IndexCastOp>(integerScalarType, i);
+          Value arithI = b0.create<arith::IndexCastOp>(scalarIntType, i);
           Value exp = b0.create<arith::MulIOp>(c, arithI);
           Value weight = b0.create<field::PowUIOp>(base, exp);
           Value weightedValue = b0.create<elliptic_curve::ScalarMulOp>(

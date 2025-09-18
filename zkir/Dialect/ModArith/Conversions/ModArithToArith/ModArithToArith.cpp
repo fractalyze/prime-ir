@@ -22,6 +22,7 @@
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
+#include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/Inverter/BYInverter.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
@@ -68,7 +69,7 @@ private:
 // before applying a remainder operation
 template <typename Op>
 static TypedAttr modulusAttr(Op op, bool mul = false) {
-  auto type = op.getResult().getType();
+  auto type = op.getType();
   auto modArithType = getResultModArithType(op);
   APInt modulus = modArithType.getModulus().getValue();
 
@@ -93,28 +94,14 @@ static inline Type modulusType(Op op, bool mul = false) {
   return modulusAttr(op, mul).getType();
 }
 
-struct ConvertEncapsulate : public OpConversionPattern<EncapsulateOp> {
-  explicit ConvertEncapsulate(MLIRContext *context)
-      : OpConversionPattern<EncapsulateOp>(context) {}
+struct ConvertBitcast : public OpConversionPattern<BitcastOp> {
+  explicit ConvertBitcast(MLIRContext *context)
+      : OpConversionPattern<BitcastOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(EncapsulateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    rewriter.replaceOp(op, adaptor.getInput());
-    return success();
-  }
-};
-
-struct ConvertExtract : public OpConversionPattern<ExtractOp> {
-  explicit ConvertExtract(MLIRContext *context)
-      : OpConversionPattern<ExtractOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ExtractOp op, OpAdaptor adaptor,
+  matchAndRewrite(BitcastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
@@ -310,7 +297,7 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
     ModArithType resultType = getResultModArithType(op);
     MontgomeryAttr montAttr = resultType.getMontgomeryAttr();
     TypedAttr rSquaredAttr = montAttr.getRSquared();
-    if (auto shapedType = dyn_cast<ShapedType>(op.getOutput().getType())) {
+    if (auto shapedType = dyn_cast<ShapedType>(op.getType())) {
       auto intShapedType = shapedType.cloneWith(
           std::nullopt, typeConverter->convertType(resultType));
       rSquaredAttr = SplatElementsAttr::get(intShapedType, rSquaredAttr);
@@ -340,7 +327,7 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
     ModArithType resultType = getResultModArithType(op);
     TypedAttr zeroAttr =
         b.getIntegerAttr(typeConverter->convertType(resultType), 0);
-    if (auto shapedType = dyn_cast<ShapedType>(op.getOutput().getType())) {
+    if (auto shapedType = dyn_cast<ShapedType>(op.getType())) {
       auto intShapedType = shapedType.cloneWith(
           std::nullopt, typeConverter->convertType(resultType));
       zeroAttr = SplatElementsAttr::get(intShapedType, zeroAttr);
@@ -460,7 +447,7 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ModArithType modType = getResultModArithType(op);
-    auto intType = modType.getModulus().getType();
+    auto intType = modType.getStorageType();
 
     Value cmod = b.create<arith::ConstantOp>(modulusAttr(op));
     Value one = b.create<arith::ConstantIntOp>(intType, 1);
@@ -764,7 +751,7 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
     Value lowExt = b.create<arith::ExtUIOp>(mulResultType, result.lo);
     Value highExt = b.create<arith::ExtUIOp>(mulResultType, result.hi);
     Value shift = b.create<arith::ConstantIntOp>(
-        mulResultType, resultType.getModulus().getValue().getBitWidth());
+        mulResultType, resultType.getStorageBitWidth());
     highExt = b.create<arith::ShLIOp>(highExt, shift);
     Value squared = b.create<arith::OrIOp>(lowExt, highExt);
 
@@ -823,9 +810,9 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
     auto signlessIntType =
         IntegerType::get(b.getContext(), outputBitWidth, IntegerType::Signless);
     auto extractedLHS =
-        b.create<mod_arith::ExtractOp>(signlessIntType, op.getLhs());
+        b.create<mod_arith::BitcastOp>(signlessIntType, op.getLhs());
     auto extractedRHS =
-        b.create<mod_arith::ExtractOp>(signlessIntType, op.getRhs());
+        b.create<mod_arith::BitcastOp>(signlessIntType, op.getRhs());
 
     auto cmpOp =
         b.create<arith::CmpIOp>(op.getPredicate(), extractedLHS, extractedRHS);
@@ -859,11 +846,10 @@ void ModArithToArith::runOnOperation() {
   patterns.add<
       // clang-format off
       ConvertAdd,
+      ConvertBitcast,
       ConvertCmp,
       ConvertConstant,
       ConvertDouble,
-      ConvertEncapsulate,
-      ConvertExtract,
       ConvertFromMont,
       ConvertInverse,
       ConvertMac,
@@ -889,6 +875,8 @@ void ModArithToArith::runOnOperation() {
       ConvertAny<bufferization::ToTensorOp>,
       ConvertAny<elliptic_curve::ExtractOp>,
       ConvertAny<elliptic_curve::PointOp>,
+      ConvertAny<field::ExtFromCoeffsOp>,
+      ConvertAny<field::ExtToCoeffsOp>,
       ConvertAny<linalg::BroadcastOp>,
       ConvertAny<linalg::GenericOp>,
       ConvertAny<linalg::MapOp>,
@@ -934,6 +922,8 @@ void ModArithToArith::runOnOperation() {
       bufferization::ToTensorOp,
       elliptic_curve::ExtractOp,
       elliptic_curve::PointOp,
+      field::ExtFromCoeffsOp,
+      field::ExtToCoeffsOp,
       linalg::BroadcastOp,
       linalg::GenericOp,
       linalg::MapOp,

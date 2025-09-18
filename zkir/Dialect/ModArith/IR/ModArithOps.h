@@ -16,7 +16,7 @@ namespace mlir::zkir::mod_arith {
 
 template <typename OpType>
 inline ModArithType getResultModArithType(OpType op) {
-  return cast<ModArithType>(getElementTypeOrSelf(op.getResult().getType()));
+  return cast<ModArithType>(getElementTypeOrSelf(op.getType()));
 }
 
 template <typename OpType>
@@ -26,7 +26,7 @@ inline ModArithType getOperandModArithType(OpType op) {
 
 template <typename OpType>
 inline IntegerType getResultIntegerType(OpType op) {
-  return cast<IntegerType>(getElementTypeOrSelf(op.getResult().getType()));
+  return cast<IntegerType>(getElementTypeOrSelf(op.getType()));
 }
 
 template <typename OpType>

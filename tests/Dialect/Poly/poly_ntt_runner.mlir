@@ -28,12 +28,12 @@ func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interf
 
 func.func @test_poly_ntt() {
   %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.encapsulate %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
+  %coeffs = field.bitcast %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
   %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
   %res = poly.ntt %coeffs_mont into %coeffs_mont {root=#root_of_unity} : tensor<4x!coeff_ty_mont>
 
   %res_standard = field.from_mont %res : tensor<4x!coeff_ty>
-  %extract = field.extract %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %extract = field.bitcast %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
   %1 = bufferization.to_buffer %extract : tensor<4xi32> to memref<4xi32>
   %U = memref.cast %1 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
@@ -42,7 +42,7 @@ func.func @test_poly_ntt() {
   %poly = poly.from_tensor %intt : tensor<4x!coeff_ty_mont> -> !poly_ty
   %res2 = poly.to_tensor %poly : !poly_ty -> tensor<4x!coeff_ty_mont>
   %res2_standard = field.from_mont %res2 : tensor<4x!coeff_ty>
-  %extract2 = field.extract %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %extract2 = field.bitcast %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
   %2= bufferization.to_buffer %extract2 : tensor<4xi32> to memref<4xi32>
   %U2 = memref.cast %2 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
@@ -53,25 +53,25 @@ func.func @test_poly_ntt() {
 
 func.func @test_poly_ntt_with_twiddles() {
   %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.encapsulate %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
+  %coeffs = field.bitcast %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
   %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
   %twiddles_raw = arith.constant dense<[5569, 6115, 2112, 1566]> : tensor<4xi32>
-  %twiddles = field.encapsulate %twiddles_raw : tensor<4xi32> -> tensor<4x!coeff_ty_mont>
+  %twiddles = field.bitcast %twiddles_raw : tensor<4xi32> -> tensor<4x!coeff_ty_mont>
   %res = poly.ntt %coeffs_mont into %coeffs_mont with %twiddles : tensor<4x!coeff_ty_mont>
 
   %res_standard = field.from_mont %res : tensor<4x!coeff_ty>
-  %extract = field.extract %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %extract = field.bitcast %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
   %1 = bufferization.to_buffer %extract : tensor<4xi32> to memref<4xi32>
   %U = memref.cast %1 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
 
   %inv_twiddles_raw = arith.constant dense<[5569, 1566, 2112, 6115]> : tensor<4xi32>
-  %inv_twiddles = field.encapsulate %inv_twiddles_raw : tensor<4xi32> -> tensor<4x!coeff_ty_mont>
+  %inv_twiddles = field.bitcast %inv_twiddles_raw : tensor<4xi32> -> tensor<4x!coeff_ty_mont>
   %intt = poly.ntt %res into %res with %inv_twiddles inverse=true : tensor<4x!coeff_ty_mont>
   %poly = poly.from_tensor %intt : tensor<4x!coeff_ty_mont> -> !poly_ty
   %res2 = poly.to_tensor %poly : !poly_ty -> tensor<4x!coeff_ty_mont>
   %res2_standard = field.from_mont %res2 : tensor<4x!coeff_ty>
-  %extract2 = field.extract %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %extract2 = field.bitcast %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
   %2= bufferization.to_buffer %extract2 : tensor<4xi32> to memref<4xi32>
   %U2 = memref.cast %2 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
@@ -83,13 +83,13 @@ func.func @test_poly_ntt_with_twiddles() {
 
 func.func @test_poly_ntt_out_of_place() {
   %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.encapsulate %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
+  %coeffs = field.bitcast %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
   %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
   %tmp = bufferization.alloc_tensor() : tensor<4x!coeff_ty_mont>
   %res = poly.ntt %coeffs_mont into %tmp {root=#root_of_unity} : tensor<4x!coeff_ty_mont>
 
   %res_standard = field.from_mont %res : tensor<4x!coeff_ty>
-  %extract = field.extract %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %extract = field.bitcast %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
   %1 = bufferization.to_buffer %extract : tensor<4xi32> to memref<4xi32>
   %U = memref.cast %1 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
@@ -99,7 +99,7 @@ func.func @test_poly_ntt_out_of_place() {
   %poly = poly.from_tensor %intt : tensor<4x!coeff_ty_mont> -> !poly_ty
   %res2 = poly.to_tensor %poly : !poly_ty -> tensor<4x!coeff_ty_mont>
   %res2_standard = field.from_mont %res2 : tensor<4x!coeff_ty>
-  %extract2 = field.extract %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %extract2 = field.bitcast %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
   %2= bufferization.to_buffer %extract2 : tensor<4xi32> to memref<4xi32>
   %U2 = memref.cast %2 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
@@ -111,13 +111,13 @@ func.func @test_poly_ntt_out_of_place() {
 
 func.func @test_poly_ntt_out_of_place_no_bit_reversal() {
   %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.encapsulate %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
+  %coeffs = field.bitcast %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
   %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
   %tmp = bufferization.alloc_tensor() : tensor<4x!coeff_ty_mont>
   %res = poly.ntt %coeffs_mont into %tmp {root=#root_of_unity} bit_reverse=false : tensor<4x!coeff_ty_mont>
 
   %res_standard = field.from_mont %res : tensor<4x!coeff_ty>
-  %extract = field.extract %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %extract = field.bitcast %res_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
   %1 = bufferization.to_buffer %extract : tensor<4xi32> to memref<4xi32>
   %U = memref.cast %1 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
@@ -127,7 +127,7 @@ func.func @test_poly_ntt_out_of_place_no_bit_reversal() {
   %poly = poly.from_tensor %intt : tensor<4x!coeff_ty_mont> -> !poly_ty
   %res2 = poly.to_tensor %poly : !poly_ty -> tensor<4x!coeff_ty_mont>
   %res2_standard = field.from_mont %res2 : tensor<4x!coeff_ty>
-  %extract2 = field.extract %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
+  %extract2 = field.bitcast %res2_standard : tensor<4x!coeff_ty> -> tensor<4xi32>
   %2= bufferization.to_buffer %extract2 : tensor<4xi32> to memref<4xi32>
   %U2 = memref.cast %2 : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()

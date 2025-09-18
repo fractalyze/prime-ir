@@ -62,8 +62,7 @@ Pippengers::Pippengers(Value scalars, Value points, Type outputType,
                        .getResult()
                  : scalars;
 
-  size_t scalarBitWidth =
-      scalarFieldType_.getModulus().getValue().getBitWidth();
+  size_t scalarBitWidth = scalarFieldType_.getStorageBitWidth();
   bitsPerWindow_ =
       windowBits > 0
           ? windowBits

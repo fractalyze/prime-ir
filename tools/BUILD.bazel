@@ -26,6 +26,7 @@ cc_binary(
         "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField",
         "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM",
         "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//zkir/Dialect/Field/Conversions/ExtFieldToLLVM",
         "//zkir/Dialect/Field/Conversions/FieldToModArith",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/Field/Pipelines:Passes",

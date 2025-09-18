@@ -21,7 +21,7 @@ index 22a25fd1a5af..bbfab789d58a 100644
 +            getType().getElementType())) {
 +      auto st = cast<ShapedType>(getType());
 +      return DenseElementsAttr::get(
-+          st.cloneWith(std::nullopt, modArithType.getModulus().getType()),
++          st.cloneWith(std::nullopt, modArithType.getStorageType()),
 +          adaptor.getElements());
 +    }
      return DenseElementsAttr::get(getType(), adaptor.getElements());

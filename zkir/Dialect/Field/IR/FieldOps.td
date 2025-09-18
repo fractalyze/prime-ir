@@ -5,7 +5,10 @@ include "zkir/Dialect/Field/IR/FieldAttributes.td"
 include "zkir/Dialect/Field/IR/FieldDialect.td"
 include "zkir/Dialect/Field/IR/FieldTypes.td"
 include "zkir/Dialect/ModArith/IR/ModArithAttributes.td"
+include "zkir/Dialect/ModArith/IR/ModArithTypes.td"
+include "zkir/Utils/CommonTraits.td"
 include "mlir/Dialect/Arith/IR/ArithBase.td"
+include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
@@ -97,48 +100,32 @@ def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<
   let assemblyFormat = "$low `,` $high attr-dict `:` type($output)";
 }
 
-def Field_EncapsulateOp : Op<Field_Dialect, "encapsulate", [Pure]> {
-  let summary = "Encapsulate an integer into a field type";
+def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
+ SameOperandsAndResultShape, AllSameTensorDims<["input", "output"]>,
+ DeclareOpInterfaceMethods<CastOpInterface>]> {
+  let summary = "Bitcast between prime field types and to/from integer types";
   let description = [{
-    Converts the integer to be of field type.
+    Bitcasts between prime field types and to/from integer types.
 
-    The bitwidth of the input integer type is required to have the same bitwidth
-    as the storage type of the output field type.
+    The storage bitwidth of the input type is required to be the same storage
+    bitwidth of the output type. Integer to integer bitcast is disallowed as it
+    should be handled by `arith.bitcast`.
+
+    Currently, this operation only supports prime field. In the future, when the
+    use case is clear, we could support bitcasting between other field types and
+    integer type.
 
     Example:
     ```
     !PF = field.pf<7 : i32>
-    %f0 = field.encapsulate %c0 : i32 -> !PF
-    !QF = field.f2<!PF, #beta>
-    %f1, %f2 = field.encapsulate %c1, %c2 : i32, i32 -> !QF
+    %c0 = field.bitcast %f0 : !PF -> i32
+    %f1 = field.bitcast %c0 : i32 -> !PF
+    %f2 = field.bitcast %f0 : !PF -> !PF2
     ```
   }];
-  let arguments = (ins Variadic<SignlessIntegerLike>:$input);
-  let results = (outs FieldLike:$output);
+  let arguments = (ins AnyTypeOf<[PrimeFieldLike, SignlessIntegerLike]>:$input);
+  let results = (outs AnyTypeOf<[PrimeFieldLike, SignlessIntegerLike]>:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
-  let hasVerifier = 1;
-}
-
-def Field_ExtractOp : Op<Field_Dialect, "extract", [Pure]> {
-  let summary = "Extract the integer stored inside field type";
-  let description = [{
-    Extracts the integer inside the field type.
-
-    The bitwidth of the output integer type is required to have the same
-    bitwidth as the storage type of the input field type.
-
-    Example:
-    ```
-    !PF = field.pf<7 : i32>
-    %c0 = field.extract %f0 : !PF -> i32
-    !QF = field.f2<!PF, #beta>
-    %c1, %c2 = field.extract %f1 : !QF -> i32, i32
-    ```
-  }];
-  let arguments = (ins FieldLike:$input);
-  let results = (outs Variadic<SignlessIntegerLike>:$output);
-  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
-  let hasVerifier = 1;
 }
 
 def Field_CmpOp : Field_Op<"cmp", [SameTypeOperands, TypesMatchWith<
@@ -322,6 +309,42 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
   let arguments = (ins FieldLike:$base, SignlessIntegerLike:$exp);
   let results = (outs FieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($base) `,` type($exp)";
+  let hasVerifier = 1;
+}
+
+def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
+  let summary = "Get the coefficients of an extension field element";
+  let description = [{
+    Gets the coefficient representation of an extension field element.
+    This operation does NOT accept tensors since it cannot be applied elementwise.
+
+    Example:
+    ```
+    !QF = field.f2<!PF, #beta>
+    %c0, %c1 = field.ext_to_coeffs %qf : !QF -> !PF, !PF
+    ```
+  }];
+  let arguments = (ins Field_QuadraticExtFieldType:$input);
+  let results = (outs Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$output);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Field_ExtFromCoeffsOp : Field_Op<"ext_from_coeffs", [Pure]> {
+  let summary = "Constructs extension field element from the coefficients";
+  let description = [{
+    Constructs extension field element from the coefficients.
+    This operation does NOT accept tensors since it cannot be applied elementwise.
+
+    Example:
+    ```
+    !QF = field.f2<!PF, #beta>
+    %qf = field.ext_from_coeffs %c0, %c1 : !PF, !PF -> !QF
+    ```
+  }];
+  let arguments = (ins Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$input);
+  let results = (outs Field_QuadraticExtFieldType:$output);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
 

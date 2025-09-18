@@ -136,8 +136,8 @@ PrimitiveRootAttrStorage::construct(AttributeStorageAllocator &allocator,
   SmallVector<APInt> roots, invRoots;
   precomputeRoots(rootVal, mod, degree.getInt(), roots, invRoots, montgomeryR);
   // Create a ranked tensor type for the exponents attribute.
-  auto tensorType = RankedTensorType::get(
-      {degree.getInt()}, root.getType().getModulus().getType());
+  auto tensorType =
+      RankedTensorType::get({degree.getInt()}, root.getType().getStorageType());
 
   // Create the DenseIntElementsAttr from the computed exponent values.
   DenseElementsAttr rootsAttr = DenseElementsAttr::get(tensorType, roots);

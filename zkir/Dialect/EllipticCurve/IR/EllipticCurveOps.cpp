@@ -1,10 +1,13 @@
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 
+#include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LogicalResult.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "zkir/Dialect/Field/IR/FieldDialect.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 namespace mlir::zkir::elliptic_curve {
 namespace {
@@ -19,18 +22,71 @@ LogicalResult verifyMSMPointTypes(OpType op, Type inputType, Type outputType) {
   }
   return success();
 }
+
+template <typename OpType>
+LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
+  Type ptBaseField = getCurveFromPointLike(pointType).getBaseField();
+  if (isa<field::FieldDialect>(coordType.getDialect())) {
+    if (ptBaseField != coordType) {
+      return op.emitError() << "coord must be base field of point; but got "
+                            << coordType << " expected " << ptBaseField;
+    }
+    return success();
+  }
+  if (auto pfType = dyn_cast<field::PrimeFieldType>(ptBaseField)) {
+    if (auto modArithType = dyn_cast<mod_arith::ModArithType>(coordType)) {
+      if (pfType.getModulus() != modArithType.getModulus())
+        return op.emitError()
+               << "output must have the same modulus as the base "
+                  "field of input";
+      if (pfType.isMontgomery() != modArithType.isMontgomery())
+        return op.emitError()
+               << "output must have the same montgomery form as the "
+                  "base field of input";
+    } else if (auto intType = dyn_cast<IntegerType>(coordType)) {
+      if (intType.getWidth() != pfType.getStorageBitWidth())
+        return op.emitError()
+               << "output must have the same bitwidth as the base "
+                  "field of input";
+    } else {
+      return op.emitError()
+             << "output must be a mod_arith type or an integer "
+                "type if the base field is a prime field; but got "
+             << coordType;
+    }
+  } else if (auto f2Type =
+                 dyn_cast<field::QuadraticExtFieldType>(ptBaseField)) {
+    if (auto structType = dyn_cast<LLVM::LLVMStructType>(coordType)) {
+      if (structType.getBody().size() != 2)
+        return op.emitError() << "output struct must have two elements for "
+                                 "quadratic extension field";
+      // NOTE: In case of extension fields, the types are not lowered to modular
+      // types since struct cannot contain modular types so we can ignore that
+      // case.
+      if (structType.getBody()[0] != f2Type.getBaseField().getStorageType() ||
+          structType.getBody()[1] != f2Type.getBaseField().getStorageType())
+        return op.emitError() << "output struct element must have the same "
+                                 "bitwidth as the base field of input";
+    } else {
+      return op.emitError() << "output must be a struct type for quadratic "
+                               "extension field; but got "
+                            << coordType;
+    }
+  }
+  return success();
+}
 } // namespace
 
 /////////////// VERIFY OPS /////////////////
 
 LogicalResult PointOp::verify() {
-  Type outputType = getOutput().getType();
+  Type outputType = getType();
   if (getNumCoordsFromPointLike(outputType) != getCoords().size()) {
     return emitError() << outputType << " should have "
                        << getNumCoordsFromPointLike(outputType)
                        << " coordinates";
   }
-  return success();
+  return verifyPointCoordTypes(*this, outputType, getCoords()[0].getType());
 }
 
 LogicalResult ExtractOp::verify() {
@@ -40,7 +96,7 @@ LogicalResult ExtractOp::verify() {
                        << getNumCoordsFromPointLike(inputType)
                        << " coordinates";
   }
-  return success();
+  return verifyPointCoordTypes(*this, inputType, getType(0));
 }
 
 LogicalResult IsZeroOp::verify() {
@@ -56,7 +112,7 @@ template <typename OpType>
 LogicalResult verifyBinaryOp(OpType op) {
   Type lhsType = op.getLhs().getType();
   Type rhsType = op.getRhs().getType();
-  Type outputType = op.getOutput().getType();
+  Type outputType = op.getType();
   if (isa<AffineType>(lhsType) || isa<AffineType>(rhsType)) {
     if (lhsType == rhsType &&
         (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) {
@@ -84,7 +140,7 @@ LogicalResult SubOp::verify() { return verifyBinaryOp(*this); }
 
 LogicalResult DoubleOp::verify() {
   Type inputType = getInput().getType();
-  Type outputType = getOutput().getType();
+  Type outputType = getType();
   if ((isa<AffineType>(inputType) &&
        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       inputType == outputType)
@@ -95,7 +151,7 @@ LogicalResult DoubleOp::verify() {
 
 LogicalResult ScalarMulOp::verify() {
   Type pointType = getPoint().getType();
-  Type outputType = getOutput().getType();
+  Type outputType = getType();
   if ((isa<AffineType>(pointType) &&
        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       pointType == outputType)
@@ -111,7 +167,7 @@ LogicalResult MSMOp::verify() {
     return emitError() << "scalars and points must have the same rank";
   }
   Type inputType = pointsType.getElementType();
-  Type outputType = getOutput().getType();
+  Type outputType = getType();
   if (failed(verifyMSMPointTypes(*this, inputType, outputType))) {
     return failure();
   }
@@ -180,8 +236,7 @@ LogicalResult BucketReduceOp::verify() {
 }
 
 LogicalResult WindowReduceOp::verify() {
-  unsigned scalarBitWidth =
-      getScalarType().getModulus().getValue().getBitWidth();
+  unsigned scalarBitWidth = getScalarType().getStorageBitWidth();
   int16_t bitsPerWindow = getBitsPerWindow();
   TensorType windowsType = getWindows().getType();
 
@@ -199,7 +254,7 @@ LogicalResult WindowReduceOp::verify() {
 
 LogicalResult ConvertPointTypeOp::verify() {
   Type inputType = getInput().getType();
-  Type outputType = getOutput().getType();
+  Type outputType = getType();
   if (inputType == outputType)
     return emitError() << "Converting on same types";
   // TODO(ashjeong): check curves are the same

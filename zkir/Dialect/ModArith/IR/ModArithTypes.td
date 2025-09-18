@@ -66,6 +66,13 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [MemRefElementTypeI
     BYAttr getBYAttr() {
       return BYAttr::get(getContext(), getModulus());
     }
+    IntegerType getStorageType() {
+      // TODO(batzor): decouple the storage type from the modulus type
+      return cast<IntegerType>(getModulus().getType());
+    }
+    unsigned getStorageBitWidth() {
+      return getStorageType().getWidth();
+    }
   }];
 }
 

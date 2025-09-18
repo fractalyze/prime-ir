@@ -13,7 +13,7 @@ def IsNegativeThree : Constraint<CPred<"isNegativeOf($0, $1, 3)">>;
 def IsNegativeFour : Constraint<CPred<"isNegativeOf($0, $1, 4)">>;
 def GetAsConstant : NativeCodeCall<"$_builder.create<ConstantOp>(odsLoc, $0.getType(), cast<TypedAttr>($1))">;
 def GetZeroAttr : NativeCodeCall<"$_builder.getZeroAttr(cast<IntegerType>($0))">;
-def GetIntegerType : NativeCodeCall<"cast<IntegerType>(cast<ModArithType>($0.getType()).getModulus().getType())">;
+def GetIntegerType : NativeCodeCall<"cast<ModArithType>($0.getType()).getStorageType()">;
 
 //===----------------------------------------------------------------------===//
 // AddOp

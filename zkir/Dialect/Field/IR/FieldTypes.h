@@ -7,6 +7,7 @@
 // Headers needed for FieldTypes.h.inc
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "mlir/IR/BuiltinTypes.h"
 // IWYU pragma: end_keep
 
 namespace mlir::zkir::field {
@@ -14,6 +15,7 @@ namespace mlir::zkir::field {
 class PrimeFieldAttr;
 
 bool isMontgomery(Type type);
+unsigned getIntOrPrimeFieldBitWidth(Type type);
 
 } // namespace mlir::zkir::field
 

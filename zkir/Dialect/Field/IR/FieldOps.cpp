@@ -122,7 +122,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
       return failure();
     }
 
-    auto outputBitWidth = pfType.getModulus().getValue().getBitWidth();
+    auto outputBitWidth = pfType.getStorageBitWidth();
     if (parsedInt[0].getActiveBits() > outputBitWidth)
       return parser.emitError(
           parser.getCurrentLocation(),
@@ -149,8 +149,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
       return failure();
     }
 
-    auto outputBitWidth =
-        f2Type.getBaseField().getModulus().getValue().getBitWidth();
+    auto outputBitWidth = f2Type.getBaseField().getStorageBitWidth();
     for (const auto &value : parsedInt) {
       if (value.getActiveBits() > outputBitWidth)
         return parser.emitError(
@@ -178,7 +177,7 @@ void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
   p.printAttributeWithoutType(getValue());
   p << " : ";
-  p.printType(getOutput().getType());
+  p.printType(getType());
 }
 
 template <typename OpType>
@@ -186,7 +185,7 @@ static LogicalResult disallowShapedTypeOfExtField(OpType op) {
   // FIXME(batzor): In the prime field case, we rely on elementwise trait but in
   // the quadratic extension case, `linalg.generic` introduced by the
   // elementwise pass will be ill-formed due to the 1:N conversion.
-  auto resultType = op.getResult().getType();
+  auto resultType = op.getType();
   if (isa<ShapedType>(resultType)) {
     auto elementType = cast<ShapedType>(resultType).getElementType();
     if (isa<QuadraticExtFieldType>(elementType)) {
@@ -206,106 +205,61 @@ LogicalResult InverseOp::verify() {
   return disallowShapedTypeOfExtField(*this);
 }
 LogicalResult FromMontOp::verify() {
-  bool isMont = isMontgomery(this->getOutput().getType());
+  bool isMont = isMontgomery(getType());
   if (isMont) {
     return emitOpError()
            << "FromMontOp result should be a standard type, but got "
-           << getElementTypeOrSelf(this->getOutput().getType()) << ".";
+           << getElementTypeOrSelf(getType()) << ".";
   }
   return disallowShapedTypeOfExtField(*this);
 }
 LogicalResult ToMontOp::verify() {
-  bool isMont = isMontgomery(this->getOutput().getType());
+  bool isMont = isMontgomery(getType());
   if (!isMont) {
     return emitOpError()
            << "ToMontOp result should be a Montgomery type, but got "
-           << getElementTypeOrSelf(this->getOutput().getType()) << ".";
+           << getElementTypeOrSelf(getType()) << ".";
   }
   return disallowShapedTypeOfExtField(*this);
 }
-LogicalResult ExtractOp::verify() {
-  Type inputType = this->getInput().getType();
-  TypeRange resultTypes = this->getOutput().getTypes();
 
-  if (isa<ShapedType>(inputType) &&
-      isa<QuadraticExtFieldType>(getElementTypeOrSelf(inputType))) {
-    return emitOpError() << "shaped type is not supported for quadratic "
-                            "extension field type";
-  } else if (auto pfType = dyn_cast<PrimeFieldType>(inputType)) {
-    // For prime field input, expect exactly one integer output
-    if (resultTypes.size() != 1) {
-      return emitOpError()
-             << "expected one result type for prime field input, but got "
-             << resultTypes.size();
-    }
-    auto intType = cast<IntegerType>(resultTypes[0]);
-    if (intType.getWidth() != pfType.getModulus().getValue().getBitWidth()) {
-      return emitOpError() << "result integer bitwidth " << intType.getWidth()
-                           << " does not match prime field modulus bitwidth "
-                           << pfType.getModulus().getValue().getBitWidth();
-    }
-  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(inputType)) {
-    if (isa<ShapedType>(inputType)) {
-      return emitOpError() << "shaped type is not supported for quadratic "
-                              "extension field type";
-    }
-    if (resultTypes.size() != 2) {
-      return emitOpError() << "expected two result types for quadratic "
+bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+  Type inputType = getElementTypeOrSelf(inputs.front());
+  Type outputType = getElementTypeOrSelf(outputs.front());
+
+  return getIntOrPrimeFieldBitWidth(inputType) ==
+         getIntOrPrimeFieldBitWidth(outputType);
+}
+
+LogicalResult ExtToCoeffsOp::verify() {
+  Type inputType = getInput().getType();
+  if (auto f2Type = dyn_cast<QuadraticExtFieldType>(inputType)) {
+    if (getOutput().size() == 2) {
+      return success();
+    } else {
+      return emitOpError() << "expected two output types for quadratic "
                               "extension field input, but got "
-                           << resultTypes.size();
-    }
-
-    auto baseField = f2Type.getBaseField();
-    unsigned modBitWidth = baseField.getModulus().getValue().getBitWidth();
-    for (int i = 0; i < 2; i++) {
-      auto intType = cast<IntegerType>((resultTypes[i]));
-      if (intType.getWidth() != modBitWidth) {
-        return emitOpError()
-               << "result integer bitwidth " << intType.getWidth()
-               << " does not match base field modulus bitwidth " << modBitWidth;
-      }
+                           << getOutput().size();
     }
   }
-  return success();
+
+  return emitOpError() << "input type must be a extension field; got "
+                       << inputType;
 }
-LogicalResult EncapsulateOp::verify() {
-  Type resultType = (this->getOutput().getType());
-  TypeRange inputTypes = this->getInput().getTypes();
 
-  if (failed(disallowShapedTypeOfExtField(*this)))
-    return failure();
-
-  if (auto pfType = dyn_cast<PrimeFieldType>(resultType)) {
-    if (inputTypes.size() != 1) {
-      return emitOpError()
-             << "expected one input for prime field output, but got "
-             << inputTypes.size();
-    }
-    auto intType = cast<IntegerType>(inputTypes[0]);
-    if (intType.getWidth() != pfType.getModulus().getValue().getBitWidth()) {
-      return emitOpError() << "input integer bitwidth " << intType.getWidth()
-                           << " does not match prime field modulus bitwidth "
-                           << pfType.getModulus().getValue().getBitWidth();
-    }
-  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(resultType)) {
-    if (inputTypes.size() != 2) {
+LogicalResult ExtFromCoeffsOp::verify() {
+  Type outputType = getType();
+  if (auto f2Type = dyn_cast<QuadraticExtFieldType>(outputType)) {
+    if (getInput().size() == 2) {
+      return success();
+    } else {
       return emitOpError() << "expected two input types for quadratic "
                               "extension field output, but got "
-                           << inputTypes.size();
-    }
-
-    auto baseField = f2Type.getBaseField();
-    unsigned modBitWidth = baseField.getModulus().getValue().getBitWidth();
-    for (int i = 0; i < 2; i++) {
-      auto intType = cast<IntegerType>((inputTypes[i]));
-      if (intType.getWidth() != modBitWidth) {
-        return emitOpError()
-               << "input integer bitwidth " << intType.getWidth()
-               << " does not match base field modulus bitwidth " << modBitWidth;
-      }
+                           << getInput().size();
     }
   }
-  return success();
+  return emitOpError() << "output type must be a extension field; got "
+                       << outputType;
 }
 
 namespace {

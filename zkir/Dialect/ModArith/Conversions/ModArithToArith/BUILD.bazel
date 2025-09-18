@@ -14,6 +14,7 @@ cc_library(
     deps = [
         ":pass_inc_gen",
         "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/Conversions/ModArithToArith/Inverter:BYInverter",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/TensorExt/IR:TensorExt",
