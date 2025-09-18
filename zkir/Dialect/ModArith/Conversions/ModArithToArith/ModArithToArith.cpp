@@ -205,6 +205,7 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
                          APInt::getAllOnes(limbWidth).zext(modBitWidth));
     TypedAttr limbShiftAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow),
                                                (numLimbs - 1) * limbWidth);
+    TypedAttr oneAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), 1);
 
     arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
                                              arith::IntegerOverflowFlags::nsw);
@@ -223,6 +224,7 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
                     ? modAttr
                     : SplatElementsAttr::get(shapedType, modAttr);
       bInvAttr = SplatElementsAttr::get(shapedType, bInvAttr);
+      oneAttr = SplatElementsAttr::get(shapedType, oneAttr);
     }
 
     // Create constants for the Montgomery reduction.
@@ -232,6 +234,7 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     auto limbShiftConst = b.create<arith::ConstantOp>(limbShiftAttr);
     auto modConst = b.create<arith::ConstantOp>(modAttr);
     auto bInvConst = b.create<arith::ConstantOp>(bInvAttr);
+    auto oneConst = b.create<arith::ConstantOp>(oneAttr);
 
     // Because the number of limbs (`numLimbs`) is known at compile time, we can
     // unroll the loop as a straight-line chain of operations.
@@ -246,12 +249,12 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
 
       // Compute `m` = `freeCoeff` * (b⁻¹ mod n) and add to `T`.
       auto m = b.create<arith::MulUIExtendedOp>(freeCoeff, bInvConst);
-      auto sum = b.create<arith::AddUIExtendedOp>(tLow, m.getLow());
-      tLow = sum.getSum();
+      tLow = b.create<arith::AddIOp>(tLow, m.getLow());
+      Value carry =
+          b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, tLow, m.getLow());
       tHigh = b.create<arith::AddIOp>(tHigh, m.getHigh(), noOverflow);
-      auto carryExt =
-          b.create<arith::ExtUIOp>(tHigh.getType(), sum.getOverflow());
-      tHigh = b.create<arith::AddIOp>(tHigh, carryExt, noOverflow);
+      auto tHighPlusOne = b.create<arith::AddIOp>(tHigh, oneConst, noOverflow);
+      tHigh = b.create<arith::SelectOp>(carry, tHighPlusOne, tHigh);
     }
     // The last iteration is the same as normal Montgomery reduction.
     Value freeCoeff = tLow;
@@ -267,12 +270,12 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
     }
     auto mN = b.create<arith::MulUIExtendedOp>(modConst, mExt);
     // Add the product to `T`.
-    auto sum = b.create<arith::AddUIExtendedOp>(tLow, mN.getLow());
-    tLow = sum.getSum();
+    tLow = b.create<arith::AddIOp>(tLow, mN.getLow());
+    auto carry =
+        b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, tLow, mN.getLow());
     tHigh = b.create<arith::AddIOp>(tHigh, mN.getHigh(), noOverflow);
-    auto carryExt =
-        b.create<arith::ExtUIOp>(tHigh.getType(), sum.getOverflow());
-    tHigh = b.create<arith::AddIOp>(tHigh, carryExt, noOverflow);
+    auto tHighPlusOne = b.create<arith::AddIOp>(tHigh, oneConst, noOverflow);
+    tHigh = b.create<arith::SelectOp>(carry, tHighPlusOne, tHigh);
     if (numLimbs == 1) {
       tLow = tHigh;
     } else {
