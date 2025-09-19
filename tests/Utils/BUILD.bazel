@@ -1,0 +1,11 @@
+load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
+load("//bazel:lit.bzl", "run_lit_tests")
+
+run_lit_tests(
+    data = [
+        "//tests:test_utilities",
+        "//tests:test_utilities_cuda",
+    ],
+    target_compatible_with = requires_cuda(),
+    tests = ["sort_pairs_runner.mlir"],
+)
