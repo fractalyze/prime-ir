@@ -518,6 +518,109 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
   }
 };
 
+struct ConvertScalarDecomp : public OpConversionPattern<ScalarDecompOp> {
+  explicit ConvertScalarDecomp(mlir::MLIRContext *context)
+      : OpConversionPattern<ScalarDecompOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ScalarDecompOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    Value scalars =
+        cast<field::PrimeFieldType>(op.getScalars().getType().getElementType())
+                .isMontgomery()
+            ? b.create<field::FromMontOp>(
+                   field::getStandardFormType(op.getScalars().getType()),
+                   op.getScalars())
+                  .getResult()
+            : op.getScalars();
+    RankedTensorType scalarsType = cast<RankedTensorType>(scalars.getType());
+    field::PrimeFieldType scalarFieldType =
+        cast<field::PrimeFieldType>(scalarsType.getElementType());
+    int32_t bitsPerWindow = op.getBitsPerWindow();
+
+    unsigned scalarBitWidth = scalarFieldType.getStorageBitWidth();
+    IntegerType scalarIntType = b.getIntegerType(scalarBitWidth);
+    scalars =
+        b.create<field::BitcastOp>(scalarsType.clone(scalarIntType), scalars)
+            .getResult();
+
+    // Use scalar_max_bits if specified, otherwise use the arithmetic bit size
+    // of scalar modulus
+    if (auto scalarMaxBitsAttr = op.getScalarMaxBitsAttr()) {
+      scalarBitWidth = scalarMaxBitsAttr.getValue().getSExtValue();
+      scalarIntType = b.getIntegerType(scalarBitWidth);
+      scalars =
+          b.create<arith::TruncIOp>(scalarsType.clone(scalarIntType), scalars);
+    }
+
+    int32_t numWindows = (scalarBitWidth + bitsPerWindow - 1) / bitsPerWindow;
+    int64_t totalSize = scalarsType.getNumElements() * numWindows;
+
+    RankedTensorType resultType =
+        scalarsType.clone({totalSize}, b.getIndexType());
+    IntegerType windowBitIntType = b.getIntegerType(bitsPerWindow);
+    Value zero = b.create<arith::ConstantIndexOp>(0);
+    Value numWindowsIndex = b.create<arith::ConstantIndexOp>(numWindows);
+    Value zeroSplitScalar = b.create<arith::ConstantIntOp>(windowBitIntType, 0);
+    Value bitsPerWindowIndex = b.create<arith::ConstantIndexOp>(bitsPerWindow);
+    Value bucketIndices = b.create<tensor::GenerateOp>(
+        resultType, SmallVector<Value>{},
+        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+          ImplicitLocOpBuilder nb(loc, nestedBuilder);
+          Value splitScalarIdx = ivs[0];
+
+          Value scalarIdx =
+              nb.create<arith::DivUIOp>(splitScalarIdx, numWindowsIndex);
+          Value windowIdx =
+              nb.create<arith::RemUIOp>(splitScalarIdx, numWindowsIndex);
+
+          Value scalar =
+              nb.create<tensor::ExtractOp>(scalars, ValueRange{scalarIdx});
+          Value windowOffset =
+              nb.create<arith::MulIOp>(windowIdx, bitsPerWindowIndex);
+          Value windowOffsetInt =
+              nb.create<arith::IndexCastOp>(scalarIntType, windowOffset);
+          Value shiftedScalar =
+              nb.create<arith::ShRUIOp>(scalar, windowOffsetInt);
+          Value splitScalar =
+              nb.create<arith::TruncIOp>(windowBitIntType, shiftedScalar);
+
+          Value isZeroSplitScalar = nb.create<arith::CmpIOp>(
+              arith::CmpIPredicate::eq, splitScalar, zeroSplitScalar);
+
+          // Calculate bucket index: if splitScalar is 0, bucketIdx = 0;
+          // otherwise bucketIdx = (window << bitsPerWindow) | splitScalar
+          Value windowShift =
+              nb.create<arith::ShLIOp>(windowIdx, bitsPerWindowIndex);
+          Value splitScalarIndex =
+              nb.create<arith::IndexCastUIOp>(nb.getIndexType(), splitScalar);
+          Value bucketIdx =
+              nb.create<arith::OrIOp>(windowShift, splitScalarIndex);
+          bucketIdx =
+              nb.create<arith::SelectOp>(isZeroSplitScalar, zero, bucketIdx);
+          nb.create<tensor::YieldOp>(bucketIdx);
+        });
+
+    Value pointIndices = b.create<tensor::GenerateOp>(
+        resultType, SmallVector<Value>{},
+        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
+          ImplicitLocOpBuilder nb(loc, nestedBuilder);
+          Value splitScalarIdx = ivs[0];
+
+          Value scalarIdx =
+              nb.create<arith::DivUIOp>(splitScalarIdx, numWindowsIndex);
+          nb.create<tensor::YieldOp>(scalarIdx);
+        });
+
+    rewriter.replaceOp(op, {bucketIndices, pointIndices});
+    return success();
+  }
+};
+
 struct ConvertBucketAcc : public OpConversionPattern<BucketAccOp> {
   explicit ConvertBucketAcc(mlir::MLIRContext *context)
       : OpConversionPattern<BucketAccOp>(context) {}
@@ -770,6 +873,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertDouble,
       ConvertIsZero,
       ConvertMSM,
+      ConvertScalarDecomp,
       ConvertNegate,
       ConvertScalarMul,
       ConvertSub,

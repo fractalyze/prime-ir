@@ -255,6 +255,49 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
   let assemblyFormat = "operands attr-dict `degree` `=` $degree (`window_bits` `=` $windowBits^)? (`parallel` $parallel^)? `:` type($scalars) `,` type($points) `->` type($output)";
 }
 
+def EllipticCurve_ScalarDecompOp : EllipticCurve_Op<"scalar_decomp", [
+  TypesMatchWith<
+    "bucket_indices and point_indices must have the same size",
+    "bucketIndices", "pointIndices", "$_self">,
+  VarPositiveAndBounded<"getBitsPerWindow()", "cast<field::PrimeFieldType>(getScalars().getType().getElementType()).getStorageBitWidth()">]> {
+  let summary = "Decompose scalars for MSM bucket computation";
+  let description = [{
+    Decomposes scalars in preparation for multi-scalar multiplication (MSM) bucket accumulation.
+    This operation takes the scalars tensor and bitsPerWindow, then produces two tensors of the same size:
+    - bucket_indices: tensor of unique bucket indices for each scalar-window combination
+    - point_indices: tensor of point indices that is to be stored at the corresponding bucket
+
+    A unique bucket index is calculated like so:
+    (current window #) << bitsPerWindow | (split part of scalar for given window)
+
+    When the maximum value of the scalars is known to have a smaller bit width than the scalar field modulus's,
+    the maximum bit width should be specified with scalarMaxBits. This can reduce the number of unnecessary loops
+    that calculate a zero bucket. By default, the bit size of the scalar modulus will be used.
+
+    Example with bitsPerWindow=2 and scalarMaxBits=4 (MSB -> LSB):
+    - Scalar 3 (0011): scalar per window = [11, 00] -> bucket indices [3, 0] -> point indices [0, 0]
+    - Scalar 5 (0101): scalar per window = [01, 01] -> bucket indices [1, 5] -> point indices [1, 1]
+    - Scalar 7 (0111): scalar per window = [11, 01] -> bucket indices [3, 5] -> point indices [2, 2]
+    - Total: bucket_indices [3, 0, 1, 5, 3, 5], point_indices [0, 0, 1, 1, 2, 2]
+
+    Example:
+    ```
+    %bucket_indices, %point_indices = elliptic_curve.scalar_decomp %scalars {bitsPerWindow = 2 : i16, scalarMaxBits = 4 : i16} : (tensor<3x!SF>) -> (tensor<6xindex>, tensor<6xindex>)
+    ```
+  }];
+  let arguments = (ins
+    1DTensorOf<[Field_PrimeFieldType]>:$scalars,
+    I16Attr:$bitsPerWindow,
+    OptionalAttr<I16Attr>:$scalarMaxBits
+  );
+  let results = (outs
+    1DTensorOf<[Index]>:$bucketIndices,
+    1DTensorOf<[Index]>:$pointIndices
+  );
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 // Elliptic curve MSM bucket accumulation for GPU.
 // Note that parameters differ from the bucket accumulation inside the other MSMOp.
 def EllipticCurve_BucketAccOp : EllipticCurve_Op<"bucket_acc", []> {

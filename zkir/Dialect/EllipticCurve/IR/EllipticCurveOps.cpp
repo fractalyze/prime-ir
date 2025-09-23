@@ -7,6 +7,7 @@
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
+#include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 namespace mlir::zkir::elliptic_curve {
@@ -198,6 +199,36 @@ LogicalResult MSMOp::verify() {
 
   return success();
   // TODO(ashjeong): check curves/fields are the same
+}
+
+LogicalResult ScalarDecompOp::verify() {
+  TensorType scalarsType = getScalars().getType();
+
+  if (!scalarsType.hasStaticShape() ||
+      !getBucketIndices().getType().hasStaticShape() ||
+      !getPointIndices().getType().hasStaticShape()) {
+    return emitOpError("requires statically shaped scalars, bucket_indices, "
+                       "and point_indices tensors");
+  }
+
+  size_t numScalars = scalarsType.getNumElements();
+
+  int16_t defaultScalarMaxBits =
+      cast<field::PrimeFieldType>(scalarsType.getElementType())
+          .getModulus()
+          .getValue()
+          .getBitWidth();
+  int16_t scalarMaxBits = getScalarMaxBits().value_or(defaultScalarMaxBits);
+  int16_t bitsPerWindow = getBitsPerWindow();
+
+  int32_t numWindows = (scalarMaxBits + bitsPerWindow - 1) / bitsPerWindow;
+  if (getBucketIndices().getType().getNumElements() !=
+      numScalars * numWindows) {
+    return emitError() << "bucket_indices size should be #scalars * #windows ("
+                       << (numScalars * numWindows) << "), but got "
+                       << getBucketIndices().getType().getNumElements();
+  }
+  return success();
 }
 
 LogicalResult BucketAccOp::verify() {
