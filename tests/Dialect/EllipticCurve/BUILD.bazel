@@ -8,6 +8,7 @@ package(
 GPU_TESTS = [
     "bucket_acc_runner.mlir",
     "bucket_reduce_runner.mlir",
+    "scalar_decomp_runner.mlir",
     "window_reduce_runner.mlir",
 ]
 
