@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "cuda_runtime_api.h" // NOLINT(build/include_subdir)
+#include "llvm/Support/raw_ostream.h"
 
 namespace zkir::utils {
 
@@ -28,9 +29,8 @@ struct CudaDeleter {
       // cleanup of other objects. Handle errors gracefully instead.
       cudaError_t error = cudaFree(ptr);
       if (error != cudaSuccess) {
-        std::fprintf(stderr,
-                     "CUDA error in destructor - cudaFree failed: %s (%d)\n",
-                     cudaGetErrorString(error), error);
+        llvm::errs() << "CUDA error in destructor - cudaAsync failed: "
+                     << cudaGetErrorString(error) << " (" << error << ")\n";
       }
     }
   }

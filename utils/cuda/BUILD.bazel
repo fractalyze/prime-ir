@@ -10,5 +10,8 @@ cc_library(
     name = "CudaUtils",
     hdrs = ["CudaUtils.h"],
     target_compatible_with = requires_cuda(),
-    deps = ["@cuda//:cuda_runtime"],
+    deps = [
+        "@cuda//:cuda_runtime",
+        "@llvm-project//llvm:Support",
+    ],
 )
