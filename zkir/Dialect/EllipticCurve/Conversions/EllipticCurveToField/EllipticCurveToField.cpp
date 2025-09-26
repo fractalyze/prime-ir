@@ -650,8 +650,8 @@ struct ConvertBucketAcc : public OpConversionPattern<BucketAccOp> {
     b.create<linalg::FillOp>(zeroPoint, bucketResults);
 
     // Compute bucket accumulation across all buckets
-    Value nofBucketsToCompute = b.create<arith::ConstantIndexOp>(
-        cast<TensorType>(sortedUniqueBucketIndices.getType()).getNumElements());
+    Value nofBucketsToCompute =
+        b.create<tensor::DimOp>(sortedUniqueBucketIndices, 0);
     b.create<scf::ParallelOp>(
         zero, nofBucketsToCompute, one,
         [&](OpBuilder &builder, Location loc, ValueRange ivs) {

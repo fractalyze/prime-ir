@@ -234,17 +234,8 @@ LogicalResult ScalarDecompOp::verify() {
 }
 
 LogicalResult BucketAccOp::verify() {
-  TensorType sortedUniqueBucketIndices =
-      getSortedUniqueBucketIndices().getType();
-  TensorType bucketOffsets = getBucketOffsets().getType();
   TensorType bucketResults = getBucketResults().getType();
   TensorType points = getPoints().getType();
-
-  if (sortedUniqueBucketIndices.getNumElements() !=
-      bucketOffsets.getNumElements() - 1) {
-    return emitError() << "bucket_offsets must have one more element than "
-                          "sorted_unique_bucket_indices";
-  }
 
   Type inputType = points.getElementType();
   Type outputType = bucketResults.getElementType();
