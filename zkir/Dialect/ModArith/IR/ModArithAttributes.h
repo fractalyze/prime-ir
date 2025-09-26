@@ -11,12 +11,12 @@ namespace mlir::zkir::mod_arith::detail {
 struct MontgomeryAttrStorage : public AttributeStorage {
   using KeyTy = IntegerAttr;
 
-  MontgomeryAttrStorage(IntegerAttr modulus, IntegerAttr nPrime, IntegerAttr r,
-                        IntegerAttr rInv, IntegerAttr bInv,
-                        IntegerAttr rSquared)
-      : modulus(std::move(modulus)), nPrime(std::move(nPrime)), r(std::move(r)),
-        rInv(std::move(rInv)), bInv(std::move(bInv)),
-        rSquared(std::move(rSquared)) {}
+  MontgomeryAttrStorage(IntegerAttr modulus, IntegerAttr nPrime,
+                        IntegerAttr nInv, IntegerAttr r, IntegerAttr rInv,
+                        IntegerAttr bInv, IntegerAttr rSquared)
+      : modulus(std::move(modulus)), nPrime(std::move(nPrime)),
+        nInv(std::move(nInv)), r(std::move(r)), rInv(std::move(rInv)),
+        bInv(std::move(bInv)), rSquared(std::move(rSquared)) {}
 
   KeyTy getAsKey() const { return KeyTy(modulus); }
 
@@ -31,6 +31,7 @@ struct MontgomeryAttrStorage : public AttributeStorage {
 
   IntegerAttr modulus;
   IntegerAttr nPrime;
+  IntegerAttr nInv;
   IntegerAttr r;
   IntegerAttr rInv;
   IntegerAttr bInv;

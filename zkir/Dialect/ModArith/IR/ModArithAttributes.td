@@ -19,6 +19,7 @@ def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
   let parameters = (ins "IntegerAttr":$modulus);
   let extraClassDeclaration = [{
     IntegerAttr getNPrime() const;
+    IntegerAttr getNInv() const;
     IntegerAttr getR() const;
     IntegerAttr getRInv() const;
     IntegerAttr getRSquared() const;

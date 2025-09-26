@@ -9,6 +9,7 @@ namespace mlir::zkir::mod_arith {
 
 IntegerAttr MontgomeryAttr::getModulus() const { return getImpl()->modulus; }
 IntegerAttr MontgomeryAttr::getNPrime() const { return getImpl()->nPrime; }
+IntegerAttr MontgomeryAttr::getNInv() const { return getImpl()->nInv; }
 IntegerAttr MontgomeryAttr::getR() const { return getImpl()->r; }
 IntegerAttr MontgomeryAttr::getRInv() const { return getImpl()->rInv; }
 IntegerAttr MontgomeryAttr::getBInv() const { return getImpl()->bInv; }
@@ -75,10 +76,15 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   IntegerAttr nPrimeAttr = IntegerAttr::get(
       IntegerType::get(modAttr.getContext(), nPrime.getBitWidth()), nPrime);
 
+  // Construct the `nInvAttr` with the bitwidth `w`
+  IntegerAttr nInvAttr = IntegerAttr::get(
+      IntegerType::get(modAttr.getContext(), w), invN.trunc(w));
+
   return new (allocator.allocate<MontgomeryAttrStorage>())
       MontgomeryAttrStorage(std::move(modAttr), std::move(nPrimeAttr),
-                            std::move(rAttr), std::move(rInvAttr),
-                            std::move(bInvAttr), std::move(rSquaredAttr));
+                            std::move(nInvAttr), std::move(rAttr),
+                            std::move(rInvAttr), std::move(bInvAttr),
+                            std::move(rSquaredAttr));
 }
 
 } // namespace detail
