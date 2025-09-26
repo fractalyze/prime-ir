@@ -48,15 +48,6 @@ filegroup(
     ],
 )
 
-filegroup(
-    name = "test_utilities_cuda",
-    testonly = True,
-    data = [
-        "//utils/cuda:cudaRuntimeUtils.so",
-        "@llvm-project//mlir:libmlir_cuda_runtime.so",
-    ],
-)
-
 glob_lit_tests(
     name = "all_tests",
     data = [":test_utilities"],

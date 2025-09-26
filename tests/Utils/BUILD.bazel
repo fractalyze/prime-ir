@@ -4,7 +4,7 @@ load("//bazel:lit.bzl", "run_lit_tests")
 run_lit_tests(
     data = [
         "//tests:test_utilities",
-        "//tests:test_utilities_cuda",
+        "//utils/cuda:cuda_runtime_utils",
     ],
     target_compatible_with = requires_cuda(),
     tests = ["sort_pairs_runner.mlir"],
