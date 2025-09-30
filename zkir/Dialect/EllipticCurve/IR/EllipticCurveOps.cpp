@@ -111,9 +111,9 @@ LogicalResult IsZeroOp::verify() {
 
 template <typename OpType>
 LogicalResult verifyBinaryOp(OpType op) {
-  Type lhsType = op.getLhs().getType();
-  Type rhsType = op.getRhs().getType();
-  Type outputType = op.getType();
+  Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
+  Type rhsType = getElementTypeOrSelf(op.getRhs().getType());
+  Type outputType = getElementTypeOrSelf(op.getType());
   if (isa<AffineType>(lhsType) || isa<AffineType>(rhsType)) {
     if (lhsType == rhsType &&
         (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) {
