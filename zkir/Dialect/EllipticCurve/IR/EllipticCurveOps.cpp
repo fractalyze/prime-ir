@@ -109,11 +109,12 @@ LogicalResult IsZeroOp::verify() {
   return emitError() << "invalid input type";
 }
 
+namespace {
 template <typename OpType>
 LogicalResult verifyBinaryOp(OpType op) {
-  Type lhsType = op.getLhs().getType();
-  Type rhsType = op.getRhs().getType();
-  Type outputType = op.getType();
+  Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
+  Type rhsType = getElementTypeOrSelf(op.getRhs().getType());
+  Type outputType = getElementTypeOrSelf(op.getType());
   if (isa<AffineType>(lhsType) || isa<AffineType>(rhsType)) {
     if (lhsType == rhsType &&
         (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) {
@@ -134,6 +135,7 @@ LogicalResult verifyBinaryOp(OpType op) {
   // TODO(ashjeong): check the curves of given types are the same
   return op->emitError() << "input or output types are wrong";
 }
+} // namespace
 
 LogicalResult AddOp::verify() { return verifyBinaryOp(*this); }
 
