@@ -217,9 +217,7 @@ LogicalResult ScalarDecompOp::verify() {
 
   int16_t defaultScalarMaxBits =
       cast<field::PrimeFieldType>(scalarsType.getElementType())
-          .getModulus()
-          .getValue()
-          .getBitWidth();
+          .getStorageBitWidth();
   int16_t scalarMaxBits = getScalarMaxBits().value_or(defaultScalarMaxBits);
   int16_t bitsPerWindow = getBitsPerWindow();
 
