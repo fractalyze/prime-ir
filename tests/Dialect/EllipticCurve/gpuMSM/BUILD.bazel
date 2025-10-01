@@ -1,0 +1,26 @@
+load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
+load("//bazel:lit.bzl", "run_lit_tests")
+
+package(
+    licenses = ["notice"],
+)
+
+GPU_TESTS = [
+    "bucket_acc_runner.mlir",
+    "bucket_reduce_runner.mlir",
+    "scalar_decomp_runner.mlir",
+    "window_reduce_runner.mlir",
+]
+
+# GPU tests that require CUDA runtime
+run_lit_tests(
+    data = [
+        "//tests:test_utilities",
+        "//utils/cuda:cuda_runtime_utils",
+    ],
+    target_compatible_with = requires_cuda(),
+    tests = GPU_TESTS,
+    timeout_override = {
+        "bucket_reduce_runner.mlir": "moderate",
+    },
+)
