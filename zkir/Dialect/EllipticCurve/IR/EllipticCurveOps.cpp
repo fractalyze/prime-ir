@@ -109,6 +109,7 @@ LogicalResult IsZeroOp::verify() {
   return emitError() << "invalid input type";
 }
 
+namespace {
 template <typename OpType>
 LogicalResult verifyBinaryOp(OpType op) {
   Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
@@ -134,6 +135,7 @@ LogicalResult verifyBinaryOp(OpType op) {
   // TODO(ashjeong): check the curves of given types are the same
   return op->emitError() << "input or output types are wrong";
 }
+} // namespace
 
 LogicalResult AddOp::verify() { return verifyBinaryOp(*this); }
 
