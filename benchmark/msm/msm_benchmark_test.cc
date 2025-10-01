@@ -16,11 +16,11 @@ using i256 = BigInt<4>;
 const i256 kPrimeScalar = i256::fromHexString(
     "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");
 
-// Set up the random number generator.
-std::mt19937_64 rng(std::random_device{}()); // NOLINT(whitespace/braces)
-std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
-
 void fillWithRandom(i256 &elem, ArrayRef<int64_t> coords) {
+  // Set up the random number generator.
+  static std::mt19937_64 rng(
+      std::random_device{}()); // NOLINT(whitespace/braces)
+  static std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
   elem = i256::randomLT(kPrimeScalar, rng, dist);
 }
 
