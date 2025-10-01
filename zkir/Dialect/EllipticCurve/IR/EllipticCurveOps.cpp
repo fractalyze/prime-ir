@@ -258,11 +258,13 @@ LogicalResult BucketReduceOp::verify() {
 }
 
 LogicalResult WindowReduceOp::verify() {
-  unsigned scalarBitWidth = getScalarType().getStorageBitWidth();
   int16_t bitsPerWindow = getBitsPerWindow();
   TensorType windowsType = getWindows().getType();
 
-  unsigned numWindows = (scalarBitWidth + bitsPerWindow - 1) / bitsPerWindow;
+  int16_t defaultScalarMaxBits = getScalarType().getStorageBitWidth();
+  int16_t scalarMaxBits = getScalarMaxBits().value_or(defaultScalarMaxBits);
+
+  int32_t numWindows = (scalarMaxBits + bitsPerWindow - 1) / bitsPerWindow;
   if (numWindows != windowsType.getNumElements()) {
     return emitError() << "number of calculated windows (" << numWindows
                        << ") must be the same as the number of windows in the "

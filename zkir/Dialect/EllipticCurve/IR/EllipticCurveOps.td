@@ -382,7 +382,8 @@ def EllipticCurve_WindowReduceOp : EllipticCurve_Op<"window_reduce", [TypesMatch
   let arguments = (ins
     Static1DTensorOf<[PointType]>:$windows,
     I16Attr: $bitsPerWindow,
-    TypeAttrOf<Field_PrimeFieldType>: $scalarType
+    TypeAttrOf<Field_PrimeFieldType>: $scalarType,
+    OptionalAttr<I16Attr>:$scalarMaxBits
   );
   let results = (outs PointType:$output);
   let hasVerifier = 1;
