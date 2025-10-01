@@ -9,6 +9,7 @@ func.func private @sortPairsI64I64(!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i
 func.func private @mgpuStreamCreate() -> !llvm.ptr
 func.func private @mgpuStreamDestroy(!llvm.ptr)
 func.func private @mgpuMemAlloc(i64, !llvm.ptr, i1) -> !llvm.ptr
+func.func private @mgpuMemFree(!llvm.ptr, !llvm.ptr)
 func.func private @mgpuMemcpy(!llvm.ptr, !llvm.ptr, i64, !llvm.ptr)
 
 func.func @testSortPairs() {
@@ -70,10 +71,15 @@ func.func @testSortPairs() {
   // [2, 3, 4, 5, 6, 7] (keys_out)
   // [1, 4, 6, 3, 5, 2] (values_out)
   func.call @sortPairsI64I64(%d_keys_in, %d_keys_out, %d_vals_in, %d_vals_out, %c6, %stream) : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, !llvm.ptr) -> ()
+  func.call @mgpuMemFree(%d_keys_in, %stream) : (!llvm.ptr, !llvm.ptr) -> ()
+  func.call @mgpuMemFree(%d_vals_in, %stream) : (!llvm.ptr, !llvm.ptr) -> ()
 
   // Copy sorted outputdata from GPU to host
   func.call @mgpuMemcpy(%keys_out_mem_ptr, %d_keys_out, %alloc_size, %stream) : (!llvm.ptr, !llvm.ptr, i64, !llvm.ptr) -> ()
   func.call @mgpuMemcpy(%values_out_mem_ptr, %d_vals_out, %alloc_size, %stream) : (!llvm.ptr, !llvm.ptr, i64, !llvm.ptr) -> ()
+
+  func.call @mgpuMemFree(%d_keys_out, %stream) : (!llvm.ptr, !llvm.ptr) -> ()
+  func.call @mgpuMemFree(%d_vals_out, %stream) : (!llvm.ptr, !llvm.ptr) -> ()
 
   // Clean up CUDA stream
   func.call @mgpuStreamDestroy(%stream) : (!llvm.ptr) -> ()
