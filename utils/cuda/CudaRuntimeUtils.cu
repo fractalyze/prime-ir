@@ -1,6 +1,7 @@
 // clang-format off
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_run_length_encode.cuh>
+#include <cub/device/device_scan.cuh>
 // clang-format on
 
 #include <cstddef>
@@ -63,4 +64,33 @@ extern "C" MLIR_RUNNERUTILS_EXPORT void
 EncodeI64(const int64_t *in, int64_t *uniqueOut, int64_t *countsOut,
           int64_t *numRunsOut, int64_t numRuns, CUstream inputStream) {
   Encode<int64_t>(in, uniqueOut, countsOut, numRunsOut, numRuns, inputStream);
+}
+
+template <typename Type>
+void ExclusiveSum(const Type *in, Type *out, int64_t numItems,
+                  CUstream inputStream) {
+  cudaStream_t stream = reinterpret_cast<cudaStream_t>(inputStream);
+  zkir::utils::CudaAsyncUniquePtr<std::byte> dTempStorage = nullptr;
+  size_t tempStorageBytes = 0;
+
+  // First call to DeviceScan::ExclusiveSum determines the required size for
+  // temporary storage.
+  CHECK_CUDA_ERROR(cub::DeviceScan::ExclusiveSum(
+      dTempStorage.get(), tempStorageBytes, in, out, numItems, stream));
+
+  dTempStorage =
+      zkir::utils::makeCudaAsyncUnique<std::byte>(tempStorageBytes, stream);
+
+  // Second call to DeviceScan::ExclusiveSum performs the actual exclusive sum.
+  CHECK_CUDA_ERROR(cub::DeviceScan::ExclusiveSum(
+      dTempStorage.get(), tempStorageBytes, in, out, numItems, stream));
+}
+
+extern "C" MLIR_RUNNERUTILS_EXPORT void ExclusiveSumI64(int64_t *in,
+                                                        int64_t *out,
+                                                        int64_t numItems,
+                                                        CUstream inputStream) {
+  // Set the last value of 'in' to 0 (at index numItems - 1).
+  in[numItems - 1] = 0;
+  ExclusiveSum<int64_t>(in, out, numItems, inputStream);
 }
