@@ -7,5 +7,8 @@ run_lit_tests(
         "//utils/cuda:cuda_runtime_utils",
     ],
     target_compatible_with = requires_cuda(),
-    tests = ["sort_pairs_runner.mlir"],
+    tests = [
+        "offset_creation_runner.mlir",
+        "sort_pairs_runner.mlir",
+    ],
 )
