@@ -10,6 +10,7 @@ GPU_TESTS = [
     "bucket_reduce_runner.mlir",
     "scalar_decomp_runner.mlir",
     "window_reduce_runner.mlir",
+    "gpu_msm_runner.mlir",
 ]
 
 # GPU tests that require CUDA runtime
