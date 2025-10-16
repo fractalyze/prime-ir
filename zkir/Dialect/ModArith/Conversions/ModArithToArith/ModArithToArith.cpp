@@ -256,12 +256,19 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
       // `mN.getLow()` cannot result in zero low limb. This means, `tLow` is
       // always equal to `mN.getLow()` so we can skip the low subtractions.
       // The reduction result will be just `tHigh` - `mN.getHigh()` mod n.
-      auto underflow = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, tHigh,
-                                               mN.getHigh());
-      auto sub = b.create<arith::SubIOp>(tHigh, mN.getHigh());
-      auto addIfUnderflow = b.create<arith::AddIOp>(sub, modConst);
-      auto result = b.create<arith::SelectOp>(underflow, addIfUnderflow, sub);
-      rewriter.replaceOp(op, result);
+      if (isa<VectorType>(modAttr.getType())) {
+        auto sub = b.create<arith::SubIOp>(tHigh, mN.getHigh());
+        auto addIfUnderflow = b.create<arith::AddIOp>(sub, modConst);
+        auto min = b.create<arith::MinUIOp>(sub, addIfUnderflow);
+        rewriter.replaceOp(op, min);
+      } else {
+        auto underflow = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult,
+                                                 tHigh, mN.getHigh());
+        auto sub = b.create<arith::SubIOp>(tHigh, mN.getHigh());
+        auto addIfUnderflow = b.create<arith::AddIOp>(sub, modConst);
+        auto result = b.create<arith::SelectOp>(underflow, addIfUnderflow, sub);
+        rewriter.replaceOp(op, result);
+      }
       return success();
     }
 
@@ -451,19 +458,25 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    auto modAttr = modulusAttr(op);
     arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
                                              arith::IntegerOverflowFlags::nsw);
     auto noOverflow =
         arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
 
-    auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
+    auto cmod = b.create<arith::ConstantOp>(modAttr);
     auto add =
         b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs(), noOverflow);
-    auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, add, cmod);
-    auto sub = b.create<arith::SubIOp>(add, cmod, noOverflow);
-    auto select = b.create<arith::SelectOp>(ifge, add, sub);
-
-    rewriter.replaceOp(op, select);
+    if (isa<VectorType>(modAttr.getType())) {
+      auto sub = b.create<arith::SubIOp>(add, cmod);
+      auto min = b.create<arith::MinUIOp>(sub, add);
+      rewriter.replaceOp(op, min);
+    } else {
+      auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, add, cmod);
+      auto sub = b.create<arith::SubIOp>(add, cmod, noOverflow);
+      auto select = b.create<arith::SelectOp>(ifge, add, sub);
+      rewriter.replaceOp(op, select);
+    }
     return success();
   }
 };
@@ -489,13 +502,19 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
       one = b.create<vector::SplatOp>(modAttr.getType(), one);
     }
     auto shifted = b.create<arith::ShLIOp>(adaptor.getInput(), one);
-    auto ifge =
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, shifted, cmod);
-    auto sub = b.create<arith::SubIOp>(shifted, cmod);
-    auto select = b.create<arith::SelectOp>(ifge, shifted, sub);
-
-    rewriter.replaceOp(op, select);
-    return success();
+    if (isa<VectorType>(modAttr.getType())) {
+      auto sub = b.create<arith::SubIOp>(shifted, cmod);
+      auto min = b.create<arith::MinUIOp>(sub, shifted);
+      rewriter.replaceOp(op, min);
+      return success();
+    } else {
+      auto ifge =
+          b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, shifted, cmod);
+      auto sub = b.create<arith::SubIOp>(shifted, cmod);
+      auto select = b.create<arith::SelectOp>(ifge, shifted, sub);
+      rewriter.replaceOp(op, select);
+      return success();
+    }
   }
 };
 
@@ -509,21 +528,21 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
   matchAndRewrite(SubOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
-                                             arith::IntegerOverflowFlags::nsw);
-    auto noOverflow =
-        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
-
     auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
-    auto sub =
-        b.create<arith::SubIOp>(adaptor.getLhs(), adaptor.getRhs(), noOverflow);
-    auto add = b.create<arith::AddIOp>(sub, cmod, noOverflow);
-    auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult,
-                                        adaptor.getLhs(), adaptor.getRhs());
-    auto select = b.create<arith::SelectOp>(ifge, add, sub);
+    auto sub = b.create<arith::SubIOp>(adaptor.getLhs(), adaptor.getRhs());
+    auto add = b.create<arith::AddIOp>(sub, cmod);
+    if (isa<VectorType>(cmod.getType())) {
+      auto min = b.create<arith::MinUIOp>(sub, add);
+      rewriter.replaceOp(op, min);
+      return success();
+    } else {
+      auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult,
+                                          adaptor.getLhs(), adaptor.getRhs());
+      auto select = b.create<arith::SelectOp>(ifge, add, sub);
 
-    rewriter.replaceOp(op, select);
-    return success();
+      rewriter.replaceOp(op, select);
+      return success();
+    }
   }
 };
 
