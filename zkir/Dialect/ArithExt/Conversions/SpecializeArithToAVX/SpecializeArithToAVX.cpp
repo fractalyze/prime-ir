@@ -1,5 +1,8 @@
 #include "zkir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.h"
 
+#include <optional>
+#include <type_traits>
+
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -20,6 +23,12 @@ inline bool isConstantSplat(Value value) {
   return false;
 }
 
+inline bool canSpecialize(Operation *op) {
+  return isa<arith::AddIOp>(op) || isa<arith::SubIOp>(op) ||
+         isa<arith::MulIOp>(op) || isa<arith::MulUIExtendedOp>(op) ||
+         isa<arith::MulSIExtendedOp>(op);
+}
+
 // Multiplies two vector<16xi32> operands using the vpmuludq instruction.
 //
 // vpmuludq performs extended multiplication on only the even lanes, producing
@@ -30,23 +39,55 @@ inline bool isConstantSplat(Value value) {
 std::pair<Value, Value> mulExtendedByOddEven(ImplicitLocOpBuilder &b,
                                              Value lhsEven, Value lhsOdd,
                                              Value rhsEven, Value rhsOdd,
-                                             bool toLowHi = false) {
+                                             bool isSigned = false) {
+  std::string asmMulString =
+      isSigned ? "vpmuldq $0, $1, $2" : "vpmuludq $0, $1, $2";
   auto vecI32Type = VectorType::get(16, b.getI32Type());
   auto vecI64Type = VectorType::get(8, b.getI64Type());
-  Value prodEven64 =
+  Value prodEven64 = b.create<LLVM::InlineAsmOp>(
+                          vecI64Type, ValueRange{lhsEven, rhsEven},
+                          asmMulString, "=x,x,x", /*has_side_effects=*/false,
+                          /*is_align_stack=*/true, LLVM::TailCallKind::None,
+                          /*asm_dialect=*/
+                          LLVM::AsmDialectAttr::get(b.getContext(),
+                                                    LLVM::AsmDialect::AD_Intel),
+                          /*operand_attrs=*/ArrayAttr())
+                         .getResult(0);
+  Value prodOdd64 = b.create<LLVM::InlineAsmOp>(
+                         vecI64Type, ValueRange{lhsOdd, rhsOdd}, asmMulString,
+                         "=x,x,x", /*has_side_effects=*/false,
+                         /*is_align_stack=*/true, LLVM::TailCallKind::None,
+                         /*asm_dialect=*/
+                         LLVM::AsmDialectAttr::get(b.getContext(),
+                                                   LLVM::AsmDialect::AD_Intel),
+                         /*operand_attrs=*/ArrayAttr())
+                        .getResult(0);
+
+  // cast them to vector<16xi32> so even lanes are the low parts and odd
+  // lanes are the high parts
+  auto prodEven32 = b.create<vector::BitCastOp>(vecI32Type, prodEven64);
+  auto prodOdd32 = b.create<vector::BitCastOp>(vecI32Type, prodOdd64);
+  return {prodEven32, prodOdd32};
+}
+
+// Helper for arith.addi and arith.subi
+template <typename OpType>
+std::pair<Value, Value> addSubByOddEven(ImplicitLocOpBuilder &b, Value lhsEven,
+                                        Value lhsOdd, Value rhsEven,
+                                        Value rhsOdd) {
+  auto vecType = VectorType::get(16, b.getI32Type());
+
+  const char *asmString;
+  if constexpr (std::is_same_v<OpType, arith::AddIOp>) {
+    asmString = "vpaddd $0, $1, $2";
+  } else if constexpr (std::is_same_v<OpType, arith::SubIOp>) {
+    asmString = "vpsubd $0, $1, $2";
+  }
+
+  Value resEven =
       b.create<LLVM::InlineAsmOp>(
-           vecI64Type, ValueRange{lhsEven, rhsEven}, "vpmuludq $0, $1, $2",
-           "=x,x,x", /*has_side_effects=*/false,
-           /*is_align_stack=*/true, LLVM::TailCallKind::None,
-           /*asm_dialect=*/
-           LLVM::AsmDialectAttr::get(b.getContext(),
-                                     LLVM::AsmDialect::AD_Intel),
-           /*operand_attrs=*/ArrayAttr())
-          .getResult(0);
-  Value prodOdd64 =
-      b.create<LLVM::InlineAsmOp>(
-           vecI64Type, ValueRange{lhsOdd, rhsOdd}, "vpmuludq $0, $1, $2",
-           "=x,x,x", /*has_side_effects=*/false,
+           vecType, ValueRange{lhsEven, rhsEven}, asmString, "=x,x,x",
+           /*has_side_effects=*/false,
            /*is_align_stack=*/true, LLVM::TailCallKind::None,
            /*asm_dialect=*/
            LLVM::AsmDialectAttr::get(b.getContext(),
@@ -54,11 +95,17 @@ std::pair<Value, Value> mulExtendedByOddEven(ImplicitLocOpBuilder &b,
            /*operand_attrs=*/ArrayAttr())
           .getResult(0);
 
-  // cast them to vector<16xi32> so even lanes are the low parts and odd
-  // lanes are the high parts
-  auto prodEven32 = b.create<vector::BitCastOp>(vecI32Type, prodEven64);
-  auto prodOdd32 = b.create<vector::BitCastOp>(vecI32Type, prodOdd64);
-  return {prodEven32, prodOdd32};
+  Value resOdd = b.create<LLVM::InlineAsmOp>(
+                      vecType, ValueRange{lhsOdd, rhsOdd}, asmString, "=x,x,x",
+                      /*has_side_effects=*/false,
+                      /*is_align_stack=*/true, LLVM::TailCallKind::None,
+                      /*asm_dialect=*/
+                      LLVM::AsmDialectAttr::get(b.getContext(),
+                                                LLVM::AsmDialect::AD_Intel),
+                      /*operand_attrs=*/ArrayAttr())
+                     .getResult(0);
+
+  return {resEven, resOdd};
 }
 
 // Gathers the low parts of two vectors of 16 32-bit integers.
@@ -129,17 +176,151 @@ Value duplicateOddLanesToEven(ImplicitLocOpBuilder &b, Value vec) {
       b.getDenseI64ArrayAttr(
           {1, 1, 3, 3, 5, 5, 7, 7, 9, 9, 11, 11, 13, 13, 15, 15}));
 }
+
+// Extracts even and odd lane values from a gatherLowsResult.
+std::pair<Value, Value> extractEvenOddFromLows(Value value) {
+  auto inlineAsm = value.getDefiningOp<LLVM::InlineAsmOp>();
+  return {inlineAsm.getOperands()[0], inlineAsm.getOperands()[2]};
+}
+
+// Extracts even and odd lane values from a gatherHighsResult.
+std::pair<Value, Value> extractEvenOddFromHighs(ImplicitLocOpBuilder &b,
+                                                Value value, bool duplicate) {
+  auto inlineAsm = value.getDefiningOp<LLVM::InlineAsmOp>();
+  Value odd = inlineAsm.getOperands()[0];
+  Value even = inlineAsm.getOperands()[2];
+  if (duplicate) {
+    odd = duplicateOddLanesToEven(b, odd);
+    even = duplicateOddLanesToEven(b, even);
+  }
+  return {even, odd};
+}
+
+// Extracts even and odd lane values from a Value, handling gather operations,
+// constants, and default cases.
+// Returns std::nullopt if value is not on a path and duplicateForDefault is
+// false.
+std::optional<std::pair<Value, Value>>
+extractEvenOdd(ImplicitLocOpBuilder &b, Value value,
+               bool duplicateForHighs = false,
+               bool duplicateForDefault = true) {
+  if (isGatherLowsResult(value)) {
+    return extractEvenOddFromLows(value);
+  }
+  if (isGatherHighsResult(value)) {
+    return extractEvenOddFromHighs(b, value, duplicateForHighs);
+  }
+  if (isConstantSplat(value)) {
+    return {{value, value}};
+  }
+  // Default case
+  if (duplicateForDefault) {
+    return {{value, duplicateOddLanesToEven(b, value)}};
+  }
+  return std::nullopt;
+}
+
 } // namespace
 
-struct SpecializeMulUIExtendedToAVX512
-    : public OpConversionPattern<arith::MulUIExtendedOp> {
-  explicit SpecializeMulUIExtendedToAVX512(MLIRContext *context)
-      : OpConversionPattern<arith::MulUIExtendedOp>(context) {}
+template <typename OpType>
+struct SpecializeAddSubIOpToAVX512 : public OpConversionPattern<OpType> {
+  explicit SpecializeAddSubIOpToAVX512(MLIRContext *context)
+      : OpConversionPattern<OpType>(context) {}
 
-  using OpConversionPattern::OpConversionPattern;
+  using OpConversionPattern<OpType>::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(arith::MulUIExtendedOp op, OpAdaptor adaptor,
+  matchAndRewrite(OpType op,
+                  typename OpConversionPattern<OpType>::OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Rewrite gather -> op to opOdd, opEven -> gather if the next operation
+    // is a dual-lane operation. This way, the next dual-lane operation can
+    // avoid gathering/splitting the op result and directly use odd/even lanes.
+    //
+    // NOTE(batzor): This pattern only works if both operands are on the same
+    // path.
+    //
+    // High path operands will look like this:
+    // [a₁, b₁, a₃, b₃, a₅, b₅, a₇, b₇, a₉, b₉, a₁₁, b₁₁, a₁₃, b₁₃, a₁₅, b₁₅]
+    // [c₁, d₁, c₃, d₃, c₅, d₅, c₇, d₇, c₉, d₉, c₁₁, d₁₁, c₁₃, d₁₃, c₁₅, d₁₅]
+    //
+    // So we can do op(a, c), op(b, d) and gather the odd lanes.
+    //
+    // Low path operands will look like this:
+    // [a₀, b₀, a₂, b₂, a₄, b₄, a₆, b₆, a₈, b₈, a₁₀, b₁₀, a₁₂, b₁₂, a₁₄, b₁₄]
+    // [c₀, d₀, c₂, d₂, c₄, d₄, c₆, d₆, c₈, d₈, c₁₀, d₁₀, c₁₂, d₁₂, c₁₄, d₁₄]
+    //
+    // So we can do op(a, c), op(b, d) and gather the even lanes.
+    if (auto vecType = dyn_cast<VectorType>(op.getLhs().getType())) {
+      if (vecType.getElementType().isInteger(32) &&
+          vecType.getNumElements() == 16) {
+        ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+        for (auto user : op->getUsers()) {
+          // If the next operation is not a dual-lane operation, return failure.
+          if (!canSpecialize(user)) {
+            return failure();
+          }
+        }
+
+        bool isLhsLow = isGatherLowsResult(adaptor.getLhs());
+        bool isLhsHigh = isGatherHighsResult(adaptor.getLhs());
+        // In the case of SubIOp, LHS can be a constant.
+        bool isLhsConst = isConstantSplat(adaptor.getLhs());
+        bool isRhsLow = isGatherLowsResult(adaptor.getRhs());
+        bool isRhsHigh = isGatherHighsResult(adaptor.getRhs());
+        bool isRhsConst = isConstantSplat(adaptor.getRhs());
+
+        bool onLowPath = (isLhsLow || isLhsConst) && (isRhsLow || isRhsConst);
+        bool onHighPath =
+            (isLhsHigh || isLhsConst) && (isRhsHigh || isRhsConst);
+
+        // LHS and RHS are not on the same path, return failure.
+        if (!(onLowPath || onHighPath)) {
+          return failure();
+        }
+
+        auto [lhsEven, lhsOdd] =
+            extractEvenOdd(b, adaptor.getLhs(), false, false).value();
+        auto [rhsEven, rhsOdd] =
+            extractEvenOdd(b, adaptor.getRhs(), false, false).value();
+
+        auto [resultEven32, resultOdd32] =
+            addSubByOddEven<OpType>(b, lhsEven, lhsOdd, rhsEven, rhsOdd);
+
+        if (onLowPath) {
+          Value gatherLow = gatherLowsInterleaved(b, resultEven32, resultOdd32);
+          rewriter.replaceOp(op, {gatherLow});
+          return success();
+        }
+
+        if (onHighPath) {
+          Value gatherHigh =
+              gatherHighsInterleaved(b, resultEven32, resultOdd32);
+          rewriter.replaceOp(op, {gatherHigh});
+          return success();
+        }
+
+        return failure();
+      }
+    }
+    return failure();
+  }
+};
+
+using SpecializeAddIOpToAVX512 = SpecializeAddSubIOpToAVX512<arith::AddIOp>;
+using SpecializeSubIOpToAVX512 = SpecializeAddSubIOpToAVX512<arith::SubIOp>;
+
+template <typename OpType>
+struct SpecializeMulIOpToAVX512Impl : public OpConversionPattern<OpType> {
+  explicit SpecializeMulIOpToAVX512Impl(MLIRContext *context)
+      : OpConversionPattern<OpType>(context) {}
+
+  using OpConversionPattern<OpType>::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(OpType op,
+                  typename OpConversionPattern<OpType>::OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     // if vector<16xi32> type, rewrite using vpmuludq, shuffle + vpmuludq
     if (auto vecType = dyn_cast<VectorType>(op.getLhs().getType())) {
@@ -147,58 +328,28 @@ struct SpecializeMulUIExtendedToAVX512
           vecType.getNumElements() == 16) {
         ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-        Value lhsEven, lhsOdd;
-        Value rhsEven, rhsOdd;
-        if (isGatherLowsResult(adaptor.getLhs())) {
-          lhsOdd = adaptor.getLhs()
-                       .getDefiningOp<LLVM::InlineAsmOp>()
-                       .getOperands()[2];
-          lhsEven = adaptor.getLhs()
-                        .getDefiningOp<LLVM::InlineAsmOp>()
-                        .getOperands()[0];
-        } else if (isGatherHighsResult(adaptor.getLhs())) {
-          lhsOdd = adaptor.getLhs()
-                       .getDefiningOp<LLVM::InlineAsmOp>()
-                       .getOperands()[0];
-          lhsEven = adaptor.getLhs()
-                        .getDefiningOp<LLVM::InlineAsmOp>()
-                        .getOperands()[2];
-          lhsOdd = duplicateOddLanesToEven(b, lhsOdd);
-          lhsEven = duplicateOddLanesToEven(b, lhsEven);
+        auto [lhsEven, lhsOdd] =
+            *extractEvenOdd(b, adaptor.getLhs(), true, true);
+        auto [rhsEven, rhsOdd] =
+            *extractEvenOdd(b, adaptor.getRhs(), true, true);
+
+        Value prodEven32, prodOdd32;
+        if constexpr (std::is_same_v<OpType, arith::MulSIExtendedOp>) {
+          std::tie(prodEven32, prodOdd32) =
+              mulExtendedByOddEven(b, lhsEven, lhsOdd, rhsEven, rhsOdd, true);
         } else {
-          lhsOdd = duplicateOddLanesToEven(b, adaptor.getLhs());
-          lhsEven = adaptor.getLhs();
+          std::tie(prodEven32, prodOdd32) =
+              mulExtendedByOddEven(b, lhsEven, lhsOdd, rhsEven, rhsOdd);
         }
 
-        if (isConstantSplat(adaptor.getRhs())) {
-          rhsEven = adaptor.getRhs();
-          rhsOdd = adaptor.getRhs();
-        } else if (isGatherLowsResult(adaptor.getRhs())) {
-          rhsOdd = adaptor.getRhs()
-                       .getDefiningOp<LLVM::InlineAsmOp>()
-                       .getOperands()[2];
-          rhsEven = adaptor.getRhs()
-                        .getDefiningOp<LLVM::InlineAsmOp>()
-                        .getOperands()[0];
-        } else if (isGatherHighsResult(adaptor.getRhs())) {
-          rhsOdd = adaptor.getRhs()
-                       .getDefiningOp<LLVM::InlineAsmOp>()
-                       .getOperands()[0];
-          rhsEven = adaptor.getRhs()
-                        .getDefiningOp<LLVM::InlineAsmOp>()
-                        .getOperands()[2];
+        if constexpr (std::is_same_v<OpType, arith::MulIOp>) {
+          Value prodLow = gatherLowsInterleaved(b, prodEven32, prodOdd32);
+          rewriter.replaceOp(op, prodLow);
         } else {
-          rhsOdd = duplicateOddLanesToEven(b, adaptor.getRhs());
-          rhsEven = adaptor.getRhs();
+          Value prodLow = gatherLowsInterleaved(b, prodEven32, prodOdd32);
+          Value prodHi = gatherHighsInterleaved(b, prodEven32, prodOdd32);
+          rewriter.replaceOp(op, {prodLow, prodHi});
         }
-
-        auto [prodEven32, prodOdd32] =
-            mulExtendedByOddEven(b, lhsEven, lhsOdd, rhsEven, rhsOdd);
-
-        Value prodLow = gatherLowsInterleaved(b, prodEven32, prodOdd32);
-        Value prodHi = gatherHighsInterleaved(b, prodEven32, prodOdd32);
-
-        rewriter.replaceOp(op, {prodLow, prodHi});
         return success();
       }
     }
@@ -206,75 +357,11 @@ struct SpecializeMulUIExtendedToAVX512
   }
 };
 
-struct SpecializeMulIOpToAVX512 : public OpConversionPattern<arith::MulIOp> {
-  explicit SpecializeMulIOpToAVX512(MLIRContext *context)
-      : OpConversionPattern<arith::MulIOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(arith::MulIOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (auto vecType = dyn_cast<VectorType>(op.getLhs().getType())) {
-      if (vecType.getElementType().isInteger(32) &&
-          vecType.getNumElements() == 16) {
-        ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-        Value lhsEven, lhsOdd;
-        Value rhsEven, rhsOdd;
-        if (isGatherLowsResult(adaptor.getLhs())) {
-          lhsOdd = adaptor.getLhs()
-                       .getDefiningOp<LLVM::InlineAsmOp>()
-                       .getOperands()[2];
-          lhsEven = adaptor.getLhs()
-                        .getDefiningOp<LLVM::InlineAsmOp>()
-                        .getOperands()[0];
-        } else if (isGatherHighsResult(adaptor.getLhs())) {
-          lhsOdd = adaptor.getLhs()
-                       .getDefiningOp<LLVM::InlineAsmOp>()
-                       .getOperands()[0];
-          lhsEven = adaptor.getLhs()
-                        .getDefiningOp<LLVM::InlineAsmOp>()
-                        .getOperands()[2];
-          lhsOdd = duplicateOddLanesToEven(b, lhsOdd);
-          lhsEven = duplicateOddLanesToEven(b, lhsEven);
-        } else {
-          lhsOdd = duplicateOddLanesToEven(b, adaptor.getLhs());
-          lhsEven = adaptor.getLhs();
-        }
-
-        if (isConstantSplat(adaptor.getRhs())) {
-          rhsEven = adaptor.getRhs();
-          rhsOdd = adaptor.getRhs();
-        } else if (isGatherLowsResult(adaptor.getRhs())) {
-          rhsOdd = adaptor.getRhs()
-                       .getDefiningOp<LLVM::InlineAsmOp>()
-                       .getOperands()[2];
-          rhsEven = adaptor.getRhs()
-                        .getDefiningOp<LLVM::InlineAsmOp>()
-                        .getOperands()[0];
-        } else if (isGatherHighsResult(adaptor.getRhs())) {
-          rhsOdd = adaptor.getRhs()
-                       .getDefiningOp<LLVM::InlineAsmOp>()
-                       .getOperands()[0];
-          rhsEven = adaptor.getRhs()
-                        .getDefiningOp<LLVM::InlineAsmOp>()
-                        .getOperands()[2];
-          rhsOdd = duplicateOddLanesToEven(b, rhsOdd);
-          rhsEven = duplicateOddLanesToEven(b, rhsEven);
-        } else {
-          rhsOdd = duplicateOddLanesToEven(b, adaptor.getRhs());
-          rhsEven = adaptor.getRhs();
-        }
-        auto [prodEven32, prodOdd32] =
-            mulExtendedByOddEven(b, lhsEven, lhsOdd, rhsEven, rhsOdd);
-        Value prodLow = gatherLowsInterleaved(b, prodEven32, prodOdd32);
-        rewriter.replaceOp(op, prodLow);
-        return success();
-      }
-    }
-    return failure();
-  }
-};
+using SpecializeMulUIExtendedToAVX512 =
+    SpecializeMulIOpToAVX512Impl<arith::MulUIExtendedOp>;
+using SpecializeMulSIExtendedToAVX512 =
+    SpecializeMulIOpToAVX512Impl<arith::MulSIExtendedOp>;
+using SpecializeMulIOpToAVX512 = SpecializeMulIOpToAVX512Impl<arith::MulIOp>;
 
 namespace {
 #include "zkir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.cpp.inc"
@@ -292,24 +379,20 @@ void SpecializeArithToAVX::runOnOperation() {
   ModuleOp module = getOperation();
 
   ConversionTarget target(*context);
-  target.addDynamicallyLegalOp<arith::MulUIExtendedOp>(
-      [](arith::MulUIExtendedOp op) {
-        // only specialize if the result is vector<16xi32>
-        Type resultType = op.getResult(0).getType();
-        if (auto vectorType = dyn_cast<VectorType>(resultType)) {
-          return !(vectorType.getShape().size() == 1 &&
-                   vectorType.getShape()[0] == 16 &&
-                   vectorType.getElementType().isInteger(32));
-        }
-        return true;
-      });
   target.addLegalDialect<LLVM::LLVMDialect>();
   target.addLegalDialect<vector::VectorDialect>();
 
   RewritePatternSet patterns(context);
   populateWithGenerated(patterns);
-  patterns.add<SpecializeMulUIExtendedToAVX512>(context);
-  patterns.add<SpecializeMulIOpToAVX512>(context);
+  patterns.add<
+      // clang-format off
+      SpecializeAddIOpToAVX512,
+      SpecializeMulIOpToAVX512,
+      SpecializeMulSIExtendedToAVX512,
+      SpecializeMulUIExtendedToAVX512,
+      SpecializeSubIOpToAVX512
+      // clang-format on
+      >(context);
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();
   }
