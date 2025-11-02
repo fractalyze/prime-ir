@@ -550,6 +550,29 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
     }
     IntegerType intType = cast<IntegerType>(exp.getType());
 
+    // If `exp` is a constant, unroll the while loop.
+    if (auto expConstOp = exp.getDefiningOp<arith::ConstantOp>()) {
+      APInt cExp = cast<IntegerAttr>(expConstOp.getValue()).getValue();
+      cExp = cExp.urem(modulus - 1);
+      APInt cZero = APInt::getZero(cExp.getBitWidth());
+      APInt cOne = cZero + 1;
+
+      // Depending on the type, we need to perform the loop.
+      Value result = init;
+      Value factor = base;
+      APInt currExp = cExp;
+      SmallVector<Value> factors;
+      while (!currExp.isZero()) {
+        if ((currExp & cOne).getBoolValue()) {
+          result = b.create<field::MulOp>(result, factor);
+        }
+        factor = b.create<field::SquareOp>(factor);
+        currExp = currExp.lshr(1);
+      }
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     // For prime field, x^(p-1) ≡ 1 mod p, so x^n ≡ x^(n mod (p-1)) mod p
     // For quadratic extension field, x^(p²-1) ≡ 1 mod p², so
     // x^n ≡ x^(n mod (p²-1)) mod p²

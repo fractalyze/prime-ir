@@ -52,17 +52,17 @@ BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/true)
 // clang-format off
 // NOLINTBEGIN(whitespace/line_length)
 //
-// 2025-10-20T08:16:27+00:00
+// 2025-11-07T03:20:47+00:00
 // Run on AMD Ryzen 9 9950X3D (32 X 5479.99 MHz CPU s)
 // CPU Caches:
 //   L1 Data 48 KiB (x16)
 //   L1 Instruction 32 KiB (x16)
 //   L2 Unified 1024 KiB (x16)
 //   L3 Unified 98304 KiB (x2)
-// Load Average: 8.40, 11.18, 10.07
+// Load Average: 11.50, 15.79, 9.93
 // ---------------------------------------------------------------
 // Benchmark                     Time             CPU   Iterations
 // ---------------------------------------------------------------
-// permute_10000              14.8 ms         14.8 ms           48
+// permute_10000              14.2 ms         14.2 ms           50
 // permute_packed_10000       12.6 ms         12.6 ms           57
 // NOLINTEND()
