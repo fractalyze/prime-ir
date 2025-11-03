@@ -142,8 +142,8 @@ LogicalResult AddOp::verify() { return verifyBinaryOp(*this); }
 LogicalResult SubOp::verify() { return verifyBinaryOp(*this); }
 
 LogicalResult DoubleOp::verify() {
-  Type inputType = getInput().getType();
-  Type outputType = getType();
+  Type inputType = getElementTypeOrSelf(getInput());
+  Type outputType = getElementTypeOrSelf(getType());
   if ((isa<AffineType>(inputType) &&
        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       inputType == outputType)
@@ -153,8 +153,8 @@ LogicalResult DoubleOp::verify() {
 }
 
 LogicalResult ScalarMulOp::verify() {
-  Type pointType = getPoint().getType();
-  Type outputType = getType();
+  Type pointType = getElementTypeOrSelf(getPoint());
+  Type outputType = getElementTypeOrSelf(getType());
   if ((isa<AffineType>(pointType) &&
        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       pointType == outputType)
