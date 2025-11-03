@@ -820,11 +820,14 @@ void EllipticCurveToField::runOnOperation() {
       // clang-format off
       AddOp,
       BucketAccOp,
+      BucketReduceOp,
       ConvertPointTypeOp,
       DoubleOp,
       IsZeroOp,
       linalg::MatvecOp,
       MSMOp,
+      NegateOp,
+      ScalarDecompOp,
       ScalarMulOp,
       SubOp,
       WindowReduceOp
