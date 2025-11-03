@@ -196,14 +196,6 @@ static LogicalResult disallowShapedTypeOfExtField(OpType op) {
   return success();
 }
 
-LogicalResult NegateOp::verify() { return disallowShapedTypeOfExtField(*this); }
-LogicalResult AddOp::verify() { return disallowShapedTypeOfExtField(*this); }
-LogicalResult SubOp::verify() { return disallowShapedTypeOfExtField(*this); }
-LogicalResult MulOp::verify() { return disallowShapedTypeOfExtField(*this); }
-LogicalResult PowUIOp::verify() { return disallowShapedTypeOfExtField(*this); }
-LogicalResult InverseOp::verify() {
-  return disallowShapedTypeOfExtField(*this);
-}
 LogicalResult CmpOp::verify() {
   auto operandType = getElementTypeOrSelf(getLhs());
   if (isa<QuadraticExtFieldType>(operandType)) {
@@ -225,7 +217,7 @@ LogicalResult FromMontOp::verify() {
            << "FromMontOp result should be a standard type, but got "
            << getElementTypeOrSelf(getType()) << ".";
   }
-  return disallowShapedTypeOfExtField(*this);
+  return success();
 }
 LogicalResult ToMontOp::verify() {
   bool isMont = isMontgomery(getType());
@@ -234,7 +226,7 @@ LogicalResult ToMontOp::verify() {
            << "ToMontOp result should be a Montgomery type, but got "
            << getElementTypeOrSelf(getType()) << ".";
   }
-  return disallowShapedTypeOfExtField(*this);
+  return success();
 }
 
 bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
