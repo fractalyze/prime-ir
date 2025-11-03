@@ -240,3 +240,36 @@ func.func @test_lower_cmp(%lhs : !PF1) {
   %ge = field.cmp uge, %lhs, %rhs : !PF1
   return
 }
+
+// CHECK-LABEL: @test_lower_cmp_mont
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) {
+func.func @test_lower_cmp_mont(%lhs : !PF1m) {
+  // CHECK: %[[RHS:.*]] = mod_arith.constant 5 : [[T]]
+  %rhs = field.constant 5:  !PF1m
+  // CHECK-NOT: field.cmp
+  // CHECK: %[[EQ_LHS:.*]] = mod_arith.from_mont %[[LHS]] : [[T2:.*]]
+  // CHECK: %[[EQ_RHS:.*]] = mod_arith.from_mont %[[RHS]] : [[T2]]
+  // CHECK: %[[EQ:.*]] = mod_arith.cmp eq, %[[EQ_LHS]], %[[EQ_RHS]] : [[T2]]
+  // CHECK: %[[NE_LHS:.*]] = mod_arith.from_mont %[[LHS]] : [[T2]]
+  // CHECK: %[[NE_RHS:.*]] = mod_arith.from_mont %[[RHS]] : [[T2]]
+  // CHECK: %[[NE:.*]] = mod_arith.cmp ne, %[[NE_LHS]], %[[NE_RHS]] : [[T2]]
+  // CHECK: %[[LT_LHS:.*]] = mod_arith.from_mont %[[LHS]] : [[T2]]
+  // CHECK: %[[LT_RHS:.*]] = mod_arith.from_mont %[[RHS]] : [[T2]]
+  // CHECK: %[[LT:.*]] = mod_arith.cmp ult, %[[LT_LHS]], %[[LT_RHS]] : [[T2]]
+  // CHECK: %[[LE_LHS:.*]] = mod_arith.from_mont %[[LHS]] : [[T2]]
+  // CHECK: %[[LE_RHS:.*]] = mod_arith.from_mont %[[RHS]] : [[T2]]
+  // CHECK: %[[LE:.*]] = mod_arith.cmp ule, %[[LE_LHS]], %[[LE_RHS]] : [[T2]]
+  // CHECK: %[[GT_LHS:.*]] = mod_arith.from_mont %[[LHS]] : [[T2]]
+  // CHECK: %[[GT_RHS:.*]] = mod_arith.from_mont %[[RHS]] : [[T2]]
+  // CHECK: %[[GT:.*]] = mod_arith.cmp ugt, %[[GT_LHS]], %[[GT_RHS]] : [[T2]]
+  // CHECK: %[[GE_LHS:.*]] = mod_arith.from_mont %[[LHS]] : [[T2]]
+  // CHECK: %[[GE_RHS:.*]] = mod_arith.from_mont %[[RHS]] : [[T2]]
+  // CHECK: %[[GE:.*]] = mod_arith.cmp uge, %[[GE_LHS]], %[[GE_RHS]] : [[T2]]
+  %eq = field.cmp eq, %lhs, %rhs : !PF1m
+  %ne = field.cmp ne, %lhs, %rhs : !PF1m
+  %lt = field.cmp ult, %lhs, %rhs : !PF1m
+  %le = field.cmp ule, %lhs, %rhs : !PF1m
+  %gt = field.cmp ugt, %lhs, %rhs : !PF1m
+  %ge = field.cmp uge, %lhs, %rhs : !PF1m
+  return
+}

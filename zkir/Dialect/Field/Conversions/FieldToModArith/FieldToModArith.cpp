@@ -616,8 +616,6 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
   }
 };
 
-// TODO(ashjeong): Account for Montgomery domain inputs. Currently only accounts
-// for base domain inputs.
 struct ConvertCmp : public OpConversionPattern<CmpOp> {
   explicit ConvertCmp(MLIRContext *context)
       : OpConversionPattern<CmpOp>(context) {}
@@ -630,25 +628,44 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getLhs());
+    arith::CmpIPredicate predicate = op.getPredicate();
     if (isa<PrimeFieldType>(fieldType)) {
-      auto cmpOp = b.create<mod_arith::CmpOp>(
-          op.getPredicate(), adaptor.getLhs(), adaptor.getRhs());
-      rewriter.replaceOp(op, cmpOp);
+      rewriter.replaceOp(op, compareOnStdDomain(b, fieldType, predicate,
+                                                adaptor.getLhs(),
+                                                adaptor.getRhs()));
       return success();
     } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
       // For quadratic extension fields, we compare the low and high parts
       // separately.
       auto lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
       auto rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
-      auto cmpLow = b.create<mod_arith::CmpOp>(op.getPredicate(), lhsCoeffs[0],
-                                               rhsCoeffs[0]);
-      auto cmpHigh = b.create<mod_arith::CmpOp>(op.getPredicate(), lhsCoeffs[1],
-                                                rhsCoeffs[1]);
+      auto cmpLow = compareOnStdDomain(b, fieldType, predicate, lhsCoeffs[0],
+                                       rhsCoeffs[0]);
+      auto cmpHigh = compareOnStdDomain(b, fieldType, predicate, lhsCoeffs[1],
+                                        rhsCoeffs[1]);
       auto result = b.create<arith::AndIOp>(cmpLow, cmpHigh);
       rewriter.replaceOp(op, result);
       return success();
     }
     return failure();
+  }
+
+  Value compareOnStdDomain(ImplicitLocOpBuilder &b, Type fieldType,
+                           arith::CmpIPredicate predicate, Value lhs,
+                           Value rhs) const {
+    if (isMontgomery(fieldType)) {
+      auto modArithLhsType = cast<mod_arith::ModArithType>(lhs.getType());
+      auto stdModArithType = mod_arith::ModArithType::get(
+          modArithLhsType.getContext(), modArithLhsType.getModulus(),
+          /*isMontgomery=*/false);
+
+      Value standardLhs = b.create<mod_arith::FromMontOp>(stdModArithType, lhs);
+      Value standardRhs = b.create<mod_arith::FromMontOp>(stdModArithType, rhs);
+
+      return b.create<mod_arith::CmpOp>(predicate, standardLhs, standardRhs);
+    } else {
+      return b.create<mod_arith::CmpOp>(predicate, lhs, rhs);
+    }
   }
 };
 
