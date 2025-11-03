@@ -204,6 +204,20 @@ LogicalResult PowUIOp::verify() { return disallowShapedTypeOfExtField(*this); }
 LogicalResult InverseOp::verify() {
   return disallowShapedTypeOfExtField(*this);
 }
+LogicalResult CmpOp::verify() {
+  auto operandType = getElementTypeOrSelf(getLhs());
+  if (isa<QuadraticExtFieldType>(operandType)) {
+    arith::CmpIPredicate predicate = getPredicate();
+    if (predicate == arith::CmpIPredicate::eq ||
+        predicate == arith::CmpIPredicate::ne) {
+      return success();
+    } else {
+      return emitOpError() << "only 'eq' and 'ne' comparisons are supported "
+                              "for quadratic extension field type";
+    }
+  }
+  return success();
+}
 LogicalResult FromMontOp::verify() {
   bool isMont = isMontgomery(getType());
   if (isMont) {

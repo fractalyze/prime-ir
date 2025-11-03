@@ -158,6 +158,7 @@ def Field_CmpOp : Field_Op<"cmp", [SameTypeOperands, TypesMatchWith<
                        FieldLike:$lhs,
                        FieldLike:$rhs);
   let results = (outs BoolLike:$result);
+  let hasVerifier = 1;
   let assemblyFormat = "$predicate `,` $lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 

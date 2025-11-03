@@ -643,7 +643,15 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
                                        rhsCoeffs[0]);
       auto cmpHigh = compareOnStdDomain(b, fieldType, predicate, lhsCoeffs[1],
                                         rhsCoeffs[1]);
-      auto result = b.create<arith::AndIOp>(cmpLow, cmpHigh);
+      Value result;
+      if (predicate == arith::CmpIPredicate::eq) {
+        result = b.create<arith::AndIOp>(cmpLow, cmpHigh);
+      } else if (predicate == arith::CmpIPredicate::ne) {
+        result = b.create<arith::OrIOp>(cmpLow, cmpHigh);
+      } else {
+        llvm_unreachable(
+            "Unsupported comparison predicate for QuadraticExtFieldType");
+      }
       rewriter.replaceOp(op, result);
       return success();
     }
