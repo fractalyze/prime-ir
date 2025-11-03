@@ -226,12 +226,12 @@ func.func @test_lower_cmp(%lhs : !PF1) {
   // CHECK: %[[RHS:.*]] = mod_arith.constant 5 : [[T]]
   %rhs = field.constant 5:  !PF1
   // CHECK-NOT: field.cmp
-  // %[[EQUAL:.*]] = arith.cmpi [[eq:.*]], %[[LHS]], %[[RHS]] : [[i32]]
-  // %[[NOTEQUAL:.*]] = arith.cmpi [[ne:.*]], %[[LHS]], %[[RHS]] : [[i32]]
-  // %[[LESSTHAN:.*]] = arith.cmpi [[ult:.*]], %[[LHS]], %[[RHS]] : [[i32]]
-  // %[[LESSTHANOREQUALS:.*]] = arith.cmpi [[ule:.*]], %[[LHS]], %[[RHS]] : [[i32]]
-  // %[[GREATERTHAN:.*]] = arith.cmpi [[ugt:.*]], %[[LHS]], %[[RHS]] : [[i32]]
-  // %[[GREATERTHANOREQUALS:.*]] = arith.cmpi [[uge:.*]], %[[LHS]], %[[RHS]] : [[i32]]
+  // CHECK: %[[EQUAL:.*]] = mod_arith.cmp eq, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[NOTEQUAL:.*]] = mod_arith.cmp ne, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[LESSTHAN:.*]] = mod_arith.cmp ult, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[LESSTHANOREQUALS:.*]] = mod_arith.cmp ule, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[GREATERTHAN:.*]] = mod_arith.cmp ugt, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[GREATERTHANOREQUALS:.*]] = mod_arith.cmp uge, %[[LHS]], %[[RHS]] : [[T]]
   %equal = field.cmp eq, %lhs, %rhs : !PF1
   %notEqual = field.cmp ne, %lhs, %rhs : !PF1
   %lessThan = field.cmp ult, %lhs, %rhs : !PF1
