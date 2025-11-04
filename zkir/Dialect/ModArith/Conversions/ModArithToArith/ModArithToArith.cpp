@@ -482,8 +482,12 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
     ModArithType modType = getResultModArithType(op);
     auto intType = modType.getStorageType();
 
-    Value cmod = b.create<arith::ConstantOp>(modulusAttr(op));
+    auto modAttr = modulusAttr(op);
+    Value cmod = b.create<arith::ConstantOp>(modAttr);
     Value one = b.create<arith::ConstantIntOp>(intType, 1);
+    if (isa<VectorType>(modAttr.getType())) {
+      one = b.create<vector::SplatOp>(modAttr.getType(), one);
+    }
     auto shifted = b.create<arith::ShLIOp>(adaptor.getInput(), one);
     auto ifge =
         b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, shifted, cmod);
