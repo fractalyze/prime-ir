@@ -69,10 +69,9 @@ Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
                           .getResult()
                     : b.create<field::ConstantOp>(baseFieldType, 1);
   return isa<XYZZType>(pointType)
-             ? b.create<elliptic_curve::PointOp>(
-                   pointType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-             : b.create<elliptic_curve::PointOp>(
-                   pointType, ValueRange{oneBF, oneBF, zeroBF});
+             ? b.create<PointOp>(pointType,
+                                 ValueRange{oneBF, oneBF, zeroBF, zeroBF})
+             : b.create<PointOp>(pointType, ValueRange{oneBF, oneBF, zeroBF});
 }
 
 } // namespace mlir::zkir::elliptic_curve

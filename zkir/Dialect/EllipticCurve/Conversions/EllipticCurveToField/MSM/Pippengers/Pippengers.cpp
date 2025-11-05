@@ -102,10 +102,8 @@ void Pippengers::bucketReduction(Value j, Value initialPoint, Value buckets,
         Value idx = b_.create<arith::SubIOp>(idxTmp1, one_);
 
         auto bucket = b_.create<memref::LoadOp>(buckets, idx);
-        auto rSum =
-            b_.create<elliptic_curve::AddOp>(outputType_, args[0], bucket);
-        auto wSum =
-            b_.create<elliptic_curve::AddOp>(outputType_, args[1], rSum);
+        auto rSum = b_.create<AddOp>(outputType_, args[0], bucket);
+        auto wSum = b_.create<AddOp>(outputType_, args[1], rSum);
 
         b_.create<scf::YieldOp>(ValueRange{rSum, wSum});
       });
@@ -129,23 +127,21 @@ Value Pippengers::windowReduction() {
 
         auto accumulator = winReducArgs[0];
         auto windowSum = b1.create<memref::LoadOp>(windowSums_, idx);
-        accumulator = b1.create<elliptic_curve::AddOp>(outputType_, accumulator,
-                                                       windowSum);
+        accumulator = b1.create<AddOp>(outputType_, accumulator, windowSum);
         auto bitAccForOp = b1.create<scf::ForOp>(
             zero_, bitsPerWindow, one_, accumulator,
             [&](OpBuilder &bitAccBuilder, Location bitAccLoc, Value i,
                 ValueRange bitAccArgs) {
               ImplicitLocOpBuilder b2(bitAccLoc, bitAccBuilder);
-              Value doubled = b2.create<elliptic_curve::DoubleOp>(
-                  outputType_, bitAccArgs[0]);
+              Value doubled = b2.create<DoubleOp>(outputType_, bitAccArgs[0]);
               b2.create<scf::YieldOp>(doubled);
             });
         b1.create<scf::YieldOp>(bitAccForOp.getResult(0));
       });
 
   auto windowSumsAtZero = b_.create<memref::LoadOp>(windowSums_, zero_);
-  return b_.create<elliptic_curve::AddOp>(
-      outputType_, windowsForOp.getResult(0), windowSumsAtZero);
+  return b_.create<AddOp>(outputType_, windowsForOp.getResult(0),
+                          windowSumsAtZero);
 }
 
 } // namespace mlir::zkir::elliptic_curve

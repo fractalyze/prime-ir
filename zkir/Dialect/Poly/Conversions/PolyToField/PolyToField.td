@@ -11,10 +11,10 @@ def PolyToField : Pass<"poly-to-field", "ModuleOp"> {
     This pass lowers the `poly` dialect to the `field` dialect.
   }];
   let dependentDialects = [
-    "mlir::bufferization::BufferizationDialect",
-    "mlir::linalg::LinalgDialect",
-    "mlir::zkir::field::FieldDialect",
-    "mlir::zkir::tensor_ext::TensorExtDialect",
+    "bufferization::BufferizationDialect",
+    "linalg::LinalgDialect",
+    "zkir::field::FieldDialect",
+    "zkir::tensor_ext::TensorExtDialect",
   ];
 }
 

@@ -29,12 +29,9 @@
 namespace mlir::zkir::field {
 
 void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::createLinalgGeneralizeNamedOpsPass());
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::createConvertElementwiseToLinalgPass());
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::createLinalgElementwiseOpFusionPass());
+  pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
+  pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
+  pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
   pm.addPass(createFieldToModArith());
   pm.addPass(createCanonicalizerPass());
 
@@ -70,12 +67,9 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
 }
 
 void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::createLinalgGeneralizeNamedOpsPass());
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::createConvertElementwiseToLinalgPass());
-  pm.addNestedPass<mlir::func::FuncOp>(
-      mlir::createLinalgElementwiseOpFusionPass());
+  pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
+  pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
+  pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
   pm.addPass(createFieldToModArith());
   pm.addPass(createCanonicalizerPass());
 

@@ -169,10 +169,8 @@ struct EllipticCurveToLLVMDialectInterface
 };
 
 void registerConvertEllipticCurveToLLVMInterface(DialectRegistry &registry) {
-  registry.addExtension(
-      +[](MLIRContext *ctx,
-          zkir::elliptic_curve::EllipticCurveDialect *dialect) {
-        dialect->addInterfaces<EllipticCurveToLLVMDialectInterface>();
-      });
+  registry.addExtension(+[](MLIRContext *ctx, EllipticCurveDialect *dialect) {
+    dialect->addInterfaces<EllipticCurveToLLVMDialectInterface>();
+  });
 }
 } // namespace mlir::zkir::elliptic_curve

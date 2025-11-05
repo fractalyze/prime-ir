@@ -468,7 +468,7 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 };
 
 struct ConvertDouble : public OpConversionPattern<DoubleOp> {
-  explicit ConvertDouble(mlir::MLIRContext *context)
+  explicit ConvertDouble(MLIRContext *context)
       : OpConversionPattern<DoubleOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -570,8 +570,7 @@ struct ConvertMac : public OpConversionPattern<MacOp> {
       auto sum =
           b.create<arith::AddUIExtendedOp>(mul.getLow(), adaptor.getAcc());
       auto high = b.create<arith::AddIOp>(mul.getHigh(), sum.getOverflow());
-      auto reduced =
-          b.create<mod_arith::MontReduceOp>(resultType, sum.getSum(), high);
+      auto reduced = b.create<MontReduceOp>(resultType, sum.getSum(), high);
       rewriter.replaceOp(op, reduced);
       return success();
     } else {
@@ -617,8 +616,8 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
     }
     auto mul =
         b.create<arith::MulUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
-    auto reduced = b.create<mod_arith::MontReduceOp>(
-        getResultModArithType(op), mul.getLow(), mul.getHigh());
+    auto reduced = b.create<MontReduceOp>(getResultModArithType(op),
+                                          mul.getLow(), mul.getHigh());
 
     rewriter.replaceOp(op, reduced);
     return success();
@@ -673,8 +672,8 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   Value carry = zeroLimb;
 
   // Calculate x + y * z + carry
-  auto mulAddWithCarry = [&b, limbType](mlir::Value x, mlir::Value y,
-                                        mlir::Value z, mlir::Value carry) {
+  auto mulAddWithCarry = [&b, limbType](Value x, Value y, Value z,
+                                        Value carry) {
     auto yz = b.create<arith::MulUIExtendedOp>(y, z);
     Value hi = yz.getHigh();
     Value lo = yz.getLow();
@@ -760,7 +759,7 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
 } // namespace
 
 struct ConvertSquare : public OpConversionPattern<SquareOp> {
-  explicit ConvertSquare(mlir::MLIRContext *context)
+  explicit ConvertSquare(MLIRContext *context)
       : OpConversionPattern<SquareOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
@@ -772,8 +771,7 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
 
     ModArithType resultType = getResultModArithType(op);
     if (resultType.isMontgomery()) {
-      auto result =
-          b.create<mod_arith::MontSquareOp>(resultType, op.getInput());
+      auto result = b.create<MontSquareOp>(resultType, op.getInput());
       rewriter.replaceOp(op, result);
       return success();
     }
@@ -814,8 +812,8 @@ struct ConvertMontSquare : public OpConversionPattern<MontSquareOp> {
           "ModArithToArith conversion");
     }
     auto result = squareExtended(b, op, adaptor.getInput());
-    auto reduced = b.create<mod_arith::MontReduceOp>(getResultModArithType(op),
-                                                     result.lo, result.hi);
+    auto reduced =
+        b.create<MontReduceOp>(getResultModArithType(op), result.lo, result.hi);
 
     rewriter.replaceOp(op, reduced);
     return success();
@@ -841,10 +839,8 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
                                   .getBitWidth();
     auto signlessIntType =
         IntegerType::get(b.getContext(), outputBitWidth, IntegerType::Signless);
-    auto extractedLHS =
-        b.create<mod_arith::BitcastOp>(signlessIntType, op.getLhs());
-    auto extractedRHS =
-        b.create<mod_arith::BitcastOp>(signlessIntType, op.getRhs());
+    auto extractedLHS = b.create<BitcastOp>(signlessIntType, op.getLhs());
+    auto extractedRHS = b.create<BitcastOp>(signlessIntType, op.getRhs());
 
     auto cmpOp =
         b.create<arith::CmpIOp>(op.getPredicate(), extractedLHS, extractedRHS);

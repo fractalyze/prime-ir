@@ -104,6 +104,13 @@ func.func @test_scalar_mul(%affine1: !affine, %jacobian1: !jacobian, %xyzz1: !xy
   return
 }
 
+// CHECK-LABEL: @test_cmp
+func.func @test_cmp(%xyzz1: !xyzz, %xyzz2: !xyzz) {
+  // CHECK-NOT: elliptic_curve.cmp
+  %cmp1 = elliptic_curve.cmp eq, %xyzz1, %xyzz2 : !xyzz
+  return
+}
+
 func.func @test_msm(%scalars: tensor<3x!SFm>, %points: tensor<3x!affine>) {
   %msm_result = elliptic_curve.msm %scalars, %points degree=2 : tensor<3x!SFm>, tensor<3x!affine> -> !jacobian
   return

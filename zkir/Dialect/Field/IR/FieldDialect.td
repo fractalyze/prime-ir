@@ -10,8 +10,8 @@ def Field_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
   let dependentDialects = [
-    "::mlir::zkir::mod_arith::ModArithDialect",
-    "::mlir::scf::SCFDialect",
+    "scf::SCFDialect",
+    "zkir::mod_arith::ModArithDialect",
   ];
 }
 

@@ -7,9 +7,9 @@
 
 namespace mlir::zkir::field {
 
-LogicalResult PrimeFieldAttr::verify(
-    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-    PrimeFieldType type, IntegerAttr _value) {
+LogicalResult
+PrimeFieldAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
+                       PrimeFieldType type, IntegerAttr _value) {
   APInt modulus = type.getModulus().getValue();
   APInt value = _value.getValue();
 
@@ -31,9 +31,9 @@ LogicalResult PrimeFieldAttr::verify(
   return success();
 }
 
-LogicalResult RootOfUnityAttr::verify(
-    ::llvm::function_ref<::mlir::InFlightDiagnostic()> emitError,
-    PrimeFieldAttr root, IntegerAttr degree) {
+LogicalResult
+RootOfUnityAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
+                        PrimeFieldAttr root, IntegerAttr degree) {
   if (root.getType().isMontgomery()) {
     // NOTE(batzor): Montgomery form is not supported for root of unity because
     // verification logic assumes standard form. Also, `PrimitiveRootAttr` in

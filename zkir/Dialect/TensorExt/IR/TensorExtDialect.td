@@ -10,8 +10,8 @@ def TensorExt_Dialect : Dialect {
   }];
   let cppNamespace = "::mlir::zkir::tensor_ext";
   let dependentDialects = [
-    "tensor::TensorDialect",
     "LLVM::LLVMDialect",
+    "tensor::TensorDialect",
   ];
   let hasConstantMaterializer = 1;
 }

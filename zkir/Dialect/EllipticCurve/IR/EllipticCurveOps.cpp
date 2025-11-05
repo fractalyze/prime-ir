@@ -142,8 +142,8 @@ LogicalResult AddOp::verify() { return verifyBinaryOp(*this); }
 LogicalResult SubOp::verify() { return verifyBinaryOp(*this); }
 
 LogicalResult DoubleOp::verify() {
-  Type inputType = getInput().getType();
-  Type outputType = getType();
+  Type inputType = getElementTypeOrSelf(getInput());
+  Type outputType = getElementTypeOrSelf(getType());
   if ((isa<AffineType>(inputType) &&
        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       inputType == outputType)
@@ -153,14 +153,25 @@ LogicalResult DoubleOp::verify() {
 }
 
 LogicalResult ScalarMulOp::verify() {
-  Type pointType = getPoint().getType();
-  Type outputType = getType();
+  Type pointType = getElementTypeOrSelf(getPoint());
+  Type outputType = getElementTypeOrSelf(getType());
   if ((isa<AffineType>(pointType) &&
        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
       pointType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same
   return emitError() << "wrong output type given point type";
+}
+
+LogicalResult CmpOp::verify() {
+  arith::CmpIPredicate predicate = getPredicate();
+  if (predicate == arith::CmpIPredicate::eq ||
+      predicate == arith::CmpIPredicate::ne) {
+    return success();
+  } else {
+    return emitOpError() << "only 'eq' and 'ne' comparisons are supported for "
+                            "elliptic curve points";
+  }
 }
 
 LogicalResult MSMOp::verify() {

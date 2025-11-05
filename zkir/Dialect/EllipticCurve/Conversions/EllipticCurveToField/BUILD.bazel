@@ -20,6 +20,7 @@ cc_library(
         "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/XYZZ:Double",
         "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//zkir/Dialect/Field/IR:Field",
+        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BufferizationDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LinalgDialect",

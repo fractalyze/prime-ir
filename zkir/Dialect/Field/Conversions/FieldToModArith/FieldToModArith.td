@@ -11,7 +11,7 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
     This pass lowers the `field` dialect to their `mod_arith` equivalents.
   }];
   let dependentDialects = [
-    "mlir::zkir::mod_arith::ModArithDialect",
+    "zkir::mod_arith::ModArithDialect",
   ];
 }
 

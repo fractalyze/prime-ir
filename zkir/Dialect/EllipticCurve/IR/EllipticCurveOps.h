@@ -3,6 +3,7 @@
 
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveOps.h.inc
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"

@@ -19,7 +19,7 @@ def Poly_Dialect : Dialect {
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
   let dependentDialects = [
-    "::mlir::zkir::field::FieldDialect",
+    "zkir::field::FieldDialect",
   ];
 }
 

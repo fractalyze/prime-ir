@@ -22,11 +22,9 @@ ValueRange PippengersGeneric::scalarIsOneBranch(Value point, Value windowOffset,
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b0(loc, builder);
         if (isa<JacobianType>(point.getType()) && isa<XYZZType>(outputType_)) {
-          point =
-              b0.create<elliptic_curve::ConvertPointTypeOp>(outputType_, point);
+          point = b0.create<ConvertPointTypeOp>(outputType_, point);
         }
-        Value addedPoint =
-            b0.create<elliptic_curve::AddOp>(outputType_, windowSum, point);
+        Value addedPoint = b0.create<AddOp>(outputType_, windowSum, point);
         b0.create<scf::YieldOp>(addedPoint);
       },
       [&](OpBuilder &builder, Location loc) {
@@ -78,11 +76,10 @@ void PippengersGeneric::scalarIsNotOneBranch(Value scalar, Value point,
         auto bucketAtAdjustedIdx =
             b0.create<memref::LoadOp>(outputType_, buckets, adjustedIdx);
         if (isa<JacobianType>(point.getType()) && isa<XYZZType>(outputType_)) {
-          point =
-              b0.create<elliptic_curve::ConvertPointTypeOp>(outputType_, point);
+          point = b0.create<ConvertPointTypeOp>(outputType_, point);
         }
-        auto newPoint = b0.create<elliptic_curve::AddOp>(
-            outputType_, bucketAtAdjustedIdx, point);
+        auto newPoint =
+            b0.create<AddOp>(outputType_, bucketAtAdjustedIdx, point);
         b0.create<memref::StoreOp>(newPoint, buckets, adjustedIdx);
         b0.create<scf::YieldOp>();
       });

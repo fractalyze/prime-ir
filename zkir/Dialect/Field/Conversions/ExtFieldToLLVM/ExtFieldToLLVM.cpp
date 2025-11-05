@@ -118,11 +118,10 @@ struct ExtFieldToLLVM : impl::ExtFieldToLLVMBase<ExtFieldToLLVM> {
 // ConvertToLLVMPatternInterface implementation
 //===----------------------------------------------------------------------===//
 
-struct ExtFieldToLLVMDialectInterface
-    : public mlir::ConvertToLLVMPatternInterface {
+struct ExtFieldToLLVMDialectInterface : public ConvertToLLVMPatternInterface {
   using ConvertToLLVMPatternInterface::ConvertToLLVMPatternInterface;
 
-  void loadDependentDialects(mlir::MLIRContext *context) const final {
+  void loadDependentDialects(MLIRContext *context) const final {
     context->loadDialect<LLVM::LLVMDialect>();
   }
 
@@ -137,9 +136,8 @@ struct ExtFieldToLLVMDialectInterface
 };
 
 void registerConvertExtFieldToLLVMInterface(DialectRegistry &registry) {
-  registry.addExtension(
-      +[](MLIRContext *ctx, zkir::field::FieldDialect *dialect) {
-        dialect->addInterfaces<ExtFieldToLLVMDialectInterface>();
-      });
+  registry.addExtension(+[](MLIRContext *ctx, FieldDialect *dialect) {
+    dialect->addInterfaces<ExtFieldToLLVMDialectInterface>();
+  });
 }
 } // namespace mlir::zkir::field

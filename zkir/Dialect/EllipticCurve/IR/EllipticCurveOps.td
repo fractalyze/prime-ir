@@ -4,6 +4,7 @@
 include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.td"
 include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.td"
 
+include "mlir/Dialect/Arith/IR/ArithBase.td"
 include "mlir/Dialect/LLVMIR/LLVMTypes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
@@ -197,6 +198,38 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [ElementwiseMappa
   let results = (outs PointLike:$output);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($scalar) `,` type($point) `->` type($output)";
+}
+
+// Elliptic curve point comparison.
+def EllipticCurve_CmpOp : EllipticCurve_Op<"cmp", [SameTypeOperands, Pure, ElementwiseMappable,
+  TypesMatchWith<"result type has i1 element type and same shape as operands", "lhs", "result", "getI1SameShape($_self)">]> {
+  let summary = "Elliptic curve point comparison operation";
+  let description = [{
+    **From description of `Arith_CmpIOp`**
+    Its first argument is an attribute that defines which type of comparison is
+    performed. The following comparisons are supported:
+
+    -   equal (mnemonic: `"eq"`; integer value: `0`)
+    -   not equal (mnemonic: `"ne"`; integer value: `1`)
+
+    The result is `1` if the comparison is true and `0` otherwise. For vector or
+    tensor operands, the comparison is performed elementwise and the element of
+    the result indicates whether the comparison is true for the operand elements
+    with the same indices as those of the result.
+
+    Example:
+    ```
+    !affine = elliptic_curve.affine<#sw>
+
+    %equal = elliptic_curve.cmp eq, %a, %b : !affine
+    ```
+  }];
+  let arguments = (ins Arith_CmpIPredicateAttr:$predicate,
+                       PointLike:$lhs,
+                       PointLike:$rhs);
+  let results = (outs BoolLike:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = "$predicate `,` $lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
 // Elliptic curve point scalar multiplication.

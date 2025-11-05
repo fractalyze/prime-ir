@@ -158,6 +158,7 @@ def Field_CmpOp : Field_Op<"cmp", [SameTypeOperands, TypesMatchWith<
                        FieldLike:$lhs,
                        FieldLike:$rhs);
   let results = (outs BoolLike:$result);
+  let hasVerifier = 1;
   let assemblyFormat = "$predicate `,` $lhs `,` $rhs attr-dict `:` type($lhs)";
 }
 
@@ -208,7 +209,6 @@ def Field_InverseOp : Field_UnaryOp<"inverse", [Involution]> {
     %inv_a = field.inverse %a : field.pf<primeModulus>
     ```
   }];
-  let hasVerifier = 1;
 }
 
 // Field double.
@@ -248,7 +248,6 @@ def Field_NegateOp : Field_UnaryOp<"negate", [Involution]> {
     %negation = field.negate %a : field.pf<primeModulus>
     ```
   }];
-  let hasVerifier = 1;
 }
 
 // Field addition.
@@ -262,7 +261,6 @@ def Field_AddOp : Field_BinaryOp<"add", [Commutative]> {
     %r = field.add %a, %b : field.pf<primeModulus>
     ```
   }];
-  let hasVerifier = 1;
 }
 
 // Field subtraction.
@@ -276,7 +274,6 @@ def Field_SubOp : Field_BinaryOp<"sub"> {
     %r = field.sub %a, %b : field.pf<primeModulus>
     ```
   }];
-  let hasVerifier = 1;
 }
 
 // Field multiplication.
@@ -290,7 +287,6 @@ def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
     %r = field.mul %a, %b : field.pf<primeModulus>
     ```
   }];
-  let hasVerifier = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -309,7 +305,6 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
   let arguments = (ins FieldLike:$base, SignlessIntegerLike:$exp);
   let results = (outs FieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($base) `,` type($exp)";
-  let hasVerifier = 1;
 }
 
 def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
