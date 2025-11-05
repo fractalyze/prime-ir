@@ -17,8 +17,8 @@
 // Based on Plonky3 implementation: https://github.com/Plonky3/Plonky3
 
 !scalar = !field.pf<2013265921 : i32, true>
-!packed = vector<16x!field.pf<2013265921 : i32, true>>
-!packed_std = vector<16x!field.pf<2013265921 : i32>>
+!packed = vector<4x!field.pf<2013265921 : i32, true>>
+!packed_std = vector<4x!field.pf<2013265921 : i32>>
 !packed_state = memref<16x!packed>
 !packed_state_std = memref<16x!packed_std>
 
@@ -32,7 +32,7 @@ func.func @packed_add_rc_and_sbox(%var: !packed, %c: !packed) -> !packed {
 // In-place version of apply_mat4 using memref
 // Optimally, we just want to do matmul which then lowers to the following
 // sequence but at this moment, it seems hard to achieve. Therefore, we just use field addition instead of matrix multiplication.
-func.func @packed_apply_mat4(%state: memref<4x!packed, strided<[1], offset: ?>>) {
+func.func @packed_apply_mat4(%state: memref<16x!packed, strided<[1], offset: ?>>) {
   // Load the 4x4 MDS matrix (no changes here)
   %matrix = arith.constant dense<[
     [2, 3, 1, 1],
@@ -47,10 +47,10 @@ func.func @packed_apply_mat4(%state: memref<4x!packed, strided<[1], offset: ?>>)
   %c3 = arith.constant 3 : index
 
   // Compute the sum of all 4 elements
-  %x0 = memref.load %state[%c0] : memref<4x!packed, strided<[1], offset: ?>>
-  %x1 = memref.load %state[%c1] : memref<4x!packed, strided<[1], offset: ?>>
-  %x2 = memref.load %state[%c2] : memref<4x!packed, strided<[1], offset: ?>>
-  %x3 = memref.load %state[%c3] : memref<4x!packed, strided<[1], offset: ?>>
+  %x0 = memref.load %state[%c0] : memref<16x!packed, strided<[1], offset: ?>>
+  %x1 = memref.load %state[%c1] : memref<16x!packed, strided<[1], offset: ?>>
+  %x2 = memref.load %state[%c2] : memref<16x!packed, strided<[1], offset: ?>>
+  %x3 = memref.load %state[%c3] : memref<16x!packed, strided<[1], offset: ?>>
 
   %x01 = field.add %x0, %x1 : !packed
   %x23 = field.add %x2, %x3 : !packed
@@ -72,10 +72,10 @@ func.func @packed_apply_mat4(%state: memref<4x!packed, strided<[1], offset: ?>>)
   %x3_new = field.add %x01233, %x00 : !packed
 
   // Store the sum in all output positions
-  memref.store %x0_new, %state[%c0] : memref<4x!packed, strided<[1], offset: ?>>
-  memref.store %x1_new, %state[%c1] : memref<4x!packed, strided<[1], offset: ?>>
-  memref.store %x2_new, %state[%c2] : memref<4x!packed, strided<[1], offset: ?>>
-  memref.store %x3_new, %state[%c3] : memref<4x!packed, strided<[1], offset: ?>>
+  memref.store %x0_new, %state[%c0] : memref<16x!packed, strided<[1], offset: ?>>
+  memref.store %x1_new, %state[%c1] : memref<16x!packed, strided<[1], offset: ?>>
+  memref.store %x2_new, %state[%c2] : memref<16x!packed, strided<[1], offset: ?>>
+  memref.store %x3_new, %state[%c3] : memref<16x!packed, strided<[1], offset: ?>>
   return
 }
 
@@ -117,7 +117,7 @@ func.func @packed_mds_light_permutation(%state: !packed_state) {
   // Now apply the outer circulant matrix
   // Precompute the four sums of every four elements
   // Compute sums: sums[k] = sum of state[j + k] for j = 0, 4, 8, 12
-  %sums = memref.alloca() : memref<4x!packed>
+  %sums = memref.alloca() : memref<16x!packed>
   affine.for %k = 0 to 4 {
     %val0 = affine.load %state[%k] : !packed_state
     %val1 = affine.load %state[%k + 4] : !packed_state
@@ -126,7 +126,7 @@ func.func @packed_mds_light_permutation(%state: !packed_state) {
     %sum01 = field.add %val0, %val1 : !packed
     %sum23 = field.add %val2, %val3 : !packed
     %new_sum = field.add %sum01, %sum23 : !packed
-    affine.store %new_sum, %sums[%k] : memref<4x!packed>
+    affine.store %new_sum, %sums[%k] : memref<16x!packed>
   }
 
   // Apply the formula: y_i = x_i' + sums[i % 4]
@@ -135,7 +135,7 @@ func.func @packed_mds_light_permutation(%state: !packed_state) {
     %val1 = affine.load %state[%i + 4] : !packed_state
     %val2 = affine.load %state[%i + 8] : !packed_state
     %val3 = affine.load %state[%i + 12] : !packed_state
-    %sum = affine.load %sums[%i] : memref<4x!packed>
+    %sum = affine.load %sums[%i] : memref<16x!packed>
     %sum0 = field.add %val0, %sum : !packed
     %sum1 = field.add %val1, %sum : !packed
     %sum2 = field.add %val2, %sum : !packed
@@ -171,28 +171,28 @@ func.func @packed_internal_layer_mat_mul(%state: !packed_state, %sum : !packed) 
   // Precompute powers of 2 inverses using powui
   // [-2, 1, 2, 1/2, 3, 4, -1/2, -3, -4, 1/2^8, 1/4, 1/8, 1/2^27, -1/2^8, -1/16, -1/2^27]
   %inv_two_scalar = arith.constant 134217727 : i32
-  %inv_two_vec = vector.splat %inv_two_scalar : vector<16xi32>
-  %inv_two = field.bitcast %inv_two_vec : vector<16xi32> -> !packed
+  %inv_two_vec = vector.splat %inv_two_scalar : vector<4xi32>
+  %inv_two = field.bitcast %inv_two_vec : vector<4xi32> -> !packed
 
   %inv_four_scalar = arith.constant 1073741824 : i32
-  %inv_four_vec = vector.splat %inv_four_scalar : vector<16xi32>
-  %inv_four = field.bitcast %inv_four_vec : vector<16xi32> -> !packed
+  %inv_four_vec = vector.splat %inv_four_scalar : vector<4xi32>
+  %inv_four = field.bitcast %inv_four_vec : vector<4xi32> -> !packed
 
   %inv_eight_scalar = arith.constant 536870912 : i32
-  %inv_eight_vec = vector.splat %inv_eight_scalar : vector<16xi32>
-  %inv_eight = field.bitcast %inv_eight_vec : vector<16xi32> -> !packed
+  %inv_eight_vec = vector.splat %inv_eight_scalar : vector<4xi32>
+  %inv_eight = field.bitcast %inv_eight_vec : vector<4xi32> -> !packed
 
   %inv_sixteen_scalar = arith.constant 268435456 : i32
-  %inv_sixteen_vec = vector.splat %inv_sixteen_scalar : vector<16xi32>
-  %inv_sixteen = field.bitcast %inv_sixteen_vec : vector<16xi32> -> !packed
+  %inv_sixteen_vec = vector.splat %inv_sixteen_scalar : vector<4xi32>
+  %inv_sixteen = field.bitcast %inv_sixteen_vec : vector<4xi32> -> !packed
 
   %inv_256_scalar = arith.constant 16777216 : i32
-  %inv_256_vec = vector.splat %inv_256_scalar : vector<16xi32>
-  %inv_256 = field.bitcast %inv_256_vec : vector<16xi32> -> !packed
+  %inv_256_vec = vector.splat %inv_256_scalar : vector<4xi32>
+  %inv_256 = field.bitcast %inv_256_vec : vector<4xi32> -> !packed
 
   %inv_2_27_scalar = arith.constant 32 : i32
-  %inv_2_27_vec = vector.splat %inv_2_27_scalar : vector<16xi32>
-  %inv_2_27 = field.bitcast %inv_2_27_vec : vector<16xi32> -> !packed
+  %inv_2_27_vec = vector.splat %inv_2_27_scalar : vector<4xi32>
+  %inv_2_27 = field.bitcast %inv_2_27_vec : vector<4xi32> -> !packed
 
   // state[1] += sum
   %s1 = memref.load %state[%c1] : !packed_state

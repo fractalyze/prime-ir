@@ -81,12 +81,14 @@ func.func @test_packed_poseidon2_permute() {
   %state = memref.alloca() : !packed_state
   // Use a for loop to fill each slot with vector<j> (where j = i), bitcast to field, convert to mont
   %zero = arith.constant 0 : index
+  %four = arith.constant 4 : index
+
   %sixteen = arith.constant 16 : index
   %one = arith.constant 1 : index
   scf.for %i = %zero to %sixteen step %one {
     %val = arith.index_cast %i : index to i32
-    %v_i32 = vector.splat %val : vector<16xi32>
-    %v_std = field.bitcast %v_i32 : vector<16xi32> -> !packed_std
+    %v_i32 = vector.splat %val : vector<4xi32>
+    %v_std = field.bitcast %v_i32 : vector<4xi32> -> !packed_std
     %v_mont = field.to_mont %v_std : !packed
     memref.store %v_mont, %state[%i] : !packed_state
   }
@@ -95,21 +97,21 @@ func.func @test_packed_poseidon2_permute() {
   func.call @packed_poseidon2_permute(%state) : (!packed_state) -> ()
   // Load diagonal entries from %state (memref<16x!packed>) and print them.
   // Allocate output: memref<16x!pf>
-  %diag_mem = memref.alloca() : memref<16xi32>
-  scf.for %i = %zero to %sixteen step %one {
+  %diag_mem = memref.alloca() : memref<4xi32>
+  scf.for %i = %zero to %four step %one {
     %vec = memref.load %state[%i] : memref<16x!packed>
     %std = field.from_mont %vec : !packed_std
-    %intvec = field.bitcast %std : !packed_std -> vector<16xi32>
-    %val = vector.extract %intvec[%i] : i32 from vector<16xi32>
-    memref.store %val, %diag_mem[%i] : memref<16xi32>
+    %intvec = field.bitcast %std : !packed_std -> vector<4xi32>
+    %val = vector.extract %intvec[%i] : i32 from vector<4xi32>
+    memref.store %val, %diag_mem[%i] : memref<4xi32>
   }
-  %mem_cast = memref.cast %diag_mem : memref<16xi32> to memref<*xi32>
+  %mem_cast = memref.cast %diag_mem : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%mem_cast) : (memref<*xi32>) -> ()
   return
 }
 
 // expected output for input [0..15]:
-// CHECK: [1906786279, 1737026427, 1959749225, 700325316, 1638050605, 1021608788, 1726691001, 1761127344, 1552405120, 417318995, 36799261, 1215172152, 614923223, 1300746575, 957311597, 304856115]
+// CHECK: [1906786279, 1737026427, 1959749225, 700325316]
 
 
 func.func @main() {

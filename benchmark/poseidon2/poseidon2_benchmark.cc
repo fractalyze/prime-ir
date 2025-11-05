@@ -20,28 +20,28 @@ limitations under the License.
 namespace mlir::zkir::benchmark {
 namespace {
 
-using Vector16xI32 = int32_t __attribute__((vector_size(64)));
+using Vector4xI32 = int32_t __attribute__((vector_size(16)));
 
 extern "C" void
 _mlir_ciface_permute_10000(StridedMemRefType<uint32_t, 1> *input);
 extern "C" void
-_mlir_ciface_packed_permute_10000(StridedMemRefType<Vector16xI32, 1> *input);
+_mlir_ciface_packed_permute_10000(StridedMemRefType<Vector4xI32, 1> *input);
 
 // Set each element to 0.
 void fillWithZero(uint32_t &elem, [[maybe_unused]] ArrayRef<int64_t> coords) {
   elem = 0;
 }
 
-void fillVectorWithZero(Vector16xI32 &data,
+void fillVectorWithZero(Vector4xI32 &data,
                         [[maybe_unused]] ArrayRef<int64_t> coords) {
-  data = Vector16xI32{0};
+  data = Vector4xI32{0};
 }
 
 template <bool kIsPacked>
 void BM_permute_10000_benchmark(::benchmark::State &state) {
   if constexpr (kIsPacked) {
-    OwningMemRef<Vector16xI32, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
-                                        /*init=*/fillVectorWithZero);
+    OwningMemRef<Vector4xI32, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
+                                       /*init=*/fillVectorWithZero);
     for (auto _ : state) {
       _mlir_ciface_packed_permute_10000(&*input);
     }
