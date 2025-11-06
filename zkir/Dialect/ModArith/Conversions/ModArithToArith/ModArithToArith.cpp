@@ -20,6 +20,7 @@ limitations under the License.
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
@@ -88,6 +89,17 @@ namespace {
 Value getSignedFormFromCanonical(Value input, TypedAttr modAttr) {
   auto minOp = input.getDefiningOp<arith::MinUIOp>();
   if (!minOp) {
+    if (auto addCorrection = input.getDefiningOp<arith::AddIOp>()) {
+      if (addCorrection.getRhs().getDefiningOp<arith::MulIOp>()) {
+        auto mul = addCorrection.getRhs().getDefiningOp<arith::MulIOp>();
+        if (mul.getLhs().getDefiningOp<LLVM::InlineAsmOp>()) {
+          auto inlineAsmOp = mul.getLhs().getDefiningOp<LLVM::InlineAsmOp>();
+          if (inlineAsmOp.getAsmString() == "cmgt $0.4s, $1.4s, $2.4s") {
+            return addCorrection.getLhs();
+          }
+        }
+      }
+    }
     return {};
   }
   auto addOpLhs = minOp.getLhs().getDefiningOp<arith::AddIOp>();
@@ -647,6 +659,19 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
     }
     Value signedLhs = getSignedFormFromCanonical(adaptor.getLhs(), modAttr);
     Value signedRhs = getSignedFormFromCanonical(adaptor.getRhs(), modAttr);
+    if (auto vectorType = dyn_cast<VectorType>(modAttr.getType())) {
+      if (vectorType.getElementType() == b.getI32Type() &&
+          vectorType.getNumElements() == 4) {
+        // ARM Neon algorithm can handle signed inputs
+        signedLhs = signedLhs ? signedLhs : adaptor.getLhs();
+        signedRhs = signedRhs ? signedRhs : adaptor.getRhs();
+
+        MontReducer reducer(b, modType);
+        auto reduced = reducer.doArmNeonMul(signedLhs, signedRhs);
+        rewriter.replaceOp(op, reduced);
+        return success();
+      }
+    }
     if (signedLhs && signedRhs) {
       auto mul = b.create<arith::MulSIExtendedOp>(signedLhs, signedRhs);
       auto reduced =
@@ -866,6 +891,20 @@ struct ConvertMontSquare : public OpConversionPattern<MontSquareOp> {
       return op->emitError(
           "MontSquareOp with non-Montgomery type is not supported in "
           "ModArithToArith conversion");
+    }
+    auto modAttr = modulusAttr(op);
+    if (auto vectorType = dyn_cast<VectorType>(modAttr.getType())) {
+      if (vectorType.getElementType() == b.getI32Type() &&
+          vectorType.getNumElements() == 4) {
+        // ARM Neon algorithm can handle signed inputs
+        auto signedInput =
+            getSignedFormFromCanonical(adaptor.getInput(), modulusAttr(op));
+        signedInput = signedInput ? signedInput : adaptor.getInput();
+        MontReducer reducer(b, modType);
+        auto reduced = reducer.doArmNeonMul(signedInput, signedInput);
+        rewriter.replaceOp(op, reduced);
+        return success();
+      }
     }
     auto result = squareExtended(b, op, adaptor.getInput());
     auto reduced = b.create<MontReduceOp>(op.getType(), result.lo, result.hi);

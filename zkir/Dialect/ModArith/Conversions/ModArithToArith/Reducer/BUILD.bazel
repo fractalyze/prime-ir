@@ -27,6 +27,7 @@ cc_library(
         "//zkir/Dialect/ModArith/IR:ModArith",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:Support",
     ],
 )

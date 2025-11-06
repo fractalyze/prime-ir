@@ -16,6 +16,7 @@ limitations under the License.
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/MontReducer.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
@@ -84,6 +85,77 @@ Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
 bool MontReducer::isFromSignedMul(Value input) {
   auto signedOp = input.getDefiningOp<arith::MulSIExtendedOp>();
   return signedOp && signedOp.getLhs() != signedOp.getRhs();
+}
+
+Value MontReducer::doArmNeonMul(Value lhs, Value rhs, bool canonicalize) {
+  // ARM Neon can only handle 4x32-bit inputs.
+  auto vecType = cast<VectorType>(lhs.getType());
+  assert(vecType.getElementType() == b_.getI32Type());
+  assert(vecType.getNumElements() == 4);
+
+  // Prepare nInv constant.
+  TypedAttr nInvAttr = montAttr_.getNInv();
+  Type limbType = nInvAttr.getType();
+  if (auto shapedType = dyn_cast<ShapedType>(lhs.getType())) {
+    limbType = shapedType.cloneWith(std::nullopt, limbType);
+    nInvAttr = SplatElementsAttr::get(cast<ShapedType>(limbType), nInvAttr);
+  }
+  auto nInvConst = b_.create<arith::ConstantOp>(nInvAttr);
+
+  // Prepare modulus constant.
+  auto modConst = createModulusConst(lhs.getType());
+
+  // 1. cHi = sqdmulh(lhs, rhs)
+  Value cHi =
+      b_.create<LLVM::InlineAsmOp>(
+            vecType, ValueRange{lhs, rhs}, "sqdmulh $0.4s, $1.4s, $2.4s",
+            "=w,w,w",
+            /*has_side_effects=*/false, /*is_align_stack=*/true,
+            LLVM::TailCallKind::None, nullptr, /*operand_attrs=*/ArrayAttr())
+          .getResult(0);
+
+  // 2. muRhs = rhs * nInv
+  Value muRhs = b_.create<arith::MulIOp>(rhs, nInvConst);
+
+  // 3. q = lhs * muRhs
+  Value q = b_.create<arith::MulIOp>(lhs, muRhs);
+
+  // 4. qpHi = sqdmulh(q, P)
+  Value qpHi =
+      b_.create<LLVM::InlineAsmOp>(
+            vecType, ValueRange{q, modConst}, "sqdmulh $0.4s, $1.4s, $2.4s",
+            "=w,w,w",
+            /*has_side_effects=*/false, /*is_align_stack=*/true,
+            LLVM::TailCallKind::None, nullptr, /*operand_attrs=*/ArrayAttr())
+          .getResult(0);
+
+  // 5. d = shsub(cHi, qpHi)
+  Value d = b_.create<LLVM::InlineAsmOp>(vecType, ValueRange{cHi, qpHi},
+                                         "shsub $0.4s, $1.4s, $2.4s", "=w,w,w",
+                                         /*has_side_effects=*/false,
+                                         /*is_align_stack=*/true,
+                                         LLVM::TailCallKind::None, nullptr,
+                                         /*operand_attrs=*/ArrayAttr())
+                .getResult(0);
+
+  if (!canonicalize) {
+    return d;
+  }
+
+  // 6. underflow = cmgt(qpHi, cHi)
+  Value underflow =
+      b_.create<LLVM::InlineAsmOp>(
+            vecType, ValueRange{qpHi, cHi}, "cmgt $0.4s, $1.4s, $2.4s",
+            "=w,w,w",
+            /*has_side_effects=*/false, /*is_align_stack=*/true,
+            LLVM::TailCallKind::None, nullptr, /*operand_attrs=*/ArrayAttr())
+          .getResult(0);
+
+  // 7. Canonical reduction: d = d + (underflow * negModConst)
+  Value zero = b_.create<arith::SubIOp>(modConst, modConst);
+  Value negModConst = b_.create<arith::SubIOp>(zero, modConst);
+  Value correction = b_.create<arith::MulIOp>(underflow, negModConst);
+  return b_.create<arith::AddIOp>(d, correction);
 }
 
 Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh) {

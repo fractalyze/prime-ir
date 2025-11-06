@@ -53,6 +53,9 @@ public:
   // Assumes that both are in the range [0, n).
   Value getCanonicalDiff(Value lhs, Value rhs);
 
+  // Do full montgomery multiplication using ARM Neon instructions.
+  Value doArmNeonMul(Value lhs, Value rhs, bool canonicalize = true);
+
 private:
   // Creates a properly typed constant for the modulus based on the input type.
   // Handles splatting for vector types automatically.
