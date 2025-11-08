@@ -13,6 +13,16 @@ func.func @test_lower_constant() -> !mod_arith.int<3 : i5> {
   return %res: !mod_arith.int<3 : i5>
 }
 
+// CHECK-LABEL: @test_lower_constant_vec
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_lower_constant_vec() -> !Zpv {
+  // CHECK-NOT: mod_arith.constant
+  // CHECK: %[[CVAL:.*]] = arith.constant dense<[5, 10, 15, 20]> : [[T]]
+  // CHECK: return %[[CVAL]] : [[T]]
+  %res = mod_arith.constant dense<[5, 10, 15, 20]> : tensor<4xi32> :  !Zpv
+  return %res: !Zpv
+}
+
 // CHECK-LABEL: @test_lower_negate
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_negate(%lhs : !Zp) -> !Zp {

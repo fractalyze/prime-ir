@@ -398,38 +398,86 @@ OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt parsedInt;
   Type parsedType;
+  DenseElementsAttr valueAttr;
 
-  if (failed(parser.parseInteger(parsedInt)) ||
-      failed(parser.parseColonType(parsedType)))
-    return failure();
+  if (parser.parseOptionalInteger(parsedInt).has_value()) {
+    if (failed(parser.parseColonType(parsedType)))
+      return failure();
 
-  if (parsedInt.isNegative()) {
+    if (parsedInt.isNegative()) {
+      parser.emitError(parser.getCurrentLocation(),
+                       "negative value is not allowed");
+      return failure();
+    }
+
+    auto modArithType = dyn_cast<ModArithType>(parsedType);
+    if (!modArithType)
+      return failure();
+
+    APInt modulus = modArithType.getModulus().getValue();
+    if (modulus.isNegative() || modulus.isZero()) {
+      parser.emitError(parser.getCurrentLocation(), "modulus must be positive");
+      return failure();
+    }
+
+    unsigned outputBitWidth = modArithType.getStorageBitWidth();
+    if (parsedInt.getActiveBits() > outputBitWidth) {
+      parser.emitError(parser.getCurrentLocation(),
+                       "constant value is too large for the underlying type");
+      return failure();
+    }
+
+    // zero-extend or truncate to the correct bitwidth
+    parsedInt = parsedInt.zextOrTrunc(outputBitWidth).urem(modulus);
+    result.addAttribute(
+        "value", IntegerAttr::get(modArithType.getStorageType(), parsedInt));
+    result.addTypes(parsedType);
+    return success();
+  }
+
+  if (failed(parser.parseAttribute(valueAttr))) {
     parser.emitError(parser.getCurrentLocation(),
-                     "negative value is not allowed");
+                     "expected value to be a scalar or dense elements attr");
     return failure();
   }
 
-  auto modArithType = dyn_cast<ModArithType>(parsedType);
-  if (!modArithType)
-    return failure();
-
-  auto modulus = modArithType.getModulus().getValue();
-  if (modulus.isNegative() || modulus.isZero()) {
-    parser.emitError(parser.getCurrentLocation(), "modulus must be positive");
+  if (failed(parser.parseColonType(parsedType))) {
     return failure();
   }
 
-  auto outputBitWidth = modArithType.getStorageBitWidth();
-  if (parsedInt.getActiveBits() > outputBitWidth) {
+  auto shapedType = dyn_cast<ShapedType>(parsedType);
+  if (!shapedType) {
     parser.emitError(parser.getCurrentLocation(),
-                     "constant value is too large for the underlying type");
+                     "expected result type to be a shaped type");
     return failure();
   }
 
-  // zero-extend or truncate to the correct bitwidth
-  parsedInt = parsedInt.zextOrTrunc(outputBitWidth).urem(modulus);
-  result.addAttribute(
-      "value", IntegerAttr::get(modArithType.getStorageType(), parsedInt));
+  // check if the shape of the value attribute is the same as the result type
+  if (shapedType.getShape() != valueAttr.getType().getShape()) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "expected 'value' attribute to be a dense elements attr "
+                     "with the same shape as the result type");
+    return failure();
+  }
+
+  // check if the result type is mod arith like
+  auto modArithType = dyn_cast<ModArithType>(shapedType.getElementType());
+  if (!modArithType) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "expected result type to be a mod arith type");
+    return failure();
+  }
+
+  // check if the element type of the value attribute is the same as the mod
+  // arith storage type
+  if (modArithType.getStorageType() != valueAttr.getType().getElementType()) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "expected 'value' attribute to be a dense elements attr "
+                     "with the same element type as the mod arith storage");
+    return failure();
+  }
+
+  result.addAttribute("value", valueAttr);
   result.addTypes(parsedType);
   return success();
 }
@@ -443,25 +491,35 @@ void ConstantOp::print(OpAsmPrinter &p) {
 
 namespace {
 bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
-  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
-  APInt modulus = modArithType.getModulus().getValue();
-  if (modArithType.isMontgomery()) {
-    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-    auto intAttr = cast<IntegerAttr>(attr);
-    APInt montReduced =
-        mulMod(intAttr.getValue(), montAttr.getRInv().getValue(), modulus);
-    return montReduced == modulus - offset;
-  } else {
-    auto intAttr = cast<IntegerAttr>(attr);
-    return intAttr.getValue() == modulus - offset;
+  IntegerAttr intAttr = dyn_cast_if_present<IntegerAttr>(attr);
+  if (auto denseIntAttr = dyn_cast_if_present<SplatElementsAttr>(attr)) {
+    intAttr = denseIntAttr.getSplatValue<IntegerAttr>();
+  }
+  if (intAttr) {
+    auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
+    APInt modulus = modArithType.getModulus().getValue();
+    if (modArithType.isMontgomery()) {
+      MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
+      APInt montReduced =
+          mulMod(intAttr.getValue(), montAttr.getRInv().getValue(), modulus);
+      return montReduced == modulus - offset;
+    } else {
+      auto intAttr = cast<IntegerAttr>(attr);
+      return intAttr.getValue() == modulus - offset;
+    }
   }
   return false;
 }
 
 bool isEqualTo(Attribute attr, uint32_t offset) {
-  auto intAttr = cast<IntegerAttr>(attr);
-
-  return (intAttr.getValue() - offset).isZero();
+  IntegerAttr intAttr = dyn_cast_if_present<IntegerAttr>(attr);
+  if (auto denseIntAttr = dyn_cast_if_present<SplatElementsAttr>(attr)) {
+    intAttr = denseIntAttr.getSplatValue<IntegerAttr>();
+  }
+  if (intAttr) {
+    return (intAttr.getValue() - offset).isZero();
+  }
+  return false;
 }
 } // namespace
 
