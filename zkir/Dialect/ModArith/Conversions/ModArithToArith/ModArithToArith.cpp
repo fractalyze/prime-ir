@@ -9,6 +9,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -938,7 +939,8 @@ void ModArithToArith::runOnOperation() {
       ConvertAny<tensor::PadOp>,
       ConvertAny<tensor::ReshapeOp>,
       ConvertAny<tensor::YieldOp>,
-      ConvertAny<tensor_ext::BitReverseOp>
+      ConvertAny<tensor_ext::BitReverseOp>,
+      ConvertAny<vector::SplatOp>
       // clang-format on
       >(typeConverter, context);
 
@@ -988,7 +990,8 @@ void ModArithToArith::runOnOperation() {
       tensor::PadOp,
       tensor::ReshapeOp,
       tensor::YieldOp,
-      tensor_ext::BitReverseOp
+      tensor_ext::BitReverseOp,
+      vector::SplatOp
       // clang-format on
       >([&](auto op) { return typeConverter.isLegal(op); });
 
