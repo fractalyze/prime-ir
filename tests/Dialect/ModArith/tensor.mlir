@@ -92,6 +92,19 @@ func.func @test_tensor_insert_slice(%input : tensor<4x!Zp>, %update : tensor<2x!
   return %insert_slice : tensor<4x!Zp>
 }
 
+// CHECK-LABEL: @test_tensor_pad
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_tensor_pad(%input : tensor<4x!Zp>) -> tensor<6x!Zp> {
+  %c0 = mod_arith.constant 0 : !Zp
+  // CHECK: %[[PAD:.*]] = tensor.pad %[[INPUT]] low[1] high[1] {
+  %pad = tensor.pad %input low[1] high[1] {
+    ^bb0(%arg: index):
+      tensor.yield %c0 : !Zp
+  } : tensor<4x!Zp> to tensor<6x!Zp>
+  // CHECK: return %[[PAD]] : [[T]]
+  return %pad : tensor<6x!Zp>
+}
+
 // CHECK-LABEL: @test_tensor_reshape
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]], %[[SHAPE:.*]]: [[SHAPE_TYPE:.*]]) -> [[T:.*]] {
 func.func @test_tensor_reshape(%input : tensor<4x!Zp>, %shape: tensor<2xi32>) -> tensor<2x2x!Zp> {

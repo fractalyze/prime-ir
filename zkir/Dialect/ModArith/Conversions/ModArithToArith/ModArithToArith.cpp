@@ -929,7 +929,9 @@ void ModArithToArith::runOnOperation() {
       ConvertAny<tensor::FromElementsOp>,
       ConvertAny<tensor::InsertOp>,
       ConvertAny<tensor::InsertSliceOp>,
+      ConvertAny<tensor::PadOp>,
       ConvertAny<tensor::ReshapeOp>,
+      ConvertAny<tensor::YieldOp>,
       ConvertAny<tensor_ext::BitReverseOp>
       // clang-format on
       >(typeConverter, context);
@@ -977,7 +979,9 @@ void ModArithToArith::runOnOperation() {
       tensor::FromElementsOp,
       tensor::InsertOp,
       tensor::InsertSliceOp,
+      tensor::PadOp,
       tensor::ReshapeOp,
+      tensor::YieldOp,
       tensor_ext::BitReverseOp
       // clang-format on
       >([&](auto op) { return typeConverter.isLegal(op); });
