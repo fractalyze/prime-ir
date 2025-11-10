@@ -31,6 +31,7 @@
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
+#include "zkir/Utils/APIntUtils.h"
 #include "zkir/Utils/ConversionUtils.h"
 #include "zkir/Utils/ShapedTypeConverter.h"
 
@@ -449,6 +450,122 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ModArithType modType = getResultModArithType(op);
+    TypedAttr modAttr = modulusAttr(op);
+    APInt modulus = modType.getModulus().getValue();
+    MontgomeryAttr montAttr = modType.getMontgomeryAttr();
+
+    Value zero =
+        createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 0);
+    Value one =
+        createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 1);
+    Value four =
+        createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 4);
+    Value cmod = b.create<arith::ConstantOp>(modAttr);
+    if (auto constRhs = op.getRhs().getDefiningOp<ConstantOp>()) {
+      IntegerAttr rhsInt =
+          dyn_cast_if_present<IntegerAttr>(constRhs.getValue());
+      if (auto denseIntAttr =
+              dyn_cast_if_present<SplatElementsAttr>(constRhs.getValue())) {
+        rhsInt = denseIntAttr.getSplatValue<IntegerAttr>();
+      }
+      if (rhsInt) {
+        IntegerAttr rhsStd, negRhsStd;
+        if (modType.isMontgomery()) {
+          IntegerAttr rInv = montAttr.getRInv();
+          rhsStd = IntegerAttr::get(
+              rhsInt.getType(),
+              mulMod(rhsInt.getValue(), rInv.getValue(), modulus));
+          negRhsStd =
+              IntegerAttr::get(rhsInt.getType(), modulus - rhsStd.getValue());
+        } else {
+          rhsStd = rhsInt;
+          negRhsStd =
+              IntegerAttr::get(rhsInt.getType(), modulus - rhsInt.getValue());
+        }
+
+        // modulus = k * 2^twoAdicity + 1
+        size_t twoAdicity = (modulus - 1).countTrailingZeros();
+        APInt k = modulus.lshr(twoAdicity);
+        Value kConst =
+            createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), k);
+
+        for (size_t i = 0; i < montAttr.getInvTwoPowers().size(); i++) {
+          if (rhsStd == montAttr.getInvTwoPowers()[i] ||
+              negRhsStd == montAttr.getInvTwoPowers()[i]) {
+            bool isNegated = negRhsStd == montAttr.getInvTwoPowers()[i];
+            if (i == 0) {
+              // Efficient halve: if odd, add modulus, then shift right by 1
+              Value lhs = adaptor.getLhs();
+              auto lhsIsOdd = b.create<arith::AndIOp>(lhs, one);
+              auto needsAdd = b.create<arith::CmpIOp>(arith::CmpIPredicate::ne,
+                                                      lhsIsOdd, zero);
+              auto halvedInput = b.create<arith::SelectOp>(
+                  needsAdd, b.create<arith::AddIOp>(lhs, cmod), lhs);
+              auto halved = b.create<arith::ShRUIOp>(halvedInput, one);
+              auto negatedHalved = b.create<arith::SubIOp>(cmod, halved);
+              rewriter.replaceOp(op, isNegated ? negatedHalved : halved);
+              return success();
+            } else {
+              size_t invDegree = i + 1;
+              Value invDegreeConst = createScalarOrSplatConstant(
+                  b, b.getLoc(), modAttr.getType(), invDegree);
+              size_t degreeDelta = twoAdicity - invDegree;
+              Value degreeDeltaConst = createScalarOrSplatConstant(
+                  b, b.getLoc(), modAttr.getType(), degreeDelta);
+
+              // Create mask for low invDegree bits
+              APInt maskVal =
+                  APInt::getLowBitsSet(modulus.getBitWidth(), invDegree);
+              Value mask = createScalarOrSplatConstant(
+                  b, b.getLoc(), modAttr.getType(), maskVal);
+
+              // hi = lhs >> invDegree
+              auto hi =
+                  b.create<arith::ShRUIOp>(adaptor.getLhs(), invDegreeConst);
+
+              // lo = last invDegree bits of lhs
+              auto lo = b.create<arith::AndIOp>(adaptor.getLhs(), mask);
+
+              // loTimesK = lo * k
+              Value loTimesK;
+              // TODO(batzor): this is temporary optimization for BabyBear. We
+              // need to replace this with a more general solution.
+              if (k == 15) {
+                auto loTimes16 = b.create<arith::ShLIOp>(lo, four);
+                loTimesK = b.create<arith::SubIOp>(loTimes16, lo);
+              } else {
+                loTimesK = b.create<arith::MulIOp>(lo, kConst);
+              }
+
+              // loShifted = loTimesK << degreeDelta
+              auto loShifted =
+                  b.create<arith::ShLIOp>(loTimesK, degreeDeltaConst);
+
+              // loIsNotZero = (lo != 0)
+              auto loIsNotZero =
+                  b.create<arith::CmpIOp>(arith::CmpIPredicate::ne, lo, zero);
+
+              // loCorrected = loIsNotZero ? loShifted : cmod
+              auto loCorrected =
+                  b.create<arith::SelectOp>(loIsNotZero, loShifted, cmod);
+
+              // result = loCorrected - hi
+              auto result = b.create<arith::SubIOp>(loCorrected, hi);
+              auto negatedResult = b.create<arith::SubIOp>(cmod, result);
+
+              // NOTE(batzor): This inverted negation is as intended.
+              // WARN(batzor): The output can be modulus when LHS is 0. This is
+              // generally safe since all other operations are safe under this
+              // range but zero check would fail. This can be fixed after we
+              // introduce proper range analysis.
+              rewriter.replaceOp(op, isNegated ? result : negatedResult);
+              return success();
+            }
+          }
+        }
+      }
+    }
+
     if (modType.isMontgomery()) {
       auto result = b.create<MontMulOp>(op.getType(), op.getLhs(), op.getRhs());
       rewriter.replaceOp(op, result);

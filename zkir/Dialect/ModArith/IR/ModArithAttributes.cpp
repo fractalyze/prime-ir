@@ -14,6 +14,9 @@ IntegerAttr MontgomeryAttr::getR() const { return getImpl()->r; }
 IntegerAttr MontgomeryAttr::getRInv() const { return getImpl()->rInv; }
 IntegerAttr MontgomeryAttr::getBInv() const { return getImpl()->bInv; }
 IntegerAttr MontgomeryAttr::getRSquared() const { return getImpl()->rSquared; }
+const SmallVector<IntegerAttr> &MontgomeryAttr::getInvTwoPowers() const {
+  return getImpl()->invTwoPowers;
+}
 
 namespace detail {
 
@@ -80,11 +83,25 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   IntegerAttr nInvAttr = IntegerAttr::get(
       IntegerType::get(modAttr.getContext(), w), invN.trunc(w));
 
+  // Construct the `invTwoPowersAttr` with the bitwidth `w`
+  SmallVector<IntegerAttr> invTwoPowers;
+  invTwoPowers.reserve(modulus.getBitWidth());
+  invTwoPowers.push_back(IntegerAttr::get(
+      modAttr.getType(),
+      multiplicativeInverse(APInt::getOneBitSet(modulus.getBitWidth(), 1),
+                            modulus)));
+  size_t twoAdicity = (modulus - 1).countTrailingZeros();
+  for (size_t i = 1; i < twoAdicity; i++) {
+    invTwoPowers.push_back(IntegerAttr::get(
+        modAttr.getType(), mulMod(invTwoPowers[i - 1].getValue(),
+                                  invTwoPowers[0].getValue(), modulus)));
+  }
+
   return new (allocator.allocate<MontgomeryAttrStorage>())
       MontgomeryAttrStorage(std::move(modAttr), std::move(nPrimeAttr),
                             std::move(nInvAttr), std::move(rAttr),
                             std::move(rInvAttr), std::move(bInvAttr),
-                            std::move(rSquaredAttr));
+                            std::move(rSquaredAttr), std::move(invTwoPowers));
 }
 
 } // namespace detail
