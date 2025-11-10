@@ -89,7 +89,7 @@ mlir_translate = rule(
     },
 )
 
-def zkir_mlir_cc_import(name, mlir_src, zkir_opt_flags = [], tags = [], **kwargs):
+def zkir_mlir_cc_import(name, mlir_src, zkir_opt_flags = [], llc_flags = [], tags = [], **kwargs):
     """Compiles an MLIR file to an object file and exposes it via cc_import.
 
     This rule runs the following pipeline:
@@ -99,6 +99,7 @@ def zkir_mlir_cc_import(name, mlir_src, zkir_opt_flags = [], tags = [], **kwargs
       name: The name of the cc_import target.
       mlir_src: The source .mlir file to compile.
       zkir_opt_flags: Optional list of flags to pass to zkir-opt.
+      llc_flags: Optional list of flags to pass to llc.
       tags: Optional Bazel tags to apply to each build step.
       **kwargs: Additional arguments to pass to each build step.
     """
@@ -133,7 +134,7 @@ def zkir_mlir_cc_import(name, mlir_src, zkir_opt_flags = [], tags = [], **kwargs
     llc(
         name = obj_name,
         src = generated_llvmir_name,
-        pass_flags = ["-relocation-model=pic", "-filetype=obj"],
+        pass_flags = ["-relocation-model=pic", "-filetype=obj"] + llc_flags,
         tags = tags,
         generated_filename = generated_obj_name,
         **kwargs
@@ -146,7 +147,7 @@ def zkir_mlir_cc_import(name, mlir_src, zkir_opt_flags = [], tags = [], **kwargs
         **kwargs
     )
 
-def zkir_benchmark(name, srcs, deps, data = [], tags = [], **kwargs):
+def zkir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags = [], **kwargs):
     """A rule for running a benchmark test."""
 
     cc_test(
@@ -158,6 +159,8 @@ def zkir_benchmark(name, srcs, deps, data = [], tags = [], **kwargs):
             "@llvm-project//mlir:mlir_runner_utils",
         ],
         tags = tags,
+        copts = copts,
+        linkopts = linkopts,
         data = data,
         **kwargs
     )

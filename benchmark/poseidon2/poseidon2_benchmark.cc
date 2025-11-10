@@ -1,0 +1,68 @@
+#include "benchmark/benchmark.h"
+#include "mlir/ExecutionEngine/MemRefUtils.h"
+#include "mlir/Support/LLVM.h"
+
+namespace mlir::zkir::benchmark {
+namespace {
+
+using Vector16xI32 = int32_t __attribute__((vector_size(64)));
+
+extern "C" void
+_mlir_ciface_permute_10000(StridedMemRefType<uint32_t, 1> *input);
+extern "C" void
+_mlir_ciface_packed_permute_10000(StridedMemRefType<Vector16xI32, 1> *input);
+
+// Set each element to 0.
+void fillWithZero(uint32_t &elem, [[maybe_unused]] ArrayRef<int64_t> coords) {
+  elem = 0;
+}
+
+void fillVectorWithZero(Vector16xI32 &data,
+                        [[maybe_unused]] ArrayRef<int64_t> coords) {
+  data = Vector16xI32{0};
+}
+
+template <bool kIsPacked>
+void BM_permute_10000_benchmark(::benchmark::State &state) {
+  if constexpr (kIsPacked) {
+    OwningMemRef<Vector16xI32, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
+                                        /*init=*/fillVectorWithZero);
+    for (auto _ : state) {
+      _mlir_ciface_packed_permute_10000(&*input);
+    }
+  } else {
+    OwningMemRef<uint32_t, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
+                                    /*init=*/fillWithZero);
+    for (auto _ : state) {
+      _mlir_ciface_permute_10000(&*input);
+    }
+  }
+}
+
+BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/false)
+    ->Unit(::benchmark::kMillisecond)
+    ->Name("permute_10000");
+BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/true)
+    ->Unit(::benchmark::kMillisecond)
+    ->Name("permute_packed_10000");
+
+} // namespace
+} // namespace mlir::zkir::benchmark
+
+// clang-format off
+// NOLINTBEGIN(whitespace/line_length)
+//
+// 2025-10-20T08:16:27+00:00
+// Run on AMD Ryzen 9 9950X3D (32 X 5479.99 MHz CPU s)
+// CPU Caches:
+//   L1 Data 48 KiB (x16)
+//   L1 Instruction 32 KiB (x16)
+//   L2 Unified 1024 KiB (x16)
+//   L3 Unified 98304 KiB (x2)
+// Load Average: 8.40, 11.18, 10.07
+// ---------------------------------------------------------------
+// Benchmark                     Time             CPU   Iterations
+// ---------------------------------------------------------------
+// permute_10000              14.8 ms         14.8 ms           48
+// permute_packed_10000       13.2 ms         13.2 ms           53
+// NOLINTEND()

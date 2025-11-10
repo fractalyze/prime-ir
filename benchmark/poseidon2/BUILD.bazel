@@ -1,0 +1,32 @@
+load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import")
+
+zkir_mlir_cc_import(
+    name = "poseidon2_ciface",
+    mlir_src = "poseidon2.mlir",
+    zkir_opt_flags = [
+        "-field-to-llvm",
+    ],
+)
+
+zkir_mlir_cc_import(
+    name = "poseidon2_packed_ciface",
+    llc_flags = [
+        "-mcpu=native",
+    ],
+    mlir_src = "poseidon2_packed.mlir",
+    zkir_opt_flags = [
+        "-field-to-llvm",
+        "-convert-vector-to-llvm",
+    ],
+)
+
+zkir_benchmark(
+    name = "poseidon2_benchmark",
+    srcs = ["poseidon2_benchmark.cc"],
+    deps = [
+        ":poseidon2_ciface",
+        ":poseidon2_packed_ciface",
+        "@llvm-project//mlir:ExecutionEngine",
+        "@llvm-project//mlir:Support",
+    ],
+)
