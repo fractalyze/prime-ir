@@ -102,7 +102,7 @@ performance and correctness across a wide range of devices.
 1. Clone the ZKIR repo
 
    ```sh
-   git clone https://github.com/zk-rabbit/zkir
+   git clone https://github.com/fractalyze/zkir
    ```
 
 1. Build ZKIR
@@ -153,4 +153,4 @@ for more details.
 
 We use GitHub Issues and Pull Requests to coordinate development, and
 longer-form discussions take place in the
-[zkir-discuss](https://github.com/zk-rabbit/zkir/discussions).
+[zkir-discuss](https://github.com/fractalyze/zkir/discussions).

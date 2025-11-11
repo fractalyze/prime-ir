@@ -170,6 +170,6 @@ ______________________________________________________________________
 
 [.clang-format]: /.clang-format
 [angular commit convention]: https://github.com/angular/angular/blob/main/contributing-docs/commit-message-guidelines.md
-[commit message guideline]: https://github.com/zk-rabbit/.github/blob/main/COMMIT_MESSAGE_GUIDELINE.md
+[commit message guideline]: https://github.com/fractalyze/.github/blob/main/COMMIT_MESSAGE_GUIDELINE.md
 [llvm coding standard]: https://llvm.org/docs/CodingStandards.html
-[pull request guideline]: https://github.com/zk-rabbit/.github/blob/main/PULL_REQUEST_GUIDELINE.md
+[pull request guideline]: https://github.com/fractalyze/.github/blob/main/PULL_REQUEST_GUIDELINE.md
