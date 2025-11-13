@@ -1,77 +1,83 @@
 # ZKIR: Zero-Knowledge Intermediate Representation
 
-ZKIR is a set of high-level operations (HLOs) designed for zero-knowledge (ZK)
-provers, inspired by [StableHLO](https://github.com/openxla/stablehlo). It
-leverages
-[MLIR (Multi-Level Intermediate Representation)](https://mlir.llvm.org/) to
-enable domain-specific optimizations and support for heterogeneous proving
-backends.
+**ZKIR** is an Intermediate Representation (IR) designed specifically for
+representing Zero-Knowledge (ZK) proving schemes, using
+[MLIR (Multi-Level Intermediate Representation)](https://mlir.llvm.org/). The
+core goal of ZKIR is to enable automatic domain-specific optimizations and
+efficiently support diverse, heterogeneous proving backends without any
+additional fine-tuning for targets.
 
 ## Motivation
 
-Zero-knowledge (ZK) proof systems often require domain-specific arithmetic
-operations—such as field multiplication and modular inversion that are difficult
-to express and optimize at low-level IRs like LLVM IR.
+ZK proving systems often require domain-specific arithmetic operations, such as
+field multiplication or modular inversion. These operations are difficult to
+express and optimize at the level of low-level IRs like LLVM IR.
 
-### Why not use LLVM IR?
+In contrast, a high-level, ZK-specific IR preserves algebraic structure and
+developer intent, providing the following advantages:
 
-LLVM IR is designed primarily for general-purpose CPU targets, which introduces
-several limitations:
-
-- **Lack of domain semantics**: Field operations like `-x` are reduced to
-  generic integer operations. If the modulus is 11, the code will be as follows:
-
-  ```mlir
-   %0 = llvm.mlir.constant(11 : i32) : i32
-   %1 = llvm.sub %0, %arg0 : i32
-  ```
-
-  This makes algebraic simplification and reasoning nearly impossible.
-
-- **Loss of intent**: Without explicit semantic representation, higher-level
-  optimizations or rewrites (e.g., canonicalizing double negations) become
-  infeasible.
-
-### Benefits of MLIR
-
-In contrast, a high-level ZK-specific IR can preserve algebraic structure and
-intent, enabling
-
-- **Domain-specific optimization**. For example, simplifying `-(-x) = x` is
-  trivial when the semantics are preserved. These kinds of rewrites are easy to
-  express and safely apply at the IR level when working with well-defined field
-  operations.
+- **Domain-specific optimization**: MLIR allows us to design a domain-specific
+  language (DSL) that preserves mathematical semantics. This enables
+  simplifications such as $-(-x) = x$.
 
 - **Hardware abstraction**: MLIR is designed with extensibility in mind and
   provides dedicated dialects for various hardware targets—including
   [NVGPU](https://mlir.llvm.org/docs/Dialects/NVGPU/),
   [SPIR-V](https://mlir.llvm.org/docs/Dialects/SPIR-V/), and
-  [AMDGPU](https://mlir.llvm.org/docs/Dialects/AMDGPU/)—enabling a clean
-  separation between algorithm logic and backend-specific code generation.
+  [AMDGPU](https://mlir.llvm.org/docs/Dialects/AMDGPU/). This allows for a clean
+  separation between algorithmic logic and backend-specific code generation.
 
-  ZKIR builds on this by allowing high-level computations and ZK-specific
-  operations to be expressed independently of their execution environment. This
-  enables:
+  ZKIR builds on this advantage, allowing high-level computations and
+  ZK-specific operations to be expressed independently of their execution
+  environment. This enables:
 
-  - Retargeting the same IR to multiple hardware backends (CPU, GPU, FPGA)
+  - **Retargeting the same IR** to multiple hardware backends (CPU, GPU, FPGA)
     without rewriting the logic.
 
-  - Fine-grained control over lowering strategies—e.g., using different
+  - **Fine-grained control over lowering strategies**, such as using different
     pipelining and tiling strategies depending on the target hardware.
 
-  - Future integration with ZK-dedicated accelerators or distributed proving
-    platforms.
+  - **Future-proof integration** with ZK-dedicated accelerators or distributed
+    proving platforms.
 
 Instead of forcing ZK computation through a CPU-centric path, ZKIR makes it
-possible to define hardware-aware but backend-agnostic IR that retains both
+possible to define **hardware-aware but backend-agnostic IR** that retains both
 performance and correctness across a wide range of devices.
 
-## Vision
+## Status
 
-Currently, ZKIR defines only a subset of operations sufficient to represent part
-of a proving scheme. Our long-term goal is to extend ZKIR to express arbitrary
-proving schemes, enabling compiler-based optimization and hardware-accelerated
-proving pipelines.
+- ✅: Complete
+- 🟡: In Progress
+- ⚪: Not Yet Started
+
+### [ModArith](/zkir/Dialect/ModArith/IR/ModArithOps.td)
+
+- ✅ Fast Montgomery Multiplication
+- ✅ Bernstein-Yang Batch Inverse
+- 🟡 Specialized SIMD
+  - 🟡 AVX512
+  - 🟡 ARM Neon
+  - ⚪ AVX2
+- ⚪ DataFlow Analysis
+  - Range Analysis
+  - Montgomery Conversion Analysis
+
+### [Field](/zkir/Dialect/Field/IR/FieldOps.td)
+
+- ✅ Prime Field Operations(Add, Double, Sub, Negate, Mul, Inv, Pow, ...)
+- ⚪ Binary Field Operations
+- 🟡 Extension Field Operations
+  - ✅ Quadratic Extension Field Operations
+
+### [Elliptic Curve](/zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.td)
+
+- ✅ Group Operations(Add, Double, Sub, Negate, ScalarMul, ...)
+- ✅ MSM for CPU
+- ⚪ MSM for GPU
+
+### [Poly](/zkir/Dialect/Poly/IR/PolyOps.td)
+
+- ✅ NTT / INTT
 
 ## Prerequisite
 
@@ -96,10 +102,10 @@ proving pipelines.
 1. Clone the ZKIR repo
 
    ```sh
-   git clone https://github.com/zk-rabbit/zkir
+   git clone https://github.com/fractalyze/zkir
    ```
 
-1. Build the ZKIR
+1. Build ZKIR
 
    ```sh
    bazel build //...
@@ -141,8 +147,10 @@ proving pipelines.
 ## Community
 
 Building a substantial ZK compiler requires collaboration across the broader ZK
-ecosystem — and we’d love your help in shaping ZKIR.
+ecosystem — and we’d love your help in shaping ZKIR. See
+[CONTRIBUTING.md](https://github.com/fractalyze/.github/blob/main/CONTRIBUTING.md)
+for more details.
 
 We use GitHub Issues and Pull Requests to coordinate development, and
 longer-form discussions take place in the
-[zkir-discuss](https://github.com/zk-rabbit/zkir/discussions).
+[zkir-discuss](https://github.com/fractalyze/zkir/discussions).

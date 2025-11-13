@@ -43,7 +43,7 @@ jobs:
       - name: Install cpplint
         run: pip install cpplint
 
-      # FIXME(ashjeong): clang-tidy currently fails on CI. See https://github.com/zk-rabbit/zkir/actions/runs/16904324348/job/47890440254 for more details.
+      # FIXME(ashjeong): clang-tidy currently fails on CI. See https://github.com/fractalyze/zkir/actions/runs/16904324348/job/47890440254 for more details.
       # - name: Refresh compile commands
       #   run: |
       #     bazel run --remote_cache=grpc://127.0.0.1:9092 @hedron_compile_commands//:refresh_all
