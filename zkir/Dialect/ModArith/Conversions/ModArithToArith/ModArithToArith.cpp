@@ -385,10 +385,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw |
-                                             arith::IntegerOverflowFlags::nsw);
-    auto noOverflow =
-        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
+    auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+        b.getContext(),
+        arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
     auto add =
         b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs(), noOverflow);
     MontReducer montReducer(b, getResultModArithType(op));
@@ -609,10 +608,9 @@ struct ConvertMac : public OpConversionPattern<MacOp> {
       rewriter.replaceOp(op, reduced);
       return success();
     } else {
-      arith::IntegerOverflowFlags overflowFlag(
+      auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+          b.getContext(),
           arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
-      auto noOverflow =
-          arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
 
       auto cmodExt =
           b.create<arith::ConstantOp>(modulusAttr(op, /*extended=*/true));
@@ -678,10 +676,9 @@ struct MulExtendedResult {
 
 template <typename Op>
 MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
-  arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw |
-                                           arith::IntegerOverflowFlags::nsw);
-  auto noOverflow =
-      arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
+  auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+      b.getContext(),
+      arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
 
   ModArithType modType = getResultModArithType(op);
   IntegerType intType = modType.getStorageType();
