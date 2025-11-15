@@ -5,6 +5,7 @@
 // Headers needed for ModArithTypes.h.inc
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 // IWYU pragma: end_keep
 
