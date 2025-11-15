@@ -57,20 +57,20 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [MemRefElementTypeI
     }]>,
   ];
   let extraClassDeclaration = [{
-    bool isMontgomery() {
+    bool isMontgomery() const {
       return getIsMontgomery();
     }
-    MontgomeryAttr getMontgomeryAttr() {
+    MontgomeryAttr getMontgomeryAttr() const {
       return MontgomeryAttr::get(getContext(), getModulus());
     }
-    BYAttr getBYAttr() {
+    BYAttr getBYAttr() const {
       return BYAttr::get(getContext(), getModulus());
     }
-    IntegerType getStorageType() {
+    IntegerType getStorageType() const {
       // TODO(batzor): decouple the storage type from the modulus type
       return cast<IntegerType>(getModulus().getType());
     }
-    unsigned getStorageBitWidth() {
+    unsigned getStorageBitWidth() const {
       return getStorageType().getWidth();
     }
   }];

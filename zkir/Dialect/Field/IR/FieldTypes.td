@@ -38,14 +38,14 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInte
     }]>,
   ];
   let extraClassDeclaration = [{
-    bool isMontgomery() {
+    bool isMontgomery() const {
       return getIsMontgomery();
     }
-    IntegerType getStorageType() {
+    IntegerType getStorageType() const {
       // TODO(batzor): decouple the storage type from the modulus type
       return cast<IntegerType>(getModulus().getType());
     }
-    unsigned getStorageBitWidth() {
+    unsigned getStorageBitWidth() const {
       return getStorageType().getWidth();
     }
   }];
@@ -75,7 +75,7 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
   let assemblyFormat = "`<` $baseField `,` $beta `>`";
   let extraClassDeclaration = [{
     // Check if the field is in Montgomery form.
-    bool isMontgomery() {
+    bool isMontgomery() const {
       return getBaseField().getIsMontgomery();
     }
   }];
