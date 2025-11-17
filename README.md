@@ -1,5 +1,7 @@
 # ZKIR: Zero-Knowledge Intermediate Representation
 
+[![CI](https://github.com/fractalyze/zkir/actions/workflows/ci.yml/badge.svg)](https://github.com/fractalyze/zkir/actions/workflows/ci.yml)
+
 **ZKIR** is an Intermediate Representation (IR) designed specifically for
 representing Zero-Knowledge (ZK) proving schemes, using
 [MLIR (Multi-Level Intermediate Representation)](https://mlir.llvm.org/). The
