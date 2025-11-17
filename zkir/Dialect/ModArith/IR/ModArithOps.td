@@ -36,7 +36,6 @@ class ModArith_BinaryOp<string mnemonic, list<Trait> traits = []> :
   Arguments<(ins ModArithLike:$lhs, ModArithLike:$rhs)>,
   Results<(outs ModArithLike:$output)> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
-  let hasVerifier = 1;
 }
 
 def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [ConstantLike, Pure]> {
@@ -185,7 +184,6 @@ def ModArith_MacOp : ModArith_ArithOp<"mac"> {
   }];
   let arguments = (ins ModArithLike:$lhs, ModArithLike:$rhs, ModArithLike:$acc);
   let results = (outs ModArithLike:$output);
-  let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
@@ -215,7 +213,6 @@ def ModArith_NegateOp : ModArith_UnaryOp<"negate", [Involution]> {
   }];
   let arguments = (ins ModArithLike:$input);
   let results = (outs ModArithLike:$output);
-  let hasVerifier = 1;
   let hasFolder = 1;
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
@@ -230,7 +227,6 @@ def ModArith_SquareOp : ModArith_UnaryOp<"square"> {
     %c0 = mod_arith.square %0 : !mod_arith.int<7:i4>
     ```
   }];
-  let hasVerifier = 1;
   let hasFolder = 1;
 }
 
@@ -244,7 +240,6 @@ def ModArith_MontSquareOp : ModArith_UnaryOp<"mont_square"> {
     %m0 = mod_arith.mont_square %a : mod_arith.int<65537 : i256>
     ```
   }];
-  let hasVerifier = 1;
   let hasFolder = 1;
 }
 
@@ -275,7 +270,6 @@ def ModArith_DoubleOp : ModArith_UnaryOp<"double"> {
     %c0 = mod_arith.double %0 : !mod_arith.int<7:i4>
     ```
   }];
-  let hasVerifier = 1;
   let hasFolder = 1;
 }
 

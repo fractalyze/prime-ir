@@ -29,6 +29,10 @@ public:
   // Gets the canonical form from an input value in [0, 2n).
   Value getCanonicalFromExtended(Value input);
 
+  // Gets the canonical form from an input value in [0, 2n) and an overflow
+  // flag.
+  Value getCanonicalFromExtended(Value input, Value overflow);
+
   // Gets the canonical difference of two values in modular arithmetic.
   // Computes (lhs - rhs) mod n, returning a value in [0, n).
   // Assumes that both are in the range [0, n).

@@ -79,11 +79,11 @@ func.func @test_lower_inverse_tensor(%input : !Zpv) -> !Zpv {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_add(%lhs : !Zp, %rhs : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.add
-  // CHECK: %[[ADD:.*]] = arith.addi %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[ADD:.*]] = arith.addi %[[LHS]], %[[RHS]] overflow<nsw, nuw> : [[T]]
   // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
-  // CHECK: %[[IFGE:.*]] = arith.cmpi ult, %[[ADD]], %[[CMOD]] : [[T]]
+  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[ADD]], %[[CMOD]] : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.select %[[IFGE]], %[[ADD]], %[[SUB]] : [[T]]
+  // CHECK: %[[REM:.*]] = arith.select %[[IFLT]], %[[ADD]], %[[SUB]] : [[T]]
   // CHECK: return %[[REM]] : [[T]]
   %res = mod_arith.add %lhs, %rhs : !Zp
   return %res : !Zp
@@ -93,11 +93,11 @@ func.func @test_lower_add(%lhs : !Zp, %rhs : !Zp) -> !Zp {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_add_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   // CHECK-NOT: mod_arith.add
-  // CHECK: %[[ADD:.*]] = arith.addi %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[ADD:.*]] = arith.addi %[[LHS]], %[[RHS]] overflow<nsw, nuw> : [[T]]
   // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[T]]
-  // CHECK: %[[IFGE:.*]] = arith.cmpi ult, %[[ADD]], %[[CMOD]] : [[T]]
+  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[ADD]], %[[CMOD]] : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.select %[[IFGE]], %[[ADD]], %[[SUB]] : tensor<4xi1>, [[T]]
+  // CHECK: %[[REM:.*]] = arith.select %[[IFLT]], %[[ADD]], %[[SUB]] : tensor<4xi1>, [[T]]
   // CHECK: return %[[REM]] : [[T]]
   %res = mod_arith.add %lhs, %rhs : !Zpv
   return %res : !Zpv
@@ -108,11 +108,11 @@ func.func @test_lower_add_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
 func.func @test_lower_double(%input : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.double
   // CHECK: %[[ONE:.*]] = arith.constant 1 : [[T]]
-  // CHECK: %[[SHL:.*]] = arith.shli %[[INPUT]], %[[ONE]] : [[T]]
+  // CHECK: %[[SHL:.*]] = arith.shli %[[INPUT]], %[[ONE]] overflow<nsw, nuw> : [[T]]
   // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
-  // CHECK: %[[IFGE:.*]] = arith.cmpi ult, %[[SHL]], %[[CMOD]] : [[T]]
+  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[SHL]], %[[CMOD]] : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[SHL]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.select %[[IFGE]], %[[SHL]], %[[SUB]] : [[T]]
+  // CHECK: %[[REM:.*]] = arith.select %[[IFLT]], %[[SHL]], %[[SUB]] : [[T]]
   // CHECK: return %[[REM]] : [[T]]
   %res = mod_arith.double %input : !Zp
   return %res : !Zp
@@ -124,9 +124,9 @@ func.func @test_lower_sub(%lhs : !Zp, %rhs : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.sub
   // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: %[[IFGE:.*]] = arith.cmpi ult, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[LHS]], %[[RHS]] : [[T]]
   // CHECK: %[[ADD:.*]] = arith.addi %[[SUB]], %[[CMOD]] : [[T]]
-  // CHECK: %[[SELECT:.*]] = arith.select %[[IFGE]], %[[ADD]], %[[SUB]] : [[T]]
+  // CHECK: %[[SELECT:.*]] = arith.select %[[IFLT]], %[[ADD]], %[[SUB]] : [[T]]
   // CHECK: return %[[SELECT]] : [[T]]
   %res = mod_arith.sub %lhs, %rhs : !Zp
   return %res : !Zp
@@ -138,9 +138,9 @@ func.func @test_lower_sub_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   // CHECK-NOT: mod_arith.sub
   // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: %[[IFGE:.*]] = arith.cmpi ult, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[LHS]], %[[RHS]] : [[T]]
   // CHECK: %[[ADD:.*]] = arith.addi %[[SUB]], %[[CMOD]] : [[T]]
-  // CHECK: %[[SELECT:.*]] = arith.select %[[IFGE]], %[[ADD]], %[[SUB]] : tensor<4xi1>, [[T]]
+  // CHECK: %[[SELECT:.*]] = arith.select %[[IFLT]], %[[ADD]], %[[SUB]] : tensor<4xi1>, [[T]]
   // CHECK: return %[[SELECT]] : [[T]]
   %res = mod_arith.sub %lhs, %rhs : !Zpv
   return %res : !Zpv
@@ -192,7 +192,7 @@ func.func @test_lower_mac(%lhs : !Zp, %rhs : !Zp, %acc : !Zp) -> !Zp {
   // CHECK: %[[EXT1:.*]] = arith.extui %[[RHS]] : [[T]] to [[TEXT]]
   // CHECK: %[[EXT2:.*]] = arith.extui %[[ACC]] : [[T]] to [[TEXT]]
   // CHECK: %[[MUL:.*]] = arith.muli %[[EXT0]], %[[EXT1]] : [[TEXT]]
-  // CHECK: %[[ADD:.*]] = arith.addi %[[MUL]], %[[EXT2]] : [[TEXT]]
+  // CHECK: %[[ADD:.*]] = arith.addi %[[MUL]], %[[EXT2]] overflow<nsw, nuw> : [[TEXT]]
   // CHECK: %[[REM:.*]] = arith.remui %[[ADD]], %[[CMOD]] : [[TEXT]]
   // CHECK: %[[TRUNC:.*]] = arith.trunci %[[REM]] : [[TEXT]] to [[T]]
   // CHECK: return %[[TRUNC]] : [[T]]
@@ -209,7 +209,7 @@ func.func @test_lower_mac_vec(%lhs : !Zpv, %rhs : !Zpv, %acc : !Zpv) -> !Zpv {
   // CHECK: %[[EXT1:.*]] = arith.extui %[[RHS]] : [[T]] to [[TEXT]]
   // CHECK: %[[EXT2:.*]] = arith.extui %[[ACC]] : [[T]] to [[TEXT]]
   // CHECK: %[[MUL:.*]] = arith.muli %[[EXT0]], %[[EXT1]] : [[TEXT]]
-  // CHECK: %[[ADD:.*]] = arith.addi %[[MUL]], %[[EXT2]] : [[TEXT]]
+  // CHECK: %[[ADD:.*]] = arith.addi %[[MUL]], %[[EXT2]] overflow<nsw, nuw> : [[TEXT]]
   // CHECK: %[[REM:.*]] = arith.remui %[[ADD]], %[[CMOD]] : [[TEXT]]
   // CHECK: %[[TRUNC:.*]] = arith.trunci %[[REM]] : [[TEXT]] to [[T]]
   // CHECK: return %[[TRUNC]] : [[T]]

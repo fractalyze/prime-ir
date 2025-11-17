@@ -29,12 +29,26 @@ Value MontReducer::getCanonicalFromExtended(Value input) {
     auto min = b_.create<arith::MinUIOp>(sub, input);
     return min.getResult();
   } else {
-    auto ifge =
+    auto iflt =
         b_.create<arith::CmpIOp>(arith::CmpIPredicate::ult, input, cmod);
     auto sub = b_.create<arith::SubIOp>(input, cmod);
-    auto select = b_.create<arith::SelectOp>(ifge, input, sub);
+    auto select = b_.create<arith::SelectOp>(iflt, input, sub);
     return select.getResult();
   }
+}
+
+Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
+  auto cmod = createModulusConst(input.getType());
+  // NOTE(chokobole): 'ult' is generally preferred over 'uge' for
+  // better performance. However, using 'ult' would require inverting the
+  // overflow check logic. Currently, 'uge' is used for clearer logic, but
+  // this choice should be re-evaluated after benchmarking. See
+  // https://github.com/fractalyze/zkir/pull/86/commits/10d3807
+  auto ifge = b_.create<arith::CmpIOp>(arith::CmpIPredicate::uge, input, cmod);
+  auto or_ = b_.create<arith::OrIOp>(ifge, overflow);
+  auto sub = b_.create<arith::SubIOp>(input, cmod);
+  auto select = b_.create<arith::SelectOp>(or_, sub, input);
+  return select.getResult();
 }
 
 Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
@@ -142,10 +156,9 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh) {
   auto bInvConst = b_.create<arith::ConstantOp>(bInvAttr);
   auto oneConst = b_.create<arith::ConstantOp>(oneAttr);
 
-  arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
-                                           arith::IntegerOverflowFlags::nsw);
-  auto noOverflow =
-      arith::IntegerOverflowFlagsAttr::get(b_.getContext(), overflowFlag);
+  auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+      b_.getContext(),
+      arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
 
   // Because the number of limbs (`numLimbs`) is known at compile time, we can
   // unroll the loop as a straight-line chain of operations.

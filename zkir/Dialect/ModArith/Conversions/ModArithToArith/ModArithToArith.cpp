@@ -277,12 +277,9 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
         b, b.getLoc(), modAttr.getType(), rSquaredInt);
 
     // x * R = REDC(x * rSquared)
-    Value rSquared =
-        b.create<mod_arith::BitcastOp>(op.getType(), rSquaredConst);
-    Value bitcast =
-        b.create<mod_arith::BitcastOp>(op.getType(), adaptor.getInput());
-    auto product =
-        b.create<mod_arith::MontMulOp>(op.getType(), bitcast, rSquared);
+    Value rSquared = b.create<BitcastOp>(op.getType(), rSquaredConst);
+    Value bitcast = b.create<BitcastOp>(op.getType(), adaptor.getInput());
+    auto product = b.create<MontMulOp>(op.getType(), bitcast, rSquared);
     rewriter.replaceOp(op, product);
     return success();
   }
@@ -384,15 +381,27 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    ModArithType modArithType = getResultModArithType(op);
+    APInt modulus = modArithType.getModulus().getValue();
+    unsigned storageWidth = modArithType.getStorageBitWidth();
+    unsigned modWidth = modulus.getActiveBits();
 
-    arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
-                                             arith::IntegerOverflowFlags::nsw);
-    auto noOverflow =
-        arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
-    auto add =
-        b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs(), noOverflow);
-    MontReducer montReducer(b, getResultModArithType(op));
-    auto result = montReducer.getCanonicalFromExtended(add);
+    Value result;
+    if (modWidth == storageWidth) {
+      auto add =
+          b.create<arith::AddUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
+      MontReducer montReducer(b, getResultModArithType(op));
+      result =
+          montReducer.getCanonicalFromExtended(add.getSum(), add.getOverflow());
+    } else {
+      auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+          b.getContext(),
+          arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
+      auto add = b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs(),
+                                         noOverflow);
+      MontReducer montReducer(b, getResultModArithType(op));
+      result = montReducer.getCanonicalFromExtended(add);
+    }
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -409,12 +418,26 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    TypedAttr modAttr = modulusAttr(op);
-    Value one =
-        createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 1);
-    auto shifted = b.create<arith::ShLIOp>(adaptor.getInput(), one);
-    MontReducer montReducer(b, getResultModArithType(op));
-    auto result = montReducer.getCanonicalFromExtended(shifted);
+    ModArithType modArithType = getResultModArithType(op);
+    APInt modulus = modArithType.getModulus().getValue();
+    unsigned storageWidth = modArithType.getStorageBitWidth();
+    unsigned modWidth = modulus.getActiveBits();
+
+    Value result;
+    if (modWidth == storageWidth) {
+      result = b.create<AddOp>(op.getInput(), op.getInput());
+    } else {
+      TypedAttr modAttr = modulusAttr(op);
+      Value one =
+          createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 1);
+      auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+          b.getContext(),
+          arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
+      auto shifted =
+          b.create<arith::ShLIOp>(adaptor.getInput(), one, noOverflow);
+      MontReducer montReducer(b, getResultModArithType(op));
+      result = montReducer.getCanonicalFromExtended(shifted);
+    }
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -609,10 +632,9 @@ struct ConvertMac : public OpConversionPattern<MacOp> {
       rewriter.replaceOp(op, reduced);
       return success();
     } else {
-      arith::IntegerOverflowFlags overflowFlag(
-          arith::IntegerOverflowFlags::nuw & arith::IntegerOverflowFlags::nsw);
-      auto noOverflow =
-          arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
+      auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+          b.getContext(),
+          arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
 
       auto cmodExt =
           b.create<arith::ConstantOp>(modulusAttr(op, /*extended=*/true));
@@ -652,15 +674,15 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
     Value signedRhs = getSignedFormFromCanonical(adaptor.getRhs(), modAttr);
     if (signedLhs && signedRhs) {
       auto mul = b.create<arith::MulSIExtendedOp>(signedLhs, signedRhs);
-      auto reduced = b.create<mod_arith::MontReduceOp>(
-          op.getType(), mul.getLow(), mul.getHigh());
+      auto reduced =
+          b.create<MontReduceOp>(op.getType(), mul.getLow(), mul.getHigh());
       rewriter.replaceOp(op, reduced);
       return success();
     } else {
       auto mul =
           b.create<arith::MulUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
-      auto reduced = b.create<mod_arith::MontReduceOp>(
-          op.getType(), mul.getLow(), mul.getHigh());
+      auto reduced =
+          b.create<MontReduceOp>(op.getType(), mul.getLow(), mul.getHigh());
 
       rewriter.replaceOp(op, reduced);
       return success();
@@ -678,10 +700,9 @@ struct MulExtendedResult {
 
 template <typename Op>
 MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
-  arith::IntegerOverflowFlags overflowFlag(arith::IntegerOverflowFlags::nuw &
-                                           arith::IntegerOverflowFlags::nsw);
-  auto noOverflow =
-      arith::IntegerOverflowFlagsAttr::get(b.getContext(), overflowFlag);
+  auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+      b.getContext(),
+      arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
 
   ModArithType modType = getResultModArithType(op);
   IntegerType intType = modType.getStorageType();

@@ -564,9 +564,9 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       SmallVector<Value> factors;
       while (!currExp.isZero()) {
         if ((currExp & cOne).getBoolValue()) {
-          result = b.create<field::MulOp>(result, factor);
+          result = b.create<MulOp>(result, factor);
         }
-        factor = b.create<field::SquareOp>(factor);
+        factor = b.create<SquareOp>(factor);
         currExp = currExp.lshr(1);
       }
       rewriter.replaceOp(op, result);
