@@ -8,6 +8,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypeInterfaces.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 // IWYU pragma: end_keep
 
 namespace mlir::zkir::field {

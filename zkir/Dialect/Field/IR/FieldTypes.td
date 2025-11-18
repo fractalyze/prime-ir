@@ -3,6 +3,7 @@
 
 include "zkir/Dialect/Field/IR/FieldDialect.td"
 
+include "mlir/Interfaces/DataLayoutInterfaces.td"
 include "mlir/IR/DialectBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/CommonTypeConstraints.td"
@@ -16,7 +17,11 @@ class Field_Type<string name, string typeMnemonic, list<Trait> traits = []>
 
 // Prime field type definition.
 // This type represents an element in a prime field parameterized by a prime modulus.
-def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInterface, VectorElementTypeInterface]> {
+def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
+  MemRefElementTypeInterface,
+  VectorElementTypeInterface,
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
+  ]> {
   let summary = "Prime field element type";
   let description = [{
     `field.pf<p>` represents an element in a prime field where arithmetic operations
@@ -38,14 +43,14 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInte
     }]>,
   ];
   let extraClassDeclaration = [{
-    bool isMontgomery() {
+    bool isMontgomery() const {
       return getIsMontgomery();
     }
-    IntegerType getStorageType() {
+    IntegerType getStorageType() const {
       // TODO(batzor): decouple the storage type from the modulus type
       return cast<IntegerType>(getModulus().getType());
     }
-    unsigned getStorageBitWidth() {
+    unsigned getStorageBitWidth() const {
       return getStorageType().getWidth();
     }
   }];
@@ -55,7 +60,10 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [MemRefElementTypeInte
 // This type represents an element in a quadratic extension field parameterized by the underlying field.
 // Currently, it is only defined for prime fields.
 def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
-  MemRefElementTypeInterface]> {
+  MemRefElementTypeInterface,
+  VectorElementTypeInterface,
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
+  ]> {
   let summary = "Quadratic extension field element type";
   let description = [{
     Represents an element in a quadratic extension field defined by the given
@@ -75,7 +83,7 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
   let assemblyFormat = "`<` $baseField `,` $beta `>`";
   let extraClassDeclaration = [{
     // Check if the field is in Montgomery form.
-    bool isMontgomery() {
+    bool isMontgomery() const {
       return getBaseField().getIsMontgomery();
     }
   }];

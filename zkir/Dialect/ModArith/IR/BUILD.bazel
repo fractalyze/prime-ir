@@ -11,6 +11,7 @@ cc_library(
         "ModArithAttributes.cpp",
         "ModArithDialect.cpp",
         "ModArithOps.cpp",
+        "ModArithTypes.cpp",
     ],
     hdrs = [
         "ModArithAttributes.h",
@@ -28,6 +29,7 @@ cc_library(
         "//zkir/Utils:OpUtils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:DataLayoutInterfaces",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
         "@llvm-project//mlir:Support",
@@ -47,6 +49,7 @@ td_library(
         "//zkir/Utils:CommonTraits",
         "@llvm-project//mlir:ArithOpsTdFiles",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:DataLayoutInterfaces",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",
         "@llvm-project//mlir:SideEffectInterfacesTdFiles",

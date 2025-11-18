@@ -30,4 +30,25 @@ unsigned getIntOrPrimeFieldBitWidth(Type type) {
   return cast<IntegerType>(type).getWidth();
 }
 
+llvm::TypeSize PrimeFieldType::getTypeSizeInBits(
+    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return llvm::TypeSize::getFixed(getStorageBitWidth());
+}
+
+uint64_t PrimeFieldType::getABIAlignment(
+    DataLayout const &dataLayout,
+    llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return dataLayout.getTypeABIAlignment(getStorageType());
+}
+
+llvm::TypeSize QuadraticExtFieldType::getTypeSizeInBits(
+    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() * 2);
+}
+
+uint64_t QuadraticExtFieldType::getABIAlignment(
+    DataLayout const &dataLayout,
+    llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
+}
 } // namespace mlir::zkir::field

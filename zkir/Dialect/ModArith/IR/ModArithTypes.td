@@ -3,6 +3,7 @@
 
 include "zkir/Dialect/ModArith/IR/ModArithDialect.td"
 
+include "mlir/Interfaces/DataLayoutInterfaces.td"
 include "mlir/IR/DialectBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/CommonTypeConstraints.td"
@@ -13,7 +14,11 @@ class ModArith_Type<string name, string typeMnemonic, list<Trait> traits = []>
   let mnemonic = typeMnemonic;
 }
 
-def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [MemRefElementTypeInterface, VectorElementTypeInterface]> {
+def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
+  MemRefElementTypeInterface,
+  VectorElementTypeInterface,
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
+  ]> {
   let summary = "Integer type with modular arithmetic";
   let description = [{
     `mod_arith.int<p>` represents an element of the ring of integers modulo $p$.
@@ -57,20 +62,20 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [MemRefElementTypeI
     }]>,
   ];
   let extraClassDeclaration = [{
-    bool isMontgomery() {
+    bool isMontgomery() const {
       return getIsMontgomery();
     }
-    MontgomeryAttr getMontgomeryAttr() {
+    MontgomeryAttr getMontgomeryAttr() const {
       return MontgomeryAttr::get(getContext(), getModulus());
     }
-    BYAttr getBYAttr() {
+    BYAttr getBYAttr() const {
       return BYAttr::get(getContext(), getModulus());
     }
-    IntegerType getStorageType() {
+    IntegerType getStorageType() const {
       // TODO(batzor): decouple the storage type from the modulus type
       return cast<IntegerType>(getModulus().getType());
     }
-    unsigned getStorageBitWidth() {
+    unsigned getStorageBitWidth() const {
       return getStorageType().getWidth();
     }
   }];
