@@ -86,26 +86,6 @@ getCommonConversionInfo(Operation *op, const TypeConverter *typeConverter) {
   return std::move(info);
 }
 
-template <typename SourceOp, typename TargetFieldOp>
-struct ConvertPolyBinOp : public OpConversionPattern<SourceOp> {
-  explicit ConvertPolyBinOp(MLIRContext *context)
-      : OpConversionPattern<SourceOp>(context) {}
-
-  using OpConversionPattern<SourceOp>::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(SourceOp op, typename SourceOp::Adaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (PolyType poly_ty = dyn_cast<PolyType>(op.getType())) {
-      ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-      auto result = b.create<TargetFieldOp>(adaptor.getLhs(), adaptor.getRhs());
-      rewriter.replaceOp(op, result);
-      return success();
-    }
-    return failure();
-  }
-};
-
 struct ConvertToTensor : public OpConversionPattern<ToTensorOp> {
   explicit ConvertToTensor(MLIRContext *context)
       : OpConversionPattern<ToTensorOp>(context) {}
@@ -558,8 +538,6 @@ void PolyToField::runOnOperation() {
       ConvertFromTensor,
       ConvertNTT,
       ConvertToTensor,
-      ConvertPolyBinOp<AddOp, field::AddOp>,
-      ConvertPolyBinOp<SubOp, field::SubOp>,
       ConvertAny<bufferization::AllocTensorOp>,
       ConvertAny<tensor_ext::BitReverseOp>
       // clang-format on

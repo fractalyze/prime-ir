@@ -626,47 +626,6 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
   }
 };
 
-struct ConvertMac : public OpConversionPattern<MacOp> {
-  explicit ConvertMac(MLIRContext *context)
-      : OpConversionPattern<MacOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(MacOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    ModArithType modType = getResultModArithType(op);
-    if (modType.isMontgomery()) {
-      auto mul =
-          b.create<arith::MulUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
-      auto sum =
-          b.create<arith::AddUIExtendedOp>(mul.getLow(), adaptor.getAcc());
-      auto high = b.create<arith::AddIOp>(mul.getHigh(), sum.getOverflow());
-      auto reduced = b.create<MontReduceOp>(op.getType(), sum.getSum(), high);
-      rewriter.replaceOp(op, reduced);
-      return success();
-    } else {
-      auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
-          b.getContext(),
-          arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
-
-      auto cmodExt =
-          b.create<arith::ConstantOp>(modulusAttr(op, /*extended=*/true));
-      auto x = b.create<arith::ExtUIOp>(cmodExt.getType(), adaptor.getLhs());
-      auto y = b.create<arith::ExtUIOp>(cmodExt.getType(), adaptor.getRhs());
-      auto acc = b.create<arith::ExtUIOp>(cmodExt.getType(), adaptor.getAcc());
-      auto mul = b.create<arith::MulIOp>(x, y);
-      auto add = b.create<arith::AddIOp>(mul, acc, noOverflow);
-      auto remu = b.create<arith::RemUIOp>(add, cmodExt);
-      auto trunc = b.create<arith::TruncIOp>(modulusType(op), remu);
-
-      rewriter.replaceOp(op, trunc);
-      return success();
-    }
-  }
-};
-
 struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
   explicit ConvertMontMul(MLIRContext *context)
       : OpConversionPattern<MontMulOp>(context) {}
@@ -975,7 +934,6 @@ void ModArithToArith::runOnOperation() {
       ConvertDouble,
       ConvertFromMont,
       ConvertInverse,
-      ConvertMac,
       ConvertMontInverse,
       ConvertMontMul,
       ConvertMontReduce,

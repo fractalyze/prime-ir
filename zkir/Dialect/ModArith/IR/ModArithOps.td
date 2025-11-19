@@ -192,30 +192,6 @@ def ModArith_CmpOp : ModArith_Op<"cmp", [SameTypeOperands, TypesMatchWith<
   let hasFolder = 1;
 }
 
-def ModArith_MacOp : ModArith_ArithOp<"mac"> {
-  let summary = "Modular multiplication-and-accumulation operation";
-  let description = [{
-    Multiplies the first operand with the second operand and adds the result to the third operand.
-  }];
-  let arguments = (ins ModArithLike:$lhs, ModArithLike:$rhs, ModArithLike:$acc);
-  let results = (outs ModArithLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
-}
-
-def ModArith_SubIfGEOp : ModArith_ArithOp<"subifge"> {
-  let summary = "Subtract if greater than or equal to";
-  let description = [{
-    Subtracts the second operand from the first operand if the first operand is greater than or equal to the second operand.
-    Otherwise, it returns the first operand unchanged.
-  }];
-  let arguments = (ins
-    SignlessIntegerLike:$lhs,
-    SignlessIntegerLike:$rhs
-  );
-  let results = (outs SignlessIntegerLike:$output);
-  let assemblyFormat = "operands attr-dict `:` qualified(type($output))";
-}
-
 def ModArith_NegateOp : ModArith_UnaryOp<"negate", [Involution]> {
   let summary = "Modular negation";
   let description = [{

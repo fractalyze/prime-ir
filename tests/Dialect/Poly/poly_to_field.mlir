@@ -21,26 +21,6 @@
 #elem = #field.pf.elem<6:i255>  : !PF1
 #root_of_unity = #field.root_of_unity<#elem, 2:i255>
 
-// CHECK-LABEL: @test_lower_add
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
-func.func @test_lower_add(%lhs : !poly_ty1, %rhs : !poly_ty1) -> !poly_ty1 {
-  // CHECK-NOT: poly.add
-  // CHECK: %[[RES:.*]] = field.add %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: return %[[RES]] : [[T]]
-  %res = poly.add %lhs, %rhs : !poly_ty1
-  return %res : !poly_ty1
-}
-
-// CHECK-LABEL: @test_lower_sub
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
-func.func @test_lower_sub(%lhs : !poly_ty1, %rhs : !poly_ty1) -> !poly_ty1 {
-  // CHECK-NOT: poly.sub
-  // CHECK: %[[RES:.*]] = field.sub %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: return %[[RES]] : [[T]]
-  %res = poly.sub %lhs, %rhs : !poly_ty1
-  return %res : !poly_ty1
-}
-
 // CHECK-LABEL: @test_lower_to_tensor
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_to_tensor(%arg0 : !poly_ty1) -> tensor<4x!PF1> {
