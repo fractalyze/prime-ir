@@ -276,6 +276,7 @@ def Field_AddOp : Field_BinaryOp<"add", [Commutative]> {
     %r = field.add %a, %b : field.pf<primeModulus>
     ```
   }];
+  let hasCanonicalizer = 1;
 }
 
 // Field subtraction.
@@ -289,6 +290,7 @@ def Field_SubOp : Field_BinaryOp<"sub"> {
     %r = field.sub %a, %b : field.pf<primeModulus>
     ```
   }];
+  let hasCanonicalizer = 1;
 }
 
 // Field multiplication.

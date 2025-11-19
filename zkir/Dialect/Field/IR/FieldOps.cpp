@@ -23,6 +23,7 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldCanonicalization.cpp.inc
+#include "mlir/IR/Matchers.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 // IWYU pragma: end_keep
 namespace mlir::zkir::field {
@@ -287,8 +288,43 @@ namespace {
 #include "zkir/Dialect/Field/IR/FieldCanonicalization.cpp.inc"
 }
 
+void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add<AddConstantTwice>(context);
+  patterns.add<AddConstantToSubLhs>(context);
+  patterns.add<AddConstantToSubRhs>(context);
+  patterns.add<AddSelfIsDouble>(context);
+  patterns.add<AddBothNegated>(context);
+  patterns.add<AddAfterSub>(context);
+  patterns.add<AddAfterNegLhs>(context);
+  patterns.add<AddAfterNegRhs>(context);
+  patterns.add<FactorMulAdd>(context);
+}
+
+void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+  patterns.add<SubConstantFromAdd>(context);
+  patterns.add<SubConstantTwiceLhs>(context);
+  patterns.add<SubConstantTwiceRhs>(context);
+  patterns.add<SubAddFromConstant>(context);
+  patterns.add<SubSubFromConstantLhs>(context);
+  patterns.add<SubSubFromConstantRhs>(context);
+  patterns.add<SubLhsAfterAdd>(context);
+  patterns.add<SubRhsAfterAdd>(context);
+  patterns.add<SubLhsAfterSub>(context);
+  patterns.add<SubAfterNegLhs>(context);
+  patterns.add<SubAfterNegRhs>(context);
+  patterns.add<SubBothNegated>(context);
+  patterns.add<SubAfterSquareBoth>(context);
+  patterns.add<SubAfterSumSquare>(context);
+  patterns.add<FactorMulSub>(context);
+}
+
 void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
+  patterns.add<MulSelfIsSquare>(context);
+  patterns.add<MulConstantTwice>(context);
+  patterns.add<MulOfMulByConstant>(context);
   patterns.add<BitReverseMulBitReverse>(context);
 }
 

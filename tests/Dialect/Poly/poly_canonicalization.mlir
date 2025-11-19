@@ -41,7 +41,7 @@ func.func @test_canonicalize_intt_after_ntt(%p0 : !poly_ty) -> !poly_ty {
 // CHECK: (%[[X:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_canonicalize_ntt_after_intt(%t0 : !tensor_ty) -> !tensor_ty {
   // CHECK-NOT: poly.ntt
-  // CHECK: %[[RESULT:.*]] = field.add %[[X]], %[[X]] : [[T]]
+  // CHECK: %[[RESULT:.*]] = field.double %[[X]] : [[T]]
   %coeffs = poly.ntt %t0 into %t0 {root=#root_of_unity} inverse=true : !tensor_ty
   %evals = poly.ntt %coeffs into %coeffs {root=#root_of_unity} : !tensor_ty
   %coeffs1 = poly.ntt %evals into %evals {root=#root_of_unity} inverse=true bit_reverse=false : !tensor_ty
