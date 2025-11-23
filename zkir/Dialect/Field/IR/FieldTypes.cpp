@@ -32,6 +32,8 @@ bool isMontgomery(Type type) {
     return pfType.isMontgomery();
   } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(element)) {
     return f2Type.isMontgomery();
+  } else if (auto f3Type = dyn_cast<CubicExtFieldType>(element)) {
+    return f3Type.isMontgomery();
   } else {
     return false;
   }
@@ -62,6 +64,17 @@ llvm::TypeSize QuadraticExtFieldType::getTypeSizeInBits(
 }
 
 uint64_t QuadraticExtFieldType::getABIAlignment(
+    DataLayout const &dataLayout,
+    llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
+}
+
+llvm::TypeSize CubicExtFieldType::getTypeSizeInBits(
+    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() * 3);
+}
+
+uint64_t CubicExtFieldType::getABIAlignment(
     DataLayout const &dataLayout,
     llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());

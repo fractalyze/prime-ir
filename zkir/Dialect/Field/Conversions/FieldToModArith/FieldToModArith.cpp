@@ -63,6 +63,8 @@ mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
 SmallVector<Type> coeffsTypeRange(Type type) {
   if (auto f2Type = dyn_cast<QuadraticExtFieldType>(type)) {
     return SmallVector<Type>(2, convertPrimeFieldType(f2Type.getBaseField()));
+  } else if (auto f3Type = dyn_cast<CubicExtFieldType>(type)) {
+    return SmallVector<Type>(3, convertPrimeFieldType(f3Type.getBaseField()));
   } else {
     llvm_unreachable("Unsupported type for coeffs type range");
     return SmallVector<Type>();

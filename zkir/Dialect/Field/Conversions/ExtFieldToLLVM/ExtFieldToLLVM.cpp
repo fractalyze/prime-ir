@@ -38,15 +38,15 @@ using namespace mlir::LLVM;
 namespace {
 template <typename T>
 Type convertExtFieldType(T type) {
-  PrimeFieldType baseFieldType = type.getBaseField();
-  Type integerType = baseFieldType.getStorageType();
-  // TODO(batzor): Add support for more extension fields.
-  if constexpr (std::is_same_v<T, QuadraticExtFieldType>) {
-    return LLVM::LLVMStructType::getLiteral(type.getContext(),
-                                            {integerType, integerType});
-  } else {
-    return type;
+  if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(type)) {
+    PrimeFieldType baseFieldType = extField.getBaseField();
+    Type integerType = baseFieldType.getStorageType();
+    unsigned n = extField.getNumCoefficients();
+
+    SmallVector<Type> fields(n, integerType);
+    return LLVM::LLVMStructType::getLiteral(type.getContext(), fields);
   }
+  return type;
 }
 
 struct ConvertExtFromCoeffs : public ConvertOpToLLVMPattern<ExtFromCoeffsOp> {
@@ -55,14 +55,16 @@ struct ConvertExtFromCoeffs : public ConvertOpToLLVMPattern<ExtFromCoeffsOp> {
   LogicalResult
   matchAndRewrite(ExtFromCoeffsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     auto structType = typeConverter->convertType(op.getType());
-    if (isa<QuadraticExtFieldType>(op.getType())) {
-      if (adaptor.getInput().size() != 2)
-        return op.emitOpError(
-            "expected two input types for quadratic extension field");
-      auto extFieldStruct = SimpleStructBuilder<2>::initialized(
-          rewriter, loc, structType, adaptor.getInput());
+
+    if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(op.getType())) {
+      unsigned n = extField.getNumCoefficients();
+      if (adaptor.getInput().size() != n)
+        return op.emitOpError("expected ") << n << " coefficients";
+
+      auto extFieldStruct =
+          extField.buildStructFromCoeffs(b, structType, adaptor.getInput());
       rewriter.replaceOp(op, {extFieldStruct});
       return success();
     }
@@ -76,10 +78,12 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
   LogicalResult
   matchAndRewrite(ExtToCoeffsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (isa<QuadraticExtFieldType>(op.getInput().getType())) {
-      SimpleStructBuilder<2> extFieldStruct(adaptor.getInput());
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    if (auto extField =
+            dyn_cast<ExtensionFieldTypeInterface>(op.getInput().getType())) {
       SmallVector<Value> coeffs =
-          extFieldStruct.getValues(rewriter, op.getLoc());
+          extField.extractCoeffsFromStruct(b, adaptor.getInput());
       rewriter.replaceOpWithMultiple(op, coeffs);
       return success();
     }
@@ -93,6 +97,8 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
 void populateExtFieldToLLVMTypeConversion(LLVMTypeConverter &typeConverter) {
   typeConverter.addConversion(
       [](QuadraticExtFieldType type) { return convertExtFieldType(type); });
+  typeConverter.addConversion(
+      [](CubicExtFieldType type) { return convertExtFieldType(type); });
 }
 
 void populateExtFieldToLLVMConversionPatterns(

@@ -115,6 +115,23 @@ def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<
   let assemblyFormat = "$low `,` $high attr-dict `:` type($output)";
 }
 
+def Field_F3ConstantOp : Op<Field_Dialect, "f3.constant", [Pure, TypesMatchWith<
+  "result type is the same as the operand type", "output", "low", "cast<CubicExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "mid", "cast<CubicExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "high", "cast<CubicExtFieldType>($_self).getBaseField()">]> {
+  let summary = "Define a constant cubic extension field element";
+  let description = [{
+    Example:
+    ```
+    !CF = !field.f3<!PF, #xi>
+    %0 = field.f3.constant %low, %mid, %high : !CF
+    ```
+  }];
+  let arguments = (ins Field_PrimeFieldType:$low, Field_PrimeFieldType:$mid, Field_PrimeFieldType:$high);
+  let results = (outs Field_CubicExtFieldType:$output);
+  let assemblyFormat = "$low `,` $mid `,` $high attr-dict `:` type($output)";
+}
+
 def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
  SameOperandsAndResultShape, AllSameTensorDims<["input", "output"]>,
  DeclareOpInterfaceMethods<CastOpInterface>]> {
@@ -334,9 +351,12 @@ def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
     ```
     !QF = field.f2<!PF, #beta>
     %c0, %c1 = field.ext_to_coeffs %qf : !QF -> !PF, !PF
+
+    !CF = field.f3<!PF, #xi>
+    %c0, %c1, %c2 = field.ext_to_coeffs %cf : !CF -> !PF, !PF, !PF
     ```
   }];
-  let arguments = (ins Field_QuadraticExtFieldType:$input);
+  let arguments = (ins AnyTypeOf<[Field_QuadraticExtFieldType, Field_CubicExtFieldType]>:$input);
   let results = (outs Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
@@ -352,10 +372,13 @@ def Field_ExtFromCoeffsOp : Field_Op<"ext_from_coeffs", [Pure]> {
     ```
     !QF = field.f2<!PF, #beta>
     %qf = field.ext_from_coeffs %c0, %c1 : !PF, !PF -> !QF
+
+    !CF = field.f3<!PF, #xi>
+    %cf = field.ext_from_coeffs %c0, %c1, %c2 : !PF, !PF, !PF -> !CF
     ```
   }];
   let arguments = (ins Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$input);
-  let results = (outs Field_QuadraticExtFieldType:$output);
+  let results = (outs AnyTypeOf<[Field_QuadraticExtFieldType, Field_CubicExtFieldType]>:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
