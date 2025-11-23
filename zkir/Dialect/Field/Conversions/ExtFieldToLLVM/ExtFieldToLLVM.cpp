@@ -29,6 +29,9 @@ Type convertExtFieldType(T type) {
   if constexpr (std::is_same_v<T, QuadraticExtFieldType>) {
     return LLVM::LLVMStructType::getLiteral(type.getContext(),
                                             {integerType, integerType});
+  } else if constexpr (std::is_same_v<T, CubicExtFieldType>) {
+    return LLVM::LLVMStructType::getLiteral(type.getContext(),
+                                            {integerType, integerType, integerType});
   } else {
     return type;
   }
@@ -51,6 +54,15 @@ struct ConvertExtFromCoeffs : public ConvertOpToLLVMPattern<ExtFromCoeffsOp> {
       rewriter.replaceOp(op, {extFieldStruct});
       return success();
     }
+    if (isa<CubicExtFieldType>(op.getType())) {
+      if (adaptor.getInput().size() != 3)
+        return op.emitOpError(
+            "expected three input types for cubic extension field");
+      auto extFieldStruct = SimpleStructBuilder<3>::initialized(
+          rewriter, loc, structType, adaptor.getInput());
+      rewriter.replaceOp(op, {extFieldStruct});
+      return success();
+    }
     return op.emitOpError("unsupported output type");
   }
 };
@@ -68,6 +80,13 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
       rewriter.replaceOpWithMultiple(op, coeffs);
       return success();
     }
+    if (isa<CubicExtFieldType>(op.getInput().getType())) {
+      SimpleStructBuilder<3> extFieldStruct(adaptor.getInput());
+      SmallVector<Value> coeffs =
+          extFieldStruct.getValues(rewriter, op.getLoc());
+      rewriter.replaceOpWithMultiple(op, coeffs);
+      return success();
+    }
     return op.emitOpError("unsupported input type");
   }
 };
@@ -78,6 +97,8 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
 void populateExtFieldToLLVMTypeConversion(LLVMTypeConverter &typeConverter) {
   typeConverter.addConversion(
       [](QuadraticExtFieldType type) { return convertExtFieldType(type); });
+  typeConverter.addConversion(
+      [](CubicExtFieldType type) { return convertExtFieldType(type); });
 }
 
 void populateExtFieldToLLVMConversionPatterns(

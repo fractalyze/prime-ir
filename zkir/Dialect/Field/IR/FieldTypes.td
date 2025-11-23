@@ -81,10 +81,43 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
   }];
 }
 
-def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType], "any-field-type">;
+// Cubic extension field type definition.
+// This type represents an element in a cubic extension field parameterized by the underlying field.
+// Currently, it is only defined for prime fields.
+def Field_CubicExtFieldType : Field_Type<"CubicExtField", "f3", [
+  MemRefElementTypeInterface]> {
+  let summary = "Cubic extension field element type";
+  let description = [{
+    Represents an element in a cubic extension field defined by the given
+    prime field `baseField` and the irreducible binomial `xi`.
+
+    An element is represented as a₀ + a₁v + a₂v² where v³ = ξ.
+
+    Example:
+    ```
+    !PF = !field.pf<7:i32>
+    #xi = #field.pf.elem<6:i32> : !PF
+    !CF = !field.f3<!PF, #xi>
+    ```
+  }];
+  let parameters = (ins
+   Field_PrimeFieldType: $baseField,
+   "PrimeFieldAttr": $xi
+  );
+  let assemblyFormat = "`<` $baseField `,` $xi `>`";
+  let extraClassDeclaration = [{
+    // Check if the field is in Montgomery form.
+    bool isMontgomery() {
+      return getBaseField().getIsMontgomery();
+    }
+  }];
+}
+
+def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType], "any-field-type">;
 
 def PrimeFieldLike: TypeOrValueSemanticsContainer<Field_PrimeFieldType, "prime-field-like">;
 def QuadraticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuadraticExtFieldType, "quadratic-ext-field-like">;
-def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, QuadraticExtFieldLike.predicate]>, "field-like">;
+def CubicExtFieldLike: TypeOrValueSemanticsContainer<Field_CubicExtFieldType, "cubic-ext-field-like">;
+def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, QuadraticExtFieldLike.predicate, CubicExtFieldLike.predicate]>, "field-like">;
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDTYPES_TD_

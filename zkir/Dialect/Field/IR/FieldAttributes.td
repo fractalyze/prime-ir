@@ -46,6 +46,15 @@ def Field_QuadraticExtFieldAttr : Field_Attr<"QuadraticExtField", "f2.elem", [Ty
   }];
 }
 
+def Field_CubicExtFieldAttr : Field_Attr<"CubicExtField", "f3.elem", [TypedAttrInterface]> {
+  let summary = "An attribute representing a cubic extension field element";
+  let parameters = (ins "CubicExtFieldType":$type, Field_PrimeFieldAttr:$low, Field_PrimeFieldAttr:$mid, Field_PrimeFieldAttr:$high);
+  let assemblyFormat = "`<` $low `,` $mid `,` $high `>` `:` $type";
+  let extraClassDeclaration = [{
+    using ValueType = Attribute;
+  }];
+}
+
 def Field_RootOfUnityAttr : Field_Attr<"RootOfUnity", "root_of_unity", [TypedAttrInterface]> {
   let summary = "An attribute representing a root of unity in a prime field";
   let parameters = (ins Field_PrimeFieldAttr:$root, "IntegerAttr":$degree);
@@ -58,7 +67,7 @@ def Field_RootOfUnityAttr : Field_Attr<"RootOfUnity", "root_of_unity", [TypedAtt
   let genVerifyDecl = 1;
 }
 
-def Field_AnyFieldAttr : AnyAttrOf<[Field_PrimeFieldAttr, Field_QuadraticExtFieldAttr]> {
+def Field_AnyFieldAttr : AnyAttrOf<[Field_PrimeFieldAttr, Field_QuadraticExtFieldAttr, Field_CubicExtFieldAttr]> {
   string cppType = "::mlir::TypedAttr";
 }
 

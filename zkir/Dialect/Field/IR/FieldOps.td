@@ -100,6 +100,23 @@ def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<
   let assemblyFormat = "$low `,` $high attr-dict `:` type($output)";
 }
 
+def Field_F3ConstantOp : Op<Field_Dialect, "f3.constant", [Pure, TypesMatchWith<
+  "result type is the same as the operand type", "output", "low", "cast<CubicExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "mid", "cast<CubicExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "high", "cast<CubicExtFieldType>($_self).getBaseField()">]> {
+  let summary = "Define a constant cubic extension field element";
+  let description = [{
+    Example:
+    ```
+    !CF = !field.f3<!PF, #xi>
+    %0 = field.f3.constant %low, %mid, %high : !CF
+    ```
+  }];
+  let arguments = (ins Field_PrimeFieldType:$low, Field_PrimeFieldType:$mid, Field_PrimeFieldType:$high);
+  let results = (outs Field_CubicExtFieldType:$output);
+  let assemblyFormat = "$low `,` $mid `,` $high attr-dict `:` type($output)";
+}
+
 def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
  SameOperandsAndResultShape, AllSameTensorDims<["input", "output"]>,
  DeclareOpInterfaceMethods<CastOpInterface>]> {
