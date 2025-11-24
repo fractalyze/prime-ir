@@ -125,6 +125,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(op.getType())) {
       modType = cast<mod_arith::ModArithType>(
           typeConverter->convertType(f2Type.getBaseField()));
+    } else if (auto f3Type = dyn_cast<CubicExtFieldType>(op.getType())) {
+      modType = cast<mod_arith::ModArithType>(
+          typeConverter->convertType(f3Type.getBaseField()));
     } else {
       op.emitOpError("unsupported output type");
       return failure();
