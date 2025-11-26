@@ -73,16 +73,10 @@ td_library(
 
 gentbl_cc_library(
     name = "dialect_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-dialect-decls"],
-            "EllipticCurveDialect.h.inc",
-        ),
-        (
-            ["-gen-dialect-defs"],
-            "EllipticCurveDialect.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "EllipticCurveDialect.h.inc": ["-gen-dialect-decls"],
+        "EllipticCurveDialect.cpp.inc": ["-gen-dialect-defs"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "EllipticCurveDialect.td",
     deps = [
@@ -93,22 +87,16 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "attributes_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-attrdef-decls",
-                "--attrdefs-dialect=elliptic_curve",
-            ],
-            "EllipticCurveAttributes.h.inc",
-        ),
-        (
-            [
-                "-gen-attrdef-defs",
-                "--attrdefs-dialect=elliptic_curve",
-            ],
-            "EllipticCurveAttributes.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "EllipticCurveAttributes.h.inc": [
+            "-gen-attrdef-decls",
+            "--attrdefs-dialect=elliptic_curve",
+        ],
+        "EllipticCurveAttributes.cpp.inc": [
+            "-gen-attrdef-defs",
+            "--attrdefs-dialect=elliptic_curve",
+        ],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "EllipticCurveAttributes.td",
     deps = [
@@ -119,22 +107,16 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "types_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-typedef-decls",
-                "--typedefs-dialect=elliptic_curve",
-            ],
-            "EllipticCurveTypes.h.inc",
-        ),
-        (
-            [
-                "-gen-typedef-defs",
-                "--typedefs-dialect=elliptic_curve",
-            ],
-            "EllipticCurveTypes.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "EllipticCurveTypes.h.inc": [
+            "-gen-typedef-decls",
+            "--typedefs-dialect=elliptic_curve",
+        ],
+        "EllipticCurveTypes.cpp.inc": [
+            "-gen-typedef-defs",
+            "--typedefs-dialect=elliptic_curve",
+        ],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "EllipticCurveTypes.td",
     deps = [
@@ -144,16 +126,10 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "ops_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-op-decls"],
-            "EllipticCurveOps.h.inc",
-        ),
-        (
-            ["-gen-op-defs"],
-            "EllipticCurveOps.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "EllipticCurveOps.h.inc": ["-gen-op-decls"],
+        "EllipticCurveOps.cpp.inc": ["-gen-op-defs"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "EllipticCurveOps.td",
     deps = [

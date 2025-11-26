@@ -51,23 +51,14 @@ cc_library(
 
 gentbl_cc_library(
     name = "pass_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-pass-decls",
-                "-name=EllipticCurveToField",
-            ],
-            "EllipticCurveToField.h.inc",
-        ),
-        (
-            ["-gen-rewriters"],
-            "EllipticCurveToField.cpp.inc",
-        ),
-        (
-            ["-gen-pass-doc"],
-            "EllipticCurveToField.md",
-        ),
-    ],
+    tbl_outs = {
+        "EllipticCurveToField.h.inc": [
+            "-gen-pass-decls",
+            "-name=EllipticCurveToField",
+        ],
+        "EllipticCurveToField.cpp.inc": ["-gen-rewriters"],
+        "EllipticCurveToField.md": ["-gen-pass-doc"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "EllipticCurveToField.td",
     deps = [
