@@ -20,6 +20,7 @@ limitations under the License.
 #include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/Support/LLVM.h"
+#include "mlir/Transforms/InliningUtils.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 // IWYU pragma: begin_keep
@@ -51,6 +52,15 @@ limitations under the License.
 #include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc"
 
 namespace mlir::zkir::mod_arith {
+
+struct ModArithInlinerInterface : public DialectInlinerInterface {
+  using DialectInlinerInterface::DialectInlinerInterface;
+
+  // All ModArith dialect ops can be inlined.
+  bool isLegalToInline(Operation *, Region *, bool, IRMapping &) const final {
+    return true;
+  }
+};
 
 class ModArithOpAsmDialectInterface : public OpAsmDialectInterface {
 public:
@@ -84,6 +94,7 @@ void ModArithDialect::initialize() {
 #include "zkir/Dialect/ModArith/IR/ModArithOps.cpp.inc" // NOLINT(build/include)
       >();
 
+  addInterface<ModArithInlinerInterface>();
   addInterface<ModArithOpAsmDialectInterface>();
 }
 

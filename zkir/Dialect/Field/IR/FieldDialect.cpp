@@ -21,6 +21,7 @@ limitations under the License.
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LLVM.h"
+#include "mlir/Transforms/InliningUtils.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 
 // IWYU pragma: begin_keep
@@ -57,6 +58,15 @@ limitations under the License.
 
 namespace mlir::zkir::field {
 
+struct FieldInlinerInterface : public DialectInlinerInterface {
+  using DialectInlinerInterface::DialectInlinerInterface;
+
+  // All field dialect ops can be inlined.
+  bool isLegalToInline(Operation *, Region *, bool, IRMapping &) const final {
+    return true;
+  }
+};
+
 class FieldOpAsmDialectInterface : public OpAsmDialectInterface {
 public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
@@ -87,6 +97,7 @@ void FieldDialect::initialize() {
 #include "zkir/Dialect/Field/IR/FieldOps.cpp.inc" // NOLINT(build/include)
       >();
 
+  addInterface<FieldInlinerInterface>();
   addInterface<FieldOpAsmDialectInterface>();
 }
 
