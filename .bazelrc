@@ -13,6 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# NOTE: Currently, building with Bzlmod causes a python_repository attribute error
+# (e.g., missing python_version_kind).
+common --noenable_bzlmod
+
 build --cxxopt=-std=c++17
 build --host_cxxopt=-std=c++17
 # llvm builds typically without rtti

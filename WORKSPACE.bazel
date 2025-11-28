@@ -15,6 +15,47 @@
 
 workspace(name = "zkir")
 
+load("//third_party/zk_dtypes:workspace.bzl", zk_dtypes = "repo")
+
+zk_dtypes()
+
+# Initialize hermetic Python
+load("@zk_dtypes//third_party/py:python_init_rules.bzl", "python_init_rules")
+
+python_init_rules()
+
+load("@zk_dtypes//third_party/py:python_init_repositories.bzl", "python_init_repositories")
+
+python_init_repositories(
+    requirements = {
+        "3.11": "//:requirements_lock_3_11.txt",
+    },
+)
+
+load("@zk_dtypes//third_party/py:python_init_toolchains.bzl", "python_init_toolchains")
+
+python_init_toolchains()
+
+load("@zk_dtypes//third_party/py:python_init_pip.bzl", "python_init_pip")
+
+python_init_pip()
+
+load("@pypi//:requirements.bzl", "install_deps")
+
+install_deps()
+
+load("@zk_dtypes//bazel:zk_dtypes_deps.bzl", "zk_dtypes_deps")
+
+zk_dtypes_deps()
+
+load("@rules_java//java:rules_java_deps.bzl", "rules_java_dependencies")
+
+rules_java_dependencies()
+
+load("@rules_java//java:repositories.bzl", "rules_java_toolchains")
+
+rules_java_toolchains()
+
 load("//bazel:zkir_deps.bzl", "zkir_deps")
 
 zkir_deps()
@@ -91,8 +132,12 @@ http_archive(
     urls = ["https://github.com/bazel-contrib/rules_cuda/archive/b11b7e499550954ad396ad41aac597b380ce2957.tar.gz"],
 )
 
-load("@rules_cuda//cuda:repositories.bzl", "rules_cuda_dependencies", "rules_cuda_toolchains")
+load("@rules_cuda//cuda:repositories.bzl", "rules_cuda_toolchains")
 
-rules_cuda_dependencies()
+# NOTE(chokobole): Calling `rules_cuda_dependencies()` creates a conflict
+# by adding redundant `bazel_skylib` and platforms dependencies.
+# This version mismatch (particularly for platforms) breaks the rules_python build.
+# For more details, see:
+# https://github.com/bazel-contrib/rules_cuda/blob/b11b7e4/cuda/private/repositories.bzl#L406-L426
 
 rules_cuda_toolchains(register_toolchains = True)

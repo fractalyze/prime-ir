@@ -17,7 +17,11 @@
 This module configures dependencies for the ZKIR project.
 """
 
+load("//third_party/benchmark:workspace.bzl", benchmark = "repo")
 load("//third_party/omp:omp_configure.bzl", "omp_configure")
 
+# buildifier: disable=function-docstring
 def zkir_deps():
     omp_configure(name = "local_config_omp")
+
+    benchmark()
