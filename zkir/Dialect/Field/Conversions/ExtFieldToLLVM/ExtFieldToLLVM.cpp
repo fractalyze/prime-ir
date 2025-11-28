@@ -38,15 +38,25 @@ using namespace mlir::LLVM;
 namespace {
 template <typename T>
 Type convertExtFieldType(T type) {
-  PrimeFieldType baseFieldType = type.getBaseField();
-  Type integerType = baseFieldType.getStorageType();
-  // TODO(batzor): Add support for more extension fields.
-  if constexpr (std::is_same_v<T, QuadraticExtFieldType>) {
-    return LLVM::LLVMStructType::getLiteral(type.getContext(),
-                                            {integerType, integerType});
-  } else {
-    return type;
+  if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(type)) {
+    Type baseFieldType = extField.getBaseFieldType();
+    Type elementType;
+
+    // Handle tower of extensions: if base is also an extension field,
+    // recursively convert it to a nested struct
+    if (auto baseExt = dyn_cast<ExtensionFieldTypeInterface>(baseFieldType)) {
+      elementType = convertExtFieldType(baseExt);
+    } else {
+      // Base is a prime field, use its storage type
+      auto pfType = cast<PrimeFieldType>(baseFieldType);
+      elementType = pfType.getStorageType();
+    }
+
+    unsigned n = extField.getDegreeOverBase();
+    SmallVector<Type> fields(n, elementType);
+    return LLVM::LLVMStructType::getLiteral(type.getContext(), fields);
   }
+  return type;
 }
 
 struct ConvertExtFromCoeffs : public ConvertOpToLLVMPattern<ExtFromCoeffsOp> {
@@ -55,18 +65,15 @@ struct ConvertExtFromCoeffs : public ConvertOpToLLVMPattern<ExtFromCoeffsOp> {
   LogicalResult
   matchAndRewrite(ExtFromCoeffsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto loc = op.getLoc();
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     auto structType = typeConverter->convertType(op.getType());
-    if (isa<QuadraticExtFieldType>(op.getType())) {
-      if (adaptor.getInput().size() != 2)
-        return op.emitOpError(
-            "expected two input types for quadratic extension field");
-      auto extFieldStruct = SimpleStructBuilder<2>::initialized(
-          rewriter, loc, structType, adaptor.getInput());
-      rewriter.replaceOp(op, {extFieldStruct});
-      return success();
-    }
-    return op.emitOpError("unsupported output type");
+
+    auto extField = cast<ExtensionFieldTypeInterface>(op.getType());
+    SmallVector<Value> coeffs(adaptor.getInput().begin(),
+                              adaptor.getInput().end());
+    auto extFieldStruct = extField.buildStructFromCoeffs(b, structType, coeffs);
+    rewriter.replaceOp(op, {extFieldStruct});
+    return success();
   }
 };
 
@@ -76,10 +83,12 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
   LogicalResult
   matchAndRewrite(ExtToCoeffsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    if (isa<QuadraticExtFieldType>(op.getInput().getType())) {
-      SimpleStructBuilder<2> extFieldStruct(adaptor.getInput());
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    if (auto extField =
+            dyn_cast<ExtensionFieldTypeInterface>(op.getInput().getType())) {
       SmallVector<Value> coeffs =
-          extFieldStruct.getValues(rewriter, op.getLoc());
+          extField.extractCoeffsFromStruct(b, adaptor.getInput());
       rewriter.replaceOpWithMultiple(op, coeffs);
       return success();
     }
@@ -91,8 +100,9 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
 } // namespace
 
 void populateExtFieldToLLVMTypeConversion(LLVMTypeConverter &typeConverter) {
-  typeConverter.addConversion(
-      [](QuadraticExtFieldType type) { return convertExtFieldType(type); });
+  typeConverter.addConversion([](ExtensionFieldTypeInterface type) {
+    return convertExtFieldType(type);
+  });
 }
 
 void populateExtFieldToLLVMConversionPatterns(

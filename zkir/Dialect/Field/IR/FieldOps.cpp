@@ -67,13 +67,15 @@ Type getStandardFormType(Type type) {
       standardType =
           PrimeFieldType::get(type.getContext(), pfType.getModulus());
     }
-  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(standardType)) {
-    if (f2Type.getBaseField().isMontgomery()) {
-      auto pfType = PrimeFieldType::get(type.getContext(),
-                                        f2Type.getBaseField().getModulus());
-      standardType = QuadraticExtFieldType::get(
-          type.getContext(), pfType,
-          getAttrAsStandardForm(f2Type.getNonResidue()));
+  } else if (auto extField =
+                 dyn_cast<ExtensionFieldTypeInterface>(standardType)) {
+    if (extField.isMontgomery()) {
+      auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+      auto pfType =
+          PrimeFieldType::get(type.getContext(), baseField.getModulus());
+      auto irreducible = cast<PrimeFieldAttr>(extField.getNonResidue());
+      standardType =
+          extField.cloneWith(pfType, getAttrAsStandardForm(irreducible));
     }
   }
   if (auto memrefType = dyn_cast<MemRefType>(type)) {
@@ -93,13 +95,14 @@ Type getMontgomeryFormType(Type type) {
       montType =
           PrimeFieldType::get(type.getContext(), pfType.getModulus(), true);
     }
-  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(montType)) {
-    if (!f2Type.isMontgomery()) {
-      auto pfType = PrimeFieldType::get(
-          type.getContext(), f2Type.getBaseField().getModulus(), true);
-      montType = QuadraticExtFieldType::get(
-          type.getContext(), pfType,
-          getAttrAsMontgomeryForm(f2Type.getNonResidue()));
+  } else if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(montType)) {
+    if (!extField.isMontgomery()) {
+      auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+      auto pfType =
+          PrimeFieldType::get(type.getContext(), baseField.getModulus(), true);
+      auto irreducible = cast<PrimeFieldAttr>(extField.getNonResidue());
+      montType =
+          extField.cloneWith(pfType, getAttrAsMontgomeryForm(irreducible));
     }
   }
   if (auto memrefType = dyn_cast<MemRefType>(type)) {
@@ -151,15 +154,18 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     result.addAttribute("value", PrimeFieldAttr::get(pfType, parsedInt[0]));
     result.addTypes(pfType);
     return success();
-  } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(parsedType)) {
-    if (parsedInt.size() != 2) {
+  } else if (auto extField =
+                 dyn_cast<ExtensionFieldTypeInterface>(parsedType)) {
+    unsigned numCoeffs = extField.getDegreeOverBase();
+    if (parsedInt.size() != numCoeffs) {
       parser.emitError(parser.getCurrentLocation(),
-                       "quadratic extension field constant must have exactly "
-                       "two values");
+                       "extension field constant must have exactly " +
+                           std::to_string(numCoeffs) + " values");
       return failure();
     }
 
-    auto modulus = f2Type.getBaseField().getModulus().getValue();
+    auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+    auto modulus = baseField.getModulus().getValue();
 
     // TODO(batzor): Check if the modulus is a prime number.
     if (modulus.isNegative() || modulus.isZero()) {
@@ -167,7 +173,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
       return failure();
     }
 
-    auto outputBitWidth = f2Type.getBaseField().getStorageBitWidth();
+    auto outputBitWidth = baseField.getStorageBitWidth();
     for (const auto &value : parsedInt) {
       if (value.getActiveBits() > outputBitWidth)
         return parser.emitError(
@@ -176,18 +182,15 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     }
 
     // zero-extend or truncate to the correct bitwidth
-    parsedInt[0] = parsedInt[0].zextOrTrunc(outputBitWidth);
-    parsedInt[1] = parsedInt[1].zextOrTrunc(outputBitWidth);
-    result.addAttribute(
-        "value", QuadraticExtFieldAttr::get(
-                     parser.getContext(), f2Type,
-                     PrimeFieldAttr::get(f2Type.getBaseField(), parsedInt[0]),
-                     PrimeFieldAttr::get(f2Type.getBaseField(), parsedInt[1])));
-    result.addTypes(f2Type);
+    for (unsigned i = 0; i < numCoeffs; ++i) {
+      parsedInt[i] = parsedInt[i].zextOrTrunc(outputBitWidth);
+    }
+    result.addAttribute("value", extField.createConstantAttr(parsedInt));
+    result.addTypes(parsedType);
     return success();
   }
   parser.emitError(parser.getCurrentLocation(),
-                   "invalid constant type: expected prime or quadratic");
+                   "invalid constant type: expected prime or extension field");
   return failure();
 }
 
@@ -257,30 +260,29 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 
 LogicalResult ExtToCoeffsOp::verify() {
   Type inputType = getInput().getType();
-  if (auto f2Type = dyn_cast<QuadraticExtFieldType>(inputType)) {
-    if (getOutput().size() == 2) {
+  if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(inputType)) {
+    unsigned expected = extField.getDegreeOverBase();
+    if (getOutput().size() == expected) {
       return success();
-    } else {
-      return emitOpError() << "expected two output types for quadratic "
-                              "extension field input, but got "
-                           << getOutput().size();
     }
+    return emitOpError() << "expected " << expected
+                         << " output types for extension field input, but got "
+                         << getOutput().size();
   }
-
   return emitOpError() << "input type must be a extension field; got "
                        << inputType;
 }
 
 LogicalResult ExtFromCoeffsOp::verify() {
   Type outputType = getType();
-  if (auto f2Type = dyn_cast<QuadraticExtFieldType>(outputType)) {
-    if (getInput().size() == 2) {
+  if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(outputType)) {
+    unsigned expected = extField.getDegreeOverBase();
+    if (getInput().size() == expected) {
       return success();
-    } else {
-      return emitOpError() << "expected two input types for quadratic "
-                              "extension field output, but got "
-                           << getInput().size();
     }
+    return emitOpError() << "expected " << expected
+                         << " input types for extension field output, but got "
+                         << getInput().size();
   }
   return emitOpError() << "output type must be a extension field; got "
                        << outputType;
