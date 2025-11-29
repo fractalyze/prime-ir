@@ -71,7 +71,6 @@ td_library(
 
 gentbl_cc_library(
     name = "attributes_inc_gen",
-    includes = ["../../../.."],
     tbl_outs = [
         (
             [
@@ -114,7 +113,6 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "dialect_inc_gen",
-    includes = ["../../../.."],
     tbl_outs = [
         (
             ["-gen-dialect-decls"],
@@ -134,7 +132,6 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "types_inc_gen",
-    includes = ["../../../.."],
     tbl_outs = [
         (
             [
@@ -161,7 +158,6 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "ops_inc_gen",
-    includes = ["../../../.."],
     tbl_outs = [
         (
             ["-gen-op-decls"],
