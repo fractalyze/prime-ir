@@ -39,23 +39,14 @@ cc_library(
 
 gentbl_cc_library(
     name = "pass_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-pass-decls",
-                "-name=SpecializeArithToAVX",
-            ],
-            "SpecializeArithToAVX.h.inc",
-        ),
-        (
-            ["-gen-rewriters"],
-            "SpecializeArithToAVX.cpp.inc",
-        ),
-        (
-            ["-gen-pass-doc"],
-            "SpecializeArithToAVX.md",
-        ),
-    ],
+    tbl_outs = {
+        "SpecializeArithToAVX.h.inc": [
+            "-gen-pass-decls",
+            "-name=SpecializeArithToAVX",
+        ],
+        "SpecializeArithToAVX.cpp.inc": ["-gen-rewriters"],
+        "SpecializeArithToAVX.md": ["-gen-pass-doc"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "SpecializeArithToAVX.td",
     deps = [

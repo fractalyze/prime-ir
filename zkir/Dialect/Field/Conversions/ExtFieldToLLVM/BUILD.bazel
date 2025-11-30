@@ -43,23 +43,14 @@ cc_library(
 
 gentbl_cc_library(
     name = "pass_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-pass-decls",
-                "-name=ExtFieldToLLVM",
-            ],
-            "ExtFieldToLLVM.h.inc",
-        ),
-        (
-            ["-gen-rewriters"],
-            "ExtFieldToLLVM.cpp.inc",
-        ),
-        (
-            ["-gen-pass-doc"],
-            "ExtFieldToLLVM.md",
-        ),
-    ],
+    tbl_outs = {
+        "ExtFieldToLLVM.h.inc": [
+            "-gen-pass-decls",
+            "-name=ExtFieldToLLVM",
+        ],
+        "ExtFieldToLLVM.cpp.inc": ["-gen-rewriters"],
+        "ExtFieldToLLVM.md": ["-gen-pass-doc"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "ExtFieldToLLVM.td",
     deps = [

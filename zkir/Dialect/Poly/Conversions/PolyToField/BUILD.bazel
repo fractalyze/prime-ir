@@ -48,23 +48,14 @@ cc_library(
 
 gentbl_cc_library(
     name = "pass_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-pass-decls",
-                "-name=PolyToField",
-            ],
-            "PolyToField.h.inc",
-        ),
-        (
-            ["-gen-rewriters"],
-            "PolyToField.cpp.inc",
-        ),
-        (
-            ["-gen-pass-doc"],
-            "PolyToField.md",
-        ),
-    ],
+    tbl_outs = {
+        "PolyToField.h.inc": [
+            "-gen-pass-decls",
+            "-name=PolyToField",
+        ],
+        "PolyToField.cpp.inc": ["-gen-rewriters"],
+        "PolyToField.md": ["-gen-pass-doc"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "PolyToField.td",
     deps = [

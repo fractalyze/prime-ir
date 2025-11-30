@@ -42,23 +42,14 @@ cc_library(
 
 gentbl_cc_library(
     name = "pass_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-pass-decls",
-                "-name=TensorExtToTensor",
-            ],
-            "TensorExtToTensor.h.inc",
-        ),
-        (
-            ["-gen-rewriters"],
-            "TensorExtToTensor.cpp.inc",
-        ),
-        (
-            ["-gen-pass-doc"],
-            "TensorExtToTensor.md",
-        ),
-    ],
+    tbl_outs = {
+        "TensorExtToTensor.h.inc": [
+            "-gen-pass-decls",
+            "-name=TensorExtToTensor",
+        ],
+        "TensorExtToTensor.cpp.inc": ["-gen-rewriters"],
+        "TensorExtToTensor.md": ["-gen-pass-doc"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "TensorExtToTensor.td",
     deps = [

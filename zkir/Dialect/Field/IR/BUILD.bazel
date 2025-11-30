@@ -77,24 +77,12 @@ td_library(
 
 gentbl_cc_library(
     name = "attributes_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-attrdef-decls"],
-            "FieldAttributes.h.inc",
-        ),
-        (
-            ["-gen-attrdef-defs"],
-            "FieldAttributes.cpp.inc",
-        ),
-        (
-            ["-gen-attr-interface-decls"],
-            "FieldAttributesInterfaces.h.inc",
-        ),
-        (
-            ["-gen-attr-interface-defs"],
-            "FieldAttributesInterfaces.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "FieldAttributes.h.inc": ["-gen-attrdef-decls"],
+        "FieldAttributes.cpp.inc": ["-gen-attrdef-defs"],
+        "FieldAttributesInterfaces.h.inc": ["-gen-attr-interface-decls"],
+        "FieldAttributesInterfaces.cpp.inc": ["-gen-attr-interface-defs"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "FieldAttributes.td",
     deps = [
@@ -104,12 +92,9 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "canonicalization_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-rewriters"],
-            "FieldCanonicalization.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "FieldCanonicalization.cpp.inc": ["-gen-rewriters"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "FieldCanonicalization.td",
     deps = [
@@ -119,16 +104,10 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "dialect_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-dialect-decls"],
-            "FieldDialect.h.inc",
-        ),
-        (
-            ["-gen-dialect-defs"],
-            "FieldDialect.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "FieldDialect.h.inc": ["-gen-dialect-decls"],
+        "FieldDialect.cpp.inc": ["-gen-dialect-defs"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "FieldDialect.td",
     deps = [
@@ -138,24 +117,12 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "types_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-typedef-decls"],
-            "FieldTypes.h.inc",
-        ),
-        (
-            ["-gen-typedef-defs"],
-            "FieldTypes.cpp.inc",
-        ),
-        (
-            ["-gen-type-interface-decls"],
-            "FieldTypesInterfaces.h.inc",
-        ),
-        (
-            ["-gen-type-interface-defs"],
-            "FieldTypesInterfaces.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "FieldTypes.h.inc": ["-gen-typedef-decls"],
+        "FieldTypes.cpp.inc": ["-gen-typedef-defs"],
+        "FieldTypesInterfaces.h.inc": ["-gen-type-interface-decls"],
+        "FieldTypesInterfaces.cpp.inc": ["-gen-type-interface-defs"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "FieldTypes.td",
     deps = [
@@ -165,16 +132,10 @@ gentbl_cc_library(
 
 gentbl_cc_library(
     name = "ops_inc_gen",
-    tbl_outs = [
-        (
-            ["-gen-op-decls"],
-            "FieldOps.h.inc",
-        ),
-        (
-            ["-gen-op-defs"],
-            "FieldOps.cpp.inc",
-        ),
-    ],
+    tbl_outs = {
+        "FieldOps.h.inc": ["-gen-op-decls"],
+        "FieldOps.cpp.inc": ["-gen-op-defs"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "FieldOps.td",
     deps = [

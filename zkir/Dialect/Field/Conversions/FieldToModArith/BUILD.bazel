@@ -54,23 +54,14 @@ cc_library(
 
 gentbl_cc_library(
     name = "pass_inc_gen",
-    tbl_outs = [
-        (
-            [
-                "-gen-pass-decls",
-                "-name=FieldToModArith",
-            ],
-            "FieldToModArith.h.inc",
-        ),
-        (
-            ["-gen-rewriters"],
-            "FieldToModArith.cpp.inc",
-        ),
-        (
-            ["-gen-pass-doc"],
-            "FieldToModArith.md",
-        ),
-    ],
+    tbl_outs = {
+        "FieldToModArith.h.inc": [
+            "-gen-pass-decls",
+            "-name=FieldToModArith",
+        ],
+        "FieldToModArith.cpp.inc": ["-gen-rewriters"],
+        "FieldToModArith.md": ["-gen-pass-doc"],
+    },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "FieldToModArith.td",
     deps = [
