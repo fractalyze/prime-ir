@@ -8,6 +8,24 @@ alwaysApply: false
 
 The following are project-specific deviations and clarifications from the [LLVM Coding Standard].
 
+## Naming guide
+
+- **Type names** (including classes, structs, enums, typedefs, etc) should be
+  nouns and start with an upper-case letter (e.g. `TextFileReader`).
+
+- **Variable names** should be nouns (as they represent state). The name should
+  be camel case, and start with a lower-case letter (e.g. `leader` or `boats`).
+  (This is different from the reference.)
+
+- **Function names** should be verb phrases (as they represent actions), and
+  command-like function should be imperative. The name should be camel case, and
+  start with a lowercase letter (e.g. `openFile()` or `isFoo()`).
+
+- **Enum declarations** (e.g. `enum Foo {...}`) are types, so they should follow
+  the naming conventions for types. A common use for enums is as a discriminator
+  for a union, or an indicator of a subclass. When an enum is used for something
+  like this, it should have a Kind suffix (e.g. `ValueKind`).
+
 ## Static Methods
 
 - For **static methods** implemented in `.cpp` files, explicitly annotate with `// static`.
