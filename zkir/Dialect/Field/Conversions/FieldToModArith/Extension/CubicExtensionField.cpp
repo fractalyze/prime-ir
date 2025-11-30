@@ -25,7 +25,7 @@ Value CubicExtensionField::square(Value v) {
   // Fields" by Devegili, OhEigeartaigh, Scott, Dahab (Section 4).
   // https://eprint.iacr.org/2006/471.pdf
   //
-  // For a = c0 + c1*u + c2*u² where u³ = xi:
+  // For v = c0 + c1 * u + c2 * u² where u³ = xi:
   //
   // s0 = c0²
   // s1 = 2 * c0 * c1
@@ -81,7 +81,7 @@ Value CubicExtensionField::square(Value v) {
 
 Value CubicExtensionField::mul(Value x, Value y) {
   // Schoolbook multiplication for cubic extension field.
-  // For x = x0 + x1*u + x2*u² xnd y = y0 + y1*u + y2*u²
+  // For x = x0 + x1 * u + x2 * u² and y = y0 + y1 * u + y2 * u²
   // where u³ = xi:
   //
   // v0 = x0 * y0
@@ -136,7 +136,7 @@ Value CubicExtensionField::mul(Value x, Value y) {
 
 Value CubicExtensionField::inverse(Value v) {
   // Inverse of a cubic extension field element.
-  // For a = c0 + c1*u + c2*u² where u³ = xi:
+  // For v = c0 + c1 * u + c2 * u² where u³ = xi:
   //
   // t0 = c0² - xi * c1 * c2
   // t1 = xi * c2² - c0 * c1
