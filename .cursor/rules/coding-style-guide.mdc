@@ -64,11 +64,11 @@ Example:
 ```c++
 class Prover {
  public:
-  explicit Prover(Context* ctx) : ctx_(ctx) {}
+  explicit Prover(Context* ctx) : ctx(ctx) {}
 
  private:
-  Context* ctx_; // not owned
-  std::unique_ptr<Engine> engine_;
+  Context* ctx; // not owned
+  std::unique_ptr<Engine> engine;
 };
 ```
 
