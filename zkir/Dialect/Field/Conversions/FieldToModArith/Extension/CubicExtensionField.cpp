@@ -15,19 +15,12 @@ limitations under the License.
 
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/CubicExtensionField.h"
 
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
 namespace mlir::zkir::field {
 
-CubicExtensionField::CubicExtensionField(ImplicitLocOpBuilder &b, Value xi)
-    : b(b), xi(xi) {}
-
-Value CubicExtensionField::mulByNonResidue(Value v) {
-  return b.create<mod_arith::MulOp>(xi, v);
-}
-
-SmallVector<Value, 3> CubicExtensionField::square(Value c0, Value c1,
-                                                  Value c2) {
+Value CubicExtensionField::square(Value v) {
   // CH-SQR2 algorithm from "Multiplication and Squaring on Pairing-Friendly
   // Fields" by Devegili, OhEigeartaigh, Scott, Dahab (Section 4).
   // https://eprint.iacr.org/2006/471.pdf
@@ -44,6 +37,11 @@ SmallVector<Value, 3> CubicExtensionField::square(Value c0, Value c1,
   // r0 = s0 + xi * s3
   // r1 = s1 + xi * s4
   // r2 = s1 + s2 + s3 - s0 - s4
+
+  auto coeffs = toCoeffs(b, v);
+  auto c0 = coeffs[0];
+  auto c1 = coeffs[1];
+  auto c2 = coeffs[2];
 
   // s0 = c0²
   auto s0 = b.create<mod_arith::SquareOp>(c0);
@@ -65,11 +63,11 @@ SmallVector<Value, 3> CubicExtensionField::square(Value c0, Value c1,
   auto s4 = b.create<mod_arith::SquareOp>(c2);
 
   // r0 = s0 + xi * s3
-  auto xiS3 = mulByNonResidue(s3);
+  auto xiS3 = b.create<mod_arith::MulOp>(nonResidue, s3);
   auto r0 = b.create<mod_arith::AddOp>(s0, xiS3);
 
   // r1 = s1 + xi * s4
-  auto xiS4 = mulByNonResidue(s4);
+  auto xiS4 = b.create<mod_arith::MulOp>(nonResidue, s4);
   auto r1 = b.create<mod_arith::AddOp>(s1, xiS4);
 
   // r2 = s1 + s2 + s3 - s0 - s4
@@ -78,46 +76,54 @@ SmallVector<Value, 3> CubicExtensionField::square(Value c0, Value c1,
   auto r2Tmp3 = b.create<mod_arith::SubOp>(r2Tmp2, s0);
   auto r2 = b.create<mod_arith::SubOp>(r2Tmp3, s4);
 
-  return {r0, r1, r2};
+  return fromCoeffs(b, type, {r0, r1, r2});
 }
 
-SmallVector<Value, 3> CubicExtensionField::mul(Value a0, Value a1, Value a2,
-                                               Value b0, Value b1, Value b2) {
+Value CubicExtensionField::mul(Value x, Value y) {
   // Schoolbook multiplication for cubic extension field.
-  // For a = a0 + a1*u + a2*u² and b = b0 + b1*u + b2*u²
+  // For x = x0 + x1*u + x2*u² xnd y = y0 + y1*u + y2*u²
   // where u^3 = xi:
   //
-  // v0 = a0 * b0
-  // v1 = a1 * b2
-  // v2 = a2 * b1
-  // v3 = a0 * b1
-  // v4 = a1 * b0
-  // v5 = a2 * b2
-  // v6 = a0 * b2
-  // v7 = a1 * b1
-  // v8 = a2 * b0
+  // v0 = x0 * y0
+  // v1 = x1 * y2
+  // v2 = x2 * y1
+  // v3 = x0 * y1
+  // v4 = x1 * y0
+  // v5 = x2 * y2
+  // v6 = x0 * y2
+  // v7 = x1 * y1
+  // v8 = x2 * y0
   //
   // r0 = v0 + xi * (v1 + v2)
   // r1 = v3 + v4 + xi * v5
   // r2 = v6 + v7 + v8
 
-  auto v0 = b.create<mod_arith::MulOp>(a0, b0);
-  auto v1 = b.create<mod_arith::MulOp>(a1, b2);
-  auto v2 = b.create<mod_arith::MulOp>(a2, b1);
-  auto v3 = b.create<mod_arith::MulOp>(a0, b1);
-  auto v4 = b.create<mod_arith::MulOp>(a1, b0);
-  auto v5 = b.create<mod_arith::MulOp>(a2, b2);
-  auto v6 = b.create<mod_arith::MulOp>(a0, b2);
-  auto v7 = b.create<mod_arith::MulOp>(a1, b1);
-  auto v8 = b.create<mod_arith::MulOp>(a2, b0);
+  auto xCoeffs = toCoeffs(b, x);
+  auto x0 = xCoeffs[0];
+  auto x1 = xCoeffs[1];
+  auto x2 = xCoeffs[2];
+  auto yCoeffs = toCoeffs(b, y);
+  auto y0 = yCoeffs[0];
+  auto y1 = yCoeffs[1];
+  auto y2 = yCoeffs[2];
+
+  auto v0 = b.create<mod_arith::MulOp>(x0, y0);
+  auto v1 = b.create<mod_arith::MulOp>(x1, y2);
+  auto v2 = b.create<mod_arith::MulOp>(x2, y1);
+  auto v3 = b.create<mod_arith::MulOp>(x0, y1);
+  auto v4 = b.create<mod_arith::MulOp>(x1, y0);
+  auto v5 = b.create<mod_arith::MulOp>(x2, y2);
+  auto v6 = b.create<mod_arith::MulOp>(x0, y2);
+  auto v7 = b.create<mod_arith::MulOp>(x1, y1);
+  auto v8 = b.create<mod_arith::MulOp>(x2, y0);
 
   // r0 = v0 + xi * (v1 + v2)
   auto sumV1V2 = b.create<mod_arith::AddOp>(v1, v2);
-  auto xiTimesSumV1V2 = mulByNonResidue(sumV1V2);
+  auto xiTimesSumV1V2 = b.create<mod_arith::MulOp>(nonResidue, sumV1V2);
   auto r0 = b.create<mod_arith::AddOp>(v0, xiTimesSumV1V2);
 
   // r1 = v3 + v4 + xi * v5
-  auto xiTimesV5 = mulByNonResidue(v5);
+  auto xiTimesV5 = b.create<mod_arith::MulOp>(nonResidue, v5);
   auto sumV3V4 = b.create<mod_arith::AddOp>(v3, v4);
   auto r1 = b.create<mod_arith::AddOp>(sumV3V4, xiTimesV5);
 
@@ -125,11 +131,10 @@ SmallVector<Value, 3> CubicExtensionField::mul(Value a0, Value a1, Value a2,
   auto sumV6V7 = b.create<mod_arith::AddOp>(v6, v7);
   auto r2 = b.create<mod_arith::AddOp>(sumV6V7, v8);
 
-  return {r0, r1, r2};
+  return fromCoeffs(b, type, {r0, r1, r2});
 }
 
-SmallVector<Value, 3> CubicExtensionField::inverse(Value c0, Value c1,
-                                                   Value c2) {
+Value CubicExtensionField::inverse(Value v) {
   // Inverse of a cubic extension field element.
   // For a = c0 + c1*u + c2*u² where u^3 = xi:
   //
@@ -143,15 +148,20 @@ SmallVector<Value, 3> CubicExtensionField::inverse(Value c0, Value c1,
   // r1 = t1 * t4
   // r2 = t2 * t4
 
+  auto coeffs = toCoeffs(b, v);
+  auto c0 = coeffs[0];
+  auto c1 = coeffs[1];
+  auto c2 = coeffs[2];
+
   // t0 = c0² - xi * c1 * c2
   auto c0Squared = b.create<mod_arith::SquareOp>(c0);
   auto c1TimesC2 = b.create<mod_arith::MulOp>(c1, c2);
-  auto xiTimesC1C2 = mulByNonResidue(c1TimesC2);
+  auto xiTimesC1C2 = b.create<mod_arith::MulOp>(nonResidue, c1TimesC2);
   auto t0 = b.create<mod_arith::SubOp>(c0Squared, xiTimesC1C2);
 
   // t1 = xi * c2² - c0 * c1
   auto c2Squared = b.create<mod_arith::SquareOp>(c2);
-  auto xiTimesC2Squared = mulByNonResidue(c2Squared);
+  auto xiTimesC2Squared = b.create<mod_arith::MulOp>(nonResidue, c2Squared);
   auto c0TimesC1 = b.create<mod_arith::MulOp>(c0, c1);
   auto t1 = b.create<mod_arith::SubOp>(xiTimesC2Squared, c0TimesC1);
 
@@ -165,7 +175,7 @@ SmallVector<Value, 3> CubicExtensionField::inverse(Value c0, Value c1,
   auto c2TimesT1 = b.create<mod_arith::MulOp>(c2, t1);
   auto c1TimesT2 = b.create<mod_arith::MulOp>(c1, t2);
   auto sumT1T2 = b.create<mod_arith::AddOp>(c2TimesT1, c1TimesT2);
-  auto xiTimesSumT1T2 = mulByNonResidue(sumT1T2);
+  auto xiTimesSumT1T2 = b.create<mod_arith::MulOp>(nonResidue, sumT1T2);
   auto t3 = b.create<mod_arith::AddOp>(c0TimesT0, xiTimesSumT1T2);
 
   // t4 = t3^(-1)
@@ -178,7 +188,7 @@ SmallVector<Value, 3> CubicExtensionField::inverse(Value c0, Value c1,
   auto r1 = b.create<mod_arith::MulOp>(t1, t4);
   auto r2 = b.create<mod_arith::MulOp>(t2, t4);
 
-  return {r0, r1, r2};
+  return fromCoeffs(b, type, {r0, r1, r2});
 }
 
 } // namespace mlir::zkir::field

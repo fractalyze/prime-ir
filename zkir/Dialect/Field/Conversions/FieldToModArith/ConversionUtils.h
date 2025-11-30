@@ -13,26 +13,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_CUBICEXTENSIONFIELD_H_
-#define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_CUBICEXTENSIONFIELD_H_
+#ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_CONVERSIONUTILS_H_
+#define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_CONVERSIONUTILS_H_
 
-#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/ExtensionField.h"
+#include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/Types.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
+#include "zkir/Dialect/Field/IR/FieldTypes.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 namespace mlir::zkir::field {
 
-class CubicExtensionField : public ExtensionField {
-public:
-  Value square(Value v) override;
-  Value mul(Value x, Value y) override;
-  Value inverse(Value v) override;
+mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type);
 
-private:
-  friend class ExtensionField;
+Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
+                                 Value extFieldElement);
 
-  using ExtensionField::ExtensionField;
-};
+Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs);
 
 } // namespace mlir::zkir::field
 
-// NOLINTNEXTLINE(whitespace/line_length)
-#endif // ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_CUBICEXTENSIONFIELD_H_
+#endif // ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_CONVERSIONUTILS_H_

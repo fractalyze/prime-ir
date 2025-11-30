@@ -20,13 +20,20 @@ package(
 )
 
 cc_library(
-    name = "CubicExtensionField",
-    srcs = ["CubicExtensionField.cpp"],
-    hdrs = ["CubicExtensionField.h"],
+    name = "ExtensionField",
+    srcs = [
+        "CubicExtensionField.cpp",
+        "CubicExtensionField.h",
+        "ExtensionField.cpp",
+    ],
+    hdrs = ["ExtensionField.h"],
     deps = [
+        "//zkir/Dialect/Field/Conversions/FieldToModArith:ConversionUtils",
+        "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TransformUtils",
     ],
 )
