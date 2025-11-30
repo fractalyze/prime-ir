@@ -28,12 +28,12 @@ The following are project-specific deviations and clarifications from the
 
 ### Static Methods
 
-- For **static methods** implemented in `.cc` files, explicitly annotate with
+- For **static methods** implemented in `.cpp` files, explicitly annotate with
   `// static`.
 
   ```c++
   // static
-  uint64_t EnvTime::NowNanos() {
+  uint64_t EnvTime::nowNanos() {
     // ...
   }
   ```
@@ -48,7 +48,7 @@ The following are project-specific deviations and clarifications from the
 
   constexpr int kBufferSize = 1024;
 
-  void HelperFunction() {
+  void helperFunction() {
     // ...
   }
 

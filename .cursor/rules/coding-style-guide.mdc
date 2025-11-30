@@ -1,6 +1,6 @@
 ---
 description: C++ Style Rules
-globs: *.cc,*.h
+globs: *.cc,*.cpp,*.h
 alwaysApply: false
 ---
 
@@ -10,11 +10,11 @@ The following are project-specific deviations and clarifications from the [LLVM 
 
 ## Static Methods
 
-- For **static methods** implemented in `.cc` files, explicitly annotate with `// static`.
+- For **static methods** implemented in `.cpp` files, explicitly annotate with `// static`.
 
   ```c++
   // static
-  uint64_t EnvTime::NowNanos() {
+  uint64_t EnvTime::nowNanos() {
     // ...
   }
   ```
@@ -28,7 +28,7 @@ The following are project-specific deviations and clarifications from the [LLVM 
 
   constexpr int kBufferSize = 1024;
 
-  void HelperFunction() {
+  void helperFunction() {
     // ...
   }
 
