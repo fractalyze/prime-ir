@@ -106,7 +106,8 @@ ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
   auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{i});
   auto point = b.create<tensor::ExtractOp>(points, ValueRange{i});
 
-  auto zeroSF = b.create<field::ConstantOp>(scalarFieldType, 0);
+  auto zeroSF =
+      cast<field::FieldTypeInterface>(scalarFieldType).createZeroConstant(b);
   auto scalarIsZero =
       b.create<field::CmpOp>(arith::CmpIPredicate::eq, scalar, zeroSF);
   auto zeroScalarMulIfOp = b.create<scf::IfOp>(
@@ -119,7 +120,8 @@ ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b0(loc, builder);
-        auto oneSF = b0.create<field::ConstantOp>(scalarFieldType, 1);
+        auto oneSF = cast<field::FieldTypeInterface>(scalarFieldType)
+                         .createOneConstant(b0);
         auto scalarIsOne =
             b0.create<field::CmpOp>(arith::CmpIPredicate::eq, scalar, oneSF);
         auto scalarIsOneIfOp = b0.create<scf::IfOp>(

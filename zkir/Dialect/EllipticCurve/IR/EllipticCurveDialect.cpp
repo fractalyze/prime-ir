@@ -75,14 +75,10 @@ ShortWeierstrassAttr getCurveFromPointLike(Type pointLike) {
 // WARNING: Assumes Jacobian or XYZZ point types
 Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   auto baseFieldType = getCurveFromPointLike(pointType).getBaseField();
-  auto zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
-  Value oneBF = field::isMontgomery(baseFieldType)
-                    ? b.create<field::ToMontOp>(
-                           baseFieldType,
-                           b.create<field::ConstantOp>(
-                               field::getStandardFormType(baseFieldType), 1))
-                          .getResult()
-                    : b.create<field::ConstantOp>(baseFieldType, 1);
+  auto zeroBF =
+      cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
+  Value oneBF =
+      cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
   return isa<XYZZType>(pointType)
              ? b.create<PointOp>(pointType,
                                  ValueRange{oneBF, oneBF, zeroBF, zeroBF})

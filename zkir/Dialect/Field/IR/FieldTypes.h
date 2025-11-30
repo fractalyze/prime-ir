@@ -37,9 +37,9 @@ class PrimeFieldType;
 bool isMontgomery(Type type);
 unsigned getIntOrPrimeFieldBitWidth(Type type);
 
-} // namespace mlir::zkir::field
-
 #include "zkir/Dialect/Field/IR/FieldTypesInterfaces.h.inc"
+
+} // namespace mlir::zkir::field
 
 #define GET_TYPEDEF_CLASSES
 #include "zkir/Dialect/Field/IR/FieldTypes.h.inc"

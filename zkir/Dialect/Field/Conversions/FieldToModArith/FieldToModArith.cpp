@@ -436,32 +436,12 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       if (pfType.isMontgomery()) {
         init = b.create<ToMontOp>(montType, init);
       }
-    } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
-      modulus = f2Type.getBaseField().getModulus().getValue();
-      init = f2Type.isMontgomery()
-                 ? b.create<ToMontOp>(
-                        f2Type,
-                        b.create<ConstantOp>(cast<QuadraticExtFieldType>(
-                                                 getStandardFormType(f2Type)),
-                                             1, 0))
-                       .getResult()
-                 : b.create<ConstantOp>(f2Type, 1, 0);
-    } else if (auto f3Type = dyn_cast<CubicExtFieldType>(fieldType)) {
-      modulus = f3Type.getBaseField().getModulus().getValue();
-      init =
-          f3Type.isMontgomery()
-              ? b.create<ToMontOp>(
-                     f3Type,
-                     b.create<F3ConstantOp>(
-                         cast<CubicExtFieldType>(getStandardFormType(f3Type)),
-                         b.create<ConstantOp>(f3Type.getBaseField(), 1),
-                         b.create<ConstantOp>(f3Type.getBaseField(), 0),
-                         b.create<ConstantOp>(f3Type.getBaseField(), 0)))
-                    .getResult()
-              : b.create<F3ConstantOp>(
-                    f3Type, b.create<ConstantOp>(f3Type.getBaseField(), 1),
-                    b.create<ConstantOp>(f3Type.getBaseField(), 0),
-                    b.create<ConstantOp>(f3Type.getBaseField(), 0));
+    } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+      // TODO(chokobole): Support towers of extension field.
+      modulus = cast<PrimeFieldType>(efType.getBaseFieldType())
+                    .getModulus()
+                    .getValue();
+      init = efType.createOneConstant(b);
     } else {
       op.emitOpError("unsupported output type");
       return failure();

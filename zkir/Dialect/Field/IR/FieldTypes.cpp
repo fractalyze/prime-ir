@@ -17,9 +17,10 @@ limitations under the License.
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
-#include "zkir/Dialect/Field/IR/FieldTypesInterfaces.cpp.inc"
 
 namespace mlir::zkir::field {
+
+#include "zkir/Dialect/Field/IR/FieldTypesInterfaces.cpp.inc"
 
 bool isMontgomery(Type type) {
   Type element;
@@ -45,6 +46,50 @@ unsigned getIntOrPrimeFieldBitWidth(Type type) {
 }
 
 //===----------------------------------------------------------------------===//
+// FieldTypeInterface utilities
+//===----------------------------------------------------------------------===//
+
+namespace field_utils {
+namespace {
+
+template <typename T>
+bool isMontgomery(const T *field) {
+  if constexpr (std::is_same_v<T, PrimeFieldType>) {
+    return field->getIsMontgomery();
+  } else {
+    return field->getBaseField().getIsMontgomery();
+  }
+}
+
+template <typename T>
+Value createZeroConstant(const T *field, ImplicitLocOpBuilder &builder) {
+  return builder.create<ConstantOp>(*field, 0);
+}
+
+template <typename T>
+Value createOneConstant(const T *field, ImplicitLocOpBuilder &builder) {
+  return field->isMontgomery()
+             ? builder
+                   .create<ToMontOp>(*field,
+                                     builder.create<ConstantOp>(
+                                         getStandardFormType(*field), 1))
+                   .getResult()
+             : builder.create<ConstantOp>(*field, 1);
+}
+
+} // namespace
+} // namespace field_utils
+
+#define DEFINE_FIELD_TYPE_INTERFACE_METHODS(TYPE)                              \
+  bool TYPE::isMontgomery() const { return field_utils::isMontgomery(this); }  \
+  Value TYPE::createZeroConstant(ImplicitLocOpBuilder &builder) const {        \
+    return field_utils::createZeroConstant(this, builder);                     \
+  }                                                                            \
+  Value TYPE::createOneConstant(ImplicitLocOpBuilder &builder) const {         \
+    return field_utils::createOneConstant(this, builder);                      \
+  }
+
+//===----------------------------------------------------------------------===//
 // PrimeFieldType
 //===----------------------------------------------------------------------===//
 
@@ -58,6 +103,8 @@ uint64_t PrimeFieldType::getABIAlignment(
     llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return dataLayout.getTypeABIAlignment(getStorageType());
 }
+
+DEFINE_FIELD_TYPE_INTERFACE_METHODS(PrimeFieldType);
 
 //===----------------------------------------------------------------------===//
 // ExtensionFieldTypeInterface utilities
@@ -119,9 +166,7 @@ llvm::SmallVector<Value> extractCoeffsFromStruct(ImplicitLocOpBuilder &builder,
 
 #define DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(                              \
     TYPE, ATTR, DEGREE_OVER_PRIME, DEGREE_OVER_BASE)                           \
-  bool TYPE::isMontgomery() const {                                            \
-    return ext_field_utils::isMontgomery(this);                                \
-  }                                                                            \
+  DEFINE_FIELD_TYPE_INTERFACE_METHODS(TYPE)                                    \
   unsigned TYPE::getDegreeOverPrime() const { return DEGREE_OVER_PRIME; }      \
   unsigned TYPE::getDegreeOverBase() const { return DEGREE_OVER_BASE; }        \
   Type TYPE::getBaseFieldType() const { return getBaseField(); }               \

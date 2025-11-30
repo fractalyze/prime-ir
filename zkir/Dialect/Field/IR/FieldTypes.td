@@ -40,6 +40,12 @@ def FieldTypeInterface : TypeInterface<"FieldTypeInterface"> {
   let methods = [
     InterfaceMethod<"Check if the field is in Montgomery form",
       "bool", "isMontgomery">,
+    InterfaceMethod<"Create zero constant",
+      "mlir::Value", "createZeroConstant",
+      (ins "mlir::ImplicitLocOpBuilder &":$builder)>,
+    InterfaceMethod<"Create one constant",
+      "mlir::Value", "createOneConstant",
+      (ins "mlir::ImplicitLocOpBuilder &":$builder)>,
   ];
 }
 
@@ -85,7 +91,7 @@ def ExtensionFieldTypeInterface : TypeInterface<"ExtensionFieldTypeInterface", [
 def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
-  FieldTypeInterface,
+  DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
   ]> {
   let summary = "Prime field element type";
@@ -109,9 +115,6 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
     }]>,
   ];
   let extraClassDeclaration = [{
-    bool isMontgomery() const {
-      return getIsMontgomery();
-    }
     IntegerType getStorageType() const {
       // TODO(batzor): decouple the storage type from the modulus type
       return cast<IntegerType>(getModulus().getType());
