@@ -44,7 +44,7 @@ func.func @test_lower_sub(%arg0: !CF, %arg1: !CF) -> !CF {
 func.func @test_lower_mul(%arg0: !CF, %arg1: !CF) -> !CF {
     // CHECK: mod_arith.constant 2 : !z7_i32
     // CHECK-COUNT-2: field.ext_to_coeffs
-    // CHECK-COUNT-9: mod_arith.mul
+    // CHECK-COUNT-11: mod_arith.mul
     // CHECK: field.ext_from_coeffs
     %0 = field.mul %arg0, %arg1 : !CF
     return %0 : !CF
@@ -55,7 +55,12 @@ func.func @test_lower_square(%arg0: !CF) -> !CF {
     // CH-SQR2 algorithm uses 3 squares
     // CHECK: mod_arith.constant 2 : !z7_i32
     // CHECK: field.ext_to_coeffs
-    // CHECK-COUNT-3: mod_arith.square
+    // CHECK: mod_arith.square
+    // CHECK: mod_arith.mul
+    // CHECK: mod_arith.square
+    // CHECK: mod_arith.mul
+    // CHECK: mod_arith.square
+    // CHECK-COUNT-2: mod_arith.mul
     // CHECK: field.ext_from_coeffs
     %0 = field.square %arg0 : !CF
     return %0 : !CF
@@ -63,17 +68,18 @@ func.func @test_lower_square(%arg0: !CF) -> !CF {
 
 // CHECK-LABEL: @test_lower_inverse
 func.func @test_lower_inverse(%arg0: !CF) -> !CF {
-    // Verify a * a^-1 = 1 pattern
     // CHECK: field.ext_to_coeffs
+    // CHECK: mod_arith.square
+    // CHECK-COUNT-2: mod_arith.mul
+    // CHECK: mod_arith.square
+    // CHECK-COUNT-2: mod_arith.mul
+    // CHECK: mod_arith.square
+    // CHECK-COUNT-5: mod_arith.mul
     // CHECK: mod_arith.inverse
-    // CHECK: field.ext_from_coeffs
-    // CHECK: field.ext_to_coeffs
-    // CHECK: field.ext_to_coeffs
-    // CHECK-COUNT-9: mod_arith.mul
+    // CHECK-COUNT-3: mod_arith.mul
     // CHECK: field.ext_from_coeffs
     %inv = field.inverse %arg0 : !CF
-    %result = field.mul %arg0, %inv : !CF
-    return %result : !CF
+    return %inv : !CF
 }
 
 // CHECK-LABEL: @test_lower_f3_constant
@@ -86,6 +92,7 @@ func.func @test_lower_f3_constant(%arg0: !PF, %arg1: !PF, %arg2: !PF) -> !CF {
 // CHECK-LABEL: @test_lower_cmp_eq
 func.func @test_lower_cmp_eq(%arg0: !CF, %arg1: !CF) -> i1 {
     // CHECK-COUNT-2: field.ext_to_coeffs
+    // CHECK-COUNT-3: mod_arith.cmp eq
     // CHECK-COUNT-2: arith.andi
     %0 = field.cmp eq, %arg0, %arg1 : !CF
     return %0 : i1
