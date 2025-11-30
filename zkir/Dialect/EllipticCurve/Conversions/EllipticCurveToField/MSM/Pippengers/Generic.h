@@ -28,10 +28,10 @@ public:
                     ImplicitLocOpBuilder &b, bool parallel, int32_t degree,
                     int32_t windowBits)
       : Pippengers(scalars, points, outputType, b, degree, windowBits),
-        parallel_(parallel) {
+        parallel(parallel) {
     // Note that the required number of buckets per window is 2^{bitsPerWindow}
     // - 1 since we don't need the "zero" bucket.
-    numBuckets_ = (1 << bitsPerWindow_) - 1;
+    numBuckets = (1 << bitsPerWindow) - 1;
   }
 
   // Process is as follows:
@@ -77,7 +77,7 @@ private:
   // (accumulation), then reduce buckets per window (reduction)
   void bucketAccReduc();
 
-  bool parallel_;
+  bool parallel;
 };
 
 } // namespace mlir::zkir::elliptic_curve

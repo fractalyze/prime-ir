@@ -35,23 +35,23 @@ protected:
   // Window Reduction - reduce windows to one total MSM result
   Value windowReduction();
 
-  size_t numBuckets_;
-  size_t bitsPerWindow_;
-  size_t numWindows_;
-  Value numScalarMuls_; // Index
+  size_t numBuckets;
+  size_t bitsPerWindow;
+  size_t numWindows;
+  Value numScalarMuls; // Index
 
-  Value zero_; // Index
-  Value one_;  // Index
-  Value zeroPoint_;
-  Value scalars_;
-  Value points_;
+  Value zero; // Index
+  Value one;  // Index
+  Value zeroPoint;
+  Value scalars;
+  Value points;
 
-  Value windowSums_;
-  Value allBuckets_;
+  Value windowSums;
+  Value allBuckets;
 
-  field::PrimeFieldType scalarFieldType_;
-  Type outputType_;
-  ImplicitLocOpBuilder &b_;
+  field::PrimeFieldType scalarFieldType;
+  Type outputType;
+  ImplicitLocOpBuilder &b;
 };
 
 } // namespace mlir::zkir::elliptic_curve

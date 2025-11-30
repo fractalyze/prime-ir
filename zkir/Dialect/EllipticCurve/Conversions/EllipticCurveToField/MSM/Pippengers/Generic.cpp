@@ -31,15 +31,15 @@ ValueRange PippengersGeneric::scalarIsOneBranch(Value point, Value windowOffset,
                                                 Value windowSum,
                                                 ImplicitLocOpBuilder &b) {
   auto windowOffsetIsZero =
-      b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, windowOffset, zero_);
+      b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, windowOffset, zero);
   auto windowOffsetIsZeroIfOp = b.create<scf::IfOp>(
       windowOffsetIsZero,
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b0(loc, builder);
-        if (isa<JacobianType>(point.getType()) && isa<XYZZType>(outputType_)) {
-          point = b0.create<ConvertPointTypeOp>(outputType_, point);
+        if (isa<JacobianType>(point.getType()) && isa<XYZZType>(outputType)) {
+          point = b0.create<ConvertPointTypeOp>(outputType, point);
         }
-        Value addedPoint = b0.create<AddOp>(outputType_, windowSum, point);
+        Value addedPoint = b0.create<AddOp>(outputType, windowSum, point);
         b0.create<scf::YieldOp>(addedPoint);
       },
       [&](OpBuilder &builder, Location loc) {
@@ -52,7 +52,7 @@ ValueRange PippengersGeneric::scalarIsOneBranch(Value point, Value windowOffset,
 Value PippengersGeneric::scalarDecomposition(Value scalar,
                                              Value windowOffsetIndex,
                                              ImplicitLocOpBuilder &b) {
-  auto scalarIntType = scalarFieldType_.getStorageType();
+  auto scalarIntType = scalarFieldType.getStorageType();
   Value windowOffset =
       b.create<arith::IndexCastOp>(scalarIntType, windowOffsetIndex);
 
@@ -62,14 +62,14 @@ Value PippengersGeneric::scalarDecomposition(Value scalar,
       b.create<field::BitcastOp>(TypeRange{scalarIntType}, scalar);
   auto upperBitsScalar = b.create<arith::ShRUIOp>(signlessScalar, windowOffset);
 
-  auto windowBitIntType = IntegerType::get(b.getContext(), bitsPerWindow_);
+  auto windowBitIntType = IntegerType::get(b.getContext(), bitsPerWindow);
   return b.create<arith::TruncIOp>(windowBitIntType, upperBitsScalar);
 }
 
 void PippengersGeneric::scalarIsNotOneBranch(Value scalar, Value point,
                                              Value buckets, Value windowOffset,
                                              ImplicitLocOpBuilder &b) {
-  auto windowBitIntType = IntegerType::get(b.getContext(), bitsPerWindow_);
+  auto windowBitIntType = IntegerType::get(b.getContext(), bitsPerWindow);
 
   Value zeroInt = b.create<arith::ConstantIntOp>(windowBitIntType, 0);
   Value oneInt = b.create<arith::ConstantIntOp>(windowBitIntType, 1);
@@ -89,12 +89,12 @@ void PippengersGeneric::scalarIsNotOneBranch(Value scalar, Value point,
         Value adjustedIdx = b0.create<arith::IndexCastUIOp>(
             b0.getIndexType(), scalarPerWindowMinusOne);
         auto bucketAtAdjustedIdx =
-            b0.create<memref::LoadOp>(outputType_, buckets, adjustedIdx);
-        if (isa<JacobianType>(point.getType()) && isa<XYZZType>(outputType_)) {
-          point = b0.create<ConvertPointTypeOp>(outputType_, point);
+            b0.create<memref::LoadOp>(outputType, buckets, adjustedIdx);
+        if (isa<JacobianType>(point.getType()) && isa<XYZZType>(outputType)) {
+          point = b0.create<ConvertPointTypeOp>(outputType, point);
         }
         auto newPoint =
-            b0.create<AddOp>(outputType_, bucketAtAdjustedIdx, point);
+            b0.create<AddOp>(outputType, bucketAtAdjustedIdx, point);
         b0.create<memref::StoreOp>(newPoint, buckets, adjustedIdx);
         b0.create<scf::YieldOp>();
       });
@@ -103,10 +103,10 @@ void PippengersGeneric::scalarIsNotOneBranch(Value scalar, Value point,
 ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
                                               Value buckets, Value windowOffset,
                                               ImplicitLocOpBuilder &b) {
-  auto scalar = b.create<tensor::ExtractOp>(scalars_, ValueRange{i});
-  auto point = b.create<tensor::ExtractOp>(points_, ValueRange{i});
+  auto scalar = b.create<tensor::ExtractOp>(scalars, ValueRange{i});
+  auto point = b.create<tensor::ExtractOp>(points, ValueRange{i});
 
-  auto zeroSF = b.create<field::ConstantOp>(scalarFieldType_, 0);
+  auto zeroSF = b.create<field::ConstantOp>(scalarFieldType, 0);
   auto scalarIsZero =
       b.create<field::CmpOp>(arith::CmpIPredicate::eq, scalar, zeroSF);
   auto zeroScalarMulIfOp = b.create<scf::IfOp>(
@@ -119,7 +119,7 @@ ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
       /*elseBuilder=*/
       [&](OpBuilder &builder, Location loc) {
         ImplicitLocOpBuilder b0(loc, builder);
-        auto oneSF = b0.create<field::ConstantOp>(scalarFieldType_, 1);
+        auto oneSF = b0.create<field::ConstantOp>(scalarFieldType, 1);
         auto scalarIsOne =
             b0.create<field::CmpOp>(arith::CmpIPredicate::eq, scalar, oneSF);
         auto scalarIsOneIfOp = b0.create<scf::IfOp>(
@@ -145,76 +145,75 @@ ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
 void PippengersGeneric::bucketAccReduc() {
   Operation *windowsForOp = nullptr;
   Value j;
-  Value numBuckets = b_.create<arith::ConstantIndexOp>(numBuckets_);
-  Value numWindows = b_.create<arith::ConstantIndexOp>(numWindows_);
+  Value numBuckets = b.create<arith::ConstantIndexOp>(this->numBuckets);
+  Value numWindows = b.create<arith::ConstantIndexOp>(this->numWindows);
 
-  if (parallel_) {
-    auto bucketsType = MemRefType::get(
-        {static_cast<int64_t>(numWindows_), static_cast<int64_t>(numBuckets_)},
-        outputType_);
-    allBuckets_ = b_.create<memref::AllocOp>(bucketsType);
+  if (parallel) {
+    auto bucketsType = MemRefType::get({static_cast<int64_t>(this->numWindows),
+                                        static_cast<int64_t>(this->numBuckets)},
+                                       outputType);
+    allBuckets = b.create<memref::AllocOp>(bucketsType);
     // Initialize all buckets to zero point
-    b_.create<scf::ParallelOp>(
-        ValueRange{zero_, zero_}, ValueRange{numWindows, numBuckets},
-        ValueRange{one_, one_},
+    b.create<scf::ParallelOp>(
+        ValueRange{zero, zero}, ValueRange{numWindows, numBuckets},
+        ValueRange{one, one},
         [&](OpBuilder &parallelBuilder, Location parallelLoc, ValueRange ivs) {
           ImplicitLocOpBuilder b0(parallelLoc, parallelBuilder);
           Value windowIdx = ivs[0];
           Value bucketIdx = ivs[1];
-          b0.create<memref::StoreOp>(zeroPoint_, allBuckets_,
+          b0.create<memref::StoreOp>(zeroPoint, allBuckets,
                                      ValueRange{windowIdx, bucketIdx});
           b0.create<scf::ReduceOp>();
         });
   } else {
     auto bucketsType =
-        MemRefType::get({static_cast<int64_t>(numBuckets_)}, outputType_);
-    allBuckets_ = b_.create<memref::AllocOp>(bucketsType);
+        MemRefType::get({static_cast<int64_t>(this->numBuckets)}, outputType);
+    allBuckets = b.create<memref::AllocOp>(bucketsType);
     // Initialization should be done per window since we reuse same buffer in
     // the serial case.
   }
 
-  if (parallel_) {
-    auto parOp = b_.create<scf::ParallelOp>(zero_, numWindows, one_);
-    b_.setInsertionPointToStart(parOp.getBody());
+  if (parallel) {
+    auto parOp = b.create<scf::ParallelOp>(zero, numWindows, one);
+    b.setInsertionPointToStart(parOp.getBody());
     j = parOp.getInductionVars()[0];
     windowsForOp = parOp;
   } else {
-    auto forOp = b_.create<scf::ForOp>(zero_, numWindows, one_);
-    b_.setInsertionPointToStart(forOp.getBody());
+    auto forOp = b.create<scf::ForOp>(zero, numWindows, one);
+    b.setInsertionPointToStart(forOp.getBody());
     j = forOp.getInductionVar();
     windowsForOp = forOp;
   }
 
   // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-2.-bucket-accumulation
-  Value bitsPerWindow = b_.create<arith::ConstantIndexOp>(bitsPerWindow_);
-  Value windowOffset = b_.create<arith::MulIOp>(bitsPerWindow, j);
+  Value bitsPerWindow = b.create<arith::ConstantIndexOp>(this->bitsPerWindow);
+  Value windowOffset = b.create<arith::MulIOp>(bitsPerWindow, j);
 
   Value buckets;
-  if (parallel_) {
-    SmallVector<OpFoldResult> offsets = {Value(j), b_.getIndexAttr(0)};
-    SmallVector<OpFoldResult> sizes = {b_.getIndexAttr(1),
-                                       b_.getIndexAttr(numBuckets_)};
-    SmallVector<OpFoldResult> strides = {b_.getIndexAttr(1),
-                                         b_.getIndexAttr(1)};
+  if (parallel) {
+    SmallVector<OpFoldResult> offsets = {Value(j), b.getIndexAttr(0)};
+    SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1),
+                                       b.getIndexAttr(this->numBuckets)};
+    SmallVector<OpFoldResult> strides = {b.getIndexAttr(1), b.getIndexAttr(1)};
 
     // Create subview for current window's buckets
     auto layout =
-        StridedLayoutAttr::get(b_.getContext(), ShapedType::kDynamic, {1});
+        StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic, {1});
     MemRefType bucketsType = MemRefType::get(
-        {static_cast<int64_t>(numBuckets_)}, outputType_, layout);
-    buckets = b_.create<memref::SubViewOp>(bucketsType, allBuckets_,
-                                           /*offsets=*/offsets,
-                                           /*sizes=*/sizes,
-                                           /*strides=*/strides);
+        {static_cast<int64_t>(this->numBuckets)}, outputType, layout);
+    buckets = b.create<memref::SubViewOp>(bucketsType, allBuckets,
+                                          /*offsets=*/offsets,
+                                          /*sizes=*/sizes,
+                                          /*strides=*/strides);
   } else {
-    buckets = allBuckets_;
+    buckets = allBuckets;
     // Initialize the buckets to zero point
-    b_.create<linalg::FillOp>(zeroPoint_, buckets);
+    b.create<linalg::FillOp>(zeroPoint, buckets);
   }
 
-  auto scalarMulsForOp = b_.create<scf::ForOp>(
-      zero_, numScalarMuls_, one_,
-      /*windowSum=*/zeroPoint_,
+  auto scalarMulsForOp = b.create<scf::ForOp>(
+      zero, numScalarMuls, one,
+      /*windowSum=*/zeroPoint,
       [&](OpBuilder &nestedBuilder, Location nestedLoc, Value i,
           ValueRange args) {
         ImplicitLocOpBuilder b0(nestedLoc, nestedBuilder);
@@ -222,8 +221,8 @@ void PippengersGeneric::bucketAccReduc() {
         b0.create<scf::YieldOp>(windowSum);
       });
 
-  bucketReduction(j, scalarMulsForOp.getResult(0), buckets, b_);
-  b_.setInsertionPointAfter(windowsForOp);
+  bucketReduction(j, scalarMulsForOp.getResult(0), buckets, b);
+  b.setInsertionPointAfter(windowsForOp);
 }
 
 } // namespace mlir::zkir::elliptic_curve
