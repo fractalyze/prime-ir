@@ -289,13 +289,8 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto coeffs = toCoeffs(b, adaptor.getInput());
-      SmallVector<Value> negCoeffs;
-      for (unsigned i = 0; i < efType.getDegreeOverPrime(); ++i) {
-        negCoeffs.push_back(b.create<mod_arith::NegateOp>(coeffs[i]));
-      }
-      auto ext = b.create<ExtFromCoeffsOp>(TypeRange{fieldType}, negCoeffs);
-      rewriter.replaceOp(op, ext);
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(op, extensionField->negate(adaptor.getInput()));
       return success();
     }
     return failure();
@@ -320,15 +315,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto lhsCoeffs = toCoeffs(b, adaptor.getLhs());
-      auto rhsCoeffs = toCoeffs(b, adaptor.getRhs());
-      SmallVector<Value> resultCoeffs;
-      for (unsigned i = 0; i < efType.getDegreeOverPrime(); ++i) {
-        resultCoeffs.push_back(
-            b.create<mod_arith::AddOp>(lhsCoeffs[i], rhsCoeffs[i]));
-      }
-      auto ext = b.create<ExtFromCoeffsOp>(TypeRange{fieldType}, resultCoeffs);
-      rewriter.replaceOp(op, ext);
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(
+          op, extensionField->add(adaptor.getLhs(), adaptor.getRhs()));
       return success();
     }
     return failure();
@@ -353,13 +342,8 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto coeffs = toCoeffs(b, adaptor.getInput());
-      SmallVector<Value> resultCoeffs;
-      for (unsigned i = 0; i < efType.getDegreeOverPrime(); ++i) {
-        resultCoeffs.push_back(b.create<mod_arith::DoubleOp>(coeffs[i]));
-      }
-      auto ext = b.create<ExtFromCoeffsOp>(TypeRange{fieldType}, resultCoeffs);
-      rewriter.replaceOp(op, ext);
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(op, extensionField->dbl(adaptor.getInput()));
       return success();
     }
     return failure();
@@ -384,15 +368,9 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto lhsCoeffs = toCoeffs(b, adaptor.getLhs());
-      auto rhsCoeffs = toCoeffs(b, adaptor.getRhs());
-      SmallVector<Value> resultCoeffs;
-      for (unsigned i = 0; i < efType.getDegreeOverPrime(); ++i) {
-        resultCoeffs.push_back(
-            b.create<mod_arith::SubOp>(lhsCoeffs[i], rhsCoeffs[i]));
-      }
-      auto ext = b.create<ExtFromCoeffsOp>(TypeRange{fieldType}, resultCoeffs);
-      rewriter.replaceOp(op, ext);
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(
+          op, extensionField->sub(adaptor.getLhs(), adaptor.getRhs()));
       return success();
     }
     return failure();

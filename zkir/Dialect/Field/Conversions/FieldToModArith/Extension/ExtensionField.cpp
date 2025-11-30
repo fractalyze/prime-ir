@@ -16,7 +16,9 @@ limitations under the License.
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/ExtensionField.h"
 
 #include "llvm/Support/ErrorHandling.h"
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/CubicExtensionField.h"
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/QuadraticExtensionField.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
@@ -28,7 +30,9 @@ ExtensionField::create(ImplicitLocOpBuilder &b,
                        ExtensionFieldTypeInterface type,
                        const TypeConverter *converter) {
   std::unique_ptr<ExtensionField> ret;
-  if (isa<CubicExtFieldType>(type)) {
+  if (isa<QuadraticExtFieldType>(type)) {
+    ret.reset(new QuadraticExtensionField(b, type, converter));
+  } else if (isa<CubicExtFieldType>(type)) {
     ret.reset(new CubicExtensionField(b, type, converter));
   } else {
     llvm_unreachable("Unsupported extension field type");
@@ -44,6 +48,48 @@ ExtensionField::ExtensionField(ImplicitLocOpBuilder &b,
   nonResidue = b.create<mod_arith::ConstantOp>(
       converter->convertType(type.getBaseFieldType()),
       cast<PrimeFieldAttr>(type.getNonResidue()).getValue());
+}
+
+Value ExtensionField::add(Value x, Value y) {
+  auto xCoeffs = toCoeffs(b, x);
+  auto yCoeffs = toCoeffs(b, y);
+  SmallVector<Value, kMaxDegreeOverBaseField> retCoeffs;
+  for (unsigned i = 0; i < type.getDegreeOverBase(); ++i) {
+    // TODO(chokobole): Support towers of extension field.
+    retCoeffs.push_back(b.create<mod_arith::AddOp>(xCoeffs[i], yCoeffs[i]));
+  }
+  return fromCoeffs(b, type, retCoeffs);
+}
+
+Value ExtensionField::sub(Value x, Value y) {
+  auto xCoeffs = toCoeffs(b, x);
+  auto yCoeffs = toCoeffs(b, y);
+  SmallVector<Value, kMaxDegreeOverBaseField> retCoeffs;
+  for (unsigned i = 0; i < type.getDegreeOverBase(); ++i) {
+    // TODO(chokobole): Support towers of extension field.
+    retCoeffs.push_back(b.create<mod_arith::SubOp>(xCoeffs[i], yCoeffs[i]));
+  }
+  return fromCoeffs(b, type, retCoeffs);
+}
+
+Value ExtensionField::dbl(Value x) {
+  auto coeffs = toCoeffs(b, x);
+  SmallVector<Value, kMaxDegreeOverBaseField> retCoeffs;
+  for (unsigned i = 0; i < type.getDegreeOverBase(); ++i) {
+    // TODO(chokobole): Support towers of extension field.
+    retCoeffs.push_back(b.create<mod_arith::DoubleOp>(coeffs[i]));
+  }
+  return fromCoeffs(b, type, retCoeffs);
+}
+
+Value ExtensionField::negate(Value x) {
+  auto coeffs = toCoeffs(b, x);
+  SmallVector<Value, kMaxDegreeOverBaseField> retCoeffs;
+  for (unsigned i = 0; i < type.getDegreeOverBase(); ++i) {
+    // TODO(chokobole): Support towers of extension field.
+    retCoeffs.push_back(b.create<mod_arith::NegateOp>(coeffs[i]));
+  }
+  return fromCoeffs(b, type, retCoeffs);
 }
 
 } // namespace mlir::zkir::field

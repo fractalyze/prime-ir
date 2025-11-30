@@ -25,6 +25,8 @@ cc_library(
         "CubicExtensionField.cpp",
         "CubicExtensionField.h",
         "ExtensionField.cpp",
+        "QuadraticExtensionField.cpp",
+        "QuadraticExtensionField.h",
     ],
     hdrs = ["ExtensionField.h"],
     deps = [

@@ -38,6 +38,11 @@ public:
 
   virtual ~ExtensionField() = default;
 
+  Value add(Value x, Value y);
+  Value sub(Value x, Value y);
+  // NOTE: double is a reserved word in C++.
+  Value dbl(Value x);
+  Value negate(Value x);
   virtual Value square(Value v) = 0;
   virtual Value mul(Value x, Value y) = 0;
   virtual Value inverse(Value v) = 0;
