@@ -22,9 +22,9 @@ namespace mlir::zkir::field {
 
 class CubicExtensionField : public ExtensionField {
 public:
-  Value square(Value v) override;
+  Value square(Value x) override;
   Value mul(Value x, Value y) override;
-  Value inverse(Value v) override;
+  Value inverse(Value x) override;
 
 private:
   friend class ExtensionField;

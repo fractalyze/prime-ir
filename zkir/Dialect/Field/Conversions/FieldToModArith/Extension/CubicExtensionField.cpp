@@ -20,83 +20,83 @@ limitations under the License.
 
 namespace mlir::zkir::field {
 
-Value CubicExtensionField::square(Value v) {
+Value CubicExtensionField::square(Value x) {
   // CH-SQR2 algorithm from "Multiplication and Squaring on Pairing-Friendly
   // Fields" by Devegili, OhEigeartaigh, Scott, Dahab (Section 4).
   // https://eprint.iacr.org/2006/471.pdf
   //
-  // For v = c0 + c1 * u + c2 * u² where u³ = xi:
+  // For x = x₀ + x₁ * u + x₂ * u² where u³ = xi:
   //
-  // s0 = c0²
-  // s1 = 2 * c0 * c1
-  // s2 = (c0 - c1 + c2)²
-  // s3 = 2 * c1 * c2
-  // s4 = c2²
+  // s₀ = x₀²
+  // s₁ = 2 * x₀ * x₁
+  // s₂ = (x₀ - x₁ + x₂)²
+  // s₃ = 2 * x₁ * x₂
+  // s₄ = x₂²
   //
   // Result:
-  // r0 = s0 + xi * s3
-  // r1 = s1 + xi * s4
-  // r2 = s1 + s2 + s3 - s0 - s4
+  // y₀ = s₀ + xi * s₃
+  // y₁ = s₁ + xi * s₄
+  // y₂ = s₁ + s₂ + s₃ - s₀ - s₄
 
-  auto coeffs = toCoeffs(b, v);
-  auto c0 = coeffs[0];
-  auto c1 = coeffs[1];
-  auto c2 = coeffs[2];
+  auto coeffs = toCoeffs(b, x);
+  auto x0 = coeffs[0];
+  auto x1 = coeffs[1];
+  auto x2 = coeffs[2];
 
-  // s0 = c0²
-  auto s0 = b.create<mod_arith::SquareOp>(c0);
+  // s₀ = x₀²
+  auto s0 = b.create<mod_arith::SquareOp>(x0);
 
-  // s1 = 2 * c0 * c1
-  auto c0C1 = b.create<mod_arith::MulOp>(c0, c1);
+  // s₁ = 2 * x₀ * x₁
+  auto c0C1 = b.create<mod_arith::MulOp>(x0, x1);
   auto s1 = b.create<mod_arith::DoubleOp>(c0C1);
 
-  // s2 = (c0 - c1 + c2)²
-  auto c0MinusC1 = b.create<mod_arith::SubOp>(c0, c1);
-  auto c0MinusC1PlusC2 = b.create<mod_arith::AddOp>(c0MinusC1, c2);
-  auto s2 = b.create<mod_arith::SquareOp>(c0MinusC1PlusC2);
+  // s₂ = (x₀ - x₁ + x₂)²
+  auto x0MinusX1 = b.create<mod_arith::SubOp>(x0, x1);
+  auto x0MinusX1PlusX2 = b.create<mod_arith::AddOp>(x0MinusX1, x2);
+  auto s2 = b.create<mod_arith::SquareOp>(x0MinusX1PlusX2);
 
-  // s3 = 2 * c1 * c2
-  auto c1C2 = b.create<mod_arith::MulOp>(c1, c2);
-  auto s3 = b.create<mod_arith::DoubleOp>(c1C2);
+  // s₃ = 2 * x₁ * x₂
+  auto x1TimesX2 = b.create<mod_arith::MulOp>(x1, x2);
+  auto s3 = b.create<mod_arith::DoubleOp>(x1TimesX2);
 
-  // s4 = c2²
-  auto s4 = b.create<mod_arith::SquareOp>(c2);
+  // s₄ = x₂²
+  auto s4 = b.create<mod_arith::SquareOp>(x2);
 
-  // r0 = s0 + xi * s3
-  auto xiS3 = b.create<mod_arith::MulOp>(nonResidue, s3);
-  auto r0 = b.create<mod_arith::AddOp>(s0, xiS3);
+  // y₀ = s₀ + xi * s₃
+  auto xiTimesS3 = b.create<mod_arith::MulOp>(nonResidue, s3);
+  auto y0 = b.create<mod_arith::AddOp>(s0, xiTimesS3);
 
-  // r1 = s1 + xi * s4
-  auto xiS4 = b.create<mod_arith::MulOp>(nonResidue, s4);
-  auto r1 = b.create<mod_arith::AddOp>(s1, xiS4);
+  // y₁ = s₁ + xi * s₄
+  auto xiTimesS4 = b.create<mod_arith::MulOp>(nonResidue, s4);
+  auto y1 = b.create<mod_arith::AddOp>(s1, xiTimesS4);
 
-  // r2 = s1 + s2 + s3 - s0 - s4
-  auto r2Tmp = b.create<mod_arith::AddOp>(s1, s2);
-  auto r2Tmp2 = b.create<mod_arith::AddOp>(r2Tmp, s3);
-  auto r2Tmp3 = b.create<mod_arith::SubOp>(r2Tmp2, s0);
-  auto r2 = b.create<mod_arith::SubOp>(r2Tmp3, s4);
+  // y₂ = s₁ + s₂ + s₃ - s₀ - s₄
+  auto s1PlusS2 = b.create<mod_arith::AddOp>(s1, s2);
+  auto s1PlusS2PlusS3 = b.create<mod_arith::AddOp>(s1PlusS2, s3);
+  auto s1PlusS2PlusS3MinusS0 = b.create<mod_arith::SubOp>(s1PlusS2PlusS3, s0);
+  auto y2 = b.create<mod_arith::SubOp>(s1PlusS2PlusS3MinusS0, s4);
 
-  return fromCoeffs(b, type, {r0, r1, r2});
+  return fromCoeffs(b, type, {y0, y1, y2});
 }
 
 Value CubicExtensionField::mul(Value x, Value y) {
   // Schoolbook multiplication for cubic extension field.
-  // For x = x0 + x1 * u + x2 * u² and y = y0 + y1 * u + y2 * u²
+  // For x = x₀ + x₁ * u + x₂ * u² and y = y₀ + y₁ * u + y₂ * u²
   // where u³ = xi:
   //
-  // v0 = x0 * y0
-  // v1 = x1 * y2
-  // v2 = x2 * y1
-  // v3 = x0 * y1
-  // v4 = x1 * y0
-  // v5 = x2 * y2
-  // v6 = x0 * y2
-  // v7 = x1 * y1
-  // v8 = x2 * y0
+  // v₀ = x₀ * y₀
+  // v₁ = x₁ * y₂
+  // v₂ = x₂ * y₁
+  // v₃ = x₀ * y₁
+  // v₄ = x₁ * y₀
+  // v₅ = x₂ * y₂
+  // v₆ = x₀ * y₂
+  // v₇ = x₁ * y₁
+  // v₈ = x₂ * y₀
   //
-  // r0 = v0 + xi * (v1 + v2)
-  // r1 = v3 + v4 + xi * v5
-  // r2 = v6 + v7 + v8
+  // z₀ = v₀ + xi * (v₁ + v₂)
+  // z₁ = v₃ + v₄ + xi * v₅
+  // z₂ = v₆ + v₇ + v₈
 
   auto xCoeffs = toCoeffs(b, x);
   auto x0 = xCoeffs[0];
@@ -117,78 +117,79 @@ Value CubicExtensionField::mul(Value x, Value y) {
   auto v7 = b.create<mod_arith::MulOp>(x1, y1);
   auto v8 = b.create<mod_arith::MulOp>(x2, y0);
 
-  // r0 = v0 + xi * (v1 + v2)
-  auto sumV1V2 = b.create<mod_arith::AddOp>(v1, v2);
-  auto xiTimesSumV1V2 = b.create<mod_arith::MulOp>(nonResidue, sumV1V2);
-  auto r0 = b.create<mod_arith::AddOp>(v0, xiTimesSumV1V2);
+  // z₀ = v₀ + xi * (v₁ + v₂)
+  auto v1PlusV2 = b.create<mod_arith::AddOp>(v1, v2);
+  auto xiTimesV1PlusV2 = b.create<mod_arith::MulOp>(nonResidue, v1PlusV2);
+  auto z0 = b.create<mod_arith::AddOp>(v0, xiTimesV1PlusV2);
 
-  // r1 = v3 + v4 + xi * v5
+  // z₁ = v₃ + v₄ + xi * v₅
   auto xiTimesV5 = b.create<mod_arith::MulOp>(nonResidue, v5);
-  auto sumV3V4 = b.create<mod_arith::AddOp>(v3, v4);
-  auto r1 = b.create<mod_arith::AddOp>(sumV3V4, xiTimesV5);
+  auto v3PlusV4 = b.create<mod_arith::AddOp>(v3, v4);
+  auto z1 = b.create<mod_arith::AddOp>(v3PlusV4, xiTimesV5);
 
-  // r2 = v6 + v7 + v8
-  auto sumV6V7 = b.create<mod_arith::AddOp>(v6, v7);
-  auto r2 = b.create<mod_arith::AddOp>(sumV6V7, v8);
+  // z₂ = v₆ + v₇ + v₈
+  auto v6PlusV7 = b.create<mod_arith::AddOp>(v6, v7);
+  auto z2 = b.create<mod_arith::AddOp>(v6PlusV7, v8);
 
-  return fromCoeffs(b, type, {r0, r1, r2});
+  return fromCoeffs(b, type, {z0, z1, z2});
 }
 
-Value CubicExtensionField::inverse(Value v) {
+Value CubicExtensionField::inverse(Value x) {
   // Inverse of a cubic extension field element.
-  // For v = c0 + c1 * u + c2 * u² where u³ = xi:
+  // For x = x₀ + x₁ * u + x₂ * u² where u³ = xi:
   //
-  // t0 = c0² - xi * c1 * c2
-  // t1 = xi * c2² - c0 * c1
-  // t2 = c1² - c0 * c2
-  // t3 = c0 * t0 + xi * (c2 * t1 + c1 * t2)
-  // t4 = t3^(-1)
+  // t₀ = x₀² - xi * x₁ * x₂
+  // t₁ = xi * x₂² - x₀ * x₁
+  // t₂ = x₁² - x₀ * x₂
+  // t₃ = x₀ * t₀ + xi * (x₂ * t₁ + x₁ * t₂)
+  // t₄ = t₃^(-1)
   //
-  // r0 = t0 * t4
-  // r1 = t1 * t4
-  // r2 = t2 * t4
+  // y₀ = t₀ * t₄
+  // y₁ = t₁ * t₄
+  // y₂ = t₂ * t₄
 
-  auto coeffs = toCoeffs(b, v);
-  auto c0 = coeffs[0];
-  auto c1 = coeffs[1];
-  auto c2 = coeffs[2];
+  auto coeffs = toCoeffs(b, x);
+  auto x0 = coeffs[0];
+  auto x1 = coeffs[1];
+  auto x2 = coeffs[2];
 
-  // t0 = c0² - xi * c1 * c2
-  auto c0Squared = b.create<mod_arith::SquareOp>(c0);
-  auto c1TimesC2 = b.create<mod_arith::MulOp>(c1, c2);
-  auto xiTimesC1C2 = b.create<mod_arith::MulOp>(nonResidue, c1TimesC2);
-  auto t0 = b.create<mod_arith::SubOp>(c0Squared, xiTimesC1C2);
+  // t₀ = x₀² - xi * x₁ * x₂
+  auto x0Squared = b.create<mod_arith::SquareOp>(x0);
+  auto x1TimesX2 = b.create<mod_arith::MulOp>(x1, x2);
+  auto xiTimesX1X2 = b.create<mod_arith::MulOp>(nonResidue, x1TimesX2);
+  auto t0 = b.create<mod_arith::SubOp>(x0Squared, xiTimesX1X2);
 
-  // t1 = xi * c2² - c0 * c1
-  auto c2Squared = b.create<mod_arith::SquareOp>(c2);
-  auto xiTimesC2Squared = b.create<mod_arith::MulOp>(nonResidue, c2Squared);
-  auto c0TimesC1 = b.create<mod_arith::MulOp>(c0, c1);
-  auto t1 = b.create<mod_arith::SubOp>(xiTimesC2Squared, c0TimesC1);
+  // t₁ = xi * x₂² - x₀ * x₁
+  auto x2Squared = b.create<mod_arith::SquareOp>(x2);
+  auto xiTimesX2Squared = b.create<mod_arith::MulOp>(nonResidue, x2Squared);
+  auto x0TimesX1 = b.create<mod_arith::MulOp>(x0, x1);
+  auto t1 = b.create<mod_arith::SubOp>(xiTimesX2Squared, x0TimesX1);
 
-  // t2 = c1² - c0 * c2
-  auto c1Squared = b.create<mod_arith::SquareOp>(c1);
-  auto c0TimesC2 = b.create<mod_arith::MulOp>(c0, c2);
-  auto t2 = b.create<mod_arith::SubOp>(c1Squared, c0TimesC2);
+  // t₂ = x₁² - x₀ * x₂
+  auto x1Squared = b.create<mod_arith::SquareOp>(x1);
+  auto x0TimesX2 = b.create<mod_arith::MulOp>(x0, x2);
+  auto t2 = b.create<mod_arith::SubOp>(x1Squared, x0TimesX2);
 
-  // t3 = c0 * t0 + xi * (c2 * t1 + c1 * t2)
-  auto c0TimesT0 = b.create<mod_arith::MulOp>(c0, t0);
-  auto c2TimesT1 = b.create<mod_arith::MulOp>(c2, t1);
-  auto c1TimesT2 = b.create<mod_arith::MulOp>(c1, t2);
-  auto sumT1T2 = b.create<mod_arith::AddOp>(c2TimesT1, c1TimesT2);
-  auto xiTimesSumT1T2 = b.create<mod_arith::MulOp>(nonResidue, sumT1T2);
-  auto t3 = b.create<mod_arith::AddOp>(c0TimesT0, xiTimesSumT1T2);
+  // t₃ = x₀ * t₀ + xi * (x₂ * t₁ + x₁ * t₂)
+  auto x0TimesT0 = b.create<mod_arith::MulOp>(x0, t0);
+  auto x2TimesT1 = b.create<mod_arith::MulOp>(x2, t1);
+  auto x1TimesT2 = b.create<mod_arith::MulOp>(x1, t2);
+  auto x2T1PlusX1T2 = b.create<mod_arith::AddOp>(x2TimesT1, x1TimesT2);
+  auto xiTimesX2T1PlusX1T2 =
+      b.create<mod_arith::MulOp>(nonResidue, x2T1PlusX1T2);
+  auto t3 = b.create<mod_arith::AddOp>(x0TimesT0, xiTimesX2T1PlusX1T2);
 
-  // t4 = t3^(-1)
+  // t₄ = t₃^(-1)
   auto t4 = b.create<mod_arith::InverseOp>(t3);
 
-  // r0 = t0 * t4
-  // r1 = t1 * t4
-  // r2 = t2 * t4
-  auto r0 = b.create<mod_arith::MulOp>(t0, t4);
-  auto r1 = b.create<mod_arith::MulOp>(t1, t4);
-  auto r2 = b.create<mod_arith::MulOp>(t2, t4);
+  // y₀ = t₀ * t₄
+  // y₁ = t₁ * t₄
+  // y₂ = t₂ * t₄
+  auto y0 = b.create<mod_arith::MulOp>(t0, t4);
+  auto y1 = b.create<mod_arith::MulOp>(t1, t4);
+  auto y2 = b.create<mod_arith::MulOp>(t2, t4);
 
-  return fromCoeffs(b, type, {r0, r1, r2});
+  return fromCoeffs(b, type, {y0, y1, y2});
 }
 
 } // namespace mlir::zkir::field

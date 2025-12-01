@@ -43,9 +43,9 @@ public:
   // NOTE: double is a reserved word in C++.
   Value dbl(Value x);
   Value negate(Value x);
-  virtual Value square(Value v) = 0;
+  virtual Value square(Value x) = 0;
   virtual Value mul(Value x, Value y) = 0;
-  virtual Value inverse(Value v) = 0;
+  virtual Value inverse(Value x) = 0;
 
 protected:
   ExtensionField(ImplicitLocOpBuilder &b, ExtensionFieldTypeInterface type,
