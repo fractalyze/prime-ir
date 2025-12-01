@@ -16,6 +16,7 @@ limitations under the License.
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 
 #include "mlir/IR/BuiltinTypes.h"
+#include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Field/IR/FieldTypesInterfaces.cpp.inc"
 
 namespace mlir::zkir::field {
@@ -43,6 +44,10 @@ unsigned getIntOrPrimeFieldBitWidth(Type type) {
   return cast<IntegerType>(type).getWidth();
 }
 
+//===----------------------------------------------------------------------===//
+// PrimeFieldType
+//===----------------------------------------------------------------------===//
+
 llvm::TypeSize PrimeFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return llvm::TypeSize::getFixed(getStorageBitWidth());
@@ -53,6 +58,96 @@ uint64_t PrimeFieldType::getABIAlignment(
     llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return dataLayout.getTypeABIAlignment(getStorageType());
 }
+
+//===----------------------------------------------------------------------===//
+// ExtensionFieldTypeInterface utilities
+//===----------------------------------------------------------------------===//
+
+namespace ext_field_utils {
+namespace {
+
+template <typename T>
+bool isMontgomery(T *extField) {
+  return extField->getBaseField().getIsMontgomery();
+}
+
+template <typename T>
+Type cloneWith(const T *extField, Type baseField, Attribute element) {
+  return T::get(extField->getContext(), cast<PrimeFieldType>(baseField),
+                cast<PrimeFieldAttr>(element));
+}
+
+template <typename A, typename T, unsigned kRemainingSize, typename... Args>
+TypedAttr callCreateConstantAttr(const T *extField,
+                                 llvm::ArrayRef<llvm::APInt> coeffs,
+                                 Args &&...currentCoeffs) {
+  if constexpr (kRemainingSize == 0) {
+    return A::get(extField->getContext(), *extField,
+                  std::forward<Args>(currentCoeffs)...);
+  } else {
+    unsigned index = coeffs.size() - kRemainingSize;
+    auto nextCoeff =
+        PrimeFieldAttr::get(extField->getBaseField(), coeffs[index]);
+
+    return callCreateConstantAttr<A, T, kRemainingSize - 1>(
+        extField, coeffs, nextCoeff, std::forward<Args>(currentCoeffs)...);
+  }
+}
+
+template <typename A, typename T, unsigned kDegreeOverPrime>
+TypedAttr createConstantAttr(const T *extField,
+                             llvm::ArrayRef<llvm::APInt> coeffs) {
+  return callCreateConstantAttr<A, T, kDegreeOverPrime>(extField, coeffs);
+}
+
+template <unsigned kDegreeOverPrime>
+Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder, Type structType,
+                            llvm::ArrayRef<Value> coeffs) {
+  return zkir::SimpleStructBuilder<kDegreeOverPrime>::initialized(
+      builder, builder.getLoc(), structType, coeffs);
+}
+
+template <unsigned kDegreeOverBase>
+llvm::SmallVector<Value> extractCoeffsFromStruct(ImplicitLocOpBuilder &builder,
+                                                 Value structValue) {
+  zkir::SimpleStructBuilder<kDegreeOverBase> extFieldStruct(structValue);
+  return extFieldStruct.getValues(builder, builder.getLoc());
+}
+
+} // namespace
+} // namespace ext_field_utils
+
+#define DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(                              \
+    TYPE, ATTR, DEGREE_OVER_PRIME, DEGREE_OVER_BASE)                           \
+  bool TYPE::isMontgomery() const {                                            \
+    return ext_field_utils::isMontgomery(this);                                \
+  }                                                                            \
+  unsigned TYPE::getDegreeOverPrime() const { return DEGREE_OVER_PRIME; }      \
+  unsigned TYPE::getDegreeOverBase() const { return DEGREE_OVER_BASE; }        \
+  Type TYPE::getBaseFieldType() const { return getBaseField(); }               \
+  Type TYPE::cloneWith(Type baseField, Attribute element) const {              \
+    return ext_field_utils::cloneWith<TYPE>(this, baseField, element);         \
+  }                                                                            \
+  TypedAttr TYPE::createConstantAttr(llvm::ArrayRef<llvm::APInt> coeffs)       \
+      const {                                                                  \
+    return ext_field_utils::createConstantAttr<ATTR, TYPE, DEGREE_OVER_PRIME>( \
+        this, coeffs);                                                         \
+  }                                                                            \
+  Value TYPE::buildStructFromCoeffs(ImplicitLocOpBuilder &builder,             \
+                                    Type structType,                           \
+                                    llvm::ArrayRef<Value> coeffs) const {      \
+    return ext_field_utils::buildStructFromCoeffs<DEGREE_OVER_BASE>(           \
+        builder, structType, coeffs);                                          \
+  }                                                                            \
+  llvm::SmallVector<Value> TYPE::extractCoeffsFromStruct(                      \
+      ImplicitLocOpBuilder &builder, Value structValue) const {                \
+    return ext_field_utils::extractCoeffsFromStruct<DEGREE_OVER_BASE>(         \
+        builder, structValue);                                                 \
+  }
+
+//===----------------------------------------------------------------------===//
+// QuadraticExtFieldType
+//===----------------------------------------------------------------------===//
 
 llvm::TypeSize QuadraticExtFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
@@ -65,6 +160,13 @@ uint64_t QuadraticExtFieldType::getABIAlignment(
   return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
 }
 
+DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(QuadraticExtFieldType,
+                                         QuadraticExtFieldAttr, 2, 2);
+
+//===----------------------------------------------------------------------===//
+// CubicExtFieldType
+//===----------------------------------------------------------------------===//
+
 llvm::TypeSize CubicExtFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() * 3);
@@ -75,4 +177,8 @@ uint64_t CubicExtFieldType::getABIAlignment(
     llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
 }
+
+DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(CubicExtFieldType, CubicExtFieldAttr,
+                                         3, 3);
+
 } // namespace mlir::zkir::field
