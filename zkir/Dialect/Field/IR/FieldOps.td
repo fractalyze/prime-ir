@@ -73,6 +73,8 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
         return build($_builder, $_state, pfType, value);
       } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(ty)) {
         return build($_builder, $_state, f2Type, value);
+      } else if (auto f3Type = dyn_cast<CubicExtFieldType>(ty)) {
+        return build($_builder, $_state, f3Type, value);
       } else {
         llvm_unreachable("Unsupported field type for constant");
       }
@@ -86,16 +88,23 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
     OpBuilder<(ins "PrimeFieldType":$ty, "IntegerAttr":$value), [{
       return build($_builder, $_state, ty, PrimeFieldAttr::get(ty.getContext(), ty, value));
     }]>,
-    OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$low), [{
-      PrimeFieldAttr lowAttr = PrimeFieldAttr::get(ty.getBaseField(), low);
-      PrimeFieldAttr highAttr = PrimeFieldAttr::get(ty.getBaseField(), 0);
-      return build($_builder, $_state, ty, QuadraticExtFieldAttr::get(ty.getContext(), ty, lowAttr, highAttr));
+    OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$c0), [{
+      return build($_builder, $_state, ty, c0, 0);
     }]>,
-    OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$low, "uint64_t":$high), [{
-      PrimeFieldAttr lowAttr = PrimeFieldAttr::get(ty.getBaseField(), low);
-      PrimeFieldAttr highAttr = PrimeFieldAttr::get(ty.getBaseField(), high);
-      return build($_builder, $_state, ty, QuadraticExtFieldAttr::get(ty.getContext(), ty, lowAttr, highAttr));
-    }]>
+    OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1), [{
+      PrimeFieldAttr c0Attr = PrimeFieldAttr::get(ty.getBaseField(), c0);
+      PrimeFieldAttr c1Attr = PrimeFieldAttr::get(ty.getBaseField(), c1);
+      return build($_builder, $_state, ty, QuadraticExtFieldAttr::get(ty.getContext(), ty, c0Attr, c1Attr));
+    }]>,
+    OpBuilder<(ins "CubicExtFieldType":$ty, "uint64_t":$c0), [{
+      return build($_builder, $_state, ty, c0, 0, 0);
+    }]>,
+    OpBuilder<(ins "CubicExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1, "uint64_t":$c2), [{
+      PrimeFieldAttr c0Attr = PrimeFieldAttr::get(ty.getBaseField(), c0);
+      PrimeFieldAttr c1Attr = PrimeFieldAttr::get(ty.getBaseField(), c1);
+      PrimeFieldAttr c2Attr = PrimeFieldAttr::get(ty.getBaseField(), c2);
+      return build($_builder, $_state, ty, CubicExtFieldAttr::get(ty.getContext(), ty, c0Attr, c1Attr, c2Attr));
+    }]>,
   ];
 }
 

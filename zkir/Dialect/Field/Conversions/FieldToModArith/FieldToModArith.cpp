@@ -38,7 +38,8 @@ limitations under the License.
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
-#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/CubicExtensionField.h"
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/ExtensionField.h"
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
@@ -53,29 +54,6 @@ namespace mlir::zkir::field {
 
 #define GEN_PASS_DEF_FIELDTOMODARITH
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc"
-
-namespace {
-mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
-  IntegerAttr modulus = type.getModulus();
-  bool isMontgomery = type.isMontgomery();
-  return mod_arith::ModArithType::get(type.getContext(), modulus, isMontgomery);
-}
-
-SmallVector<Type> coeffsTypeRange(Type type) {
-  auto extField = cast<ExtensionFieldTypeInterface>(type);
-  auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
-  return SmallVector<Type>(extField.getDegreeOverBase(),
-                           convertPrimeFieldType(baseField));
-}
-
-Operation::result_range extractCoeffs(ImplicitLocOpBuilder &b,
-                                      Value extFieldElement) {
-  return b
-      .create<ExtToCoeffsOp>(coeffsTypeRange(extFieldElement.getType()),
-                             extFieldElement)
-      .getResults();
-}
-} // namespace
 
 class FieldToModArithTypeConverter : public ShapedTypeConverter {
 public:
@@ -190,7 +168,7 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
       auto baseField = cast<PrimeFieldType>(efType.getBaseFieldType());
       Type baseModArithType = typeConverter->convertType(baseField);
-      auto coeffs = extractCoeffs(b, adaptor.getInput());
+      auto coeffs = toCoeffs(b, adaptor.getInput());
 
       SmallVector<Value> montCoeffs;
       for (auto coeff : coeffs) {
@@ -227,7 +205,7 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
       auto baseField = cast<PrimeFieldType>(efType.getBaseFieldType());
       Type baseModArithType = typeConverter->convertType(baseField);
-      auto coeffs = extractCoeffs(b, adaptor.getInput());
+      auto coeffs = toCoeffs(b, adaptor.getInput());
 
       SmallVector<Value> stdCoeffs;
       for (auto coeff : coeffs) {
@@ -259,43 +237,9 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
       rewriter.replaceOp(op, inv);
       return success();
     }
-    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
-      // construct beta as a mod arith constant
-      auto beta = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(f2Type.getBaseField()),
-          f2Type.getNonResidue().getValue());
-
-      // denominator = a₀² - a₁²β
-      auto coeffs = extractCoeffs(b, adaptor.getInput());
-      auto lowSquared = b.create<mod_arith::SquareOp>(coeffs[0]);
-      auto highSquared = b.create<mod_arith::SquareOp>(coeffs[1]);
-      auto betaTimesHighSquared = b.create<mod_arith::MulOp>(beta, highSquared);
-      auto denominator =
-          b.create<mod_arith::SubOp>(lowSquared, betaTimesHighSquared);
-      auto denominatorInv = b.create<mod_arith::InverseOp>(denominator);
-
-      // c₀ = a₀ / denominator
-      auto c0 = b.create<mod_arith::MulOp>(coeffs[0], denominatorInv);
-      // c₁ = -a₁ / denominator
-      auto highNegated = b.create<mod_arith::NegateOp>(coeffs[1]);
-      auto c1 = b.create<mod_arith::MulOp>(highNegated, denominatorInv);
-      auto f2 =
-          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
-      rewriter.replaceOp(op, f2);
-      return success();
-    }
-    if (auto f3Type = dyn_cast<CubicExtFieldType>(fieldType)) {
-      auto xi = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(f3Type.getBaseField()),
-          f3Type.getNonResidue().getValue());
-
-      auto coeffs = extractCoeffs(b, adaptor.getInput());
-      CubicExtensionField f3Field(b, xi);
-      auto result = f3Field.inverse(coeffs[0], coeffs[1], coeffs[2]);
-
-      auto f3 = b.create<ExtFromCoeffsOp>(
-          TypeRange{f3Type}, ValueRange{result[0], result[1], result[2]});
-      rewriter.replaceOp(op, f3);
+    if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(op, extensionField->inverse(adaptor.getInput()));
       return success();
     }
     return failure();
@@ -320,13 +264,8 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto coeffs = extractCoeffs(b, adaptor.getInput());
-      SmallVector<Value> negCoeffs;
-      for (unsigned i = 0; i < efType.getDegreeOverPrime(); ++i) {
-        negCoeffs.push_back(b.create<mod_arith::NegateOp>(coeffs[i]));
-      }
-      auto ext = b.create<ExtFromCoeffsOp>(TypeRange{fieldType}, negCoeffs);
-      rewriter.replaceOp(op, ext);
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(op, extensionField->negate(adaptor.getInput()));
       return success();
     }
     return failure();
@@ -351,15 +290,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
-      auto rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
-      SmallVector<Value> resultCoeffs;
-      for (unsigned i = 0; i < efType.getDegreeOverPrime(); ++i) {
-        resultCoeffs.push_back(
-            b.create<mod_arith::AddOp>(lhsCoeffs[i], rhsCoeffs[i]));
-      }
-      auto ext = b.create<ExtFromCoeffsOp>(TypeRange{fieldType}, resultCoeffs);
-      rewriter.replaceOp(op, ext);
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(
+          op, extensionField->add(adaptor.getLhs(), adaptor.getRhs()));
       return success();
     }
     return failure();
@@ -384,13 +317,8 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto coeffs = extractCoeffs(b, adaptor.getInput());
-      SmallVector<Value> resultCoeffs;
-      for (unsigned i = 0; i < efType.getDegreeOverPrime(); ++i) {
-        resultCoeffs.push_back(b.create<mod_arith::DoubleOp>(coeffs[i]));
-      }
-      auto ext = b.create<ExtFromCoeffsOp>(TypeRange{fieldType}, resultCoeffs);
-      rewriter.replaceOp(op, ext);
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(op, extensionField->dbl(adaptor.getInput()));
       return success();
     }
     return failure();
@@ -415,15 +343,9 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
-      auto rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
-      SmallVector<Value> resultCoeffs;
-      for (unsigned i = 0; i < efType.getDegreeOverPrime(); ++i) {
-        resultCoeffs.push_back(
-            b.create<mod_arith::SubOp>(lhsCoeffs[i], rhsCoeffs[i]));
-      }
-      auto ext = b.create<ExtFromCoeffsOp>(TypeRange{fieldType}, resultCoeffs);
-      rewriter.replaceOp(op, ext);
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(
+          op, extensionField->sub(adaptor.getLhs(), adaptor.getRhs()));
       return success();
     }
     return failure();
@@ -447,50 +369,10 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
       rewriter.replaceOp(op, mul);
       return success();
     }
-    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
-      // construct beta as a mod arith constant
-      auto beta = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(f2Type.getBaseField()),
-          f2Type.getNonResidue().getValue());
-
-      Operation::result_range lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
-      Operation::result_range rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
-      // v₀ = a₀ * b₀
-      // v₁ = a₁ * b₁
-      auto v0 = b.create<mod_arith::MulOp>(lhsCoeffs[0], rhsCoeffs[0]);
-      auto v1 = b.create<mod_arith::MulOp>(lhsCoeffs[1], rhsCoeffs[1]);
-
-      // c₀ = v₀ + βv₁
-      auto betaTimesV1 = b.create<mod_arith::MulOp>(beta, v1);
-      auto c0 = b.create<mod_arith::AddOp>(v0, betaTimesV1);
-
-      // c₁ = (a₀ + a₁)(b₀ + b₁) - v₀ - v₁
-      auto sumLhs = b.create<mod_arith::AddOp>(lhsCoeffs[0], lhsCoeffs[1]);
-      auto sumRhs = b.create<mod_arith::AddOp>(rhsCoeffs[0], rhsCoeffs[1]);
-      auto sumProduct = b.create<mod_arith::MulOp>(sumLhs, sumRhs);
-      Value c1 = b.create<mod_arith::SubOp>(sumProduct, v0);
-      c1 = b.create<mod_arith::SubOp>(c1, v1);
-
-      auto f2 =
-          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
-      rewriter.replaceOp(op, f2);
-      return success();
-    }
-    if (auto f3Type = dyn_cast<CubicExtFieldType>(fieldType)) {
-      auto xi = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(f3Type.getBaseField()),
-          f3Type.getNonResidue().getValue());
-
-      auto lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
-      auto rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
-
-      CubicExtensionField f3Field(b, xi);
-      auto result = f3Field.mul(lhsCoeffs[0], lhsCoeffs[1], lhsCoeffs[2],
-                                rhsCoeffs[0], rhsCoeffs[1], rhsCoeffs[2]);
-
-      auto f3 = b.create<ExtFromCoeffsOp>(
-          TypeRange{f3Type}, ValueRange{result[0], result[1], result[2]});
-      rewriter.replaceOp(op, f3);
+    if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(
+          op, extensionField->mul(adaptor.getLhs(), adaptor.getRhs()));
       return success();
     }
     return failure();
@@ -514,50 +396,9 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
       rewriter.replaceOp(op, square);
       return success();
     }
-    if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
-      // construct beta as a mod arith constant
-      auto beta = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(f2Type.getBaseField()),
-          f2Type.getNonResidue().getValue());
-
-      auto coeffs = extractCoeffs(b, adaptor.getInput());
-
-      // v₀ = a₀ - a₁
-      Value v0 = b.create<mod_arith::SubOp>(coeffs[0], coeffs[1]);
-
-      // v₁ = a₀ - βa₁
-      auto betaA1 = b.create<mod_arith::MulOp>(beta, coeffs[1]);
-      auto v1 = b.create<mod_arith::SubOp>(coeffs[0], betaA1);
-
-      // v₂ = a₀ * a₁
-      auto v2 = b.create<mod_arith::MulOp>(coeffs[0], coeffs[1]);
-
-      // v₀ = v₀ * v₁ + v₂
-      auto v0TimesV1 = b.create<mod_arith::MulOp>(v0, v1);
-      v0 = b.create<mod_arith::AddOp>(v0TimesV1, v2);
-
-      // c₁ = v₂ + v₂
-      auto c1 = b.create<mod_arith::DoubleOp>(v2);
-      // c₀ = v₀ + βv₂
-      auto betaV2 = b.create<mod_arith::MulOp>(beta, v2);
-      auto c0 = b.create<mod_arith::AddOp>(v0, betaV2);
-      auto f2 =
-          b.create<ExtFromCoeffsOp>(TypeRange{f2Type}, ValueRange{c0, c1});
-      rewriter.replaceOp(op, f2);
-      return success();
-    }
-    if (auto f3Type = dyn_cast<CubicExtFieldType>(fieldType)) {
-      auto xi = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(f3Type.getBaseField()),
-          f3Type.getNonResidue().getValue());
-
-      auto coeffs = extractCoeffs(b, adaptor.getInput());
-      CubicExtensionField f3Field(b, xi);
-      auto result = f3Field.square(coeffs[0], coeffs[1], coeffs[2]);
-
-      auto f3 = b.create<ExtFromCoeffsOp>(
-          TypeRange{f3Type}, ValueRange{result[0], result[1], result[2]});
-      rewriter.replaceOp(op, f3);
+    if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+      auto extensionField = ExtensionField::create(b, efType, typeConverter);
+      rewriter.replaceOp(op, extensionField->square(adaptor.getInput()));
       return success();
     }
     return failure();
@@ -595,32 +436,12 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       if (pfType.isMontgomery()) {
         init = b.create<ToMontOp>(montType, init);
       }
-    } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(fieldType)) {
-      modulus = f2Type.getBaseField().getModulus().getValue();
-      init = f2Type.isMontgomery()
-                 ? b.create<ToMontOp>(
-                        f2Type,
-                        b.create<ConstantOp>(cast<QuadraticExtFieldType>(
-                                                 getStandardFormType(f2Type)),
-                                             1, 0))
-                       .getResult()
-                 : b.create<ConstantOp>(f2Type, 1, 0);
-    } else if (auto f3Type = dyn_cast<CubicExtFieldType>(fieldType)) {
-      modulus = f3Type.getBaseField().getModulus().getValue();
-      init =
-          f3Type.isMontgomery()
-              ? b.create<ToMontOp>(
-                     f3Type,
-                     b.create<F3ConstantOp>(
-                         cast<CubicExtFieldType>(getStandardFormType(f3Type)),
-                         b.create<ConstantOp>(f3Type.getBaseField(), 1),
-                         b.create<ConstantOp>(f3Type.getBaseField(), 0),
-                         b.create<ConstantOp>(f3Type.getBaseField(), 0)))
-                    .getResult()
-              : b.create<F3ConstantOp>(
-                    f3Type, b.create<ConstantOp>(f3Type.getBaseField(), 1),
-                    b.create<ConstantOp>(f3Type.getBaseField(), 0),
-                    b.create<ConstantOp>(f3Type.getBaseField(), 0));
+    } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+      // TODO(chokobole): Support towers of extension field.
+      modulus = cast<PrimeFieldType>(efType.getBaseFieldType())
+                    .getModulus()
+                    .getValue();
+      init = efType.createOneConstant(b);
     } else {
       op.emitOpError("unsupported output type");
       return failure();
@@ -762,8 +583,8 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
       return success();
     } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
       // For extension fields, we compare each coefficient separately.
-      auto lhsCoeffs = extractCoeffs(b, adaptor.getLhs());
-      auto rhsCoeffs = extractCoeffs(b, adaptor.getRhs());
+      auto lhsCoeffs = toCoeffs(b, adaptor.getLhs());
+      auto rhsCoeffs = toCoeffs(b, adaptor.getRhs());
       unsigned n = efType.getDegreeOverPrime();
       SmallVector<Value> cmpResults;
       for (unsigned i = 0; i < n; ++i) {

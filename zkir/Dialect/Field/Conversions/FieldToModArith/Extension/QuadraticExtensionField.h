@@ -13,14 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_CUBICEXTENSIONFIELD_H_
-#define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_CUBICEXTENSIONFIELD_H_
+#ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_QUADRATICEXTENSIONFIELD_H_
+#define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_QUADRATICEXTENSIONFIELD_H_
 
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/ExtensionField.h"
 
 namespace mlir::zkir::field {
 
-class CubicExtensionField : public ExtensionField {
+class QuadraticExtensionField : public ExtensionField {
 public:
   Value square(Value x) override;
   Value mul(Value x, Value y) override;
@@ -35,4 +35,4 @@ private:
 } // namespace mlir::zkir::field
 
 // NOLINTNEXTLINE(whitespace/line_length)
-#endif // ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_CUBICEXTENSIONFIELD_H_
+#endif // ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSION_QUADRATICEXTENSIONFIELD_H_

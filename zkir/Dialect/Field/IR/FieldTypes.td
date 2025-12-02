@@ -40,12 +40,20 @@ def FieldTypeInterface : TypeInterface<"FieldTypeInterface"> {
   let methods = [
     InterfaceMethod<"Check if the field is in Montgomery form",
       "bool", "isMontgomery">,
+    InterfaceMethod<"Create zero constant",
+      "mlir::Value", "createZeroConstant",
+      (ins "mlir::ImplicitLocOpBuilder &":$builder)>,
+    InterfaceMethod<"Create one constant",
+      "mlir::Value", "createOneConstant",
+      (ins "mlir::ImplicitLocOpBuilder &":$builder)>,
   ];
 }
 
 // Extension field type interface.
 // Provides a unified interface for extension field types (Fp2, Fp3, etc.)
-def ExtensionFieldTypeInterface : TypeInterface<"ExtensionFieldTypeInterface", [FieldTypeInterface]> {
+def ExtensionFieldTypeInterface : TypeInterface<"ExtensionFieldTypeInterface", [
+  DeclareTypeInterfaceMethods<FieldTypeInterface>
+  ]> {
   let description = [{
     Interface for extension field types that allows generic handling
     of different extension degrees without explicit type checking.
@@ -83,7 +91,7 @@ def ExtensionFieldTypeInterface : TypeInterface<"ExtensionFieldTypeInterface", [
 def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
-  FieldTypeInterface,
+  DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
   ]> {
   let summary = "Prime field element type";
@@ -107,9 +115,6 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
     }]>,
   ];
   let extraClassDeclaration = [{
-    bool isMontgomery() const {
-      return getIsMontgomery();
-    }
     IntegerType getStorageType() const {
       // TODO(batzor): decouple the storage type from the modulus type
       return cast<IntegerType>(getModulus().getType());
@@ -126,7 +131,7 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
 def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
-  ExtensionFieldTypeInterface,
+  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
   ]> {
   let summary = "Quadratic extension field element type";
@@ -146,57 +151,6 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
    "PrimeFieldAttr": $nonResidue
   );
   let assemblyFormat = "`<` $baseField `,` $nonResidue `>`";
-  let extraClassDeclaration = [{
-    // Check if the field is in Montgomery form.
-    bool isMontgomery() const {
-      return getBaseField().getIsMontgomery();
-    }
-
-    // ExtensionFieldTypeInterface methods
-    unsigned getDegreeOverPrime() const {
-      return 2;
-    }
-
-    unsigned getDegreeOverBase() const {
-      return 2;
-    }
-
-    mlir::Type getBaseFieldType() const {
-      return getBaseField();
-    }
-
-    mlir::Type cloneWith(mlir::Type baseField, mlir::Attribute element);
-
-    mlir::TypedAttr createConstantAttr(llvm::ArrayRef<llvm::APInt> coeffs);
-
-    mlir::Value buildStructFromCoeffs(mlir::ImplicitLocOpBuilder &builder,
-                                      mlir::Type structType,
-                                      llvm::ArrayRef<mlir::Value> coeffs) {
-      return mlir::zkir::SimpleStructBuilder<2>::initialized(
-          builder, builder.getLoc(), structType, coeffs);
-    }
-
-    llvm::SmallVector<mlir::Value> extractCoeffsFromStruct(
-        mlir::ImplicitLocOpBuilder &builder, mlir::Value structValue) {
-      mlir::zkir::SimpleStructBuilder<2> extFieldStruct(structValue);
-      return extFieldStruct.getValues(builder, builder.getLoc());
-    }
-  }];
-  let extraClassDefinition = [{
-    mlir::Type $cppClass::cloneWith(
-        mlir::Type baseField, mlir::Attribute element) {
-      return QuadraticExtFieldType::get(getContext(),
-          mlir::cast<PrimeFieldType>(baseField),
-          mlir::cast<PrimeFieldAttr>(element));
-    }
-
-    mlir::TypedAttr $cppClass::createConstantAttr(llvm::ArrayRef<llvm::APInt> coeffs) {
-      return QuadraticExtFieldAttr::get(
-          getContext(), *this,
-          PrimeFieldAttr::get(getBaseField(), coeffs[0]),
-          PrimeFieldAttr::get(getBaseField(), coeffs[1]));
-    }
-  }];
 }
 
 // Cubic extension field type definition.
@@ -205,7 +159,7 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
 def Field_CubicExtFieldType : Field_Type<"CubicExtField", "f3", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
-  ExtensionFieldTypeInterface,
+  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
   ]> {
   let summary = "Cubic extension field element type";
@@ -227,58 +181,6 @@ def Field_CubicExtFieldType : Field_Type<"CubicExtField", "f3", [
    "PrimeFieldAttr": $nonResidue
   );
   let assemblyFormat = "`<` $baseField `,` $nonResidue `>`";
-  let extraClassDeclaration = [{
-    // Check if the field is in Montgomery form.
-    bool isMontgomery() const {
-      return getBaseField().getIsMontgomery();
-    }
-
-    // ExtensionFieldTypeInterface methods
-    unsigned getDegreeOverPrime() const {
-      return 3;
-    }
-
-    unsigned getDegreeOverBase() const {
-      return 3;
-    }
-
-    mlir::Type getBaseFieldType() const {
-      return getBaseField();
-    }
-
-    mlir::Type cloneWith(mlir::Type baseField, mlir::Attribute element);
-
-    mlir::TypedAttr createConstantAttr(llvm::ArrayRef<llvm::APInt> coeffs);
-
-    mlir::Value buildStructFromCoeffs(mlir::ImplicitLocOpBuilder &builder,
-                                      mlir::Type structType,
-                                      llvm::ArrayRef<mlir::Value> coeffs) {
-      return mlir::zkir::SimpleStructBuilder<3>::initialized(
-          builder, builder.getLoc(), structType, coeffs);
-    }
-
-    llvm::SmallVector<mlir::Value> extractCoeffsFromStruct(
-        mlir::ImplicitLocOpBuilder &builder, mlir::Value structValue) {
-      mlir::zkir::SimpleStructBuilder<3> extFieldStruct(structValue);
-      return extFieldStruct.getValues(builder, builder.getLoc());
-    }
-  }];
-  let extraClassDefinition = [{
-    mlir::Type $cppClass::cloneWith(
-        mlir::Type baseField, mlir::Attribute element) {
-      return CubicExtFieldType::get(getContext(),
-          mlir::cast<PrimeFieldType>(baseField),
-          mlir::cast<PrimeFieldAttr>(element));
-    }
-
-    mlir::TypedAttr $cppClass::createConstantAttr(llvm::ArrayRef<llvm::APInt> coeffs) {
-      return CubicExtFieldAttr::get(
-          getContext(), *this,
-          PrimeFieldAttr::get(getBaseField(), coeffs[0]),
-          PrimeFieldAttr::get(getBaseField(), coeffs[1]),
-          PrimeFieldAttr::get(getBaseField(), coeffs[2]));
-    }
-  }];
 }
 
 def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType], "any-field-type">;

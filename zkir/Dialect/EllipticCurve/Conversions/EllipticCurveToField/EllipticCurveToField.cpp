@@ -79,7 +79,8 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
     Operation::result_range coords = extractCoords(b, op.getInput());
     Type baseFieldType =
         getCurveFromPointLike(op.getInput().getType()).getBaseField();
-    Value zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
+    Value zeroBF =
+        cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
 
     Value isZero;
     if (isa<AffineType>(op.getInput().getType())) {
@@ -113,12 +114,10 @@ struct ConvertConvertPointType
     Type inputType = op.getInput().getType();
     Type outputType = op.getType();
     Type baseFieldType = getCurveFromPointLike(inputType).getBaseField();
-    Value zeroBF = b.create<field::ConstantOp>(baseFieldType, 0);
-    // TODO(chokobole): Fix below after attaching montgomery information to
-    // the field type.
-    Value oneBF = b.create<field::ToMontOp>(
-        baseFieldType, b.create<field::ConstantOp>(
-                           field::getStandardFormType(baseFieldType), 1));
+    Value zeroBF =
+        cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
+    Value oneBF =
+        cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
 
     SmallVector<Value> outputCoords;
 

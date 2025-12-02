@@ -13,35 +13,25 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef ZKIR_DIALECT_FIELD_IR_FIELDTYPES_H_
-#define ZKIR_DIALECT_FIELD_IR_FIELDTYPES_H_
+#ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_CONVERSIONUTILS_H_
+#define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_CONVERSIONUTILS_H_
 
-#include "mlir/IR/Types.h"
-
-// IWYU pragma: begin_keep
-// Headers needed for FieldTypes.h.inc
-#include "mlir/IR/Builders.h"
-#include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/BuiltinTypeInterfaces.h"
-#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/Interfaces/DataLayoutInterfaces.h"
-#include "zkir/Utils/SimpleStructBuilder.h"
-// IWYU pragma: end_keep
+#include "mlir/IR/Types.h"
+#include "mlir/IR/Value.h"
+#include "mlir/IR/ValueRange.h"
+#include "zkir/Dialect/Field/IR/FieldTypes.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 namespace mlir::zkir::field {
 
-class PrimeFieldAttr;
-class PrimeFieldType;
+mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type);
 
-bool isMontgomery(Type type);
-unsigned getIntOrPrimeFieldBitWidth(Type type);
+Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
+                                 Value extFieldElement);
 
-#include "zkir/Dialect/Field/IR/FieldTypesInterfaces.h.inc"
+Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs);
 
 } // namespace mlir::zkir::field
 
-#define GET_TYPEDEF_CLASSES
-#include "zkir/Dialect/Field/IR/FieldTypes.h.inc"
-
-#endif // ZKIR_DIALECT_FIELD_IR_FIELDTYPES_H_
+#endif // ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_CONVERSIONUTILS_H_
