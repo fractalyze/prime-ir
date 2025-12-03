@@ -50,7 +50,7 @@ mlir_tools_path = runfiles_dir.joinpath(Path(mlir_tools_relpath))
 
 tool_relpaths = [
     mlir_tools_relpath,
-    "_main/tools",
+    "zkir/tools",
     "llvm-project/llvm",
 ]
 

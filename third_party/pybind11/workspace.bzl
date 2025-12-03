@@ -13,21 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-This module configures dependencies for the ZKIR project.
-"""
+"""Loads the pybind11 library."""
 
-load("//third_party/benchmark:workspace.bzl", benchmark = "repo")
-load("//third_party/nanobind:workspace.bzl", nanobind = "repo")
-load("//third_party/omp:omp_configure.bzl", "omp_configure")
-load("//third_party/pybind11:workspace.bzl", pybind11 = "repo")
-load("//third_party/robin_map:workspace.bzl", robin_map = "repo")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# buildifier: disable=function-docstring
-def zkir_deps():
-    omp_configure(name = "local_config_omp")
-
-    benchmark()
-    nanobind()
-    robin_map()
-    pybind11()
+def repo():
+    http_archive(
+        name = "pybind11",
+        strip_prefix = "pybind11-2.10.3",
+        sha256 = "201966a61dc826f1b1879a24a3317a1ec9214a918c8eb035be2f30c3e9cfbdcb",
+        urls = ["https://github.com/pybind/pybind11/archive/v2.10.3.zip"],
+        build_file = "//third_party/pybind11:pybind11.BUILD",
+    )

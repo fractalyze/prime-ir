@@ -33,6 +33,7 @@ def lit_test(name = None, src = None, size = "small", timeout = "short", tags = 
           size = "small",
           timeout = "short",
           main = "lit.py",
+          deps = ["@pypi//lit"],
       )
 
     Where the `ops.mlir` file contains the test cases in standard RUN + CHECK format.
@@ -77,6 +78,7 @@ def lit_test(name = None, src = None, size = "small", timeout = "short", tags = 
         main = "lit.py",
         tags = tags,
         target_compatible_with = target_compatible_with,
+        deps = ["@pypi//lit"],
     )
 
 def run_lit_tests(

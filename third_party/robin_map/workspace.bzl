@@ -13,21 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-This module configures dependencies for the ZKIR project.
-"""
+"""Loads the robin_map library."""
 
-load("//third_party/benchmark:workspace.bzl", benchmark = "repo")
-load("//third_party/nanobind:workspace.bzl", nanobind = "repo")
-load("//third_party/omp:omp_configure.bzl", "omp_configure")
-load("//third_party/pybind11:workspace.bzl", pybind11 = "repo")
-load("//third_party/robin_map:workspace.bzl", robin_map = "repo")
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# buildifier: disable=function-docstring
-def zkir_deps():
-    omp_configure(name = "local_config_omp")
-
-    benchmark()
-    nanobind()
-    robin_map()
-    pybind11()
+def repo():
+    http_archive(
+        name = "robin_map",
+        strip_prefix = "robin-map-1.3.0",
+        sha256 = "a8424ad3b0affd4c57ed26f0f3d8a29604f0e1f2ef2089f497f614b1c94c7236",
+        urls = ["https://github.com/Tessil/robin-map/archive/refs/tags/v1.3.0.tar.gz"],
+        build_file = "//third_party/robin_map:robin_map.BUILD",
+    )

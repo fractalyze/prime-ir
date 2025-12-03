@@ -13,21 +13,17 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
-This module configures dependencies for the ZKIR project.
-"""
+load("@rules_cc//cc:defs.bzl", "cc_library")
 
-load("//third_party/benchmark:workspace.bzl", benchmark = "repo")
-load("//third_party/nanobind:workspace.bzl", nanobind = "repo")
-load("//third_party/omp:omp_configure.bzl", "omp_configure")
-load("//third_party/pybind11:workspace.bzl", pybind11 = "repo")
-load("//third_party/robin_map:workspace.bzl", robin_map = "repo")
-
-# buildifier: disable=function-docstring
-def zkir_deps():
-    omp_configure(name = "local_config_omp")
-
-    benchmark()
-    nanobind()
-    robin_map()
-    pybind11()
+cc_library(
+    name = "robin_map",
+    hdrs = [
+        "include/tsl/robin_growth_policy.h",
+        "include/tsl/robin_hash.h",
+        "include/tsl/robin_map.h",
+        "include/tsl/robin_set.h",
+    ],
+    includes = ["."],
+    strip_include_prefix = "include",
+    visibility = ["//visibility:public"],
+)
