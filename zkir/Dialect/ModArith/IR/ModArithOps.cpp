@@ -200,35 +200,49 @@ OpFoldResult FromMontOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult CmpOp::fold(FoldAdaptor adaptor) {
+  auto compare = [](APInt lhs, APInt rhs, arith::CmpIPredicate predicate) {
+    switch (predicate) {
+    case arith::CmpIPredicate::eq:
+      return lhs.eq(rhs);
+    case arith::CmpIPredicate::ne:
+      return lhs.ne(rhs);
+    case arith::CmpIPredicate::slt:
+      return lhs.slt(rhs);
+    case arith::CmpIPredicate::sle:
+      return lhs.sle(rhs);
+    case arith::CmpIPredicate::sgt:
+      return lhs.sgt(rhs);
+    case arith::CmpIPredicate::sge:
+      return lhs.sge(rhs);
+    case arith::CmpIPredicate::ult:
+      return lhs.ult(rhs);
+    case arith::CmpIPredicate::ule:
+      return lhs.ule(rhs);
+    case arith::CmpIPredicate::ugt:
+      return lhs.ugt(rhs);
+    case arith::CmpIPredicate::uge:
+      return lhs.uge(rhs);
+    }
+  };
+
   auto predicate = adaptor.getPredicate();
   if (auto lhs = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
     if (auto rhs = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
-      APInt lhsValue = lhs.getValue();
-      APInt rhsValue = rhs.getValue();
-      switch (predicate) {
-      case arith::CmpIPredicate::eq:
-        return BoolAttr::get(getType().getContext(), lhsValue.eq(rhsValue));
-      case arith::CmpIPredicate::ne:
-        return BoolAttr::get(getType().getContext(), lhsValue.ne(rhsValue));
-      case arith::CmpIPredicate::slt:
-        return BoolAttr::get(getType().getContext(), lhsValue.slt(rhsValue));
-      case arith::CmpIPredicate::sle:
-        return BoolAttr::get(getType().getContext(), lhsValue.sle(rhsValue));
-      case arith::CmpIPredicate::sgt:
-        return BoolAttr::get(getType().getContext(), lhsValue.sgt(rhsValue));
-      case arith::CmpIPredicate::sge:
-        return BoolAttr::get(getType().getContext(), lhsValue.sge(rhsValue));
-      case arith::CmpIPredicate::ult:
-        return BoolAttr::get(getType().getContext(), lhsValue.ult(rhsValue));
-      case arith::CmpIPredicate::ule:
-        return BoolAttr::get(getType().getContext(), lhsValue.ule(rhsValue));
-      case arith::CmpIPredicate::ugt:
-        return BoolAttr::get(getType().getContext(), lhsValue.ugt(rhsValue));
-      case arith::CmpIPredicate::uge:
-        return BoolAttr::get(getType().getContext(), lhsValue.uge(rhsValue));
-      default:
-        llvm_unreachable("unknown cmpi predicate kind");
-      }
+      return BoolAttr::get(getType().getContext(),
+                           compare(lhs.getValue(), rhs.getValue(), predicate));
+    }
+  } else if (auto lhs = dyn_cast_if_present<DenseModArithElementsAttr>(
+                 adaptor.getLhs())) {
+    if (auto rhs =
+            dyn_cast_if_present<DenseModArithElementsAttr>(adaptor.getRhs())) {
+      return DenseIntElementsAttr::get(
+          lhs.getType().clone(IntegerType::get(lhs.getType().getContext(), 1)),
+          llvm::map_to_vector(
+              llvm::zip(lhs.getValues<APInt>(), rhs.getValues<APInt>()),
+              [compare, predicate](const auto &values) {
+                const auto &[lhs, rhs] = values;
+                return compare(lhs, rhs, predicate);
+              }));
     }
   }
   return {};
@@ -242,77 +256,139 @@ OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
     return value.isZero() ? value : modulus - value;
   };
 
-  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    return IntegerAttr::get(input.getType(), negateMod(input.getValue()));
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    return IntegerAttr::get(intAttr.getType(), negateMod(intAttr.getValue()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType(),
+        llvm::map_to_vector(denseElementsAttr.getValues<APInt>(), negateMod));
   }
   return {};
 }
 
 OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
-  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    auto modArithType = cast<ModArithType>(getType());
-    APInt modulus = modArithType.getModulus().getValue();
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  APInt modulus = modArithType.getModulus().getValue();
+
+  auto doubleMod = [modulus](APInt value) {
     assert(modulus.getBitWidth() > modulus.getActiveBits());
-    APInt resultValue = input.getValue().shl(1);
+    APInt resultValue = value.shl(1);
     if (resultValue.uge(modulus)) {
       resultValue -= modulus;
     }
-    return IntegerAttr::get(input.getType(), resultValue);
+    return resultValue;
+  };
+
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    return IntegerAttr::get(intAttr.getType(), doubleMod(intAttr.getValue()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType(),
+        llvm::map_to_vector(denseElementsAttr.getValues<APInt>(), doubleMod));
   }
   return {};
 }
 
 OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
-  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    auto modArithType = cast<ModArithType>(getType());
-    APInt modulus = modArithType.getModulus().getValue();
-    APInt resultValue = mulMod(input.getValue(), input.getValue(), modulus);
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  APInt modulus = modArithType.getModulus().getValue();
+
+  auto squareMod = [modArithType, modulus](APInt value) {
+    auto square = mulMod(value, value, modulus);
     if (modArithType.isMontgomery()) {
       MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-      resultValue = mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
+      square = mulMod(square, montAttr.getRInv().getValue(), modulus);
     }
-    return IntegerAttr::get(input.getType(), resultValue);
+    return square;
+  };
+
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    return IntegerAttr::get(intAttr.getType(), squareMod(intAttr.getValue()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType(),
+        llvm::map_to_vector(denseElementsAttr.getValues<APInt>(), squareMod));
   }
   return {};
 }
 
 OpFoldResult MontSquareOp::fold(FoldAdaptor adaptor) {
-  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    auto modArithType = cast<ModArithType>(getType());
-    APInt modulus = modArithType.getModulus().getValue();
-    APInt resultValue = mulMod(input.getValue(), input.getValue(), modulus);
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  APInt modulus = modArithType.getModulus().getValue();
+
+  auto montSquareMod = [modArithType, modulus](APInt value) {
+    auto square = mulMod(value, value, modulus);
     MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-    resultValue = mulMod(resultValue, montAttr.getRInv().getValue(), modulus);
-    return IntegerAttr::get(input.getType(), resultValue);
+    square = mulMod(square, montAttr.getRInv().getValue(), modulus);
+    return square;
+  };
+
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    return IntegerAttr::get(intAttr.getType(),
+                            montSquareMod(intAttr.getValue()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType(),
+        llvm::map_to_vector(denseElementsAttr.getValues<APInt>(),
+                            montSquareMod));
   }
   return {};
 }
 
 OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
-  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    auto modArithType = cast<ModArithType>(getType());
-    APInt modulus = modArithType.getModulus().getValue();
-    APInt resultValue = multiplicativeInverse(input.getValue(), modulus);
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  APInt modulus = modArithType.getModulus().getValue();
+
+  auto inverseMod = [modArithType, modulus](APInt value) {
+    auto inverse = multiplicativeInverse(value, modulus);
     if (modArithType.isMontgomery()) {
       MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-      resultValue =
-          mulMod(resultValue, montAttr.getRSquared().getValue(), modulus);
+      inverse = mulMod(inverse, montAttr.getRSquared().getValue(), modulus);
     }
-    return IntegerAttr::get(input.getType(), resultValue);
+    return inverse;
+  };
+
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    return IntegerAttr::get(intAttr.getType(), inverseMod(intAttr.getValue()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType(),
+        llvm::map_to_vector(denseElementsAttr.getValues<APInt>(), inverseMod));
   }
   return {};
 }
 
 OpFoldResult MontInverseOp::fold(FoldAdaptor adaptor) {
-  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    auto modArithType = cast<ModArithType>(getType());
-    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  APInt modulus = modArithType.getModulus().getValue();
 
-    APInt modulus = modArithType.getModulus().getValue();
-    APInt resultValue = multiplicativeInverse(input.getValue(), modulus);
-    resultValue =
-        mulMod(resultValue, montAttr.getRSquared().getValue(), modulus);
-    return IntegerAttr::get(input.getType(), resultValue);
+  auto montInverseMod = [modArithType, modulus](APInt value) {
+    auto inverse = multiplicativeInverse(value, modulus);
+    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
+    inverse = mulMod(inverse, montAttr.getRSquared().getValue(), modulus);
+    return inverse;
+  };
+
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    return IntegerAttr::get(intAttr.getType(),
+                            montInverseMod(intAttr.getValue()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType(),
+        llvm::map_to_vector(denseElementsAttr.getValues<APInt>(),
+                            montInverseMod));
   }
   return {};
 }
