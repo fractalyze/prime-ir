@@ -235,11 +235,15 @@ OpFoldResult CmpOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  APInt modulus = modArithType.getModulus().getValue();
+
+  auto negateMod = [modulus](APInt value) {
+    return value.isZero() ? value : modulus - value;
+  };
+
   if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    auto modArithType = cast<ModArithType>(getType());
-    APInt modulus = modArithType.getModulus().getValue();
-    APInt resultValue = modulus - input.getValue();
-    return IntegerAttr::get(input.getType(), resultValue);
+    return IntegerAttr::get(input.getType(), negateMod(input.getValue()));
   }
   return {};
 }

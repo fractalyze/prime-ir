@@ -202,6 +202,17 @@ func.func @test_negate_fold() -> !Zp {
   return %1 : !Zp
 }
 
+// CHECK-LABEL: @test_negate_zero_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_negate_zero_fold() -> !Zp {
+  // CHECK: %[[C:.*]] = mod_arith.constant 0 : [[T]]
+  %0 = mod_arith.constant 0 : !Zp
+  %1 = mod_arith.negate %0 : !Zp
+  // CHECK-NOT: mod_arith.negate
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !Zp
+}
+
 // CHECK-LABEL: @test_from_mont_fold
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_from_mont_fold() -> !Zp {
