@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
+#include "llvm/ADT/SmallVectorExtras.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
@@ -313,15 +314,6 @@ OpFoldResult MontInverseOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
-  APInt rhsValue;
-  if (!matchPattern(adaptor.getRhs(), m_ConstantInt(&rhsValue))) {
-    return {};
-  }
-
-  if (rhsValue.isZero()) {
-    return getLhs();
-  }
-
   auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
   APInt modulus = modArithType.getModulus().getValue();
   auto addMod = [modulus](const APInt &a, const APInt &b) -> APInt {
@@ -332,31 +324,42 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
     return sum;
   };
 
-  if (auto lhsConst = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
-    APInt lhsValue = lhsConst.getValue();
-    APInt resultValue = addMod(lhsValue, rhsValue);
-    return IntegerAttr::get(lhsConst.getType(), resultValue);
-  }
-  if (auto denseIntAttr =
-          dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getLhs())) {
-    return denseIntAttr.mapValues(
-        modArithType.getStorageType(),
-        [addMod, rhsValue](APInt value) { return addMod(value, rhsValue); });
+  if (auto rhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+    APInt rhsValue = rhsIntAttr.getValue();
+    if (auto lhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+      APInt lhsValue = lhsIntAttr.getValue();
+      APInt resultValue = addMod(lhsValue, rhsValue);
+      return IntegerAttr::get(lhsIntAttr.getType(), resultValue);
+    } else if (rhsValue.isZero()) {
+      // x + 0 -> x
+      return getLhs();
+    }
+  } else if (auto rhsDenseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getRhs())) {
+    auto rhsValues = rhsDenseElementsAttr.getValues<APInt>();
+    if (auto lhsDenseElementsAttr =
+            dyn_cast_if_present<DenseModArithElementsAttr>(adaptor.getLhs())) {
+      auto lhsValues = lhsDenseElementsAttr.getValues<APInt>();
+      return ZkirDenseElementsAttr::get(
+          rhsDenseElementsAttr.getType(),
+          llvm::map_to_vector(llvm::zip(lhsValues, rhsValues),
+                              [addMod](const auto &values) {
+                                const auto &[lhs, rhs] = values;
+                                return addMod(lhs, rhs);
+                              }));
+    } else {
+      // NOLINTNEXTLINE(whitespace/newline)
+      if (llvm::all_of(rhsValues, [](APInt value) { return value.isZero(); })) {
+        // x + 0 -> x
+        return getLhs();
+      }
+    }
   }
   return {};
 }
 
 OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
-  APInt rhsValue;
-  if (!matchPattern(adaptor.getRhs(), m_ConstantInt(&rhsValue))) {
-    return {};
-  }
-
-  // x - 0 -> x
-  if (rhsValue.isZero()) {
-    return getLhs();
-  }
-
   auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
   APInt modulus = modArithType.getModulus().getValue();
   auto subMod = [modulus](const APInt &a, const APInt &b) -> APInt {
@@ -367,16 +370,37 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
     return diff;
   };
 
-  if (auto lhsConst = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
-    APInt lhsValue = lhsConst.getValue();
-    APInt resultValue = subMod(lhsValue, rhsValue);
-    return IntegerAttr::get(lhsConst.getType(), resultValue);
-  }
-  if (auto denseIntAttr =
-          dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getLhs())) {
-    return denseIntAttr.mapValues(
-        modArithType.getStorageType(),
-        [subMod, rhsValue](APInt value) { return subMod(value, rhsValue); });
+  if (auto rhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+    APInt rhsValue = rhsIntAttr.getValue();
+    if (auto lhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+      APInt lhsValue = lhsIntAttr.getValue();
+      APInt resultValue = subMod(lhsValue, rhsValue);
+      return IntegerAttr::get(lhsIntAttr.getType(), resultValue);
+    } else if (rhsValue.isZero()) {
+      // x - 0 -> x
+      return getLhs();
+    }
+  } else if (auto rhsDenseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getRhs())) {
+    auto rhsValues = rhsDenseElementsAttr.getValues<APInt>();
+    if (auto lhsDenseElementsAttr =
+            dyn_cast_if_present<DenseModArithElementsAttr>(adaptor.getLhs())) {
+      auto lhsValues = lhsDenseElementsAttr.getValues<APInt>();
+      return ZkirDenseElementsAttr::get(
+          rhsDenseElementsAttr.getType(),
+          llvm::map_to_vector(llvm::zip(lhsValues, rhsValues),
+                              [subMod](const auto &values) {
+                                const auto &[lhs, rhs] = values;
+                                return subMod(lhs, rhs);
+                              }));
+    } else {
+      // NOLINTNEXTLINE(whitespace/newline)
+      if (llvm::all_of(rhsValues, [](APInt value) { return value.isZero(); })) {
+        // x - 0 -> x
+        return getLhs();
+      }
+    }
   }
   return {};
 }
@@ -385,37 +409,72 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
   auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
   MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
   APInt modulus = modArithType.getModulus().getValue();
-  APInt rhsValue;
-  if (!matchPattern(adaptor.getRhs(), m_ConstantInt(&rhsValue))) {
-    return {};
-  }
 
-  // x * 0 -> 0
-  if (rhsValue.isZero()) {
-    return getRhs();
-  }
-
-  // if in Montgomery domain, reduce the constant to standard form
-  if (modArithType.isMontgomery()) {
-    rhsValue = mulMod(rhsValue, montAttr.getRInv().getValue(), modulus);
-  }
-
-  // x * 1 -> x
-  if (rhsValue.isOne()) {
-    return getLhs();
-  }
-
-  if (auto lhsConst = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
-    APInt lhsValue = lhsConst.getValue();
-    APInt resultValue = mulMod(lhsValue, rhsValue, modulus);
-    return IntegerAttr::get(lhsConst.getType(), resultValue);
-  }
-  if (auto denseIntAttr =
-          dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getLhs())) {
-    return denseIntAttr.mapValues(modArithType.getStorageType(),
-                                  [rhsValue, modulus](APInt value) {
-                                    return mulMod(value, rhsValue, modulus);
-                                  });
+  if (auto rhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+    if (auto lhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+      APInt lhsValue = lhsIntAttr.getValue();
+      APInt rhsValue = rhsIntAttr.getValue();
+      if (modArithType.isMontgomery()) {
+        rhsValue = mulMod(rhsValue, montAttr.getRInv().getValue(), modulus);
+      }
+      APInt resultValue = mulMod(lhsValue, rhsValue, modulus);
+      return IntegerAttr::get(lhsIntAttr.getType(), resultValue);
+    } else if (rhsIntAttr.getValue().isZero()) {
+      // x * 0 -> 0
+      return getRhs();
+    } else {
+      if (modArithType.isMontgomery()) {
+        if (rhsIntAttr.getValue() == montAttr.getR().getValue()) {
+          // x * 1 -> x
+          return getLhs();
+        }
+      } else {
+        if (rhsIntAttr.getValue().isOne()) {
+          // x * 1 -> x
+          return getLhs();
+        }
+      }
+    }
+  } else if (auto rhsDenseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getRhs())) {
+    auto rhsValues = rhsDenseElementsAttr.getValues<APInt>();
+    if (auto lhsDenseElementsAttr =
+            dyn_cast_if_present<DenseModArithElementsAttr>(adaptor.getLhs())) {
+      auto lhsValues = lhsDenseElementsAttr.getValues<APInt>();
+      return ZkirDenseElementsAttr::get(
+          rhsDenseElementsAttr.getType(),
+          llvm::map_to_vector(
+              llvm::zip(lhsValues, rhsValues),
+              [modulus, montAttr, modArithType](const auto &values) {
+                auto [lhs, rhs] = values;
+                if (modArithType.isMontgomery()) {
+                  rhs = mulMod(rhs, montAttr.getRInv().getValue(), modulus);
+                }
+                return mulMod(lhs, rhs, modulus);
+              }));
+    } else {
+      // NOLINTNEXTLINE(whitespace/newline)
+      if (llvm::all_of(rhsValues, [](APInt value) { return value.isZero(); })) {
+        // x * 0 -> 0
+        return getRhs();
+      } else {
+        if (modArithType.isMontgomery()) {
+          if (llvm::all_of(rhsValues, [montAttr](APInt value) {
+                return value == montAttr.getR().getValue();
+              })) {
+            // x * 1 -> x
+            return getLhs();
+          }
+        } else {
+          if (llvm::all_of(rhsValues,
+                           [](APInt value) { return value.isOne(); })) {
+            // x * 1 -> x
+            return getLhs();
+          }
+        }
+      }
+    }
   }
   return {};
 }
@@ -424,34 +483,51 @@ OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
   auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
   MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
   APInt modulus = modArithType.getModulus().getValue();
-  APInt rhsValue;
-  if (!matchPattern(adaptor.getRhs(), m_ConstantInt(&rhsValue))) {
-    return {};
-  }
 
-  // x * 0 -> 0
-  if (rhsValue.isZero()) {
-    return getRhs();
-  }
-
-  rhsValue = mulMod(rhsValue, montAttr.getRInv().getValue(), modulus);
-
-  // x * 1 -> x
-  if (rhsValue.isOne()) {
-    return getLhs();
-  }
-
-  if (auto lhsConst = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
-    APInt lhsValue = lhsConst.getValue();
-    APInt resultValue = mulMod(lhsValue, rhsValue, modulus);
-    return IntegerAttr::get(lhsConst.getType(), resultValue);
-  }
-  if (auto denseIntAttr =
-          dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getLhs())) {
-    return denseIntAttr.mapValues(modArithType.getStorageType(),
-                                  [rhsValue, modulus](APInt value) {
-                                    return mulMod(value, rhsValue, modulus);
-                                  });
+  if (auto rhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
+    APInt rhsValue =
+        mulMod(rhsIntAttr.getValue(), montAttr.getRInv().getValue(), modulus);
+    if (auto lhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getLhs())) {
+      APInt lhsValue = lhsIntAttr.getValue();
+      APInt resultValue = mulMod(lhsValue, rhsValue, modulus);
+      return IntegerAttr::get(lhsIntAttr.getType(), resultValue);
+    } else if (rhsValue.isZero()) {
+      // x * 0 -> 0
+      return getRhs();
+    } else if (rhsValue.isOne()) {
+      // x * 1 -> x
+      return getLhs();
+    }
+  } else if (auto rhsDenseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getRhs())) {
+    auto rhsValues = rhsDenseElementsAttr.getValues<APInt>();
+    if (auto lhsDenseElementsAttr =
+            dyn_cast_if_present<DenseModArithElementsAttr>(adaptor.getLhs())) {
+      auto lhsValues = lhsDenseElementsAttr.getValues<APInt>();
+      return ZkirDenseElementsAttr::get(
+          rhsDenseElementsAttr.getType(),
+          llvm::map_to_vector(
+              llvm::zip(lhsValues, rhsValues),
+              [modulus, montAttr, modArithType](const auto &values) {
+                auto [lhs, rhs] = values;
+                if (modArithType.isMontgomery()) {
+                  rhs = mulMod(rhs, montAttr.getRInv().getValue(), modulus);
+                }
+                return mulMod(lhs, rhs, modulus);
+              }));
+    } else {
+      // NOLINTNEXTLINE(whitespace/newline)
+      if (llvm::all_of(rhsValues, [](APInt value) { return value.isZero(); })) {
+        // x * 0 -> 0
+        return getRhs();
+      } else if (llvm::all_of(rhsValues, [montAttr](APInt value) {
+                   return value == montAttr.getR().getValue();
+                 })) {
+        // x * 1 -> x
+        return getLhs();
+      }
+    }
   }
   return {};
 }
