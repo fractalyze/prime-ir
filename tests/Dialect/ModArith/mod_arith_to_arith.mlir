@@ -34,7 +34,7 @@ func.func @test_lower_constant_vec() -> !Zpv {
   // CHECK-NOT: mod_arith.constant
   // CHECK: %[[CVAL:.*]] = arith.constant dense<[5, 10, 15, 20]> : [[T]]
   // CHECK: return %[[CVAL]] : [[T]]
-  %res = mod_arith.constant dense<[5, 10, 15, 20]> : tensor<4xi32> :  !Zpv
+  %res = mod_arith.constant dense<[5, 10, 15, 20]> :  !Zpv
   return %res: !Zpv
 }
 

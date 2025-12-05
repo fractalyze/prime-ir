@@ -17,7 +17,9 @@ limitations under the License.
 
 #include <utility>
 
+#include "llvm/ADT/STLExtras.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::mod_arith {
@@ -164,6 +166,68 @@ BYAttrStorage *BYAttrStorage::construct(AttributeStorageAllocator &allocator,
 }
 
 } // namespace detail
+
+namespace detail {
+
+const char DenseModArithElementsAttrStorage::kSplatTrue = ~0;
+const char DenseModArithElementsAttrStorage::kSplatFalse = 0;
+
+// static
+size_t DenseModArithElementsAttrStorage::getDenseElementBitWidth(Type ty) {
+  return cast<ModArithType>(ty).getStorageBitWidth();
+}
+
+} // namespace detail
+
+Attribute DenseModArithElementsAttr::parse(AsmParser &parser, Type odsType) {
+  llvm_unreachable(
+      "DenseModArithElementsAttr should not be parsed directly; "
+      "it relies on the standard MLIR 'dense<...>' syntax used within "
+      "'mod_arith.constant' ops.");
+  return nullptr;
+}
+
+void DenseModArithElementsAttr::print(AsmPrinter &printer) const {
+  printer << "dense<";
+  if (isSplat()) {
+    printer << *raw_int_begin();
+  } else {
+    printer << "[";
+    llvm::interleaveComma(getValues<APInt>(), printer,
+                          [&](auto it) { printer << it; });
+    printer << "]";
+  }
+  printer << ">";
+  // NOTE(chokobole): We intentionally omit printing the element type here
+  // because the surrounding 'mod_arith.constant' operation is responsible
+  // for printing the full attribute type signature (e.g., : tensor<4x!z7_i32>).
+}
+
+ZkirDenseElementsAttr
+DenseModArithElementsAttr::getRaw(ShapedType type, size_t storageWidth,
+                                  ArrayRef<APInt> values) {
+  SmallVector<char> data;
+  writeAPIntsToBuffer(storageWidth, data, values);
+  return DenseModArithElementsAttr::getRaw(type, data);
+}
+
+ZkirDenseElementsAttr DenseModArithElementsAttr::getRaw(ShapedType type,
+                                                        ArrayRef<char> data) {
+  assert(type.hasStaticShape() && "type must have static shape");
+  bool isSplat = false;
+  bool isValid = isValidRawBuffer(type, data, isSplat);
+  assert(isValid);
+  std::ignore = isValid;
+  return Base::get(type.getContext(), type, data, isSplat);
+}
+
+bool DenseModArithElementsAttr::isValidInt(int64_t dataEltSize,
+                                           bool isSigned) const {
+  return mlir::isValidIntOrFloat(
+      cast<ModArithType>(getElementType()).getStorageType(), dataEltSize, true,
+      isSigned);
+}
+
 } // namespace mlir::zkir::mod_arith
 
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.cpp.inc"

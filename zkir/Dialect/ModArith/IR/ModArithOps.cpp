@@ -108,7 +108,17 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 
 ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
                                    Type type, Location loc) {
-  return builder.create<ConstantOp>(loc, type, cast<TypedAttr>(value));
+  if (!isa<ModArithType>(getElementTypeOrSelf(type))) {
+    return nullptr;
+  }
+
+  if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
+    return builder.create<ConstantOp>(loc, type, intAttr);
+  } else if (auto denseElementsAttr =
+                 dyn_cast<DenseModArithElementsAttr>(value)) {
+    return builder.create<ConstantOp>(loc, type, denseElementsAttr);
+  }
+  return nullptr;
 }
 
 Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
@@ -116,14 +126,28 @@ Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
                                                 Location loc) {
   if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
     return builder.create<arith::ConstantOp>(loc, boolAttr);
+  } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
+    return builder.create<arith::ConstantOp>(loc, denseElementsAttr);
   }
   return ConstantOp::materialize(builder, value, type, loc);
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
-  if (isa_and_present<IntegerAttr>(adaptor.getInput()) ||
-      isa_and_present<DenseIntElementsAttr>(adaptor.getInput())) {
+  if (isa_and_present<IntegerAttr>(adaptor.getInput())) {
     return adaptor.getInput();
+  } else if (auto denseElementsAttr = dyn_cast_if_present<DenseIntElementsAttr>(
+                 adaptor.getInput())) {
+    // TODO(chokobole): Can we remove this clone?
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType().clone(getResultModArithType(*this)),
+        SmallVector<APInt>(denseElementsAttr.getValues<APInt>().begin(),
+                           denseElementsAttr.getValues<APInt>().end()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return denseElementsAttr.bitcast(
+        cast<ModArithType>(denseElementsAttr.getElementType())
+            .getStorageType());
   }
   return {};
 }
@@ -137,12 +161,16 @@ OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
     return mulMod(value, montAttr.getR().getValue(), modulus);
   };
 
-  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    return IntegerAttr::get(input.getType(),
-                            toMontConversion(input.getValue()));
-  } else if (auto input = dyn_cast_if_present<DenseIntElementsAttr>(
-                 adaptor.getInput())) {
-    return input.mapValues(modArithType.getStorageType(), toMontConversion);
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    return IntegerAttr::get(intAttr.getType(),
+                            toMontConversion(intAttr.getValue()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType(),
+        llvm::map_to_vector(denseElementsAttr.getValues<APInt>(),
+                            toMontConversion));
   }
   return {};
 }
@@ -156,12 +184,16 @@ OpFoldResult FromMontOp::fold(FoldAdaptor adaptor) {
     return mulMod(value, montAttr.getRInv().getValue(), modulus);
   };
 
-  if (auto input = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
-    return IntegerAttr::get(input.getType(),
-                            fromMontConversion(input.getValue()));
-  } else if (auto input = dyn_cast_if_present<DenseIntElementsAttr>(
-                 adaptor.getInput())) {
-    return input.mapValues(modArithType.getStorageType(), fromMontConversion);
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
+    return IntegerAttr::get(intAttr.getType(),
+                            fromMontConversion(intAttr.getValue()));
+  } else if (auto denseElementsAttr =
+                 dyn_cast_if_present<DenseModArithElementsAttr>(
+                     adaptor.getInput())) {
+    return ZkirDenseElementsAttr::get(
+        denseElementsAttr.getType(),
+        llvm::map_to_vector(denseElementsAttr.getValues<APInt>(),
+                            fromMontConversion));
   }
   return {};
 }
@@ -427,7 +459,7 @@ OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   APInt parsedInt;
   Type parsedType;
-  DenseElementsAttr valueAttr;
+  ZkirDenseElementsAttr valueAttr;
 
   if (parser.parseOptionalInteger(parsedInt).has_value()) {
     if (failed(parser.parseColonType(parsedType)))
@@ -469,45 +501,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
                      "expected value to be a scalar or dense elements attr");
     return failure();
   }
-
-  if (failed(parser.parseColonType(parsedType))) {
-    return failure();
-  }
-
-  auto shapedType = dyn_cast<ShapedType>(parsedType);
-  if (!shapedType) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "expected result type to be a shaped type");
-    return failure();
-  }
-
-  // check if the shape of the value attribute is the same as the result type
-  if (shapedType.getShape() != valueAttr.getType().getShape()) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "expected 'value' attribute to be a dense elements attr "
-                     "with the same shape as the result type");
-    return failure();
-  }
-
-  // check if the result type is mod arith like
-  auto modArithType = dyn_cast<ModArithType>(shapedType.getElementType());
-  if (!modArithType) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "expected result type to be a mod arith type");
-    return failure();
-  }
-
-  // check if the element type of the value attribute is the same as the mod
-  // arith storage type
-  if (modArithType.getStorageType() != valueAttr.getType().getElementType()) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "expected 'value' attribute to be a dense elements attr "
-                     "with the same element type as the mod arith storage");
-    return failure();
-  }
-
   result.addAttribute("value", valueAttr);
-  result.addTypes(parsedType);
+  result.addTypes(valueAttr.getType());
   return success();
 }
 

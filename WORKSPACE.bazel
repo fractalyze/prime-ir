@@ -84,6 +84,7 @@ http_archive(
         # See https://github.com/llvm/llvm-project/pull/158200
         "//third_party/llvm-project:owning_memref_memset.patch",
         # NOTE(chokobole): Patches for supporting ZKIR Dialects.
+        "//third_party/llvm-project:dense_elements_attrs.patch",
         "//third_party/llvm-project:linalg_type_support.patch",
         "//third_party/llvm-project:tensor_type_support.patch",
         "//third_party/llvm-project:memref_folding.patch",

@@ -1,52 +1,51 @@
 diff --git mlir/lib/Dialect/Tensor/IR/TensorOps.cpp mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
-index 22a25fd1a5af..164536527c37 100644
+index 22a25fd1a5af..7dad917d5056 100644
 --- mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 +++ mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 @@ -41,6 +41,9 @@
  #include <optional>
  #include <vector>
-
+ 
 +#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
-+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
++#include "zkir/IR/Attributes.h"
 +
  using namespace mlir;
  using namespace mlir::tensor;
-
-@@ -58,6 +61,8 @@ Operation *TensorDialect::materializeConstant(OpBuilder &builder,
-   if (complex::ConstantOp::isBuildableWith(value, type))
-     return builder.create<complex::ConstantOp>(loc, type,
-                                                llvm::cast<ArrayAttr>(value));
-+  if (auto op = zkir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
+ 
+@@ -53,6 +56,9 @@ using llvm::mod;
+ Operation *TensorDialect::materializeConstant(OpBuilder &builder,
+                                               Attribute value, Type type,
+                                               Location loc) {
++  if (auto op =
++          zkir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
 +    return op;
-   return nullptr;
+   if (auto op = arith::ConstantOp::materialize(builder, value, type, loc))
+     return op;
+   if (complex::ConstantOp::isBuildableWith(value, type))
+@@ -1465,8 +1471,12 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
  }
  
-@@ -1465,8 +1470,16 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
- }
-
  OpFoldResult FromElementsOp::fold(FoldAdaptor adaptor) {
 -  if (!llvm::is_contained(adaptor.getElements(), nullptr))
 +  if (!llvm::is_contained(adaptor.getElements(), nullptr)) {
-+    if (auto modArithType = dyn_cast<zkir::mod_arith::ModArithType>(
-+            getType().getElementType())) {
-+      auto st = cast<ShapedType>(getType());
-+      return DenseElementsAttr::get(
-+          st.cloneWith(std::nullopt, modArithType.getStorageType()),
-+          adaptor.getElements());
++    if (zkir::ZkirDenseElementsAttr::isValidType(getType())) {
++      return zkir::ZkirDenseElementsAttr::get(getType(), adaptor.getElements());
 +    }
      return DenseElementsAttr::get(getType(), adaptor.getElements());
 +  }
    return {};
  }
-
+ 
 diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index cc266c2fe3a7..9ef338d525f1 100644
+index 1bf8488d475b..9286fc7a06c1 100644
 --- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -7134,5 +7134,6 @@ cc_library(
+@@ -7135,6 +7135,8 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",
 +        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
++        "@zkir//zkir/IR:AttributesHdrs",
      ],
  )
+ 

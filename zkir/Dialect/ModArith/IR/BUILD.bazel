@@ -40,6 +40,7 @@ cc_library(
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
+        "//zkir/IR:AttributesHdrs",
         "//zkir/Utils:APIntUtils",
         "//zkir/Utils:OpUtils",
         "@llvm-project//llvm:Support",

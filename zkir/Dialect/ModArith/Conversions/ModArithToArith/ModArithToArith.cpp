@@ -213,6 +213,16 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    if (auto denseElementsAttr =
+            dyn_cast<ZkirDenseElementsAttr>(adaptor.getValue())) {
+      auto newValue = denseElementsAttr.bitcast(
+          cast<ModArithType>(denseElementsAttr.getElementType())
+              .getStorageType());
+      auto cval =
+          b.create<arith::ConstantOp>(op.getLoc(), cast<TypedAttr>(newValue));
+      rewriter.replaceOp(op, cval);
+      return success();
+    }
     auto cval = b.create<arith::ConstantOp>(op.getLoc(), adaptor.getValue());
     rewriter.replaceOp(op, cval);
     return success();

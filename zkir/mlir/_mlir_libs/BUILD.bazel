@@ -53,6 +53,7 @@ nanobind_pywrap_extension(
     deps = [
         "//zkir/Dialect/Field/C:CAPI",
         "//zkir/Dialect/Field/Python:FieldAttributesAndTypes",
+        "//zkir/IR:Attributes",
         "@llvm-project//mlir:CAPIIR",
         "@llvm-project//mlir:MLIRBindingsPythonNanobindHeaders",
         "@nanobind",
