@@ -107,6 +107,7 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   return adaptor.getValue();
 }
 
+// static
 ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
                                    Type type, Location loc) {
   if (!isa<ModArithType>(getElementTypeOrSelf(type))) {
