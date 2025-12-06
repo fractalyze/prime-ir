@@ -16,9 +16,11 @@ limitations under the License.
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/ExtensionField.h"
 
 #include "llvm/Support/ErrorHandling.h"
+#include "mlir/Support/LLVM.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/CubicExtensionField.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/QuadraticExtensionField.h"
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/QuarticExtensionField.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
@@ -34,6 +36,8 @@ ExtensionField::create(ImplicitLocOpBuilder &b,
     ret.reset(new QuadraticExtensionField(b, type, converter));
   } else if (isa<CubicExtFieldType>(type)) {
     ret.reset(new CubicExtensionField(b, type, converter));
+  } else if (isa<QuarticExtFieldType>(type)) {
+    ret.reset(new QuarticExtensionField(b, type, converter));
   } else {
     llvm_unreachable("Unsupported extension field type");
   }
@@ -43,7 +47,7 @@ ExtensionField::create(ImplicitLocOpBuilder &b,
 ExtensionField::ExtensionField(ImplicitLocOpBuilder &b,
                                ExtensionFieldTypeInterface type,
                                const TypeConverter *converter)
-    : b(b), type(type) {
+    : b(b), type(type), converter(converter) {
   // TODO(chokobole): Support towers of extension field.
   nonResidue = b.create<mod_arith::ConstantOp>(
       converter->convertType(type.getBaseFieldType()),
@@ -90,6 +94,10 @@ Value ExtensionField::negate(Value x) {
     retCoeffs.push_back(b.create<mod_arith::NegateOp>(coeffs[i]));
   }
   return fromCoeffs(b, type, retCoeffs);
+}
+
+Value ExtensionField::frobeniusMap(Value x, const APInt &exponent) {
+  llvm_unreachable("frobeniusMap not implemented for this extension field");
 }
 
 } // namespace mlir::zkir::field

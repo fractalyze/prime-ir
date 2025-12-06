@@ -482,29 +482,24 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
     }
 
     // For prime field, x^(p-1) ≡ 1 mod p, so x^n ≡ x^(n mod (p-1)) mod p
-    // For quadratic extension field, x^(p²-1) ≡ 1 mod p², so
-    // x^n ≡ x^(n mod (p²-1)) mod p²
-    // For cubic extension field, x^(p³-1) ≡ 1 mod p³, so
-    // x^n ≡ x^(n mod (p³-1)) mod p³
+    // For extension field of degree d, x^(pᵈ-1) ≡ 1 mod pᵈ, so
+    // x^n ≡ x^(n mod (pᵈ-1)) mod pᵈ
     if (isa<PrimeFieldType>(fieldType)) {
       exp = b.create<arith::RemUIOp>(
           exp, b.create<arith::ConstantIntOp>(intType, modulus - 1));
-    } else if (isa<QuadraticExtFieldType>(fieldType)) {
-      modulus = modulus.zext(modBitWidth * 2);
-      modulus = modulus * modulus - 1;
+    } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+      unsigned degree = efType.getDegreeOverBase();
+      modulus = modulus.zext(modBitWidth * degree);
+      APInt order = modulus;
+      for (unsigned i = 1; i < degree; ++i) {
+        order = order * modulus;
+      }
+      order = order - 1;
       exp = b.create<arith::ExtUIOp>(
-          IntegerType::get(exp.getContext(), modulus.getBitWidth()), exp);
-      intType = IntegerType::get(exp.getContext(), modulus.getBitWidth());
+          IntegerType::get(exp.getContext(), order.getBitWidth()), exp);
+      intType = IntegerType::get(exp.getContext(), order.getBitWidth());
       exp = b.create<arith::RemUIOp>(
-          exp, b.create<arith::ConstantIntOp>(intType, modulus));
-    } else if (isa<CubicExtFieldType>(fieldType)) {
-      modulus = modulus.zext(modBitWidth * 3);
-      modulus = modulus * modulus * modulus - 1;
-      exp = b.create<arith::ExtUIOp>(
-          IntegerType::get(exp.getContext(), modulus.getBitWidth()), exp);
-      intType = IntegerType::get(exp.getContext(), modulus.getBitWidth());
-      exp = b.create<arith::RemUIOp>(
-          exp, b.create<arith::ConstantIntOp>(intType, modulus));
+          exp, b.create<arith::ConstantIntOp>(intType, order));
     }
 
     Value zero = b.create<arith::ConstantIntOp>(intType, 0);

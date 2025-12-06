@@ -61,7 +61,7 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   APInt bInv = multiplicativeInverse(bReduced, modulus);
 
   // Compute `R` = `b^l` (mod `modulus`) where `l` is the number of limbs
-  APInt r = expMod(bReduced, numWords, modulus);
+  APInt r = expMod(bReduced, APInt(modulus.getBitWidth(), numWords), modulus);
   APInt rInv = multiplicativeInverse(r, modulus);
   APInt rSquared = mulMod(r, r, modulus);
 

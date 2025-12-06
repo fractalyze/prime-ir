@@ -17,6 +17,8 @@ limitations under the License.
 
 #include "mlir/Support/LLVM.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
+#include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::field {
 namespace {
@@ -46,6 +48,27 @@ Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
 
 Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs) {
   return b.create<ExtFromCoeffsOp>(type, coeffs);
+}
+
+Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                  const TypeConverter *converter, uint64_t n) {
+  unsigned bitWidth = baseField.getModulus().getValue().getBitWidth();
+  auto convertedType = converter->convertType(baseField);
+  llvm::APInt nVal(bitWidth, n);
+  return b.create<mod_arith::ConstantOp>(
+      convertedType, IntegerAttr::get(baseField.getStorageType(), nVal));
+}
+
+Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                     const TypeConverter *converter, uint64_t n) {
+  llvm::APInt modulus = baseField.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  auto convertedType = converter->convertType(baseField);
+  // Reduce n modulo modulus first, since multiplicativeInverse requires x < m.
+  llvm::APInt nReduced = llvm::APInt(bitWidth, n).urem(modulus);
+  llvm::APInt inv = multiplicativeInverse(nReduced, modulus);
+  return b.create<mod_arith::ConstantOp>(
+      convertedType, IntegerAttr::get(baseField.getStorageType(), inv));
 }
 
 } // namespace mlir::zkir::field

@@ -27,8 +27,10 @@ cc_library(
     deps = [
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Utils:APIntUtils",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TransformUtils",
     ],
 )
 
