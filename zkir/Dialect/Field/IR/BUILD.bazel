@@ -44,6 +44,7 @@ cc_library(
         "//zkir/Dialect/TensorExt/IR:TensorExt",
         "//zkir/Utils:APIntUtils",
         "//zkir/Utils:AssemblyFormatUtils",
+        "//zkir/Utils:KnownModulus",
         "//zkir/Utils:OpUtils",
         "//zkir/Utils:SimpleStructBuilder",
         "@llvm-project//llvm:Support",

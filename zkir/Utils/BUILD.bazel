@@ -69,6 +69,16 @@ cc_library(
 )
 
 cc_library(
+    name = "KnownModulus",
+    srcs = ["KnownModulus.cpp"],
+    hdrs = ["KnownModulus.h"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+cc_library(
     name = "OpUtils",
     srcs = ["OpUtils.cpp"],
     hdrs = ["OpUtils.h"],

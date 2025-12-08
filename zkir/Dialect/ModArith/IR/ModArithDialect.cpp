@@ -22,6 +22,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "zkir/Utils/KnownModulus.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for ModArithDialect.cpp.inc
@@ -69,8 +70,19 @@ public:
   AliasResult getAlias(Type type, raw_ostream &os) const override {
     auto res = llvm::TypeSwitch<Type, AliasResult>(type)
                    .Case<ModArithType>([&](auto &modArithType) {
+                     auto modulus = modArithType.getModulus().getValue();
+                     std::optional<std::string> alias =
+                         getKnownModulusAlias(modulus);
+                     if (alias) {
+                       os << "z_";
+                       os << *alias;
+                       if (!modArithType.isMontgomery()) {
+                         os << "_std";
+                       }
+                       return AliasResult::FinalAlias;
+                     }
                      os << "z";
-                     os << modArithType.getModulus().getValue();
+                     os << modulus;
                      os << "_";
                      os << modArithType.getStorageType();
                      return AliasResult::FinalAlias;

@@ -23,6 +23,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/InliningUtils.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
+#include "zkir/Utils/KnownModulus.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldDialect.cpp.inc
@@ -74,8 +75,18 @@ public:
   AliasResult getAlias(Type type, raw_ostream &os) const override {
     auto res = llvm::TypeSwitch<Type, AliasResult>(type)
                    .Case<PrimeFieldType>([&](auto &pfElemType) {
+                     auto modulus = pfElemType.getModulus().getValue();
+                     std::optional<std::string> alias =
+                         getKnownModulusAlias(modulus);
+                     if (alias) {
+                       os << "pf_";
+                       os << *alias;
+                       return AliasResult::FinalAlias;
+                     }
                      os << "pf";
-                     os << pfElemType.getModulus().getValue();
+                     os << modulus;
+                     os << "_";
+                     os << pfElemType.getStorageType();
                      return AliasResult::FinalAlias;
                    })
                    .Default([&](Type) { return AliasResult::NoAlias; });
