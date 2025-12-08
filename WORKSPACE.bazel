@@ -87,6 +87,7 @@ http_archive(
         "//third_party/llvm-project:dense_elements_attrs.patch",
         "//third_party/llvm-project:linalg_type_support.patch",
         "//third_party/llvm-project:tensor_type_support.patch",
+        "//third_party/llvm-project:vector_type_support.patch",
         "//third_party/llvm-project:memref_folding.patch",
     ],
     sha256 = LLVM_SHA256,

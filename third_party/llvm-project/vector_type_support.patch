@@ -1,0 +1,59 @@
+diff --git mlir/lib/Dialect/Vector/IR/VectorOps.cpp mlir/lib/Dialect/Vector/IR/VectorOps.cpp
+index 1fb8c7a928e0..9c837e12d919 100644
+--- mlir/lib/Dialect/Vector/IR/VectorOps.cpp
++++ mlir/lib/Dialect/Vector/IR/VectorOps.cpp
+@@ -38,6 +38,7 @@
+ #include "mlir/Interfaces/ValueBoundsOpInterface.h"
+ #include "mlir/Support/LLVM.h"
+ #include "mlir/Transforms/InliningUtils.h"
++#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
+ #include "llvm/ADT/ArrayRef.h"
+ #include "llvm/ADT/STLExtras.h"
+ #include "llvm/ADT/SmallVector.h"
+@@ -404,8 +405,12 @@ std::optional<int64_t> vector::getConstantVscaleMultiplier(Value value) {
+ /// has the correct type, returns it unchanged.
+ static Attribute convertIntegerAttr(Attribute attr, Type expectedType) {
+   if (auto intAttr = mlir::dyn_cast<IntegerAttr>(attr)) {
+-    if (intAttr.getType() != expectedType)
++    if (intAttr.getType() != expectedType) {
++      if (auto modArithType = dyn_cast<zkir::mod_arith::ModArithType>(expectedType)) {
++        return IntegerAttr::get(modArithType.getStorageType(), intAttr.getInt());
++      }
+       return IntegerAttr::get(expectedType, intAttr.getInt());
++    }
+   }
+   return attr;
+ }
+@@ -481,6 +486,9 @@ void VectorDialect::initialize() {
+ Operation *VectorDialect::materializeConstant(OpBuilder &builder,
+                                               Attribute value, Type type,
+                                               Location loc) {
++  if (auto op =
++          zkir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
++    return op;
+   if (isa<ub::PoisonAttrInterface>(value))
+     return value.getDialect().materializeConstant(builder, value, type, loc);
+ 
+@@ -2497,6 +2505,9 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
+     return convertIntegerAttr(attr, destEltType);
+   });
+ 
++  if (zkir::ZkirDenseElementsAttr::isValidType(destVecType)) {
++    return zkir::ZkirDenseElementsAttr::get(destVecType, convertedElements);
++  }
+   return DenseElementsAttr::get(destVecType, convertedElements);
+ }
+ 
+diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+index 9286fc7a06c1..f7fd3deda192 100644
+--- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+@@ -4713,6 +4713,8 @@ cc_library(
+         ":VectorOpsIncGen",
+         ":ViewLikeInterface",
+         "//llvm:Support",
++        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
++        "@zkir//zkir/IR:AttributesHdrs",
+     ],
+ )
+ 

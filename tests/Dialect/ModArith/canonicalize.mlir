@@ -1013,3 +1013,35 @@ func.func @test_mont_mul_tensor_by_one_is_self(%arg0: tensor<2x!Zpm>) -> tensor<
   // CHECK: return %[[ARG0]] : [[T]]
   return %2 : tensor<2x!Zpm>
 }
+
+//===----------------------------------------------------------------------===//
+// Tensor operations
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_from_elements
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_from_elements() -> tensor<2x!Zp> {
+  %0 = mod_arith.constant 1 : !Zp
+  %1 = mod_arith.constant 2 : !Zp
+  %2 = tensor.from_elements %0, %1 : tensor<2x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant #mod_arith.dense<[1, 2]> : [[T]]
+  // CHECK-NOT: tensor.from_elements
+  // CHECK: return %[[C:.*]] : [[T]]
+  return %2 : tensor<2x!Zp>
+}
+
+//===----------------------------------------------------------------------===//
+// Vector operations
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_vector_from_elements
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_vector_from_elements() -> vector<2x!Zp> {
+  %0 = mod_arith.constant 1 : !Zp
+  %1 = mod_arith.constant 2 : !Zp
+  %2 = vector.from_elements %0, %1 : vector<2x!Zp>
+  // CHECK: %[[FROM_ELEMENTS:.*]] = mod_arith.constant #mod_arith.dense<[1, 2]> : [[T]]
+  // CHECK-NOT: vector.from_elements
+  // CHECK: return %[[FROM_ELEMENTS:.*]] : [[T]]
+  return %2 : vector<2x!Zp>
+}
