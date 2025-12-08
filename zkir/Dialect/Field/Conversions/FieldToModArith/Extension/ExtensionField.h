@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Value.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 
@@ -46,6 +47,7 @@ public:
   virtual Value square(Value x) = 0;
   virtual Value mul(Value x, Value y) = 0;
   virtual Value inverse(Value x) = 0;
+  virtual Value frobeniusMap(Value x, const APInt &exponent);
 
 protected:
   ExtensionField(ImplicitLocOpBuilder &b, ExtensionFieldTypeInterface type,
@@ -53,6 +55,7 @@ protected:
 
   ImplicitLocOpBuilder &b;
   ExtensionFieldTypeInterface type;
+  const TypeConverter *converter; // not owned
   Value nonResidue;
 };
 

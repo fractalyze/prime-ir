@@ -31,7 +31,7 @@ llvm::APInt mulMod(const llvm::APInt &x, const llvm::APInt &y,
                    const llvm::APInt &modulus);
 
 // Compute `base` ^ `exp` (mod `modulus`).
-llvm::APInt expMod(const llvm::APInt &base, unsigned exp,
+llvm::APInt expMod(const llvm::APInt &base, const llvm::APInt &exp,
                    const llvm::APInt &modulus);
 } // namespace mlir::zkir
 

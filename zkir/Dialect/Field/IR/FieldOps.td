@@ -75,6 +75,8 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
         return build($_builder, $_state, f2Type, value);
       } else if (auto f3Type = dyn_cast<CubicExtFieldType>(ty)) {
         return build($_builder, $_state, f3Type, value);
+      } else if (auto f4Type = dyn_cast<QuarticExtFieldType>(ty)) {
+        return build($_builder, $_state, f4Type, value);
       } else {
         llvm_unreachable("Unsupported field type for constant");
       }
@@ -104,6 +106,16 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
       PrimeFieldAttr c1Attr = PrimeFieldAttr::get(ty.getBaseField(), c1);
       PrimeFieldAttr c2Attr = PrimeFieldAttr::get(ty.getBaseField(), c2);
       return build($_builder, $_state, ty, CubicExtFieldAttr::get(ty.getContext(), ty, c0Attr, c1Attr, c2Attr));
+    }]>,
+    OpBuilder<(ins "QuarticExtFieldType":$ty, "uint64_t":$c0), [{
+      return build($_builder, $_state, ty, c0, 0, 0, 0);
+    }]>,
+    OpBuilder<(ins "QuarticExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1, "uint64_t":$c2, "uint64_t":$c3), [{
+      PrimeFieldAttr c0Attr = PrimeFieldAttr::get(ty.getBaseField(), c0);
+      PrimeFieldAttr c1Attr = PrimeFieldAttr::get(ty.getBaseField(), c1);
+      PrimeFieldAttr c2Attr = PrimeFieldAttr::get(ty.getBaseField(), c2);
+      PrimeFieldAttr c3Attr = PrimeFieldAttr::get(ty.getBaseField(), c3);
+      return build($_builder, $_state, ty, QuarticExtFieldAttr::get(ty.getContext(), ty, c0Attr, c1Attr, c2Attr, c3Attr));
     }]>,
   ];
 }
@@ -139,6 +151,24 @@ def Field_F3ConstantOp : Op<Field_Dialect, "f3.constant", [Pure, TypesMatchWith<
   let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1, Field_PrimeFieldType:$c2);
   let results = (outs Field_CubicExtFieldType:$output);
   let assemblyFormat = "$c0 `,` $c1 `,` $c2 attr-dict `:` type($output)";
+}
+
+def Field_F4ConstantOp : Op<Field_Dialect, "f4.constant", [Pure, TypesMatchWith<
+  "result type is the same as the operand type", "output", "c0", "cast<QuarticExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c1", "cast<QuarticExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c2", "cast<QuarticExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c3", "cast<QuarticExtFieldType>($_self).getBaseField()">]> {
+  let summary = "Define a constant quartic extension field element";
+  let description = [{
+    Example:
+    ```
+    !QF = !field.f4<!PF, #xi>
+    %0 = field.f4.constant %c0, %c1, %c2, %c3 : !QF
+    ```
+  }];
+  let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1, Field_PrimeFieldType:$c2, Field_PrimeFieldType:$c3);
+  let results = (outs Field_QuarticExtFieldType:$output);
+  let assemblyFormat = "$c0 `,` $c1 `,` $c2 `,` $c3 attr-dict `:` type($output)";
 }
 
 def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,

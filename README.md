@@ -71,7 +71,7 @@ performance and correctness across a wide range of devices.
 - 🟡 Extension Field Operations
   - ✅ Quadratic Extension Field Operations
   - ✅ Cubic Extension Field Operations
-  - 🟡 Quartic Extension Field Operations
+  - ✅ Quartic Extension Field Operations
   - 🟡 Quintic Extension Field Operations
 
 ### [TensorExt](/zkir/Dialect/TensorExt/IR/TensorExtOps.td)

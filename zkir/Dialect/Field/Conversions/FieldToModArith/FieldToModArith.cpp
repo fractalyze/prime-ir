@@ -482,29 +482,24 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
     }
 
     // For prime field, x^(p-1) ≡ 1 mod p, so x^n ≡ x^(n mod (p-1)) mod p
-    // For quadratic extension field, x^(p²-1) ≡ 1 mod p², so
-    // x^n ≡ x^(n mod (p²-1)) mod p²
-    // For cubic extension field, x^(p³-1) ≡ 1 mod p³, so
-    // x^n ≡ x^(n mod (p³-1)) mod p³
+    // For extension field of degree d, x^(pᵈ-1) ≡ 1 mod pᵈ, so
+    // x^n ≡ x^(n mod (pᵈ-1)) mod pᵈ
     if (isa<PrimeFieldType>(fieldType)) {
       exp = b.create<arith::RemUIOp>(
           exp, b.create<arith::ConstantIntOp>(intType, modulus - 1));
-    } else if (isa<QuadraticExtFieldType>(fieldType)) {
-      modulus = modulus.zext(modBitWidth * 2);
-      modulus = modulus * modulus - 1;
+    } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+      unsigned degree = efType.getDegreeOverBase();
+      modulus = modulus.zext(modBitWidth * degree);
+      APInt order = modulus;
+      for (unsigned i = 1; i < degree; ++i) {
+        order = order * modulus;
+      }
+      order = order - 1;
       exp = b.create<arith::ExtUIOp>(
-          IntegerType::get(exp.getContext(), modulus.getBitWidth()), exp);
-      intType = IntegerType::get(exp.getContext(), modulus.getBitWidth());
+          IntegerType::get(exp.getContext(), order.getBitWidth()), exp);
+      intType = IntegerType::get(exp.getContext(), order.getBitWidth());
       exp = b.create<arith::RemUIOp>(
-          exp, b.create<arith::ConstantIntOp>(intType, modulus));
-    } else if (isa<CubicExtFieldType>(fieldType)) {
-      modulus = modulus.zext(modBitWidth * 3);
-      modulus = modulus * modulus * modulus - 1;
-      exp = b.create<arith::ExtUIOp>(
-          IntegerType::get(exp.getContext(), modulus.getBitWidth()), exp);
-      intType = IntegerType::get(exp.getContext(), modulus.getBitWidth());
-      exp = b.create<arith::RemUIOp>(
-          exp, b.create<arith::ConstantIntOp>(intType, modulus));
+          exp, b.create<arith::ConstantIntOp>(intType, order));
     }
 
     Value zero = b.create<arith::ConstantIntOp>(intType, 0);
@@ -666,6 +661,25 @@ struct ConvertF3Constant : public OpConversionPattern<F3ConstantOp> {
   }
 };
 
+struct ConvertF4Constant : public OpConversionPattern<F4ConstantOp> {
+  explicit ConvertF4Constant(MLIRContext *context)
+      : OpConversionPattern<F4ConstantOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(F4ConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    auto f4 = b.create<ExtFromCoeffsOp>(
+        op.getType(), ValueRange{adaptor.getC0(), adaptor.getC1(),
+                                 adaptor.getC2(), adaptor.getC3()});
+    rewriter.replaceOp(op, f4);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
@@ -697,6 +711,7 @@ void FieldToModArith::runOnOperation() {
       ConvertDouble,
       ConvertF2Constant,
       ConvertF3Constant,
+      ConvertF4Constant,
       ConvertFromMont,
       ConvertInverse,
       ConvertMul,

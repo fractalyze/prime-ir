@@ -20,6 +20,7 @@ limitations under the License.
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
+#include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
@@ -31,6 +32,14 @@ Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
                                  Value extFieldElement);
 
 Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs);
+
+// Create a mod_arith constant with value n.
+Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                  const TypeConverter *converter, uint64_t n);
+
+// Create a mod_arith constant with the multiplicative inverse of n.
+Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                     const TypeConverter *converter, uint64_t n);
 
 } // namespace mlir::zkir::field
 

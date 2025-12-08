@@ -226,4 +226,22 @@ uint64_t CubicExtFieldType::getABIAlignment(
 DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(CubicExtFieldType, CubicExtFieldAttr,
                                          3, 3);
 
+//===----------------------------------------------------------------------===//
+// QuarticExtFieldType
+//===----------------------------------------------------------------------===//
+
+llvm::TypeSize QuarticExtFieldType::getTypeSizeInBits(
+    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() * 4);
+}
+
+uint64_t QuarticExtFieldType::getABIAlignment(
+    DataLayout const &dataLayout,
+    llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
+}
+
+DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(QuarticExtFieldType,
+                                         QuarticExtFieldAttr, 4, 4);
+
 } // namespace mlir::zkir::field

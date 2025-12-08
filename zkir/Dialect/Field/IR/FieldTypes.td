@@ -137,13 +137,15 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
   let summary = "Quadratic extension field element type";
   let description = [{
     Represents an element in a quadratic extension field defined by the given
-    prime field `baseField` and the irreducible binomial `beta`.
+    prime field `baseField` and the non-residue `xi`.
+
+    An element is represented as a₀ + a₁v where v² = ξ.
 
     Example:
     ```
     !PF = !field.pf<7:i32>
-    #beta = #field.pf.elem<6:i32> : !PF
-    !QF = !field.f2<!PF, #beta>
+    #xi = #field.pf.elem<6:i32> : !PF
+    !QF = !field.f2<!PF, #xi>
     ```
   }];
   let parameters = (ins
@@ -165,7 +167,7 @@ def Field_CubicExtFieldType : Field_Type<"CubicExtField", "f3", [
   let summary = "Cubic extension field element type";
   let description = [{
     Represents an element in a cubic extension field defined by the given
-    prime field `baseField` and the irreducible binomial `xi`.
+    prime field `baseField` and the non-residue `xi`.
 
     An element is represented as a₀ + a₁v + a₂v² where v³ = ξ.
 
@@ -183,12 +185,43 @@ def Field_CubicExtFieldType : Field_Type<"CubicExtField", "f3", [
   let assemblyFormat = "`<` $baseField `,` $nonResidue `>`";
 }
 
-def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType], "any-field-type">;
-def Field_AnyExtFieldType : AnyTypeOf<[Field_QuadraticExtFieldType, Field_CubicExtFieldType], "any-ext-field-type">;
+// Quartic extension field type definition.
+// This type represents an element in a quartic extension field parameterized by the underlying field.
+// Currently, it is only defined for prime fields.
+def Field_QuarticExtFieldType : Field_Type<"QuarticExtField", "f4", [
+  MemRefElementTypeInterface,
+  VectorElementTypeInterface,
+  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
+  ]> {
+  let summary = "Quartic extension field element type";
+  let description = [{
+    Represents an element in a quartic extension field defined by the given
+    prime field `baseField` and the non-residue `xi`.
+
+    An element is represented as a₀ + a₁v + a₂v² + a₃v³ where v⁴ = ξ.
+
+    Example:
+    ```
+    !PF = !field.pf<7:i32>
+    #xi = #field.pf.elem<6:i32> : !PF
+    !QF = !field.f4<!PF, #xi>
+    ```
+  }];
+  let parameters = (ins
+   Field_PrimeFieldType: $baseField,
+   "PrimeFieldAttr": $nonResidue
+  );
+  let assemblyFormat = "`<` $baseField `,` $nonResidue `>`";
+}
+
+def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-field-type">;
+def Field_AnyExtFieldType : AnyTypeOf<[Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-ext-field-type">;
 
 def PrimeFieldLike: TypeOrValueSemanticsContainer<Field_PrimeFieldType, "prime-field-like">;
 def QuadraticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuadraticExtFieldType, "quadratic-ext-field-like">;
 def CubicExtFieldLike: TypeOrValueSemanticsContainer<Field_CubicExtFieldType, "cubic-ext-field-like">;
-def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, QuadraticExtFieldLike.predicate, CubicExtFieldLike.predicate]>, "field-like">;
+def QuarticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuarticExtFieldType, "quartic-ext-field-like">;
+def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, QuadraticExtFieldLike.predicate, CubicExtFieldLike.predicate, QuarticExtFieldLike.predicate]>, "field-like">;
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDTYPES_TD_
