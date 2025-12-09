@@ -17,8 +17,8 @@
 // RUN:   | zkir-opt -elliptic-curve-to-field -split-input-file \
 // RUN:   | FileCheck %s -enable-var-scope
 
-// CHECK-LABEL: @test_intialization_and_conversion
-func.func @test_intialization_and_conversion() {
+// CHECK-LABEL: @test_initialization_and_conversion
+func.func @test_initialization_and_conversion() {
   // CHECK: %[[VAR1:.*]] = field.constant #[[ATTR1:.*]] : [[PF:.*]]
   %var1 = field.constant 1 : !PFm
   // CHECK: %[[VAR2:.*]] = field.constant #[[ATTR2:.*]] : [[PF]]
