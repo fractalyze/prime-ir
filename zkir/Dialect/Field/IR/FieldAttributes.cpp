@@ -15,8 +15,10 @@ limitations under the License.
 
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 
+#include "llvm/ADT/SmallString.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "zkir/Dialect/Field/IR/FieldAttributesInterfaces.cpp.inc"
 #include "zkir/Utils/APIntUtils.h"
@@ -64,9 +66,12 @@ RootOfUnityAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
   APInt degreeValue = degree.getValue().zextOrTrunc(modulus.getBitWidth());
 
   if (!expMod(rootOfUnity, degreeValue, modulus).isOne()) {
-    emitError() << rootOfUnity.getZExtValue()
-                << " is not a root of unity of degree "
-                << degreeValue.getZExtValue();
+    SmallString<40> rootOfUnityStr;
+    rootOfUnity.toString(rootOfUnityStr, 10, false);
+    SmallString<40> degreeValueStr;
+    degreeValue.toString(degreeValueStr, 10, false);
+    emitError() << rootOfUnityStr << " is not a root of unity of degree "
+                << degreeValueStr;
     return failure();
   }
 
