@@ -102,6 +102,29 @@ Type parseModulus(AsmParser &parser) {
 void printModulus(AsmPrinter &printer, const APInt &modulus,
                   const Type &storageType, bool isMontgomery);
 
+using GetModulusCallback = llvm::function_ref<ParseResult(APInt &)>;
+
+// Attempts to validate a parsed integer value against the constraints of a
+// **modular integer** defined by the 'modulus'.
+//
+// 1. **Size Check:** Ensures the bit width of the parsed value ('parsedInt')
+//    does not exceed the bit width of the modulus/underlying storage type.
+// 2. **Size Adjustment:** Adjusts the parsed integer's size (zero-extend or
+//    truncate) to match the exact bit width of the modulus.
+// 3. **Range Check:** Verifies that the adjusted value is strictly less than
+//    the modulus (i.e., 0 <= value < modulus). Fails if the value is outside
+//    this valid modular range.
+ParseResult validateModularInteger(OpAsmParser &parser, const APInt &modulus,
+                                   APInt &parsedInt);
+
+ParseResult parseModularInteger(OpAsmParser &parser, APInt &parsedInt,
+                                Type &parsedType,
+                                GetModulusCallback getModulusCallback);
+OptionalParseResult
+parseOptionalModularInteger(OpAsmParser &parser, APInt &parsedInt,
+                            Type &parsedType,
+                            GetModulusCallback getModulusCallback);
+
 } // namespace mlir::zkir
 
 #endif // ZKIR_UTILS_ASSEMBLYFORMATUTILS_H_

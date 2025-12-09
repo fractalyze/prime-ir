@@ -21,6 +21,7 @@ limitations under the License.
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/APIntUtils.h"
+#include "zkir/Utils/AssemblyFormatUtils.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for ModArithCanonicalization.cpp.inc
@@ -618,37 +619,24 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   Type parsedType;
   ZkirDenseElementsAttr valueAttr;
 
-  if (parser.parseOptionalInteger(parsedInt).has_value()) {
-    if (failed(parser.parseColonType(parsedType)))
-      return failure();
-
-    if (parsedInt.isNegative()) {
-      parser.emitError(parser.getCurrentLocation(),
-                       "negative value is not allowed");
-      return failure();
+  auto getModulusCallback = [&](APInt &modulus) -> ParseResult {
+    if (auto modArithType = dyn_cast<ModArithType>(parsedType)) {
+      modulus = modArithType.getModulus().getValue();
+      return success();
     }
 
-    auto modArithType = dyn_cast<ModArithType>(parsedType);
-    if (!modArithType)
-      return failure();
+    parser.emitError(parser.getCurrentLocation(),
+                     "expected ModArithType for modulus");
+    return failure();
+  };
 
-    APInt modulus = modArithType.getModulus().getValue();
-    if (modulus.isNegative() || modulus.isZero()) {
-      parser.emitError(parser.getCurrentLocation(), "modulus must be positive");
-      return failure();
-    }
-
-    unsigned outputBitWidth = modArithType.getStorageBitWidth();
-    if (parsedInt.getActiveBits() > outputBitWidth) {
-      parser.emitError(parser.getCurrentLocation(),
-                       "constant value is too large for the underlying type");
-      return failure();
-    }
-
-    // zero-extend or truncate to the correct bitwidth
-    parsedInt = parsedInt.zextOrTrunc(outputBitWidth).urem(modulus);
+  if (parseOptionalModularInteger(parser, parsedInt, parsedType,
+                                  getModulusCallback)
+          .has_value()) {
     result.addAttribute(
-        "value", IntegerAttr::get(modArithType.getStorageType(), parsedInt));
+        "value",
+        IntegerAttr::get(cast<ModArithType>(parsedType).getStorageType(),
+                         parsedInt));
     result.addTypes(parsedType);
     return success();
   }
@@ -656,6 +644,18 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   if (failed(parser.parseAttribute(valueAttr))) {
     parser.emitError(parser.getCurrentLocation(),
                      "expected value to be a scalar or dense elements attr");
+    return failure();
+  }
+  if (auto denseElementsAttr = dyn_cast<DenseModArithElementsAttr>(valueAttr)) {
+    // TODO(chokobole): Validate integers in the dense elements attr using the
+    // `validateModularInteger()`. Currently it's impossible because
+    // `validateModularInteger()` requires mutable reference to the integer, but
+    // `getValues<APInt>()` returns a const reference.
+    // But this parsing logic is going to be refactored in the next PR, so we
+    // just ignore the validations for now.
+  } else {
+    parser.emitError(parser.getCurrentLocation(),
+                     "expected value to be a dense elements attr");
     return failure();
   }
   result.addAttribute("value", valueAttr);

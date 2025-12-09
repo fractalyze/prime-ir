@@ -20,12 +20,12 @@
 
 // CHECK-LABEL: @test_lower_constant
 // CHECK-SAME: () -> [[T:.*]] {
-func.func @test_lower_constant() -> !mod_arith.int<3 : i5> {
+func.func @test_lower_constant() -> !Zp {
   // CHECK-NOT: mod_arith.constant
-  // CHECK: %[[CVAL:.*]] = arith.constant 2 : [[T]]
+  // CHECK: %[[CVAL:.*]] = arith.constant 5 : [[T]]
   // CHECK: return %[[CVAL]] : [[T]]
-  %res = mod_arith.constant 5:  !mod_arith.int<3 : i5>
-  return %res: !mod_arith.int<3 : i5>
+  %res = mod_arith.constant 5:  !Zp
+  return %res: !Zp
 }
 
 // CHECK-LABEL: @test_lower_constant_vec

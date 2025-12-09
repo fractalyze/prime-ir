@@ -22,7 +22,7 @@
 func.func @test_bn254_add() -> !Zp {
   %0 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208580 :!Zp // -3
   %1 = mod_arith.constant 1 : !Zp
-  %2 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208586 : !Zp // 3
+  %2 = mod_arith.constant 3 : !Zp
   %3 = mod_arith.constant 5 : !Zp
 
   %i0 = mod_arith.add %0, %1 : !Zp // -2
@@ -42,7 +42,7 @@ func.func @test_bn254_add() -> !Zp {
 // CHECK-LABEL: @test_bn254_sub
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_bn254_sub() -> !Zp {
-  %0 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208585 :!Zp // 2
+  %0 = mod_arith.constant 2 : !Zp
   %1 = mod_arith.constant 2 : !Zp
   %2 = mod_arith.constant 4 : !Zp
   %3 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208581 :!Zp // -2
@@ -64,9 +64,9 @@ func.func @test_bn254_sub() -> !Zp {
 // @ashjeong: this works, but changing to "-2" gives different direct result
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_bn254_mult() -> !Zp {
-  %0 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208585 :!Zp // 2
+  %0 = mod_arith.constant 2 : !Zp
   %1 = mod_arith.constant 0 : !Zp
-  %2 = mod_arith.constant 1 :!Zp
+  %2 = mod_arith.constant 1 : !Zp
   %3 = mod_arith.constant 21888242871839275222246405745257275088696311157297823662689037894645226208581 :!Zp // -2
 
   %i0 = mod_arith.mul %0, %0 : !Zp // 4

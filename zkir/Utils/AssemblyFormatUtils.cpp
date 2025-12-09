@@ -28,4 +28,58 @@ void printModulus(AsmPrinter &printer, const APInt &modulus,
   printer << ">";
 }
 
+namespace {
+
+ParseResult doParseModularInteger(OpAsmParser &parser, APInt &parsedInt,
+                                  Type &parsedType,
+                                  GetModulusCallback getModulusCallback) {
+  if (failed(parser.parseColonType(parsedType))) {
+    return failure();
+  }
+
+  APInt modulus;
+  if (failed(getModulusCallback(modulus))) {
+    return failure();
+  }
+
+  return validateModularInteger(parser, modulus, parsedInt);
+}
+
+} // namespace
+
+ParseResult validateModularInteger(OpAsmParser &parser, const APInt &modulus,
+                                   APInt &parsedInt) {
+  if (parsedInt.getActiveBits() > modulus.getBitWidth()) {
+    return parser.emitError(parser.getCurrentLocation(),
+                            "value is too large for the underlying type");
+  }
+  parsedInt = parsedInt.zextOrTrunc(modulus.getBitWidth());
+  if (parsedInt.uge(modulus)) {
+    return parser.emitError(parser.getCurrentLocation(),
+                            "value is not in the field defined by modulus");
+  }
+  return success();
+}
+
+ParseResult parseModularInteger(OpAsmParser &parser, APInt &parsedInt,
+                                Type &parsedType,
+                                GetModulusCallback getModulusCallback) {
+  if (!parser.parseOptionalInteger(parsedInt).has_value()) {
+    return failure();
+  }
+  return doParseModularInteger(parser, parsedInt, parsedType,
+                               getModulusCallback);
+}
+
+OptionalParseResult
+parseOptionalModularInteger(OpAsmParser &parser, APInt &parsedInt,
+                            Type &parsedType,
+                            GetModulusCallback getModulusCallback) {
+  if (!parser.parseOptionalInteger(parsedInt).has_value()) {
+    return std::nullopt;
+  }
+  return doParseModularInteger(parser, parsedInt, parsedType,
+                               getModulusCallback);
+}
+
 } // namespace mlir::zkir
