@@ -26,7 +26,10 @@ cc_binary(
     testonly = True,
     linkshared = True,
     linkstatic = False,
-    deps = [":printI256"],
+    deps = [
+        ":printI256",
+        "@zkir//zkir/IR:Attributes",
+    ],
 )
 
 cc_library(

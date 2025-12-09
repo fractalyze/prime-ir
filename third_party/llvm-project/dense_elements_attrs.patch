@@ -1,0 +1,410 @@
+diff --git mlir/include/mlir/IR/BuiltinAttributes.h mlir/include/mlir/IR/BuiltinAttributes.h
+index c07ade606a77..9fd87483dc71 100644
+--- mlir/include/mlir/IR/BuiltinAttributes.h
++++ mlir/include/mlir/IR/BuiltinAttributes.h
+@@ -77,6 +77,37 @@ template <typename T>
+ struct is_complex_t<std::complex<T>> : public std::true_type {};
+ } // namespace detail
+ 
++/// Writes value to the bit position `bitPos` in array `rawData`.
++void writeBits(char *rawData, size_t bitPos, APInt value);
++
++/// Reads the next `bitWidth` bits from the bit position `bitPos` in array
++/// `rawData`.
++APInt readBits(const char *rawData, size_t bitPos, size_t bitWidth);
++
++/// Check the information for a C++ data type, check if this type is valid for
++/// the current attribute. This method is used to verify specific type
++/// invariants that the templatized 'getValues' method cannot.
++bool isValidIntOrFloat(Type type, int64_t dataEltSize, bool isInt,
++                       bool isSigned);
++
++/// Utility method to write a range of APInt values to a buffer.
++template <typename APRangeT>
++void writeAPIntsToBuffer(size_t storageWidth, SmallVectorImpl<char> &data,
++                         APRangeT &&values) {
++  size_t numValues = llvm::size(values);
++  data.resize(llvm::divideCeil(storageWidth * numValues, CHAR_BIT));
++  size_t offset = 0;
++  for (auto it = values.begin(), e = values.end(); it != e;
++       ++it, offset += storageWidth) {
++    assert((*it).getBitWidth() <= storageWidth);
++    writeBits(data.data(), offset, *it);
++  }
++
++  // Handle the special encoding of splat of a boolean.
++  if (numValues == 1 && (*values.begin()).getBitWidth() == 1)
++    data[0] = data[0] ? -1 : 0;
++}
++
+ /// An attribute that represents a reference to a dense vector or tensor
+ /// object.
+ class DenseElementsAttr : public Attribute {
+diff --git mlir/include/mlir/IR/BuiltinAttributes.td mlir/include/mlir/IR/BuiltinAttributes.td
+index b67b8f939b9e..d2cd23200aa7 100644
+--- mlir/include/mlir/IR/BuiltinAttributes.td
++++ mlir/include/mlir/IR/BuiltinAttributes.td
+@@ -321,6 +321,13 @@ def Builtin_DenseIntOrFPElementsAttr : Builtin_Attr<
+                                                 size_t elementBitWidth,
+                                                 size_t numElements);
+ 
++    /// Get or create a new dense elements attribute instance with the given raw
++    /// data buffer. 'type' must be a vector or tensor with static shape.
++    ///
++    /// If the `values` array only has a single element, then this constructs
++    /// splat of that value.
++    static DenseElementsAttr getRaw(ShapedType type, ArrayRef<char> data);
++
+   protected:
+     friend DenseElementsAttr;
+ 
+@@ -343,13 +350,6 @@ def Builtin_DenseIntOrFPElementsAttr : Builtin_Attr<
+     static DenseElementsAttr getRaw(ShapedType type, size_t storageWidth,
+                                     ArrayRef<APInt> values);
+ 
+-    /// Get or create a new dense elements attribute instance with the given raw
+-    /// data buffer. 'type' must be a vector or tensor with static shape.
+-    ///
+-    /// If the `values` array only has a single element, then this constructs
+-    /// splat of that value.
+-    static DenseElementsAttr getRaw(ShapedType type, ArrayRef<char> data);
+-
+     /// Overload of the raw 'get' method that asserts that the given type is of
+     /// complex type. This method is used to verify type invariants that the
+     /// templatized 'get' method cannot.
+diff --git mlir/lib/AsmParser/AttributeParser.cpp mlir/lib/AsmParser/AttributeParser.cpp
+index dcb21e7d0831..e58e4049d11b 100644
+--- mlir/lib/AsmParser/AttributeParser.cpp
++++ mlir/lib/AsmParser/AttributeParser.cpp
+@@ -19,6 +19,8 @@
+ #include "mlir/IR/BuiltinTypes.h"
+ #include "mlir/IR/DialectResourceBlobManager.h"
+ #include "mlir/IR/IntegerSet.h"
++#include "mlir/lib/AsmParser/TensorLiteralParser.h"
++#include "zkir/IR/Attributes.h"
+ #include <optional>
+ 
+ using namespace mlir;
+@@ -458,69 +460,6 @@ static ParseResult parseElementAttrHexValues(Parser &parser, Token tok,
+       tok.getLoc(), "expected string containing hex digits starting with `0x`");
+ }
+ 
+-namespace {
+-/// This class implements a parser for TensorLiterals. A tensor literal is
+-/// either a single element (e.g, 5) or a multi-dimensional list of elements
+-/// (e.g., [[5, 5]]).
+-class TensorLiteralParser {
+-public:
+-  TensorLiteralParser(Parser &p) : p(p) {}
+-
+-  /// Parse the elements of a tensor literal. If 'allowHex' is true, the parser
+-  /// may also parse a tensor literal that is store as a hex string.
+-  ParseResult parse(bool allowHex);
+-
+-  /// Build a dense attribute instance with the parsed elements and the given
+-  /// shaped type.
+-  DenseElementsAttr getAttr(SMLoc loc, ShapedType type);
+-
+-  ArrayRef<int64_t> getShape() const { return shape; }
+-
+-private:
+-  /// Get the parsed elements for an integer attribute.
+-  ParseResult getIntAttrElements(SMLoc loc, Type eltTy,
+-                                 std::vector<APInt> &intValues);
+-
+-  /// Get the parsed elements for a float attribute.
+-  ParseResult getFloatAttrElements(SMLoc loc, FloatType eltTy,
+-                                   std::vector<APFloat> &floatValues);
+-
+-  /// Build a Dense String attribute for the given type.
+-  DenseElementsAttr getStringAttr(SMLoc loc, ShapedType type, Type eltTy);
+-
+-  /// Build a Dense attribute with hex data for the given type.
+-  DenseElementsAttr getHexAttr(SMLoc loc, ShapedType type);
+-
+-  /// Parse a single element, returning failure if it isn't a valid element
+-  /// literal. For example:
+-  /// parseElement(1) -> Success, 1
+-  /// parseElement([1]) -> Failure
+-  ParseResult parseElement();
+-
+-  /// Parse a list of either lists or elements, returning the dimensions of the
+-  /// parsed sub-tensors in dims. For example:
+-  ///   parseList([1, 2, 3]) -> Success, [3]
+-  ///   parseList([[1, 2], [3, 4]]) -> Success, [2, 2]
+-  ///   parseList([[1, 2], 3]) -> Failure
+-  ///   parseList([[1, [2, 3]], [4, [5]]]) -> Failure
+-  ParseResult parseList(SmallVectorImpl<int64_t> &dims);
+-
+-  /// Parse a literal that was printed as a hex string.
+-  ParseResult parseHexElements();
+-
+-  Parser &p;
+-
+-  /// The shape inferred from the parsed elements.
+-  SmallVector<int64_t, 4> shape;
+-
+-  /// Storage used when parsing elements, this is a pair of <is_negated, token>.
+-  std::vector<std::pair<bool, Token>> storage;
+-
+-  /// Storage used when parsing elements that were stored as hex values.
+-  std::optional<Token> hexStorage;
+-};
+-} // namespace
+-
+ /// Parse the elements of a tensor literal. If 'allowHex' is true, the parser
+ /// may also parse a tensor literal that is store as a hex string.
+ ParseResult TensorLiteralParser::parse(bool allowHex) {
+@@ -970,6 +909,9 @@ Attribute Parser::parseDenseElementsAttr(Type attrType) {
+   auto type = parseElementsLiteralType(attribLoc, attrType);
+   if (!type)
+     return nullptr;
++  if (zkir::ZkirDenseElementsAttr::isValidType(type)) {
++    return zkir::ZkirDenseElementsAttr::getAttr(literalParser, attribLoc, type);
++  }
+   return literalParser.getAttr(attribLoc, type);
+ }
+ 
+diff --git mlir/lib/AsmParser/TensorLiteralParser.h mlir/lib/AsmParser/TensorLiteralParser.h
+new file mode 100644
+index 000000000000..b08c71d31b5f
+--- /dev/null
++++ mlir/lib/AsmParser/TensorLiteralParser.h
+@@ -0,0 +1,95 @@
++//===- TensorLiteralParser.h -------------------------------------*- C++-*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++#ifndef MLIR_LIB_ASMPARSER_TENSORLITERALPARSER_H
++#define MLIR_LIB_ASMPARSER_TENSORLITERALPARSER_H
++
++#include "Parser.h"
++#include "mlir/IR/BuiltinTypeInterfaces.h"
++#include "mlir/Support/LLVM.h"
++#include "llvm/Support/SMLoc.h"
++#include <optional>
++#include <vector>
++
++namespace mlir {
++namespace zkir {
++
++class ZkirDenseElementsAttr;
++
++} // namespace zkir
++
++namespace detail {
++
++/// This class implements a parser for TensorLiterals. A tensor literal is
++/// either a single element (e.g, 5) or a multi-dimensional list of elements
++/// (e.g., [[5, 5]]).
++class TensorLiteralParser {
++public:
++  TensorLiteralParser(Parser &p) : p(p) {}
++
++  /// Parse the elements of a tensor literal. If 'allowHex' is true, the parser
++  /// may also parse a tensor literal that is store as a hex string.
++  ParseResult parse(bool allowHex);
++
++  /// Build a dense attribute instance with the parsed elements and the given
++  /// shaped type.
++  DenseElementsAttr getAttr(SMLoc loc, ShapedType type);
++
++  ArrayRef<int64_t> getShape() const { return shape; }
++
++private:
++  friend class mlir::detail::Parser;
++  friend class mlir::zkir::ZkirDenseElementsAttr;
++
++  /// Get the parsed elements for an integer attribute.
++  ParseResult getIntAttrElements(SMLoc loc, Type eltTy,
++                                 std::vector<APInt> &intValues);
++
++  /// Get the parsed elements for a float attribute.
++  ParseResult getFloatAttrElements(SMLoc loc, FloatType eltTy,
++                                   std::vector<APFloat> &floatValues);
++
++  /// Build a Dense String attribute for the given type.
++  DenseElementsAttr getStringAttr(SMLoc loc, ShapedType type, Type eltTy);
++
++  /// Build a Dense attribute with hex data for the given type.
++  DenseElementsAttr getHexAttr(SMLoc loc, ShapedType type);
++
++  /// Parse a single element, returning failure if it isn't a valid element
++  /// literal. For example:
++  /// parseElement(1) -> Success, 1
++  /// parseElement([1]) -> Failure
++  ParseResult parseElement();
++
++  /// Parse a list of either lists or elements, returning the dimensions of the
++  /// parsed sub-tensors in dims. For example:
++  ///   parseList([1, 2, 3]) -> Success, [3]
++  ///   parseList([[1, 2], [3, 4]]) -> Success, [2, 2]
++  ///   parseList([[1, 2], 3]) -> Failure
++  ///   parseList([[1, [2, 3]], [4, [5]]]) -> Failure
++  ParseResult parseList(SmallVectorImpl<int64_t> &dims);
++
++  /// Parse a literal that was printed as a hex string.
++  ParseResult parseHexElements();
++
++  Parser &p;
++
++  /// The shape inferred from the parsed elements.
++  SmallVector<int64_t, 4> shape;
++
++  /// Storage used when parsing elements, this is a pair of <is_negated, token>.
++  std::vector<std::pair<bool, Token>> storage;
++
++  /// Storage used when parsing elements that were stored as hex values.
++  std::optional<Token> hexStorage;
++};
++
++} // namespace detail
++} // namespace mlir
++
++#endif // MLIR_LIB_ASMPARSER_TENSORLITERALPARSER_H
+diff --git mlir/lib/IR/BuiltinAttributes.cpp mlir/lib/IR/BuiltinAttributes.cpp
+index 617dcc222cd6..a56ebfb5aa77 100644
+--- mlir/lib/IR/BuiltinAttributes.cpp
++++ mlir/lib/IR/BuiltinAttributes.cpp
+@@ -543,8 +543,9 @@ static void copyArrayToAPIntForBEmachine(const char *inArray, size_t numBytes,
+       APInt::APINT_BITS_PER_WORD, 1);
+ }
+ 
+-/// Writes value to the bit position `bitPos` in array `rawData`.
+-static void writeBits(char *rawData, size_t bitPos, APInt value) {
++namespace mlir {
++
++void writeBits(char *rawData, size_t bitPos, APInt value) {
+   size_t bitWidth = value.getBitWidth();
+ 
+   // If the bitwidth is 1 we just toggle the specific bit.
+@@ -568,9 +569,7 @@ static void writeBits(char *rawData, size_t bitPos, APInt value) {
+   }
+ }
+ 
+-/// Reads the next `bitWidth` bits from the bit position `bitPos` in array
+-/// `rawData`.
+-static APInt readBits(const char *rawData, size_t bitPos, size_t bitWidth) {
++APInt readBits(const char *rawData, size_t bitPos, size_t bitWidth) {
+   // Handle a boolean bit position.
+   if (bitWidth == 1)
+     return APInt(1, getBit(rawData, bitPos) ? 1 : 0);
+@@ -595,6 +594,8 @@ static APInt readBits(const char *rawData, size_t bitPos, size_t bitWidth) {
+   return result;
+ }
+ 
++} // namespace mlir
++
+ /// Returns true if 'values' corresponds to a splat, i.e. one element, or has
+ /// the same element count as 'type'.
+ template <typename Values>
+@@ -1112,11 +1113,13 @@ bool DenseElementsAttr::isValidRawBuffer(ShapedType type,
+   return rawBufferWidth == storageWidth * numElements;
+ }
+ 
++namespace mlir {
++
+ /// Check the information for a C++ data type, check if this type is valid for
+ /// the current attribute. This method is used to verify specific type
+ /// invariants that the templatized 'getValues' method cannot.
+-static bool isValidIntOrFloat(Type type, int64_t dataEltSize, bool isInt,
+-                              bool isSigned) {
++bool isValidIntOrFloat(Type type, int64_t dataEltSize, bool isInt,
++                       bool isSigned) {
+   // Make sure that the data element size is the same as the type element width.
+   auto denseEltBitWidth = getDenseElementBitWidth(type);
+   auto dataSize = static_cast<size_t>(dataEltSize * CHAR_BIT);
+@@ -1158,6 +1161,8 @@ static bool isValidIntOrFloat(Type type, int64_t dataEltSize, bool isInt,
+   return valid;
+ }
+ 
++} // namespace mlir
++
+ /// Defaults down the subclass implementation.
+ DenseElementsAttr DenseElementsAttr::getRawComplex(ShapedType type,
+                                                    ArrayRef<char> data,
+@@ -1313,25 +1318,6 @@ int64_t DenseElementsAttr::getNumElements() const {
+ // DenseIntOrFPElementsAttr
+ //===----------------------------------------------------------------------===//
+ 
+-/// Utility method to write a range of APInt values to a buffer.
+-template <typename APRangeT>
+-static void writeAPIntsToBuffer(size_t storageWidth,
+-                                SmallVectorImpl<char> &data,
+-                                APRangeT &&values) {
+-  size_t numValues = llvm::size(values);
+-  data.resize(llvm::divideCeil(storageWidth * numValues, CHAR_BIT));
+-  size_t offset = 0;
+-  for (auto it = values.begin(), e = values.end(); it != e;
+-       ++it, offset += storageWidth) {
+-    assert((*it).getBitWidth() <= storageWidth);
+-    writeBits(data.data(), offset, *it);
+-  }
+-
+-  // Handle the special encoding of splat of a boolean.
+-  if (numValues == 1 && (*values.begin()).getBitWidth() == 1)
+-    data[0] = data[0] ? -1 : 0;
+-}
+-
+ /// Constructs a dense elements attribute from an array of raw APFloat values.
+ /// Each APFloat value is expected to have the same bitwidth as the element
+ /// type of 'type'. 'type' must be a vector or tensor with static shape.
+diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+index 4fc82f6c1d27..1bf8488d475b 100644
+--- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+@@ -4977,9 +4977,9 @@ cc_library(
+     name = "AsmParser",
+     srcs = glob([
+         "lib/AsmParser/*.cpp",
+-        "lib/AsmParser/*.h",
+     ]),
+     hdrs = glob([
++        "lib/AsmParser/*.h",
+         "include/mlir/AsmParser/*.h",
+     ]),
+     includes = ["include"],
+@@ -4988,6 +4988,7 @@ cc_library(
+         ":IR",
+         ":Support",
+         "//llvm:Support",
++        "@zkir//zkir/IR:AttributesHdrs",
+     ],
+ )
+ 
+@@ -8879,6 +8880,7 @@ cc_library(
+         ":PluginsLib",
+         ":Support",
+         "//llvm:Support",
++        "@zkir//zkir/IR:Attributes",
+     ],
+ )
+ 
+@@ -8906,6 +8908,7 @@ cc_library(
+         ":TranslateLib",
+         "//llvm:Support",
+         "//mlir/test:TestToLLVMIRTranslation",
++        "@zkir//zkir/IR:Attributes",
+     ],
+ )
+ 
+@@ -9398,6 +9401,7 @@ cc_binary(
+         "//llvm:Linker",
+         "//llvm:Support",
+         "//llvm:X86AsmParser",
++        "@zkir//zkir/IR:Attributes",
+     ],
+ )
+ 
+@@ -9549,6 +9553,7 @@ cc_binary(
+         ":IR",
+         ":Support",
+         "//llvm:Support",
++        "@zkir//zkir/IR:Attributes",
+     ],
+ )
+ 

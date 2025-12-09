@@ -172,6 +172,7 @@ def zkir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags 
             "@com_google_benchmark//:benchmark_main",
             "@com_google_googletest//:gtest",
             "@llvm-project//mlir:mlir_runner_utils",
+            "//zkir/IR:Attributes",
         ],
         tags = tags,
         copts = copts,

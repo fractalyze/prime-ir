@@ -66,17 +66,28 @@ LLVM_COMMIT = "5ed852f7f72855710eeff53179e6a6f2271a3c2a"
 
 LLVM_SHA256 = "95792e50d5f84847721545b645a6ca2c2b3b7610d02e3de07d65a6148e68508c"
 
+# TODO(chokobole): The 'llvm-raw' definition here is not identical to the one used
+# in the ZKX project. We must review the applied patches below and remove any that
+# are not strictly necessary for this project.
 http_archive(
     name = "llvm-raw",
     build_file_content = "# empty",
     patches = [
+        # TODO(chokobole): Remove once the issues are resolved upstream.
         "//third_party/llvm-project:cuda_runtime.patch",
-        "//third_party/llvm-project:linalg_type_support.patch",
         "//third_party/llvm-project:kernel_outlining.patch",
         "//third_party/llvm-project:nvptx_lowering.patch",
+        # TODO(chokobole): Remove owning_memref_free.patch once we upgrade the version of LLVM.
+        # See https://github.com/llvm/llvm-project/pull/153133
         "//third_party/llvm-project:owning_memref_free.patch",
+        # TODO(chokobole): Remove owning_memref_memset.patch once we upgrade the version of LLVM.
+        # See https://github.com/llvm/llvm-project/pull/158200
         "//third_party/llvm-project:owning_memref_memset.patch",
+        # NOTE(chokobole): Patches for supporting ZKIR Dialects.
+        "//third_party/llvm-project:dense_elements_attrs.patch",
+        "//third_party/llvm-project:linalg_type_support.patch",
         "//third_party/llvm-project:tensor_type_support.patch",
+        "//third_party/llvm-project:vector_type_support.patch",
         "//third_party/llvm-project:memref_folding.patch",
     ],
     sha256 = LLVM_SHA256,
