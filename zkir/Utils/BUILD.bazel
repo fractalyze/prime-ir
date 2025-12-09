@@ -53,6 +53,15 @@ td_library(
 )
 
 cc_library(
+    name = "ConstantFolder",
+    hdrs = ["ConstantFolder.h"],
+    deps = [
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+cc_library(
     name = "ConversionUtils",
     srcs = ["ConversionUtils.cpp"],
     hdrs = ["ConversionUtils.h"],
