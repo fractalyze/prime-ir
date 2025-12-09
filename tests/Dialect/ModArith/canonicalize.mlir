@@ -18,6 +18,8 @@
 !Zp = !mod_arith.int<37 : i32>
 !Zpm = !mod_arith.int<37 : i32, true>
 
+!Goldilocks = !mod_arith.int<18446744069414584321: i64>
+
 //===----------------------------------------------------------------------===//
 // Constant Folding
 //===----------------------------------------------------------------------===//
@@ -72,6 +74,30 @@ func.func @test_add_tensor_fold() -> tensor<2x!Zp> {
   return %2 : tensor<2x!Zp>
 }
 
+// CHECK-LABEL: @test_add_overflow_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_add_overflow_fold() -> !Zp {
+  // CHECK: %[[C:.*]] = mod_arith.constant 1 : [[T]]
+  %0 = mod_arith.constant 36 : !Zp
+  %1 = mod_arith.constant 2 : !Zp
+  %2 = mod_arith.add %0, %1 : !Zp
+  // CHECK-NOT: mod_arith.add
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : !Zp
+}
+
+// CHECK-LABEL: @test_add_overflow_on_goldilocks_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_add_overflow_on_goldilocks_fold() -> !Goldilocks {
+  // CHECK: %[[C:.*]] = mod_arith.constant 4294967294 : [[T]]
+  %0 = mod_arith.constant 9223372036854775808 : !Goldilocks
+  %1 = mod_arith.constant 9223372036854775807 : !Goldilocks
+  %2 = mod_arith.add %0, %1 : !Goldilocks
+  // CHECK-NOT: mod_arith.add
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : !Goldilocks
+}
+
 // CHECK-LABEL: @test_sub_fold
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_sub_fold() -> !Zp {
@@ -96,6 +122,18 @@ func.func @test_sub_tensor_fold() -> tensor<2x!Zp> {
   return %2 : tensor<2x!Zp>
 }
 
+// CHECK-LABEL: @test_sub_overflow_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_sub_overflow_fold() -> !Zp {
+  // CHECK: %[[C:.*]] = mod_arith.constant 3 : [[T]]
+  %0 = mod_arith.constant 2 : !Zp
+  %1 = mod_arith.constant 36 : !Zp
+  %2 = mod_arith.sub %0, %1 : !Zp
+  // CHECK-NOT: mod_arith.sub
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : !Zp
+}
+
 // CHECK-LABEL: @test_double_fold
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_double_fold() -> !Zp {
@@ -116,6 +154,28 @@ func.func @test_double_tensor_fold() -> tensor<2x!Zp> {
   // CHECK-NOT: mod_arith.double
   // CHECK: return %[[C]] : [[T]]
   return %1 : tensor<2x!Zp>
+}
+
+// CHECK-LABEL: @test_double_overflow_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_double_overflow_fold() -> !Zp {
+  // CHECK: %[[C:.*]] = mod_arith.constant 35 : [[T]]
+  %0 = mod_arith.constant 36 : !Zp
+  %1 = mod_arith.double %0 : !Zp
+  // CHECK-NOT: mod_arith.double
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_double_overflow_on_goldilocks_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_double_overflow_on_goldilocks_fold() -> !Goldilocks {
+  // CHECK: %[[C:.*]] = mod_arith.constant 4294967295 : [[T]]
+  %0 = mod_arith.constant 9223372036854775808 : !Goldilocks
+  %1 = mod_arith.double %0 : !Goldilocks
+  // CHECK-NOT: mod_arith.double
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !Goldilocks
 }
 
 // CHECK-LABEL: @test_mul_fold

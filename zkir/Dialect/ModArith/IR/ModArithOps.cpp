@@ -275,12 +275,22 @@ OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
   APInt modulus = modArithType.getModulus().getValue();
 
   auto doubleMod = [modulus](APInt value) {
-    assert(modulus.getBitWidth() > modulus.getActiveBits());
-    APInt resultValue = value.shl(1);
-    if (resultValue.uge(modulus)) {
-      resultValue -= modulus;
+    unsigned bitWidth = modulus.getBitWidth();
+    if (bitWidth > modulus.getActiveBits()) {
+      APInt shl = value.shl(1);
+      if (shl.uge(modulus)) {
+        shl -= modulus;
+      }
+      return shl;
+    } else {
+      APInt extValue = value.zext(bitWidth + 1);
+      APInt extModulus = modulus.zext(bitWidth + 1);
+      APInt extAdd = extValue + extValue;
+      if (extAdd.uge(extModulus)) {
+        extAdd -= extModulus;
+      }
+      return extAdd.trunc(bitWidth);
     }
-    return resultValue;
   };
 
   if (auto intAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getInput())) {
@@ -399,11 +409,23 @@ OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
   auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
   APInt modulus = modArithType.getModulus().getValue();
   auto addMod = [modulus](const APInt &a, const APInt &b) -> APInt {
-    APInt sum = a + b;
-    if (sum.uge(modulus)) {
-      sum -= modulus;
+    unsigned bitWidth = modulus.getBitWidth();
+    if (bitWidth > modulus.getActiveBits()) {
+      APInt add = a + b;
+      if (add.uge(modulus)) {
+        add -= modulus;
+      }
+      return add;
+    } else {
+      APInt extA = a.zext(bitWidth + 1);
+      APInt extB = b.zext(bitWidth + 1);
+      APInt extModulus = modulus.zext(bitWidth + 1);
+      APInt extAdd = extA + extB;
+      if (extAdd.uge(extModulus)) {
+        extAdd -= extModulus;
+      }
+      return extAdd.trunc(bitWidth);
     }
-    return sum;
   };
 
   if (auto rhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
@@ -445,11 +467,19 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
   auto modArithType = cast<ModArithType>(getElementTypeOrSelf(getType()));
   APInt modulus = modArithType.getModulus().getValue();
   auto subMod = [modulus](const APInt &a, const APInt &b) -> APInt {
-    auto diff = a + modulus - b;
-    if (diff.uge(modulus)) {
-      diff -= modulus;
+    if (a.uge(b)) {
+      return a - b;
     }
-    return diff;
+    unsigned bitWidth = modulus.getBitWidth();
+    if (bitWidth > modulus.getActiveBits()) {
+      return a + modulus - b;
+    } else {
+      APInt extA = a.zext(bitWidth + 1);
+      APInt extB = b.zext(bitWidth + 1);
+      APInt extModulus = modulus.zext(bitWidth + 1);
+      APInt extSub = extA + extModulus - extB;
+      return extSub.trunc(bitWidth);
+    }
   };
 
   if (auto rhsIntAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getRhs())) {
