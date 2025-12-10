@@ -114,12 +114,16 @@ void TensorExtToTensor::runOnOperation() {
   ConversionTarget target(*context);
 
   target.addIllegalDialect<TensorExtDialect>();
-  target.addLegalDialect<tensor::TensorDialect>();
-  target.addLegalDialect<memref::MemRefDialect>();
-  target.addLegalDialect<arith::ArithDialect>();
-  target.addLegalDialect<bufferization::BufferizationDialect>();
-  target.addLegalDialect<LLVM::LLVMDialect>();
-  target.addLegalDialect<scf::SCFDialect>();
+  target.addLegalDialect<
+      // clang-format off
+      arith::ArithDialect,
+      bufferization::BufferizationDialect,
+      LLVM::LLVMDialect,
+      memref::MemRefDialect,
+      scf::SCFDialect,
+      tensor::TensorDialect
+      // clang-format on
+      >();
   RewritePatternSet patterns(context);
 
   patterns.add<ConvertBitReverse>(context);
