@@ -103,7 +103,9 @@ def Field_RootOfUnityAttr : Field_Attr<"RootOfUnity", "root_of_unity", [TypedAtt
   let genVerifyDecl = 1;
 }
 
-def Field_AnyFieldAttr : AnyAttrOf<[APIntAttr, Field_QuadraticExtFieldAttr, Field_CubicExtFieldAttr, Field_QuarticExtFieldAttr]> {
+// TODO(chokobole): Refactor this with a proper attribute type. Currently it's used in
+// `EllipticCurveAttributes.td`, so it can't be used.
+def Field_AnyFieldAttr : AnyAttrOf<[APIntAttr, AnyIntElementsAttr]> {
   string cppType = "mlir::TypedAttr";
 }
 

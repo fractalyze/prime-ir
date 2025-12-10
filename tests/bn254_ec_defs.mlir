@@ -18,7 +18,7 @@
 !jacobian = !elliptic_curve.jacobian<#curve>
 !xyzz = !elliptic_curve.xyzz<#curve>
 
-#f2_elem = #field.f2.elem<1:i256, 2:i256> : !QF
+#f2_elem = dense<[1, 2]>: tensor<2xi256>
 #g2curve = #elliptic_curve.sw<#f2_elem, #f2_elem, (#f2_elem, #f2_elem)> : !QF
 !g2affine = !elliptic_curve.affine<#g2curve>
 !g2jacobian = !elliptic_curve.jacobian<#g2curve>
