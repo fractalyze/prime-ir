@@ -37,6 +37,7 @@ const SmallVector<IntegerAttr> &MontgomeryAttr::getInvTwoPowers() const {
 
 namespace detail {
 
+// static
 MontgomeryAttrStorage *
 MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
                                  KeyTy &&key) {

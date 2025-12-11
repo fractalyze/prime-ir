@@ -20,6 +20,7 @@ limitations under the License.
 // Headers needed for EllipticCurveAttributes.h.inc
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/OpDefinition.h"
+#include "mlir/IR/OpImplementation.h"
 // IWYU pragma: end_keep
 
 #define GET_ATTRDEF_CLASSES

@@ -51,7 +51,7 @@ ExtensionField::ExtensionField(ImplicitLocOpBuilder &b,
   // TODO(chokobole): Support towers of extension field.
   nonResidue = b.create<mod_arith::ConstantOp>(
       converter->convertType(type.getBaseFieldType()),
-      cast<PrimeFieldAttr>(type.getNonResidue()).getValue());
+      cast<IntegerAttr>(type.getNonResidue()));
 }
 
 Value ExtensionField::add(Value x, Value y) {

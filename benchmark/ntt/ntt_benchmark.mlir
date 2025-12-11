@@ -21,8 +21,7 @@
 !coefft_ty_mont = tensor<1048576x!coeff_ty_mont>
 !memref_ty_mont = memref<1048576x!coeff_ty_mont>
 
-#root_elem = #field.pf.elem<17220337697351015657950521176323262483320249231368149235373741788599650842711:i256> : !coeff_ty
-#root_of_unity = #field.root_of_unity<#root_elem, 1048576:i256>
+#root_of_unity = #field.root_of_unity<17220337697351015657950521176323262483320249231368149235373741788599650842711:i256, 1048576:i256> : !coeff_ty
 
 func.func @ntt(%arg0 : !memref_ty) attributes { llvm.emit_c_interface } {
   %t = bufferization.to_tensor %arg0 restrict writable : !memref_ty to !coefft_ty

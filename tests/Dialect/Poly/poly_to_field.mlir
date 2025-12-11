@@ -18,8 +18,7 @@
 !PF1 = !field.pf<7:i255>
 !poly_ty1 = !poly.polynomial<!PF1, 3>
 !poly_ty2 = !poly.polynomial<!PF1, 4>
-#elem = #field.pf.elem<6:i255>  : !PF1
-#root_of_unity = #field.root_of_unity<#elem, 2:i255>
+#root_of_unity = #field.root_of_unity<6:i255, 2:i255> : !PF1
 
 // CHECK-LABEL: @test_lower_to_tensor
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {

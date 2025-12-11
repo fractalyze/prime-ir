@@ -15,42 +15,22 @@ limitations under the License.
 
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 
+#include "llvm/ADT/SmallString.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "zkir/Dialect/Field/IR/FieldAttributesInterfaces.cpp.inc"
 #include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::field {
 
-LogicalResult
-PrimeFieldAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
-                       PrimeFieldType type, IntegerAttr _value) {
-  APInt modulus = type.getModulus().getValue();
-  APInt value = _value.getValue();
-
-  // check if storage type is same
-  if (modulus.getBitWidth() != value.getBitWidth()) {
-    emitError()
-        << "prime field modulus bitwidth does not match the value bitwidth";
-    return failure();
-  }
-
-  // check if value is in the field defined by modulus
-  if (value.uge(modulus)) {
-    emitError() << value.getZExtValue()
-                << " is not in the field defined by modulus "
-                << modulus.getZExtValue();
-    return failure();
-  }
-
-  return success();
-}
-
+// static
 LogicalResult
 RootOfUnityAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
-                        PrimeFieldAttr root, IntegerAttr degree) {
-  if (root.getType().isMontgomery()) {
+                        PrimeFieldType type, IntegerAttr root,
+                        IntegerAttr degree) {
+  if (type.isMontgomery()) {
     // NOTE(batzor): Montgomery form is not supported for root of unity because
     // verification logic assumes standard form. Also, `PrimitiveRootAttr` in
     // the `Poly` dialect should also handle it if we want to allow this in the
@@ -58,15 +38,17 @@ RootOfUnityAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
     emitError() << "root of unity must be in standard form";
     return failure();
   }
-  APInt modulus = root.getType().getModulus().getValue();
-  APInt rootOfUnity = root.getValue().getValue();
-  // TODO(chokobole): Check if zextOrTrunc is correct here.
-  APInt degreeValue = degree.getValue().zextOrTrunc(modulus.getBitWidth());
+  APInt modulus = type.getModulus().getValue();
+  APInt rootOfUnity = root.getValue();
+  APInt degreeValue = degree.getValue();
 
   if (!expMod(rootOfUnity, degreeValue, modulus).isOne()) {
-    emitError() << rootOfUnity.getZExtValue()
-                << " is not a root of unity of degree "
-                << degreeValue.getZExtValue();
+    SmallString<40> rootOfUnityStr;
+    rootOfUnity.toString(rootOfUnityStr, 10, false);
+    SmallString<40> degreeValueStr;
+    degreeValue.toString(degreeValueStr, 10, false);
+    emitError() << rootOfUnityStr << " is not a root of unity of degree "
+                << degreeValueStr;
     return failure();
   }
 

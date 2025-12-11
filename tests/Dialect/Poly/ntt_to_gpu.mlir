@@ -16,8 +16,7 @@
 // RUN: zkir-opt %s -poly-to-field -field-to-gpu="bufferize-function-boundaries parallelize-affine target-format=llvm nvvm-use-bare-ptr-call-conv" | FileCheck %s
 
 !PF = !field.pf<7681:i32>
-#elem = #field.pf.elem<3383:i32>  : !PF
-#root_of_unity = #field.root_of_unity<#elem, 4:i32>
+#root_of_unity = #field.root_of_unity<3383:i32, 4:i32> : !PF
 
 // CHECK-LABEL: @ntt_in_place
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]

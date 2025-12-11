@@ -106,21 +106,20 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       return failure();
     }
 
-    if (auto pfAttr = dyn_cast<PrimeFieldAttr>(op.getValueAttr())) {
-      auto cval = b.create<mod_arith::ConstantOp>(modType, pfAttr.getValue());
-      rewriter.replaceOp(op, cval);
-      return success();
+    if (auto intAttr = dyn_cast<IntegerAttr>(op.getValueAttr())) {
+      if (isa<PrimeFieldType>(op.getType())) {
+        auto cval = b.create<mod_arith::ConstantOp>(modType, intAttr);
+        rewriter.replaceOp(op, cval);
+        return success();
+      }
     }
 
-    auto efAttr = cast<ExtensionFieldAttrInterface>(op.getValueAttr());
-    auto efType = cast<ExtensionFieldTypeInterface>(op.getType());
-    unsigned n = efType.getDegreeOverBase();
+    auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
 
     SmallVector<Value> coeffs;
-    for (unsigned i = 0; i < n; ++i) {
-      auto coeff = cast<PrimeFieldAttr>(efAttr.getCoeff(i));
-      coeffs.push_back(
-          b.create<mod_arith::ConstantOp>(modType, coeff.getValue()));
+    for (auto coeff : denseAttr.getValues<APInt>()) {
+      auto coeffAttr = IntegerAttr::get(modType.getModulus().getType(), coeff);
+      coeffs.push_back(b.create<mod_arith::ConstantOp>(modType, coeffAttr));
     }
     auto ext = b.create<ExtFromCoeffsOp>(TypeRange{op.getType()}, coeffs);
     rewriter.replaceOp(op, ext);

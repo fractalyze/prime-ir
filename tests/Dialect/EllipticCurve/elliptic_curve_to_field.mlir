@@ -17,17 +17,17 @@
 // RUN:   | zkir-opt -elliptic-curve-to-field -split-input-file \
 // RUN:   | FileCheck %s -enable-var-scope
 
-// CHECK-LABEL: @test_intialization_and_conversion
-func.func @test_intialization_and_conversion() {
-  // CHECK: %[[VAR1:.*]] = field.constant #[[ATTR1:.*]] : [[PF:.*]]
+// CHECK-LABEL: @test_initialization_and_conversion
+func.func @test_initialization_and_conversion() {
+  // CHECK: %[[VAR1:.*]] = field.constant [[ATTR1:.*]] : [[PF:.*]]
   %var1 = field.constant 1 : !PFm
-  // CHECK: %[[VAR2:.*]] = field.constant #[[ATTR2:.*]] : [[PF]]
+  // CHECK: %[[VAR2:.*]] = field.constant [[ATTR2:.*]] : [[PF]]
   %var2 = field.constant 2 : !PFm
-  // CHECK: %[[VAR4:.*]] = field.constant #[[ATTR4:.*]] : [[PF]]
+  // CHECK: %[[VAR4:.*]] = field.constant [[ATTR4:.*]] : [[PF]]
   %var4 = field.constant 4 : !PFm
-  // CHECK: %[[VAR5:.*]] = field.constant #[[ATTR5:.*]] : [[PF]]
+  // CHECK: %[[VAR5:.*]] = field.constant [[ATTR5:.*]] : [[PF]]
   %var5 = field.constant 5 : !PFm
-  // CHECK: %[[VAR8:.*]] = field.constant #[[ATTR8:.*]] : [[PF]]
+  // CHECK: %[[VAR8:.*]] = field.constant [[ATTR8:.*]] : [[PF]]
   %var8 = field.constant 8 : !PFm
 
   %g2_var1 = field.constant 1, 1 : !QFm

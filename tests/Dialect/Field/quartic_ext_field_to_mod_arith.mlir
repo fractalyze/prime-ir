@@ -15,12 +15,10 @@
 
 // RUN: zkir-opt -field-to-mod-arith %s | FileCheck %s
 
-#xi = #field.pf.elem<2:i32> : !field.pf<7:i32>
 !PF = !field.pf<7:i32>
 !PFm = !field.pf<7:i32, true>
-#xi_mont = #field.pf.elem<1:i32> : !PFm
-!QF = !field.f4<!PF, #xi>
-!QFm = !field.f4<!PFm, #xi_mont>
+!QF = !field.f4<!PF, 2:i32>
+!QFm = !field.f4<!PFm, 2:i32>
 
 // CHECK-LABEL: @test_lower_add
 func.func @test_lower_add(%arg0: !QF, %arg1: !QF) -> !QF {

@@ -29,6 +29,7 @@ cc_library(
     deps = [
         ":pass_inc_gen",
         "//zkir/Dialect/Field/IR:Field",
+        "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/Poly/IR:Poly",
         "//zkir/Dialect/TensorExt/IR:TensorExt",
         "//zkir/Utils:APIntUtils",

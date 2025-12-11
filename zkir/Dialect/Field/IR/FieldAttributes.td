@@ -26,115 +26,16 @@ class Field_Attr<string name, string attrMnemonic, list<Trait> traits = []>
   let mnemonic = attrMnemonic;
 }
 
-// Extension field attribute interface.
-// Provides a unified interface for extension field attributes (Fp2, Fp3, etc.)
-def ExtensionFieldAttrInterface : AttrInterface<"ExtensionFieldAttrInterface"> {
-  let cppNamespace = "mlir::zkir::field";
-
-  let description = [{
-    Interface for extension field attributes that allows generic handling
-    of different extension degrees without explicit type checking.
-  }];
-
-  let methods = [
-    InterfaceMethod<"Get the coefficient at index",
-      "mlir::Attribute", "getCoeff", (ins "unsigned":$index)>,
-  ];
-}
-
-def Field_PrimeFieldAttr : Field_Attr<"PrimeField", "pf.elem", [TypedAttrInterface]> {
-  let summary = "An attribute representing a prime field element";
-  let parameters = (ins "PrimeFieldType":$type, "IntegerAttr":$value);
-  let assemblyFormat = "`<` $value `>` `:` $type";
-  let builders = [
-    AttrBuilderWithInferredContext<(ins "PrimeFieldType":$type,
-                                        "const llvm::APInt":$value), [{
-      return $_get(
-        type.getContext(),
-        type,
-        IntegerAttr::get(type.getStorageType(), value));
-    }]>,
-    AttrBuilderWithInferredContext<(ins "PrimeFieldType":$type,
-                                        "const uint64_t":$value), [{
-      return $_get(
-        type.getContext(),
-        type,
-        IntegerAttr::get(type.getStorageType(), value));
-    }]>
-  ];
-  let extraClassDeclaration = [{
-    using ValueType = Attribute;
-  }];
-  let genVerifyDecl = 1;
-}
-
-def Field_QuadraticExtFieldAttr : Field_Attr<"QuadraticExtField", "f2.elem", [TypedAttrInterface, ExtensionFieldAttrInterface]> {
-  let summary = "An attribute representing a quadratic extension field element";
-  let parameters = (ins "QuadraticExtFieldType":$type, Field_PrimeFieldAttr:$c0, Field_PrimeFieldAttr:$c1);
-  let assemblyFormat = "`<` $c0 `,` $c1 `>` `:` $type";
-  let extraClassDeclaration = [{
-    using ValueType = Attribute;
-
-    // ExtensionFieldAttrInterface method
-    mlir::Attribute getCoeff(unsigned index) const {
-      assert(index < 2 && "Index out of bounds");
-      return index == 0 ? getC0() : getC1();
-    }
-  }];
-}
-
-def Field_CubicExtFieldAttr : Field_Attr<"CubicExtField", "f3.elem", [TypedAttrInterface, ExtensionFieldAttrInterface]> {
-  let summary = "An attribute representing a cubic extension field element";
-  let parameters = (ins "CubicExtFieldType":$type, Field_PrimeFieldAttr:$c0, Field_PrimeFieldAttr:$c1, Field_PrimeFieldAttr:$c2);
-  let assemblyFormat = "`<` $c0 `,` $c1 `,` $c2 `>` `:` $type";
-  let extraClassDeclaration = [{
-    using ValueType = Attribute;
-
-    // ExtensionFieldAttrInterface method
-    mlir::Attribute getCoeff(unsigned index) const {
-      assert(index < 3 && "Index out of bounds");
-      switch (index) {
-        case 0: return getC0();
-        case 1: return getC1();
-        default: return getC2();
-      }
-    }
-  }];
-}
-
-def Field_QuarticExtFieldAttr : Field_Attr<"QuarticExtField", "f4.elem", [TypedAttrInterface, ExtensionFieldAttrInterface]> {
-  let summary = "An attribute representing a quartic extension field element";
-  let parameters = (ins "QuarticExtFieldType":$type, Field_PrimeFieldAttr:$c0, Field_PrimeFieldAttr:$c1, Field_PrimeFieldAttr:$c2, Field_PrimeFieldAttr:$c3);
-  let assemblyFormat = "`<` $c0 `,` $c1 `,` $c2 `,` $c3 `>` `:` $type";
-  let extraClassDeclaration = [{
-    using ValueType = Attribute;
-
-    // ExtensionFieldAttrInterface method
-    mlir::Attribute getCoeff(unsigned index) const {
-      assert(index < 4 && "Index out of bounds");
-      switch (index) {
-        case 0: return getC0();
-        case 1: return getC1();
-        case 2: return getC2();
-        default: return getC3();
-      }
-    }
-  }];
-}
-
 def Field_RootOfUnityAttr : Field_Attr<"RootOfUnity", "root_of_unity", [TypedAttrInterface]> {
   let summary = "An attribute representing a root of unity in a prime field";
-  let parameters = (ins Field_PrimeFieldAttr:$root, "IntegerAttr":$degree);
-  let assemblyFormat = "`<` $root `,` $degree `>`";
-  let extraClassDeclaration = [{
-    PrimeFieldType getType() const {
-      return getRoot().getType();
-    }
-  }];
+  let parameters = (ins "PrimeFieldType":$type, "IntegerAttr":$root, "IntegerAttr":$degree);
+  let assemblyFormat = "`<` $root `,` $degree `>` `:` $type";
   let genVerifyDecl = 1;
 }
 
-def Field_AnyFieldAttr : AnyAttrOf<[Field_PrimeFieldAttr, Field_QuadraticExtFieldAttr, Field_CubicExtFieldAttr, Field_QuarticExtFieldAttr]> {
+// TODO(chokobole): Refactor this with a proper attribute type. Currently it's used in
+// `EllipticCurveAttributes.td`, so it can't be used.
+def Field_AnyFieldAttr : AnyAttrOf<[APIntAttr, AnyIntElementsAttr]> {
   string cppType = "mlir::TypedAttr";
 }
 

@@ -15,9 +15,6 @@ limitations under the License.
 
 #include "zkir/Dialect/Field/Python/FieldTypes.h"
 
-#include "zkir/Dialect/Field/C/FieldAttributes.h"
-#include "zkir/Dialect/Field/Python/FieldAttributes.h"
-
 namespace nb = nanobind;
 using namespace mlir::python;
 
@@ -54,7 +51,7 @@ void PyPrimeFieldType::bindDerived(ClassTy &c) {
 void PyQuadraticExtensionFieldType::bindDerived(ClassTy &c) {
   c.def_static(
       "get",
-      [](PyPrimeFieldType &baseField, PyPrimeFieldAttr &nonResidue,
+      [](PyPrimeFieldType &baseField, PyAttribute &nonResidue,
          DefaultingPyMlirContext context) -> PyQuadraticExtensionFieldType {
         MlirType t = zkirQuadraticExtensionFieldTypeGet(context->get(),
                                                         baseField, nonResidue);
@@ -90,7 +87,7 @@ void PyQuadraticExtensionFieldType::bindDerived(ClassTy &c) {
 void PyCubicExtensionFieldType::bindDerived(ClassTy &c) {
   c.def_static(
       "get",
-      [](PyPrimeFieldType &baseField, PyPrimeFieldAttr &nonResidue,
+      [](PyPrimeFieldType &baseField, PyAttribute &nonResidue,
          DefaultingPyMlirContext context) -> PyCubicExtensionFieldType {
         MlirType t = zkirCubicExtensionFieldTypeGet(context->get(), baseField,
                                                     nonResidue);

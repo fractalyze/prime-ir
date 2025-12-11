@@ -17,7 +17,7 @@ limitations under the License.
 #define ZKIR_DIALECT_FIELD_IR_FIELDTYPES_TD_
 
 include "zkir/Dialect/Field/IR/FieldDialect.td"
-
+include "zkir/Dialect/Field/IR/FieldAttributes.td"
 include "mlir/Interfaces/DataLayoutInterfaces.td"
 include "mlir/IR/DialectBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
@@ -137,22 +137,21 @@ def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
   let summary = "Quadratic extension field element type";
   let description = [{
     Represents an element in a quadratic extension field defined by the given
-    prime field `baseField` and the non-residue `xi`.
+    prime field `baseField` and the non-residue `nonResidue`.
 
-    An element is represented as a₀ + a₁v where v² = ξ.
+    An element is represented as a₀ + a₁v where v² = nonResidue.
 
     Example:
     ```
     !PF = !field.pf<7:i32>
-    #xi = #field.pf.elem<6:i32> : !PF
-    !QF = !field.f2<!PF, #xi>
+    !QF = !field.f2<!PF, 6:i32>
     ```
   }];
   let parameters = (ins
    Field_PrimeFieldType: $baseField,
-   "PrimeFieldAttr": $nonResidue
+   "IntegerAttr": $nonResidue
   );
-  let assemblyFormat = "`<` $baseField `,` $nonResidue `>`";
+  let hasCustomAssemblyFormat = 1;
 }
 
 // Cubic extension field type definition.
@@ -167,22 +166,21 @@ def Field_CubicExtFieldType : Field_Type<"CubicExtField", "f3", [
   let summary = "Cubic extension field element type";
   let description = [{
     Represents an element in a cubic extension field defined by the given
-    prime field `baseField` and the non-residue `xi`.
+    prime field `baseField` and the non-residue `nonResidue`.
 
-    An element is represented as a₀ + a₁v + a₂v² where v³ = ξ.
+    An element is represented as a₀ + a₁v + a₂v² where v³ = nonResidue.
 
     Example:
     ```
     !PF = !field.pf<7:i32>
-    #xi = #field.pf.elem<6:i32> : !PF
-    !CF = !field.f3<!PF, #xi>
+    !CF = !field.f3<!PF, 6:i32>
     ```
   }];
   let parameters = (ins
    Field_PrimeFieldType: $baseField,
-   "PrimeFieldAttr": $nonResidue
+   "IntegerAttr": $nonResidue
   );
-  let assemblyFormat = "`<` $baseField `,` $nonResidue `>`";
+  let hasCustomAssemblyFormat = 1;
 }
 
 // Quartic extension field type definition.
@@ -197,22 +195,21 @@ def Field_QuarticExtFieldType : Field_Type<"QuarticExtField", "f4", [
   let summary = "Quartic extension field element type";
   let description = [{
     Represents an element in a quartic extension field defined by the given
-    prime field `baseField` and the non-residue `xi`.
+    prime field `baseField` and the non-residue `nonResidue`.
 
-    An element is represented as a₀ + a₁v + a₂v² + a₃v³ where v⁴ = ξ.
+    An element is represented as a₀ + a₁v + a₂v² + a₃v³ where v⁴ = nonResidue.
 
     Example:
     ```
     !PF = !field.pf<7:i32>
-    #xi = #field.pf.elem<6:i32> : !PF
-    !QF = !field.f4<!PF, #xi>
+    !QF = !field.f4<!PF, 6:i32>
     ```
   }];
   let parameters = (ins
    Field_PrimeFieldType: $baseField,
-   "PrimeFieldAttr": $nonResidue
+   "IntegerAttr": $nonResidue
   );
-  let assemblyFormat = "`<` $baseField `,` $nonResidue `>`";
+  let hasCustomAssemblyFormat = 1;
 }
 
 def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-field-type">;

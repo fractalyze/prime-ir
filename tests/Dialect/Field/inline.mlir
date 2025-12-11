@@ -25,7 +25,7 @@
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]]
 func.func @test_inline_multiple_ops(%arg0: !PF17, %arg1: !PF17) -> !PF17 {
   // CHECK-NOT: func.call @helper_complex
-  // CHECK: %[[C3:.*]] = field.constant #field<pf.elem<3 : i32>
+  // CHECK: %[[C3:.*]] = field.constant 3
   // CHECK: %[[MUL:.*]] = field.mul %[[ARG0]], %[[C3]] : [[T]]
   // CHECK: %[[ADD:.*]] = field.add %[[MUL]], %[[ARG1]] : [[T]]
   // CHECK: %[[RES:.*]] = field.square %[[ADD]] : [[T]]
@@ -51,8 +51,8 @@ func.func private @helper_complex(%x: !PF17, %y: !PF17) -> !PF17 {
 func.func @test_inline_nested(%arg0: !PF17) -> !PF17 {
   // CHECK-NOT: func.call @helper_nested
   // CHECK-NOT: func.call @helper_complex
-  // CHECK: %[[C5:.*]] = field.constant #field<pf.elem<5 : i32>
-  // CHECK: %[[C3:.*]] = field.constant #field<pf.elem<3 : i32>
+  // CHECK: %[[C5:.*]] = field.constant 5
+  // CHECK: %[[C3:.*]] = field.constant 3
   // CHECK: %[[MUL:.*]] = field.mul %[[ARG0]], %[[C3]] : [[T]]
   // CHECK: %[[ADD:.*]] = field.add %[[MUL]], %[[ARG0]] : [[T]]
   // CHECK: %[[SQUARE:.*]] = field.square %[[ADD]] : [[T]]

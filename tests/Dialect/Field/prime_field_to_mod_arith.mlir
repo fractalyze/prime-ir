@@ -18,10 +18,7 @@
 !PF1m = !field.pf<97:i32, true>
 !PFv = tensor<4x!PF1>
 !PFmv = tensor<4x!PF1m>
-#root_elem = #field.pf.elem<96:i32> : !PF1
-#root = #field.root_of_unity<#root_elem, 2>
-
-#mont = #mod_arith.montgomery<97:i32>
+#root = #field.root_of_unity<96:i32, 2:i32> : !PF1
 
 // CHECK-LABEL: @test_lower_constant
 // CHECK-SAME: () -> [[T:.*]] {

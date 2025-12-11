@@ -35,9 +35,6 @@ PrimeFieldType getResultPrimeFieldType(OpType op) {
   return cast<PrimeFieldType>(getElementTypeOrSelf(op.getType()));
 }
 
-PrimeFieldAttr getAttrAsStandardForm(PrimeFieldAttr attr);
-PrimeFieldAttr getAttrAsMontgomeryForm(PrimeFieldAttr attr);
-
 Type getStandardFormType(Type type);
 Type getMontgomeryFormType(Type type);
 

@@ -16,9 +16,7 @@
 // RUN: zkir-opt -affine-super-vectorize=virtual-vector-size=16 %s | FileCheck %s -enable-var-scope
 
 !PF = !field.pf<65537 : i32>
-
-#beta = #field.pf.elem<65536:i32> : !PF
-!QF = !field.f2<!PF, #beta>
+!QF = !field.f2<!PF, 65536:i32>
 
 // CHECK-LABEL: @test_vectorize
 func.func @test_vectorize(%buffer : memref<1024x!PF>) {

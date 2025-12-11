@@ -27,6 +27,7 @@ limitations under the License.
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h"
 #include "zkir/Dialect/Poly/IR/PolyDialect.h"
 #include "zkir/Dialect/Poly/IR/PolyOps.h"
@@ -191,7 +192,7 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
            "Root of unity is required if no twiddles are provided");
     field::RootOfUnityAttr rootAttr = adaptor.getRoot().value();
     APInt cmod = coeffType.getModulus().getValue();
-    APInt root = rootAttr.getRoot().getValue().getValue();
+    APInt root = rootAttr.getRoot().getValue();
 
     mod_arith::MontgomeryAttr montAttr;
     if (coeffType.isMontgomery()) {
@@ -433,10 +434,11 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
     APInt modulus = coeffType.getModulus().getValue();
     APInt invDegree =
         multiplicativeInverse(APInt(modulus.getBitWidth(), degree), modulus);
-    auto invDegreeAttr = field::PrimeFieldAttr::get(
-        cast<field::PrimeFieldType>(getStandardFormType(coeffType)), invDegree);
+    auto invDegreeAttr =
+        IntegerAttr::get(coeffType.getStorageType(), invDegree);
     if (coeffType.isMontgomery()) {
-      invDegreeAttr = getAttrAsMontgomeryForm(invDegreeAttr);
+      invDegreeAttr = mod_arith::getAttrAsMontgomeryForm(coeffType.getModulus(),
+                                                         invDegreeAttr);
     }
     // TODO(batzor): Use scalar multiplication directly when it's available.
     auto invDegreeConst = b.create<field::ConstantOp>(coeffType, invDegreeAttr);

@@ -38,11 +38,8 @@ def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [MemRefEle
 
     Example:
     ```
-    !PF = !field.pf<35:i32>
-    #3 = #field.pf.elem<3> : !PF
-    #curve = #elliptic_curve.sw<#3, #3, (#3, #3)>
-
-    !affine = !elliptic_curve.affine<#curve>
+    #bn254 = #elliptic_curve.sw<0:i256, 3:i256, (1:i256, 2:i256)> : !bn254_bf
+    !affine = !elliptic_curve.affine<#bn254>
     ```
   }];
   let parameters = (ins EllipticCurve_ShortWeierstrassAttr:$curve);
@@ -58,11 +55,8 @@ def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [Mem
 
     Example:
     ```
-    !PF = !field.pf<35:i32>
-    #3 = #field.pf.elem<3> : !PF
-    #curve = #elliptic_curve.sw<#3, #3, (#3, #3)>
-
-    !jacobian = !elliptic_curve.affine<#curve> AKA affine
+    #bn254 = #elliptic_curve.sw<0:i256, 3:i256, (1:i256, 2:i256)> : !bn254_bf
+    !jacobian = !elliptic_curve.jacobian<#bn254>
     ```
   }];
   let parameters = (ins EllipticCurve_ShortWeierstrassAttr:$curve);
@@ -79,11 +73,8 @@ def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [MemRefElementTy
 
     Example:
     ```
-    !PF = !field.pf<35:i32>
-    #3 = #field.pf.elem<3> : !PF
-    #curve = #elliptic_curve.sw<#3, #3, (#3, #3)>
-
-    !xyzz = !elliptic_curve.xyzz<#curve>
+    #bn254 = #elliptic_curve.sw<0:i256, 3:i256, (1:i256, 2:i256)> : !bn254_bf
+    !xyzz = !elliptic_curve.xyzz<#bn254>
     ```
   }];
   let parameters = (ins EllipticCurve_ShortWeierstrassAttr:$curve);

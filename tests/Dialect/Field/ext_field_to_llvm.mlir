@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %s \
+// RUN: cat %S/../../bn254_field_defs.mlir %s \
 // RUN:   | zkir-opt -convert-to-llvm -split-input-file \
 // RUN:   | FileCheck %s -enable-var-scope
 

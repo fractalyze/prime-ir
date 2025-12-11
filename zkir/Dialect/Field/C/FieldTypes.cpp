@@ -18,7 +18,6 @@ limitations under the License.
 #include "mlir/CAPI/IR.h"
 #include "mlir/CAPI/Support.h"
 #include "zkir/Dialect/Field/C/FieldTypes.h"
-#include "zkir/Dialect/Field/IR/FieldAttributes.h"
 
 using namespace mlir;
 using namespace mlir::zkir::field;
@@ -65,7 +64,7 @@ MlirType zkirQuadraticExtensionFieldTypeGet(MlirContext ctx, MlirType baseField,
                                             MlirAttribute nonResidue) {
   return wrap(QuadraticExtFieldType::get(
       unwrap(ctx), llvm::cast<PrimeFieldType>(unwrap(baseField)),
-      llvm::cast<PrimeFieldAttr>(unwrap(nonResidue))));
+      llvm::cast<IntegerAttr>(unwrap(nonResidue))));
 }
 
 MlirType zkirQuadraticExtensionFieldTypeGetBaseField(MlirType type) {
@@ -96,7 +95,7 @@ MlirType zkirCubicExtensionFieldTypeGet(MlirContext ctx, MlirType baseField,
                                         MlirAttribute nonResidue) {
   return wrap(CubicExtFieldType::get(
       unwrap(ctx), llvm::cast<PrimeFieldType>(unwrap(baseField)),
-      llvm::cast<PrimeFieldAttr>(unwrap(nonResidue))));
+      llvm::cast<IntegerAttr>(unwrap(nonResidue))));
 }
 
 MlirType zkirCubicExtensionFieldTypeGetBaseField(MlirType type) {

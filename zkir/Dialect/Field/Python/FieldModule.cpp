@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "mlir/Bindings/Python/NanobindAdaptors.h"
 #include "zkir/Dialect/Field/C/FieldDialect.h"
-#include "zkir/Dialect/Field/Python/FieldAttributes.h"
 #include "zkir/Dialect/Field/Python/FieldTypes.h"
 
 namespace nb = nanobind;
@@ -34,5 +33,4 @@ NB_MODULE(_field, m) {
       },
       nb::arg("context"), nb::arg("load") = true);
   mlir::zkir::field::python::populateIRTypes(m);
-  mlir::zkir::field::python::populateIRAttributes(m);
 }

@@ -18,7 +18,6 @@ limitations under the License.
 
 include "zkir/Dialect/Poly/IR/PolyDialect.td"
 include "zkir/Dialect/Poly/IR/PolyTypes.td"
-include "zkir/Dialect/Field/IR/FieldAttributes.td"
 
 class Poly_Attr<string name, string attrMnemonic, list<Trait> traits = []>
     : AttrDef<Poly_Dialect, name, traits> {
@@ -34,16 +33,15 @@ def Poly_PrimitiveRootAttr: Poly_Attr<"PrimitiveRoot", "primitive_root"> {
     Example:
     ```
     !PF1 = !field.pf<7:i32>
-    #elem = #field.elem<2> : !PF1
-    #root_of_unity = #field.root_of_unity<root=#elem, degree=3>
+    #root_of_unity = #field.root_of_unity<root=2:i32, degree=3> : !PF1
     #root = #poly.primitive_root<#root_of_unity>
     ```
   }];
   let extraClassDeclaration = [{
     IntegerAttr getDegree() const;
-    field::PrimeFieldAttr getRoot() const;
-    field::PrimeFieldAttr getInvRoot() const;
-    field::PrimeFieldAttr getInvDegree() const;
+    IntegerAttr getRoot() const;
+    IntegerAttr getInvRoot() const;
+    IntegerAttr getInvDegree() const;
     DenseElementsAttr getRoots() const;
     DenseElementsAttr getInvRoots() const;
   }];

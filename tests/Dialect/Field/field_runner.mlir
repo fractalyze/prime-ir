@@ -18,15 +18,10 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s --check-prefix=CHECK_TEST_POWER < %t
 
-#mont = #mod_arith.montgomery<7:i32>
 !PF = !field.pf<7:i32>
 !PFm = !field.pf<7:i32, true>
-
-#beta = #field.pf.elem<6:i32> : !PF
-#beta_mont = #field.pf.elem<3:i32> : !PFm
-!QF = !field.f2<!PF, #beta>
-!QFm = !field.f2<!PFm, #beta_mont>
-#ef = #field.f2.elem<#beta, #beta> : !QF
+!QF = !field.f2<!PF, 6:i32>
+!QFm = !field.f2<!PFm, 6:i32>
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 

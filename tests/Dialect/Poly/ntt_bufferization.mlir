@@ -17,8 +17,7 @@
 // RUN:    -one-shot-bufferize="bufferize-function-boundaries function-boundary-type-conversion=identity-layout-map" -canonicalize | FileCheck %s
 
 !PF = !field.pf<7681:i32>
-#elem = #field.pf.elem<3383:i32>  : !PF
-#root_of_unity = #field.root_of_unity<#elem, 4:i32>
+#root_of_unity = #field.root_of_unity<3383:i32, 4:i32> : !PF
 
 // CHECK-LABEL: @ntt_in_place
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]

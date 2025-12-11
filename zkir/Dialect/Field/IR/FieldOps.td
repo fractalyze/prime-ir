@@ -82,40 +82,43 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
       }
     }]>,
     OpBuilder<(ins "PrimeFieldType":$ty, "llvm::APInt":$value), [{
-      return build($_builder, $_state, ty, PrimeFieldAttr::get(ty, value));
+      return build($_builder, $_state, ty, IntegerAttr::get(ty.getStorageType(), value));
     }]>,
     OpBuilder<(ins "PrimeFieldType":$ty, "uint64_t":$value), [{
-      return build($_builder, $_state, ty, PrimeFieldAttr::get(ty, value));
-    }]>,
-    OpBuilder<(ins "PrimeFieldType":$ty, "IntegerAttr":$value), [{
-      return build($_builder, $_state, ty, PrimeFieldAttr::get(ty.getContext(), ty, value));
+      return build($_builder, $_state, ty, IntegerAttr::get(ty.getStorageType(), value));
     }]>,
     OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$c0), [{
       return build($_builder, $_state, ty, c0, 0);
     }]>,
     OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1), [{
-      PrimeFieldAttr c0Attr = PrimeFieldAttr::get(ty.getBaseField(), c0);
-      PrimeFieldAttr c1Attr = PrimeFieldAttr::get(ty.getBaseField(), c1);
-      return build($_builder, $_state, ty, QuadraticExtFieldAttr::get(ty.getContext(), ty, c0Attr, c1Attr));
+      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
+      APInt c0Int(bitWidth, c0);
+      APInt c1Int(bitWidth, c1);
+      auto tensorType = RankedTensorType::get({2}, IntegerType::get(ty.getContext(), bitWidth));
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int}));
     }]>,
     OpBuilder<(ins "CubicExtFieldType":$ty, "uint64_t":$c0), [{
       return build($_builder, $_state, ty, c0, 0, 0);
     }]>,
     OpBuilder<(ins "CubicExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1, "uint64_t":$c2), [{
-      PrimeFieldAttr c0Attr = PrimeFieldAttr::get(ty.getBaseField(), c0);
-      PrimeFieldAttr c1Attr = PrimeFieldAttr::get(ty.getBaseField(), c1);
-      PrimeFieldAttr c2Attr = PrimeFieldAttr::get(ty.getBaseField(), c2);
-      return build($_builder, $_state, ty, CubicExtFieldAttr::get(ty.getContext(), ty, c0Attr, c1Attr, c2Attr));
+      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
+      APInt c0Int(bitWidth, c0);
+      APInt c1Int(bitWidth, c1);
+      APInt c2Int(bitWidth, c2);
+      auto tensorType = RankedTensorType::get({3}, IntegerType::get(ty.getContext(), bitWidth));
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int}));
     }]>,
     OpBuilder<(ins "QuarticExtFieldType":$ty, "uint64_t":$c0), [{
       return build($_builder, $_state, ty, c0, 0, 0, 0);
     }]>,
     OpBuilder<(ins "QuarticExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1, "uint64_t":$c2, "uint64_t":$c3), [{
-      PrimeFieldAttr c0Attr = PrimeFieldAttr::get(ty.getBaseField(), c0);
-      PrimeFieldAttr c1Attr = PrimeFieldAttr::get(ty.getBaseField(), c1);
-      PrimeFieldAttr c2Attr = PrimeFieldAttr::get(ty.getBaseField(), c2);
-      PrimeFieldAttr c3Attr = PrimeFieldAttr::get(ty.getBaseField(), c3);
-      return build($_builder, $_state, ty, QuarticExtFieldAttr::get(ty.getContext(), ty, c0Attr, c1Attr, c2Attr, c3Attr));
+      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
+      APInt c0Int(bitWidth, c0);
+      APInt c1Int(bitWidth, c1);
+      APInt c2Int(bitWidth, c2);
+      APInt c3Int(bitWidth, c3);
+      auto tensorType = RankedTensorType::get({4}, IntegerType::get(ty.getContext(), bitWidth));
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int, c3Int}));
     }]>,
   ];
 }

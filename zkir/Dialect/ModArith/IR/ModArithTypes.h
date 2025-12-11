@@ -35,6 +35,9 @@ inline unsigned getIntOrModArithBitWidth(Type type) {
   }
   return cast<IntegerType>(type).getWidth();
 }
+
+IntegerAttr getAttrAsStandardForm(IntegerAttr modulus, IntegerAttr attr);
+IntegerAttr getAttrAsMontgomeryForm(IntegerAttr modulus, IntegerAttr attr);
 } // namespace mlir::zkir::mod_arith
 
 #endif // ZKIR_DIALECT_MODARITH_IR_MODARITHTYPES_H_

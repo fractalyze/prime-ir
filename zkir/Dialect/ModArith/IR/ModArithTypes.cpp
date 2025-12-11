@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
+#include "zkir/Utils/APIntUtils.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::zkir::mod_arith {
@@ -37,5 +38,25 @@ uint64_t
 ModArithType::getABIAlignment(DataLayout const &dataLayout,
                               llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return dataLayout.getTypeABIAlignment(getStorageType());
+}
+
+IntegerAttr getAttrAsStandardForm(IntegerAttr modulusAttr, IntegerAttr attr) {
+  APInt value = attr.getValue();
+  APInt modulus = modulusAttr.getValue();
+  auto modArithType = ModArithType::get(attr.getContext(), modulusAttr);
+  MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
+  value = mulMod(value, montAttr.getRInv().getValue(), modulus);
+
+  return IntegerAttr::get(attr.getType(), value);
+}
+
+IntegerAttr getAttrAsMontgomeryForm(IntegerAttr modulusAttr, IntegerAttr attr) {
+  APInt value = attr.getValue();
+  APInt modulus = modulusAttr.getValue();
+  auto modArithType = ModArithType::get(attr.getContext(), modulusAttr);
+  MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
+  value = mulMod(value, montAttr.getR().getValue(), modulus);
+
+  return IntegerAttr::get(attr.getType(), value);
 }
 } // namespace mlir::zkir::mod_arith

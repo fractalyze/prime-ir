@@ -33,19 +33,11 @@ def EllipticCurve_ShortWeierstrassAttr : EllipticCurve_Attr<"ShortWeierstrass", 
 
     Example:
     ```
-    !PF = !field.pf<35:i32>
-    #3 = #field.pf.elem<3> : !PF
-
-    #curve = #elliptic_curve.sw<#3, #3, (#3, #3)>
+    // a = 0, b = 3, G = (1, 2)
+    #curve = #elliptic_curve.sw<0:i256, 3:i256, (1:i256, 2:i256)> : !bn254_bf
     ```
   }];
-  let parameters = (ins Field_AnyFieldAttr:$a, Field_AnyFieldAttr:$b, Field_AnyFieldAttr:$Gx, Field_AnyFieldAttr:$Gy);
-  // TODO(ashjeong): add `Field_PrimeFieldType: $baseFieldType` for `getbaseFieldType()`
-  let assemblyFormat = "`<` $a`,`$b`,``(`$Gx`,`$Gy`)``>`";
-  let extraClassDeclaration = [{
-    Type getBaseField() const {
-      return llvm::cast<TypedAttr>(getA()).getType();
-    }
-  }];
+  let parameters = (ins Field_AnyFieldType:$baseField, Field_AnyFieldAttr:$a, Field_AnyFieldAttr:$b, Field_AnyFieldAttr:$Gx, Field_AnyFieldAttr:$Gy);
+  let hasCustomAssemblyFormat = 1;
 }
 #endif  // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEATTRIBUTES_TD_

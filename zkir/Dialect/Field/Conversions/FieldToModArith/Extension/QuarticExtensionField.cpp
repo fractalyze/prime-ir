@@ -334,8 +334,8 @@ Value QuarticExtensionField::frobeniusMap(Value x, const APInt &exponent) {
   auto convertedType = converter->convertType(baseField);
 
   // Get non-residue ξ
-  auto nonResidueAttr = cast<PrimeFieldAttr>(type.getNonResidue());
-  APInt xi = nonResidueAttr.getValue().getValue();
+  auto nonResidueAttr = cast<IntegerAttr>(type.getNonResidue());
+  APInt xi = nonResidueAttr.getValue();
 
   // Compute pᵉ mod (p - 1) using Fermat's little theorem
   // We need enough bits to hold the intermediate pᵉ computation

@@ -52,11 +52,9 @@ gentbl_filegroup(
 cc_library(
     name = "FieldAttributesAndTypes",
     srcs = [
-        "FieldAttributes.cpp",
         "FieldTypes.cpp",
     ],
     hdrs = [
-        "FieldAttributes.h",
         "FieldTypes.h",
     ],
     deps = [

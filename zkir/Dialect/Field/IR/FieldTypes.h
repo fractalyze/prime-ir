@@ -31,7 +31,6 @@ limitations under the License.
 
 namespace mlir::zkir::field {
 
-class PrimeFieldAttr;
 class PrimeFieldType;
 
 bool isMontgomery(Type type);

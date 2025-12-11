@@ -23,6 +23,7 @@ package(
 cc_library(
     name = "EllipticCurve",
     srcs = [
+        "EllipticCurveAttributes.cpp",
         "EllipticCurveDialect.cpp",
         "EllipticCurveOps.cpp",
     ],

@@ -80,19 +80,15 @@ field::RootOfUnityAttr PrimitiveRootAttr::getRootOfUnity() const {
   return getImpl()->rootOfUnity;
 }
 
-field::PrimeFieldAttr PrimitiveRootAttr::getRoot() const {
-  return getImpl()->root;
-}
+IntegerAttr PrimitiveRootAttr::getRoot() const { return getImpl()->root; }
 
-field::PrimeFieldAttr PrimitiveRootAttr::getInvRoot() const {
-  return getImpl()->invRoot;
-}
+IntegerAttr PrimitiveRootAttr::getInvRoot() const { return getImpl()->invRoot; }
 
 IntegerAttr PrimitiveRootAttr::getDegree() const {
   return getImpl()->rootOfUnity.getDegree();
 }
 
-field::PrimeFieldAttr PrimitiveRootAttr::getInvDegree() const {
+IntegerAttr PrimitiveRootAttr::getInvDegree() const {
   return getImpl()->invDegree;
 }
 
@@ -110,12 +106,13 @@ mod_arith::MontgomeryAttr PrimitiveRootAttr::getMontgomery() const {
 
 namespace detail {
 
+// static
 PrimitiveRootAttrStorage *
 PrimitiveRootAttrStorage::construct(AttributeStorageAllocator &allocator,
                                     KeyTy &&key) {
   // Extract the root and degree from the key.
   field::RootOfUnityAttr rootOfUnity = std::get<0>(key);
-  field::PrimeFieldAttr root = rootOfUnity.getRoot();
+  IntegerAttr root = rootOfUnity.getRoot();
   IntegerAttr degree = rootOfUnity.getDegree();
   mod_arith::MontgomeryAttr montgomery = std::get<1>(key);
 
@@ -124,8 +121,8 @@ PrimitiveRootAttrStorage::construct(AttributeStorageAllocator &allocator,
     montgomeryR = montgomery.getR();
   }
 
-  APInt mod = root.getType().getModulus().getValue();
-  APInt rootVal = root.getValue().getValue();
+  APInt mod = rootOfUnity.getType().getModulus().getValue();
+  APInt rootVal = root.getValue();
   APInt invRootVal = multiplicativeInverse(rootVal, mod);
   APInt invDegreeVal = multiplicativeInverse(
       degree.getValue().zextOrTrunc(mod.getBitWidth()), mod);
@@ -136,23 +133,17 @@ PrimitiveRootAttrStorage::construct(AttributeStorageAllocator &allocator,
 
   if (montgomery != mod_arith::MontgomeryAttr()) {
     APInt rootMontVal =
-        mulMod(root.getValue().getValue(), montgomery.getR().getValue(), mod);
-    root = field::PrimeFieldAttr::get(
-        cast<field::PrimeFieldType>(
-            field::getMontgomeryFormType(root.getType())),
-        rootMontVal);
+        mulMod(root.getValue(), montgomery.getR().getValue(), mod);
+    root = IntegerAttr::get(root.getType(), rootMontVal);
   }
-  field::PrimeFieldAttr invDegree =
-      field::PrimeFieldAttr::get(root.getType(), invDegreeVal);
-  field::PrimeFieldAttr invRoot =
-      field::PrimeFieldAttr::get(root.getType(), invRootVal);
+  IntegerAttr invDegree = IntegerAttr::get(root.getType(), invDegreeVal);
+  IntegerAttr invRoot = IntegerAttr::get(root.getType(), invRootVal);
 
   // Compute the exponent table.
   SmallVector<APInt> roots, invRoots;
   precomputeRoots(rootVal, mod, degree.getInt(), roots, invRoots, montgomeryR);
   // Create a ranked tensor type for the exponents attribute.
-  auto tensorType =
-      RankedTensorType::get({degree.getInt()}, root.getType().getStorageType());
+  auto tensorType = RankedTensorType::get({degree.getInt()}, root.getType());
 
   // Create the DenseIntElementsAttr from the computed exponent values.
   DenseElementsAttr rootsAttr = DenseElementsAttr::get(tensorType, roots);

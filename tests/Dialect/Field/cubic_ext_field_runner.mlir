@@ -18,12 +18,10 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s --check-prefix=CHECK_CUBIC < %t
 
-#xi = #field.pf.elem<2:i32> : !field.pf<7:i32>
 !PF = !field.pf<7:i32>
 !PFm = !field.pf<7:i32, true>
-#xi_mont = #field.pf.elem<1:i32> : !PFm
-!CF = !field.f3<!PF, #xi>
-!CFm = !field.f3<!PFm, #xi_mont>
+!CF = !field.f3<!PF, 2:i32>
+!CFm = !field.f3<!PFm, 2:i32>
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 

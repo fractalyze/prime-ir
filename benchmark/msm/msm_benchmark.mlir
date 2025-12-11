@@ -16,12 +16,7 @@
 !PFm = !field.pf<21888242871839275222246405745257275088696311157297823662689037894645226208583:i256, true>
 !SFm = !field.pf<21888242871839275222246405745257275088548364400416034343698204186575808495617:i256, true>
 
-#a = #field.pf.elem<0:i256> : !PFm
-#b = #field.pf.elem<3:i256> : !PFm
-#1 = #field.pf.elem<1:i256> : !PFm
-#2 = #field.pf.elem<2:i256> : !PFm
-
-#curve = #elliptic_curve.sw<#a, #b, (#1, #2)>
+#curve = #elliptic_curve.sw<0:i256, 3:i256, (1:i256, 2:i256)> : !PFm
 !affine = !elliptic_curve.affine<#curve>
 !jacobian = !elliptic_curve.jacobian<#curve>
 !xyzz = !elliptic_curve.xyzz<#curve>

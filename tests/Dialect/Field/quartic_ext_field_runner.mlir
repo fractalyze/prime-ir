@@ -19,13 +19,10 @@
 // RUN: FileCheck %s --check-prefix=CHECK_QUARTIC < %t
 
 // p = 13, ξ = 2 (non-4th-power in F₁₃)
-// Montgomery: R = 2^32 mod 13 = 9, ξ_mont = ξ * R mod p = 2 * 9 mod 13 = 5
-#xi = #field.pf.elem<2:i32> : !field.pf<13:i32>
 !PF = !field.pf<13:i32>
 !PFm = !field.pf<13:i32, true>
-#xi_mont = #field.pf.elem<5:i32> : !PFm
-!QF = !field.f4<!PF, #xi>
-!QFm = !field.f4<!PFm, #xi_mont>
+!QF = !field.f4<!PF, 2:i32>
+!QFm = !field.f4<!PFm, 2:i32>
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 

@@ -22,12 +22,10 @@ package(
 cc_library(
     name = "CAPI",
     srcs = [
-        "FieldAttributes.cpp",
         "FieldDialect.cpp",
         "FieldTypes.cpp",
     ],
     hdrs = [
-        "FieldAttributes.h",
         "FieldDialect.h",
         "FieldTypes.h",
     ],

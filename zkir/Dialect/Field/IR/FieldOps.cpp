@@ -17,9 +17,7 @@ limitations under the License.
 
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
-#include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "zkir/Utils/APIntUtils.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldCanonicalization.cpp.inc
@@ -27,38 +25,6 @@ limitations under the License.
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 // IWYU pragma: end_keep
 namespace mlir::zkir::field {
-
-PrimeFieldAttr getAttrAsStandardForm(PrimeFieldAttr attr) {
-  assert(attr.getType().isMontgomery() &&
-         "Expected Montgomery form for PrimeFieldAttr");
-
-  auto standardType =
-      PrimeFieldType::get(attr.getContext(), attr.getType().getModulus());
-  APInt value = attr.getValue().getValue();
-  APInt modulus = attr.getType().getModulus().getValue();
-  auto modArithType = mod_arith::ModArithType::get(attr.getContext(),
-                                                   attr.getType().getModulus());
-  mod_arith::MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-  value = mulMod(value, montAttr.getRInv().getValue(), modulus);
-
-  return PrimeFieldAttr::get(standardType, value);
-}
-
-PrimeFieldAttr getAttrAsMontgomeryForm(PrimeFieldAttr attr) {
-  assert(!attr.getType().isMontgomery() &&
-         "Expected standard form for PrimeFieldAttr");
-
-  auto montType =
-      PrimeFieldType::get(attr.getContext(), attr.getType().getModulus(), true);
-  APInt value = attr.getValue().getValue();
-  APInt modulus = attr.getType().getModulus().getValue();
-  auto modArithType = mod_arith::ModArithType::get(attr.getContext(),
-                                                   attr.getType().getModulus());
-  mod_arith::MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-  value = mulMod(value, montAttr.getR().getValue(), modulus);
-
-  return PrimeFieldAttr::get(montType, value);
-}
 
 Type getStandardFormType(Type type) {
   Type standardType = getElementTypeOrSelf(type);
@@ -73,9 +39,10 @@ Type getStandardFormType(Type type) {
       auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
       auto pfType =
           PrimeFieldType::get(type.getContext(), baseField.getModulus());
-      auto irreducible = cast<PrimeFieldAttr>(extField.getNonResidue());
-      standardType =
-          extField.cloneWith(pfType, getAttrAsStandardForm(irreducible));
+      auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
+      standardType = extField.cloneWith(
+          pfType,
+          mod_arith::getAttrAsStandardForm(baseField.getModulus(), nonResidue));
     }
   }
   if (auto memrefType = dyn_cast<MemRefType>(type)) {
@@ -100,9 +67,10 @@ Type getMontgomeryFormType(Type type) {
       auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
       auto pfType =
           PrimeFieldType::get(type.getContext(), baseField.getModulus(), true);
-      auto irreducible = cast<PrimeFieldAttr>(extField.getNonResidue());
+      auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
       montType =
-          extField.cloneWith(pfType, getAttrAsMontgomeryForm(irreducible));
+          extField.cloneWith(pfType, mod_arith::getAttrAsMontgomeryForm(
+                                         baseField.getModulus(), nonResidue));
     }
   }
   if (auto memrefType = dyn_cast<MemRefType>(type)) {
@@ -151,7 +119,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
     // zero-extend or truncate to the correct bitwidth
     parsedInt[0] = parsedInt[0].zextOrTrunc(outputBitWidth);
-    result.addAttribute("value", PrimeFieldAttr::get(pfType, parsedInt[0]));
+    result.addAttribute(
+        "value", IntegerAttr::get(pfType.getStorageType(), parsedInt[0]));
     result.addTypes(pfType);
     return success();
   } else if (auto extField =
