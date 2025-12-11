@@ -620,14 +620,14 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   }
 };
 
-struct ConvertF2Constant : public OpConversionPattern<F2ConstantOp> {
-  explicit ConvertF2Constant(MLIRContext *context)
-      : OpConversionPattern<F2ConstantOp>(context) {}
+struct ConvertF2Create : public OpConversionPattern<F2CreateOp> {
+  explicit ConvertF2Create(MLIRContext *context)
+      : OpConversionPattern<F2CreateOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(F2ConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(F2CreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -638,14 +638,14 @@ struct ConvertF2Constant : public OpConversionPattern<F2ConstantOp> {
   }
 };
 
-struct ConvertF3Constant : public OpConversionPattern<F3ConstantOp> {
-  explicit ConvertF3Constant(MLIRContext *context)
-      : OpConversionPattern<F3ConstantOp>(context) {}
+struct ConvertF3Create : public OpConversionPattern<F3CreateOp> {
+  explicit ConvertF3Create(MLIRContext *context)
+      : OpConversionPattern<F3CreateOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(F3ConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(F3CreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -657,14 +657,14 @@ struct ConvertF3Constant : public OpConversionPattern<F3ConstantOp> {
   }
 };
 
-struct ConvertF4Constant : public OpConversionPattern<F4ConstantOp> {
-  explicit ConvertF4Constant(MLIRContext *context)
-      : OpConversionPattern<F4ConstantOp>(context) {}
+struct ConvertF4Create : public OpConversionPattern<F4CreateOp> {
+  explicit ConvertF4Create(MLIRContext *context)
+      : OpConversionPattern<F4CreateOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(F4ConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(F4CreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -705,9 +705,9 @@ void FieldToModArith::runOnOperation() {
       ConvertConstant,
       ConvertCmp,
       ConvertDouble,
-      ConvertF2Constant,
-      ConvertF3Constant,
-      ConvertF4Constant,
+      ConvertF2Create,
+      ConvertF3Create,
+      ConvertF4Create,
       ConvertFromMont,
       ConvertInverse,
       ConvertMul,
