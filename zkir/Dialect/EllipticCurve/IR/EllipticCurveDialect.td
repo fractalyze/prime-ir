@@ -25,6 +25,12 @@ def EllipticCurve_Dialect : Dialect {
   let cppNamespace = "::mlir::zkir::elliptic_curve";
   let useDefaultTypePrinterParser = 1;
   let useDefaultAttributePrinterParser = 1;
+  let dependentDialects = [
+    "arith::ArithDialect",
+    "LLVM::LLVMDialect",
+    "zkir::field::FieldDialect",
+    "zkir::mod_arith::ModArithDialect",
+  ];
 }
 
 #endif  // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_TD_

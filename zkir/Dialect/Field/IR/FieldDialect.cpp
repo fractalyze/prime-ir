@@ -27,8 +27,10 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldDialect.cpp.inc
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/OperationSupport.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
 // Headers needed for FieldAttributes.cpp.inc
 #include "mlir/IR/BuiltinAttributes.h"

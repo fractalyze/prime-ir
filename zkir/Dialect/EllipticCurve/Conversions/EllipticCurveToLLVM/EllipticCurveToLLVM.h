@@ -19,6 +19,7 @@ limitations under the License.
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveToLLVM.h.inc
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Pass/Pass.h"
 // IWYU pragma: end_keep
 

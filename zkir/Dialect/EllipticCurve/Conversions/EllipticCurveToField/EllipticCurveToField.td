@@ -29,6 +29,9 @@ def EllipticCurveToField : Pass<"elliptic-curve-to-field", "ModuleOp"> {
   let dependentDialects = [
     "arith::ArithDialect",
     "bufferization::BufferizationDialect",
+    "linalg::LinalgDialect",
+    "memref::MemRefDialect",
+    "scf::SCFDialect",
     "tensor::TensorDialect",
     "zkir::field::FieldDialect",
   ];

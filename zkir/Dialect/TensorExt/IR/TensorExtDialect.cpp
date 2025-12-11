@@ -17,8 +17,7 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for TensorExtDialect.cpp.inc
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 // Headers needed for TensorExtOps.cpp.inc
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 // IWYU pragma: end_keep

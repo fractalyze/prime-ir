@@ -18,7 +18,6 @@ limitations under the License.
 #include <utility>
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
-#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
@@ -49,12 +48,6 @@ limitations under the License.
 #include "zkir/Utils/APIntUtils.h"
 #include "zkir/Utils/ConversionUtils.h"
 #include "zkir/Utils/ShapedTypeConverter.h"
-
-// IWYU pragma: begin_keep
-// Headers needed for ModArithToArith.h.inc
-#include "mlir/Dialect/Math/IR/Math.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
-// IWYU pragma: end_keep
 
 namespace mlir::zkir::mod_arith {
 

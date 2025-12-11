@@ -34,7 +34,7 @@ cc_library(
         "//zkir/Dialect/TensorExt/IR:TensorExt",
         "//zkir/Utils:APIntUtils",
         "//zkir/Utils:ConversionUtils",
-        "@llvm-project//mlir:AffineDialect",
+        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BufferizationDialect",
         "@llvm-project//mlir:BytecodeOpInterface",
         "@llvm-project//mlir:GPUTransforms",

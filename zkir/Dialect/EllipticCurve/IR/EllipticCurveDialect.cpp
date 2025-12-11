@@ -28,6 +28,12 @@ limitations under the License.
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
 // IWYU pragma: begin_keep
+// Headers needed for EllipticCurveDialect.cpp.inc
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/IR/MLIRContext.h"
+#include "zkir/Dialect/Field/IR/FieldDialect.h"
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 // Headers needed for EllipticCurveAttributes.cpp.inc
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"

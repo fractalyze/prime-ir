@@ -18,6 +18,8 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldToModArith.h.inc
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 // IWYU pragma: end_keep

@@ -18,7 +18,14 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveToField.h.inc
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Pass/Pass.h"
+#include "zkir/Dialect/Field/IR/FieldDialect.h"
 // IWYU pragma: end_keep
 
 namespace mlir::zkir::elliptic_curve {

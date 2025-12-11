@@ -18,6 +18,11 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for TensorExtToTensor.h.inc
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Pass/Pass.h"
 // IWYU pragma: end_keep
 

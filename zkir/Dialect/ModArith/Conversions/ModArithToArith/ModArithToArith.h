@@ -19,6 +19,9 @@ limitations under the License.
 // IWYU pragma: begin_keep
 // Headers needed for ModArithToArith.h.inc
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Pass/Pass.h"
 // IWYU pragma: end_keep
 

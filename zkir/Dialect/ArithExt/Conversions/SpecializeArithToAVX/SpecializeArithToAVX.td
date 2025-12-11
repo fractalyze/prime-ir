@@ -26,7 +26,6 @@ def SpecializeArithToAVX : Pass<"specialize-arith-to-avx", "ModuleOp"> {
     This pass specializes some `arith` ops to assembly.
   }];
   let dependentDialects = [
-    "arith::ArithDialect",
     "LLVM::LLVMDialect",
     "vector::VectorDialect",
   ];

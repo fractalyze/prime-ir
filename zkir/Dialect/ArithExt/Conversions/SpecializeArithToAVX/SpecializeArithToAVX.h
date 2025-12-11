@@ -18,6 +18,8 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for SpecializeArithToAVX.h.inc
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Pass/Pass.h"
 // IWYU pragma: end_keep
 
