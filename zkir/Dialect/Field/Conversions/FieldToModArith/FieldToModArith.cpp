@@ -90,12 +90,33 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    // NOTE(chokobole): **Extension Field Tensor Restriction Rationale**
+    //
+    // 1. **Prime Field Only:** Shaped types (like tensors/memrefs) using
+    //    `DenseIntElementsAttr` are currently only permitted for the **Prime
+    //    Field type**.
+    //
+    // 2. **Lowering Ambiguity:** Allowing tensor constants for Extension Fields
+    //    (e.g., `field.constant dense<[[1, 2], [3, 4]]> : !field.f2<!bn254_bf,
+    //    #nr>`) creates an **ambiguity** during lowering to the `mod_arith`
+    //    dialect.
+    //
+    //    The intended lower form,
+    //    `mod_arith.constant dense<[[1, 2], [3, 4]]> :
+    //    tensor<2x2x!mod_arith.int<#modulus>>`, is indistinguishable from a
+    //    standard **tensor of tensors** (`tensor<2x2x!bn254_bf>`) when the
+    //    extension field degree is higher than 1. This prevents reliable type
+    //    conversion and subsequent code generation.
+    if (auto pfType =
+            dyn_cast<PrimeFieldType>(getElementTypeOrSelf(op.getType()))) {
+      auto cval = b.create<mod_arith::ConstantOp>(
+          typeConverter->convertType(op.getType()), op.getValueAttr());
+      rewriter.replaceOp(op, cval);
+      return success();
+    }
+
     mod_arith::ModArithType modType;
-    if (auto pfType = dyn_cast<PrimeFieldType>(op.getType())) {
-      modType =
-          cast<mod_arith::ModArithType>(typeConverter->convertType(pfType));
-    } else if (auto efType =
-                   dyn_cast<ExtensionFieldTypeInterface>(op.getType())) {
+    if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(op.getType())) {
       modType = cast<mod_arith::ModArithType>(
           typeConverter->convertType(efType.getBaseFieldType()));
     } else {
@@ -103,16 +124,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       return failure();
     }
 
-    if (auto intAttr = dyn_cast<IntegerAttr>(op.getValueAttr())) {
-      if (isa<PrimeFieldType>(op.getType())) {
-        auto cval = b.create<mod_arith::ConstantOp>(modType, intAttr);
-        rewriter.replaceOp(op, cval);
-        return success();
-      }
-    }
-
     auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
-
     SmallVector<Value> coeffs;
     for (auto coeff : denseAttr.getValues<APInt>()) {
       auto coeffAttr = IntegerAttr::get(modType.getModulus().getType(), coeff);
