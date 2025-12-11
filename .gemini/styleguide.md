@@ -114,6 +114,80 @@ class Prover {
 
 ______________________________________________________________________
 
+## TableGen
+
+This section defines standards for defining MLIR Dialects and Passes,
+particularly focusing on the use of `dependentDialects` in TableGen (`.td`)
+files.
+
+### Dialect: `dependentDialects` Management
+
+See [Dialect#dependent-dialects]
+
+When defining a Dialect, the `dependentDialects` field is used to record
+dependencies on other dialects whose components (Operations, Attributes, or
+Types) are **reused, relied upon, or constructed** by the current Dialect
+itself.
+
+Example:
+
+```
+def MyDialect : Dialect {
+  // Here we register the Arithmetic and Func dialect as dependencies of our `MyDialect`.
+  let dependentDialects = [
+    "arith::ArithDialect",
+    "func::FuncDialect"
+  ];
+}
+```
+
+For every Dialect listed in the `dependentDialects` of a Dialect, the
+corresponding C++ header file **must** be included in the Dialect definition
+file.
+
+```c++
+// IWYU pragma: begin_keep
+// Headers needed for FieldDialect.cpp.inc
+#include "mlir/IR/OperationSupport.h"
+#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+// IWYU pragma: end_keep
+```
+
+### Pass: `dependentDialects` Management
+
+See [PassManager#tablegen-sepcification]
+
+The `dependentDialects` list in a `Pass` definition must only include Dialects
+for which the Pass **introduces new entities** (Operations, Attributes, Types,
+etc.) during its execution.
+
+- **Rule:** The list should contain only Dialects whose entities are **newly
+  created or explicitly used to construct a transformation** by the Pass.
+- **Avoid:** Do not include Dialects that are merely consumed, transformed, or
+  required for general Pass setup.
+  - *Example:* If a Pass transforms `tensor` ops into `memref` ops, and does not
+    create new `tensor` ops, `tensor::TensorDialect` should not be listed as a
+    dependent dialect.
+
+For every Dialect listed in the `dependentDialects` of a Pass, the corresponding
+C++ header file **must** be included in the Pass definition file (e.g.,
+`*Pass.h`).
+
+Example(for `TensorExtToTensorPass`):
+
+```c++
+// IWYU pragma: begin_keep
+// Headers needed for TensorExtToTensor.h.inc
+#include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Pass/Pass.h"
+// IWYU pragma: end_keep
+```
+
+______________________________________________________________________
+
 ## Comment Style
 
 - Non-trivial code changes must be accompanied by comments.
@@ -196,5 +270,7 @@ have license notice in the top.
 [.clang-format]: /.clang-format
 [angular commit convention]: https://github.com/angular/angular/blob/main/contributing-docs/commit-message-guidelines.md
 [commit message guideline]: https://github.com/fractalyze/.github/blob/main/COMMIT_MESSAGE_GUIDELINE.md
+[dialect#dependent-dialects]: https://mlir.llvm.org/docs/DefiningDialects/#dependent-dialects
 [llvm coding standard]: https://llvm.org/docs/CodingStandards.html
+[passmanager#tablegen-sepcification]: https://mlir.llvm.org/docs/PassManagement/#tablegen-specification
 [pull request guideline]: https://github.com/fractalyze/.github/blob/main/PULL_REQUEST_GUIDELINE.md
