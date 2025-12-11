@@ -35,6 +35,18 @@ cc_library(
 )
 
 cc_library(
+    name = "ExtensionFieldCodeGen",
+    hdrs = ["ExtensionFieldCodeGen.h"],
+    deps = [
+        ":ConversionUtils",
+        ":PrimeFieldCodeGen",
+        "//zkir/Dialect/Field/IR:Field",
+        "@llvm-project//mlir:IR",
+        "@zk_dtypes//zk_dtypes:extension_field_operations",
+    ],
+)
+
+cc_library(
     name = "FieldToModArith",
     srcs = ["FieldToModArith.cpp"],
     hdrs = [
@@ -85,5 +97,15 @@ gentbl_cc_library(
         "//zkir/Dialect/ModArith/IR:td_files",
         "@llvm-project//mlir:OpBaseTdFiles",
         "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+cc_library(
+    name = "PrimeFieldCodeGen",
+    srcs = ["PrimeFieldCodeGen.cpp"],
+    hdrs = ["PrimeFieldCodeGen.h"],
+    deps = [
+        "//zkir/Dialect/ModArith/IR:ModArith",
+        "@llvm-project//mlir:IR",
     ],
 )

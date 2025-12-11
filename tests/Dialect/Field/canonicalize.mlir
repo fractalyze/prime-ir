@@ -45,8 +45,8 @@ func.func @test_mul(%a: !QF, %b: !QF) -> !QF {
 func.func @test_square(%a: !QF) -> !QF {
   // CHECK: %[[COEFFS:.*]]:2 = field.ext_to_coeffs %[[ARG0]] : ([[T]]) -> (!z7_i32, !z7_i32)
   // CHECK: %[[SUB:.*]] = mod_arith.sub %[[COEFFS]]#0, %[[COEFFS]]#1 : !z7_i32
-  // CHECK: %[[ADD:.*]] = mod_arith.add %[[COEFFS]]#0, %[[COEFFS]]#1 : !z7_i32
   // CHECK: %[[MUL:.*]] = mod_arith.mul %[[COEFFS]]#0, %[[COEFFS]]#1 : !z7_i32
+  // CHECK: %[[ADD:.*]] = mod_arith.add %[[COEFFS]]#0, %[[COEFFS]]#1 : !z7_i32
   // CHECK: %[[MUL2:.*]] = mod_arith.mul %[[SUB]], %[[ADD]] : !z7_i32
   // CHECK: %[[DOUBLE:.*]] = mod_arith.double %[[MUL]] : !z7_i32
   // CHECK: %[[RESULT:.*]] = field.ext_from_coeffs %[[MUL2]], %[[DOUBLE]] : (!z7_i32, !z7_i32) -> [[T]]
@@ -59,9 +59,9 @@ func.func @test_square(%a: !QF) -> !QF {
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_inverse(%a: !QF) -> !QF {
   // CHECK: %[[COEFFS:.*]]:2 = field.ext_to_coeffs %[[ARG0]] : ([[T]]) -> (!z7_i32, !z7_i32)
-  // CHECK: %[[SQUARE0:.*]] = mod_arith.square %[[COEFFS]]#0 : !z7_i32
-  // CHECK: %[[SQUARE1:.*]] = mod_arith.square %[[COEFFS]]#1 : !z7_i32
-  // CHECK: %[[ADD:.*]] = mod_arith.add %[[SQUARE0]], %[[SQUARE1]] : !z7_i32
+  // CHECK: %[[SQUARE:.*]] = mod_arith.square %[[COEFFS]]#1 : !z7_i32
+  // CHECK: %[[SQUARE2:.*]] = mod_arith.square %[[COEFFS]]#0 : !z7_i32
+  // CHECK: %[[ADD:.*]] = mod_arith.add %[[SQUARE2]], %[[SQUARE]] : !z7_i32
   // CHECK: %[[INV:.*]] = mod_arith.inverse %[[ADD]] : !z7_i32
   // CHECK: %[[MUL:.*]] = mod_arith.mul %[[COEFFS]]#0, %[[INV]] : !z7_i32
   // CHECK: %[[NEG:.*]] = mod_arith.negate %[[COEFFS]]#1 : !z7_i32

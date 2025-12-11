@@ -33,6 +33,7 @@ cc_library(
     hdrs = ["ExtensionField.h"],
     deps = [
         "//zkir/Dialect/Field/Conversions/FieldToModArith:ConversionUtils",
+        "//zkir/Dialect/Field/Conversions/FieldToModArith:ExtensionFieldCodeGen",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Utils:APIntUtils",
