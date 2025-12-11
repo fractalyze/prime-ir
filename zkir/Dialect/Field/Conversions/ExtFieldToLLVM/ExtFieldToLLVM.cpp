@@ -23,7 +23,6 @@ limitations under the License.
 #include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
-#include "zkir/Utils/SimpleStructBuilder.h"
 
 namespace mlir::zkir::field {
 

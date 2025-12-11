@@ -22,7 +22,6 @@ limitations under the License.
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
@@ -120,8 +119,7 @@ void TensorExtToTensor::runOnOperation() {
       bufferization::BufferizationDialect,
       LLVM::LLVMDialect,
       memref::MemRefDialect,
-      scf::SCFDialect,
-      tensor::TensorDialect
+      scf::SCFDialect
       // clang-format on
       >();
   RewritePatternSet patterns(context);

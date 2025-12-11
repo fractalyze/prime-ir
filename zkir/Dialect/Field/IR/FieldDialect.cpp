@@ -27,7 +27,6 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldDialect.cpp.inc
-#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/OperationSupport.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 

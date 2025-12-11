@@ -29,7 +29,6 @@ cc_library(
     deps = [
         ":pass_inc_gen",
         "//zkir/Dialect/Field/IR:Field",
-        "//zkir/Utils:SimpleStructBuilder",
         "@llvm-project//mlir:ConvertToLLVMInterface",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LLVMCommonConversion",

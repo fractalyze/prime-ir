@@ -31,7 +31,6 @@ def TensorExtToTensor : Pass<"tensor-ext-to-tensor", "ModuleOp"> {
     "bufferization::BufferizationDialect",
     "memref::MemRefDialect",
     "scf::SCFDialect",
-    "tensor::TensorDialect",
     "zkir::tensor_ext::TensorExtDialect",
   ];
 }
