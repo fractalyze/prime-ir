@@ -1,24 +1,28 @@
 diff --git mlir/lib/Dialect/Vector/IR/VectorOps.cpp mlir/lib/Dialect/Vector/IR/VectorOps.cpp
-index 1fb8c7a928e0..2631423a33ae 100644
+index 1fb8c7a928e0..c0a19a1b5ee4 100644
 --- mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 +++ mlir/lib/Dialect/Vector/IR/VectorOps.cpp
-@@ -38,6 +38,8 @@
+@@ -38,6 +38,9 @@
  #include "mlir/Interfaces/ValueBoundsOpInterface.h"
  #include "mlir/Support/LLVM.h"
  #include "mlir/Transforms/InliningUtils.h"
++#include "zkir/Dialect/Field/IR/FieldOps.h"
 +#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 +#include "zkir/IR/Attributes.h"
  #include "llvm/ADT/ArrayRef.h"
  #include "llvm/ADT/STLExtras.h"
  #include "llvm/ADT/SmallVector.h"
-@@ -404,8 +406,14 @@ std::optional<int64_t> vector::getConstantVscaleMultiplier(Value value) {
+@@ -404,8 +407,17 @@ std::optional<int64_t> vector::getConstantVscaleMultiplier(Value value) {
  /// has the correct type, returns it unchanged.
  static Attribute convertIntegerAttr(Attribute attr, Type expectedType) {
    if (auto intAttr = mlir::dyn_cast<IntegerAttr>(attr)) {
 -    if (intAttr.getType() != expectedType)
 +    if (intAttr.getType() != expectedType) {
-+      if (auto modArithType =
-+              dyn_cast<zkir::mod_arith::ModArithType>(expectedType)) {
++      if (auto fieldType =
++              dyn_cast<zkir::field::PrimeFieldType>(expectedType)) {
++        return IntegerAttr::get(fieldType.getStorageType(), intAttr.getInt());
++      } else if (auto modArithType =
++                     dyn_cast<zkir::mod_arith::ModArithType>(expectedType)) {
 +        return IntegerAttr::get(modArithType.getStorageType(),
 +                                intAttr.getInt());
 +      }
@@ -27,17 +31,19 @@ index 1fb8c7a928e0..2631423a33ae 100644
    }
    return attr;
  }
-@@ -481,6 +489,9 @@ void VectorDialect::initialize() {
+@@ -481,6 +493,11 @@ void VectorDialect::initialize() {
  Operation *VectorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
                                                Location loc) {
++  if (auto op = zkir::field::ConstantOp::materialize(builder, value, type, loc))
++    return op;
 +  if (auto op =
 +          zkir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
 +    return op;
    if (isa<ub::PoisonAttrInterface>(value))
      return value.getDialect().materializeConstant(builder, value, type, loc);
  
-@@ -2497,6 +2508,8 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
+@@ -2497,6 +2514,8 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
      return convertIntegerAttr(attr, destEltType);
    });
  
@@ -47,13 +53,14 @@ index 1fb8c7a928e0..2631423a33ae 100644
  }
  
 diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index f7722951646c..581d1d4de5c7 100644
+index f7722951646c..008946b81e69 100644
 --- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -4713,6 +4713,8 @@ cc_library(
+@@ -4713,6 +4713,9 @@ cc_library(
          ":VectorOpsIncGen",
          ":ViewLikeInterface",
          "//llvm:Support",
++        "@zkir//zkir/Dialect/Field/IR:Field",
 +        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
 +        "@zkir//zkir/IR:Attributes",
      ],

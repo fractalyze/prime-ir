@@ -44,3 +44,30 @@ func.func @test_tensor_pf_extract() -> !PF {
   %1 = tensor.extract %0[%c1] : tensor<2x!PF>
   return %1 : !PF
 }
+
+//===----------------------------------------------------------------------===//
+// Vector operations
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_vector_pf_from_elements
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_vector_pf_from_elements() -> vector<2x!PF> {
+  %0 = field.constant 1 : !PF
+  %1 = field.constant 2 : !PF
+  %2 = vector.from_elements %0, %1 : vector<2x!PF>
+  // CHECK: %[[FROM_ELEMENTS:.*]] = field.constant dense<[1, 2]> : [[T]]
+  // CHECK-NOT: vector.from_elements
+  // CHECK: return %[[FROM_ELEMENTS:.*]] : [[T]]
+  return %2 : vector<2x!PF>
+}
+
+// CHECK-LABEL: @test_vector_pf_extract
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_vector_pf_extract() -> !PF {
+  // CHECK: %[[C:.*]] = field.constant 3 : [[T]]
+  // CHECK-NOT: vector.extract
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant dense<[2, 3]> : vector<2x!PF>
+  %1 = vector.extract %0[1] : !PF from vector<2x!PF>
+  return %1 : !PF
+}
