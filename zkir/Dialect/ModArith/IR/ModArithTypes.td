@@ -43,12 +43,7 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
 
     `modulus` is specified with an integer type suffix, for example,
     `mod_arith.int<65537 : i32>`. This corresponds to the storage type for the
-    modulus, and is `i64` by default.
-
-    It is required that the underlying integer type should be larger than
-    twice the modulus (have one extra bit of storage space) to avoid signedness
-    issues. For example, when `modulus == 2 ** 32 - 1`, the underlying type
-    for the modulus should be at least `i33`, though `i64` is a natural choice.
+    modulus, and is the smallest power of two integer type that can represent the modulus.
 
     Passes may allow intermediate values that do not always produce a
     canonical representative in `[0, modulus)`. For example, if the machine storage
@@ -61,7 +56,7 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
 
     Example:
     ```
-    !Zp1 = !mod_arith.int<7> // implicitly being i64
+    !Zp1 = !mod_arith.int<7> // implicitly being i4
     !Zp2 = !mod_arith.int<65537 : i32>
     !Zp3 = !mod_arith.int<536903681 : i64>
     ```
@@ -70,7 +65,6 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
    "IntegerAttr":$modulus,
     DefaultValuedParameter<"bool", "false">:$isMontgomery
   );
-  let assemblyFormat = "`<` params `>`";
   let builders = [
     TypeBuilder<(ins "IntegerAttr":$modulus), [{
       return $_get(context, modulus, false);
@@ -94,6 +88,7 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
       return getStorageType().getWidth();
     }
   }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 def ModArithLike: TypeOrValueSemanticsContainer<ModArith_ModArithType, "mod_arith-like">;

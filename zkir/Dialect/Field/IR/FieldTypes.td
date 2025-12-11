@@ -108,7 +108,6 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
    "IntegerAttr": $modulus,
    DefaultValuedParameter<"bool", "false">: $isMontgomery
   );
-  let assemblyFormat = "`<` params `>`";
   let builders = [
     TypeBuilder<(ins "IntegerAttr":$modulus), [{
       return $_get(context, modulus, false);
@@ -123,6 +122,7 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
       return getStorageType().getWidth();
     }
   }];
+  let hasCustomAssemblyFormat = 1;
 }
 
 // Quadratic extension field type definition.

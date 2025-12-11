@@ -26,8 +26,8 @@ limitations under the License.
 namespace mlir::zkir::poly {
 
 // Compute the first degree powers of root modulo mod.
-static void precomputeRoots(APInt root, const APInt &mod, unsigned degree,
-                            SmallVector<APInt> &roots,
+static void precomputeRoots(const APInt &root, const APInt &mod,
+                            unsigned degree, SmallVector<APInt> &roots,
                             SmallVector<APInt> &invRoots,
                             std::optional<IntegerAttr> montgomeryR) {
   unsigned kBitWidth = llvm::bit_width(degree);

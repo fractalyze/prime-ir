@@ -29,6 +29,17 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "AssemblyFormatUtils",
+    srcs = ["AssemblyFormatUtils.cpp"],
+    hdrs = ["AssemblyFormatUtils.h"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
 td_library(
     name = "CommonTraits",
     srcs = ["CommonTraits.td"],
@@ -39,6 +50,15 @@ td_library(
     name = "CommonTypeConstraints",
     srcs = ["CommonTypeConstraints.td"],
     deps = ["@llvm-project//mlir:BuiltinDialectTdFiles"],
+)
+
+cc_library(
+    name = "ConstantFolder",
+    hdrs = ["ConstantFolder.h"],
+    deps = [
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+    ],
 )
 
 cc_library(
@@ -54,6 +74,16 @@ cc_library(
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TransformUtils",
         "@llvm-project//mlir:ViewLikeInterface",
+    ],
+)
+
+cc_library(
+    name = "KnownModulus",
+    srcs = ["KnownModulus.cpp"],
+    hdrs = ["KnownModulus.h"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:Support",
     ],
 )
 

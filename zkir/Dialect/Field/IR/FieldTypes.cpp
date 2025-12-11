@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
+#include "zkir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::zkir::field {
 
@@ -92,6 +93,15 @@ Value createOneConstant(const T *field, ImplicitLocOpBuilder &builder) {
 //===----------------------------------------------------------------------===//
 // PrimeFieldType
 //===----------------------------------------------------------------------===//
+
+Type PrimeFieldType::parse(AsmParser &parser) {
+  return parseModulus<PrimeFieldType>(parser);
+}
+
+void PrimeFieldType::print(AsmPrinter &printer) const {
+  printModulus(printer, getModulus().getValue(), getStorageType(),
+               isMontgomery());
+}
 
 llvm::TypeSize PrimeFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {

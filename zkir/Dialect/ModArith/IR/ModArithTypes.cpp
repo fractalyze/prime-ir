@@ -15,7 +15,18 @@ limitations under the License.
 
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
+#include "zkir/Utils/AssemblyFormatUtils.h"
+
 namespace mlir::zkir::mod_arith {
+Type ModArithType::parse(AsmParser &parser) {
+  return parseModulus<ModArithType>(parser);
+}
+
+void ModArithType::print(AsmPrinter &printer) const {
+  printModulus(printer, getModulus().getValue(), getStorageType(),
+               isMontgomery());
+}
+
 llvm::TypeSize ModArithType::getTypeSizeInBits(
     mlir::DataLayout const &,
     llvm::ArrayRef<mlir::DataLayoutEntryInterface>) const {
