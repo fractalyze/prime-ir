@@ -121,6 +121,12 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
       return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int, c3Int}));
     }]>,
   ];
+  let extraClassDeclaration = [{
+    /// Build the constant op with `value` and `type` if possible, otherwise
+    /// returns null.
+    static ConstantOp materialize(OpBuilder &builder, Attribute value,
+                                  Type type, Location loc);
+  }];
 }
 
 def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<

@@ -28,6 +28,7 @@ def Field_Dialect : Dialect {
     "arith::ArithDialect",
     "zkir::mod_arith::ModArithDialect",
   ];
+  let hasConstantMaterializer = 1;
 }
 
 #endif // ZKIR_DIALECT_FIELD_IR_FIELDDIALECT_TD_

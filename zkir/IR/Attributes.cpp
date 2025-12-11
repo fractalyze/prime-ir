@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "zkir/IR/Attributes.h"
 
+#include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 namespace mlir::zkir {
@@ -23,6 +24,9 @@ ShapedType maybeConvertZkirToBuiltinType(ShapedType type) {
   if (auto modArithType =
           dyn_cast<mod_arith::ModArithType>(type.getElementType())) {
     return type.clone(modArithType.getModulus().getType());
+  } else if (auto fieldType =
+                 dyn_cast<field::PrimeFieldType>(type.getElementType())) {
+    return type.clone(fieldType.getModulus().getType());
   }
   return type;
 }

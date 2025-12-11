@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "zkir/Dialect/Field/IR/FieldDialect.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
@@ -86,6 +87,28 @@ Type getMontgomeryFormType(Type type) {
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   return adaptor.getValue();
+}
+
+// static
+ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
+                                   Type type, Location loc) {
+  if (!isa<PrimeFieldType>(getElementTypeOrSelf(type)) &&
+      !isa<ExtensionFieldTypeInterface>(getElementTypeOrSelf(type))) {
+    return nullptr;
+  }
+
+  if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
+    return builder.create<ConstantOp>(loc, type, intAttr);
+  } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
+    return builder.create<ConstantOp>(loc, type, denseElementsAttr);
+  }
+  return nullptr;
+}
+
+Operation *FieldDialect::materializeConstant(OpBuilder &builder,
+                                             Attribute value, Type type,
+                                             Location loc) {
+  return ConstantOp::materialize(builder, value, type, loc);
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
