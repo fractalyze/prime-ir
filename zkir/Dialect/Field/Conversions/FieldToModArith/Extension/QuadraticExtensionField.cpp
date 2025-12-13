@@ -32,7 +32,7 @@ Value QuadraticExtensionField::mul(Value x, Value y) {
 
 Value QuadraticExtensionField::inverse(Value x) {
   ExtensionFieldCodeGen<2> xGen(&b, x.getType(), x, nonResidue);
-  return xGen.Inverse();
+  return *xGen.Inverse();
 }
 
 } // namespace mlir::zkir::field

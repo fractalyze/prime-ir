@@ -16,6 +16,7 @@ limitations under the License.
 #ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_PRIMEFIELDCODEGEN_H_
 #define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_PRIMEFIELDCODEGEN_H_
 
+#include "absl/status/statusor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Value.h"
 
@@ -36,7 +37,7 @@ public:
   PrimeFieldCodeGen operator-() const;
   PrimeFieldCodeGen Double() const;
   PrimeFieldCodeGen Square() const;
-  PrimeFieldCodeGen Inverse() const;
+  absl::StatusOr<PrimeFieldCodeGen> Inverse() const;
 
 private:
   ImplicitLocOpBuilder *b = nullptr; // not owned
