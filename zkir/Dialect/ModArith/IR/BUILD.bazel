@@ -25,12 +25,14 @@ cc_library(
     srcs = [
         "ModArithAttributes.cpp",
         "ModArithDialect.cpp",
+        "ModArithOperation.cpp",
         "ModArithOps.cpp",
         "ModArithTypes.cpp",
     ],
     hdrs = [
         "ModArithAttributes.h",
         "ModArithDialect.h",
+        "ModArithOperation.h",
         "ModArithOps.h",
         "ModArithTypes.h",
     ],

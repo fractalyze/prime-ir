@@ -18,6 +18,7 @@ limitations under the License.
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/APIntUtils.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
@@ -240,23 +241,17 @@ namespace {
 
 class ToMontConstantFolder : public UnaryModArithConstantFolder {
 public:
-  explicit ToMontConstantFolder(ToMontOp *op)
-      : UnaryModArithConstantFolder(op->getType()) {
-    auto modArithType = cast<ModArithType>(getElementTypeOrSelf(op->getType()));
-    montAttr = modArithType.getMontgomeryAttr();
-  }
+  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return mulMod(value, montAttr.getR().getValue(), modulus);
+    return ModArithOperation(value, modArithType).ToMont();
   }
-
-  MontgomeryAttr montAttr;
 };
 
 } // namespace
 
 OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
-  ToMontConstantFolder folder(this);
+  ToMontConstantFolder folder(getType());
   return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
 }
 
@@ -264,23 +259,17 @@ namespace {
 
 class FromMontConstantFolder : public UnaryModArithConstantFolder {
 public:
-  explicit FromMontConstantFolder(FromMontOp *op)
-      : UnaryModArithConstantFolder(op->getType()) {
-    auto modArithType = cast<ModArithType>(getElementTypeOrSelf(op->getType()));
-    montAttr = modArithType.getMontgomeryAttr();
-  }
+  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return mulMod(value, montAttr.getRInv().getValue(), modulus);
+    return ModArithOperation(value, modArithType).FromMont();
   }
-
-  MontgomeryAttr montAttr;
 };
 
 } // namespace
 
 OpFoldResult FromMontOp::fold(FoldAdaptor adaptor) {
-  FromMontConstantFolder folder(this);
+  FromMontConstantFolder folder(getType());
   return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
 }
 
@@ -355,7 +344,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return value.isZero() ? value : modulus - value;
+    return -ModArithOperation(value, modArithType);
   }
 };
 
@@ -373,22 +362,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    unsigned bitWidth = modulus.getBitWidth();
-    if (bitWidth > modulus.getActiveBits()) {
-      APInt shl = value.shl(1);
-      if (shl.uge(modulus)) {
-        shl -= modulus;
-      }
-      return shl;
-    } else {
-      APInt extValue = value.zext(bitWidth + 1);
-      APInt extModulus = modulus.zext(bitWidth + 1);
-      APInt extAdd = extValue + extValue;
-      if (extAdd.uge(extModulus)) {
-        extAdd -= extModulus;
-      }
-      return extAdd.trunc(bitWidth);
-    }
+    return ModArithOperation(value, modArithType).Double();
   }
 };
 
@@ -406,12 +380,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    auto square = mulMod(value, value, modulus);
-    if (modArithType.isMontgomery()) {
-      MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-      square = mulMod(square, montAttr.getRInv().getValue(), modulus);
-    }
-    return square;
+    return ModArithOperation(value, modArithType).Square();
   }
 };
 
@@ -429,10 +398,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    auto square = mulMod(value, value, modulus);
-    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-    square = mulMod(square, montAttr.getRInv().getValue(), modulus);
-    return square;
+    return ModArithOperation(value, modArithType).Square();
   }
 };
 
@@ -450,12 +416,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    auto inverse = multiplicativeInverse(value, modulus);
-    if (modArithType.isMontgomery()) {
-      MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-      inverse = mulMod(inverse, montAttr.getRSquared().getValue(), modulus);
-    }
-    return inverse;
+    return ModArithOperation(value, modArithType).Inverse();
   }
 };
 
@@ -473,10 +434,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    auto inverse = multiplicativeInverse(value, modulus);
-    MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-    inverse = mulMod(inverse, montAttr.getRSquared().getValue(), modulus);
-    return inverse;
+    return ModArithOperation(value, modArithType).Inverse();
   }
 };
 
@@ -497,23 +455,8 @@ public:
   OpFoldResult getLhs() const final { return op->getLhs(); }
 
   APInt operate(const APInt &a, const APInt &b) const final {
-    unsigned bitWidth = modulus.getBitWidth();
-    if (bitWidth > modulus.getActiveBits()) {
-      APInt add = a + b;
-      if (add.uge(modulus)) {
-        add -= modulus;
-      }
-      return add;
-    } else {
-      APInt extA = a.zext(bitWidth + 1);
-      APInt extB = b.zext(bitWidth + 1);
-      APInt extModulus = modulus.zext(bitWidth + 1);
-      APInt extAdd = extA + extB;
-      if (extAdd.uge(extModulus)) {
-        extAdd -= extModulus;
-      }
-      return extAdd.trunc(bitWidth);
-    }
+    return ModArithOperation(a, modArithType) +
+           ModArithOperation(b, modArithType);
   }
 
 private:
@@ -537,19 +480,8 @@ public:
   OpFoldResult getLhs() const final { return op->getLhs(); }
 
   APInt operate(const APInt &a, const APInt &b) const final {
-    if (a.uge(b)) {
-      return a - b;
-    }
-    unsigned bitWidth = modulus.getBitWidth();
-    if (bitWidth > modulus.getActiveBits()) {
-      return a + modulus - b;
-    } else {
-      APInt extA = a.zext(bitWidth + 1);
-      APInt extB = b.zext(bitWidth + 1);
-      APInt extModulus = modulus.zext(bitWidth + 1);
-      APInt extSub = extA + extModulus - extB;
-      return extSub.trunc(bitWidth);
-    }
+    return ModArithOperation(a, modArithType) -
+           ModArithOperation(b, modArithType);
   }
 
 private:
@@ -573,11 +505,8 @@ public:
   OpFoldResult getLhs() const final { return op->getLhs(); }
 
   APInt operate(const APInt &a, const APInt &b) const final {
-    APInt product = mulMod(a, b, modulus);
-    if (modArithType.isMontgomery()) {
-      return mulMod(product, montAttr.getRInv().getValue(), modulus);
-    }
-    return product;
+    return ModArithOperation(a, modArithType) *
+           ModArithOperation(b, modArithType);
   }
 
 private:
@@ -601,8 +530,8 @@ public:
   OpFoldResult getLhs() const final { return op->getLhs(); }
 
   APInt operate(const APInt &a, const APInt &b) const final {
-    APInt product = mulMod(a, b, modulus);
-    return mulMod(product, montAttr.getRInv().getValue(), modulus);
+    return ModArithOperation(a, modArithType) *
+           ModArithOperation(b, modArithType);
   }
 
 private:
