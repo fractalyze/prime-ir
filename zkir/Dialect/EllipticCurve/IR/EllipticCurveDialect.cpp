@@ -112,19 +112,18 @@ class EllipticCurveOpAsmDialectInterface : public OpAsmDialectInterface {
 public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
-  // ex. !affine_curve-a3-b2-gx4-gy5_pf7_
   AliasResult getAlias(Type type, raw_ostream &os) const override {
     auto res = llvm::TypeSwitch<Type, AliasResult>(type)
                    .Case<AffineType>([&](auto &point) {
-                     os << "affine_curve";
+                     os << "affine";
                      return AliasResult::FinalAlias;
                    })
                    .Case<JacobianType>([&](auto &point) {
-                     os << "jacobian_curve";
+                     os << "jacobian";
                      return AliasResult::FinalAlias;
                    })
                    .Case<XYZZType>([&](auto &point) {
-                     os << "xyzz_curve";
+                     os << "xyzz";
                      return AliasResult::FinalAlias;
                    })
                    .Default([&](Type) { return AliasResult::NoAlias; });
