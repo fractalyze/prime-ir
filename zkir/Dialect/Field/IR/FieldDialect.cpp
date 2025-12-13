@@ -91,6 +91,18 @@ public:
             .Default([&](Type) { return AliasResult::NoAlias; });
     return res;
   }
+
+  AliasResult getAlias(Attribute attr, raw_ostream &os) const override {
+    auto res =
+        llvm::TypeSwitch<Attribute, AliasResult>(attr)
+            .Case<RootOfUnityAttr>([&](auto &rootOfUnityAttr) {
+              os << "root_of_unity_"
+                 << rootOfUnityAttr.getDegree().getValue().countTrailingZeros();
+              return AliasResult::FinalAlias;
+            })
+            .Default([&](Attribute) { return AliasResult::NoAlias; });
+    return res;
+  }
 };
 
 void FieldDialect::initialize() {
