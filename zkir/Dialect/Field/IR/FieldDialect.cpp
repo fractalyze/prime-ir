@@ -73,26 +73,22 @@ public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
   AliasResult getAlias(Type type, raw_ostream &os) const override {
-    auto res = llvm::TypeSwitch<Type, AliasResult>(type)
-                   .Case<PrimeFieldType>([&](auto &pfElemType) {
-                     auto modulus = pfElemType.getModulus().getValue();
-                     std::optional<std::string> alias =
-                         getKnownModulusAlias(modulus);
-                     if (alias) {
-                       os << "pf_";
-                       os << *alias;
-                       if (!pfElemType.isMontgomery()) {
-                         os << "_std";
-                       }
-                       return AliasResult::FinalAlias;
-                     }
-                     os << "pf";
-                     os << modulus;
-                     os << "_";
-                     os << pfElemType.getStorageType();
-                     return AliasResult::FinalAlias;
-                   })
-                   .Default([&](Type) { return AliasResult::NoAlias; });
+    auto res =
+        llvm::TypeSwitch<Type, AliasResult>(type)
+            .Case<PrimeFieldType>([&](auto &pfElemType) {
+              auto modulus = pfElemType.getModulus().getValue();
+              std::optional<std::string> alias = getKnownModulusAlias(modulus);
+              if (alias) {
+                os << "pf_" << *alias;
+                if (!pfElemType.isMontgomery()) {
+                  os << "_std";
+                }
+                return AliasResult::FinalAlias;
+              }
+              os << "pf" << modulus << "_" << pfElemType.getStorageType();
+              return AliasResult::FinalAlias;
+            })
+            .Default([&](Type) { return AliasResult::NoAlias; });
     return res;
   }
 };
