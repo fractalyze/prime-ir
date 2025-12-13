@@ -22,11 +22,8 @@ limitations under the License.
 #include "mlir/IR/ValueRange.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
-#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 namespace mlir::zkir::field {
-
-mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type);
 
 Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
                                  Value extFieldElement);

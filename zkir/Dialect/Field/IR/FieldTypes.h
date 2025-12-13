@@ -21,6 +21,7 @@ limitations under the License.
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/Types.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldTypes.h.inc
@@ -39,6 +40,9 @@ class PrimeFieldType;
 
 bool isMontgomery(Type type);
 unsigned getIntOrPrimeFieldBitWidth(Type type);
+
+mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type);
+
 ParseResult parseColonFieldType(AsmParser &parser, Type &type);
 ParseResult validateAttribute(AsmParser &parser, Type type, Attribute attr,
                               std::string_view attrName);

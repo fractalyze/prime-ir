@@ -18,7 +18,6 @@ limitations under the License.
 #include "mlir/IR/BuiltinTypes.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
-#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::zkir::field {
@@ -46,6 +45,12 @@ unsigned getIntOrPrimeFieldBitWidth(Type type) {
     return pfType.getStorageBitWidth();
   }
   return cast<IntegerType>(type).getWidth();
+}
+
+mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
+  IntegerAttr modulus = type.getModulus();
+  bool isMontgomery = type.isMontgomery();
+  return mod_arith::ModArithType::get(type.getContext(), modulus, isMontgomery);
 }
 
 ParseResult parseColonFieldType(AsmParser &parser, Type &type) {

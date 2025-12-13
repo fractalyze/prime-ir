@@ -32,12 +32,6 @@ SmallVector<Type> coeffsTypeRange(Type type) {
 
 } // namespace
 
-mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {
-  IntegerAttr modulus = type.getModulus();
-  bool isMontgomery = type.isMontgomery();
-  return mod_arith::ModArithType::get(type.getContext(), modulus, isMontgomery);
-}
-
 Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
                                  Value extFieldElement) {
   return b
