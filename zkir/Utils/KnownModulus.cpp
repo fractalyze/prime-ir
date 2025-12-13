@@ -40,6 +40,8 @@ void registerBn254Modulus(
   auto [scalarFieldModulus, baseFieldModulus] = getBnScalarFieldModuluses(x);
   knownModulusAliases[scalarFieldModulus] = "bn254_sf";
   knownModulusAliases[baseFieldModulus] = "bn254_bf";
+  knownModulusAliases[scalarFieldModulus.zext(256)] = "bn254_sf";
+  knownModulusAliases[baseFieldModulus.zext(256)] = "bn254_bf";
 }
 
 } // namespace
@@ -51,10 +53,13 @@ std::optional<std::string> getKnownModulusAlias(const APInt &modulus) {
   static auto &knownModulusAliases = *new llvm::DenseMap<APInt, std::string> {
     // Babybear: 2³¹ - 2²⁷ + 1
     {APInt(31, 2013265921), "babybear"},
+    {APInt(32, 2013265921), "babybear"},
     // Koalabear: 2³¹ - 2²⁴ + 1
     {APInt(31, 2130706433), "koalabear"},
+    {APInt(32, 2130706433), "koalabear"},
     // Mersenne31: 2³¹ - 1
     {APInt(31, 2147483647), "mersenne31"},
+    {APInt(32, 2147483647), "mersenne31"},
     // Goldilocks: 2⁶⁴ - 2³² + 1
     {APInt(64, UINT64_C(18446744069414584321)), "goldilocks"},
   };
