@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "zkir/Utils/KnownModulus.h"
 
-#include <mutex>
+#include <mutex> // NOLINT(build/c++11)
 
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/bit.h"
