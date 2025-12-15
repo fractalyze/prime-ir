@@ -1,28 +1,31 @@
 diff --git mlir/lib/Dialect/Tensor/IR/TensorOps.cpp mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
-index 22a25fd1a5af..427fd6534eb0 100644
+index 22a25fd1a5af..24e7372e4207 100644
 --- mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 +++ mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
-@@ -41,6 +41,9 @@
+@@ -41,6 +41,10 @@
  #include <optional>
  #include <vector>
  
++#include "zkir/Dialect/Field/IR/FieldOps.h"
 +#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 +#include "zkir/IR/Attributes.h"
 +
  using namespace mlir;
  using namespace mlir::tensor;
  
-@@ -53,6 +56,9 @@ using llvm::mod;
+@@ -53,6 +57,11 @@ using llvm::mod;
  Operation *TensorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
                                                Location loc) {
++  if (auto op = zkir::field::ConstantOp::materialize(builder, value, type, loc))
++    return op;
 +  if (auto op =
 +          zkir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
 +    return op;
    if (auto op = arith::ConstantOp::materialize(builder, value, type, loc))
      return op;
    if (complex::ConstantOp::isBuildableWith(value, type))
-@@ -1465,8 +1471,10 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
+@@ -1465,8 +1474,10 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
  }
  
  OpFoldResult FromElementsOp::fold(FoldAdaptor adaptor) {
@@ -36,13 +39,14 @@ index 22a25fd1a5af..427fd6534eb0 100644
  }
  
 diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 4fc82f6c1d27..f37f02dd1c74 100644
+index 4fc82f6c1d27..f7722951646c 100644
 --- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -7134,6 +7134,8 @@ cc_library(
+@@ -7134,6 +7134,9 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",
++        "@zkir//zkir/Dialect/Field/IR:Field",
 +        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
 +        "@zkir//zkir/IR:Attributes",
      ],

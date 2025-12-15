@@ -34,6 +34,7 @@ cc_library(
         ":canonicalization_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
+        "//zkir/Dialect/Field/IR:Field",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:DestinationStyleOpInterface",
@@ -66,7 +67,10 @@ gentbl_cc_library(
     },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "TensorExtCanonicalization.td",
-    deps = [":td_files"],
+    deps = [
+        ":td_files",
+        "//zkir/Dialect/Field/IR:td_files",
+    ],
 )
 
 gentbl_cc_library(

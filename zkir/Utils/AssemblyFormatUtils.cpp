@@ -28,25 +28,6 @@ void printModulus(AsmPrinter &printer, const APInt &modulus,
   printer << ">";
 }
 
-namespace {
-
-ParseResult doParseModularInteger(OpAsmParser &parser, APInt &parsedInt,
-                                  Type &parsedType,
-                                  GetModulusCallback getModulusCallback) {
-  if (failed(parser.parseColonType(parsedType))) {
-    return failure();
-  }
-
-  APInt modulus;
-  if (failed(getModulusCallback(modulus))) {
-    return failure();
-  }
-
-  return validateModularInteger(parser, modulus, parsedInt);
-}
-
-} // namespace
-
 ParseResult validateModularInteger(OpAsmParser &parser, const APInt &modulus,
                                    APInt &parsedInt) {
   if (parsedInt.getActiveBits() > modulus.getBitWidth()) {
@@ -64,11 +45,12 @@ ParseResult validateModularInteger(OpAsmParser &parser, const APInt &modulus,
 ParseResult parseModularInteger(OpAsmParser &parser, APInt &parsedInt,
                                 Type &parsedType,
                                 GetModulusCallback getModulusCallback) {
-  if (!parser.parseOptionalInteger(parsedInt).has_value()) {
-    return failure();
+  auto parseResult = parseOptionalModularInteger(parser, parsedInt, parsedType,
+                                                 getModulusCallback);
+  if (parseResult.has_value()) {
+    return parseResult.value();
   }
-  return doParseModularInteger(parser, parsedInt, parsedType,
-                               getModulusCallback);
+  return failure();
 }
 
 OptionalParseResult
@@ -78,8 +60,17 @@ parseOptionalModularInteger(OpAsmParser &parser, APInt &parsedInt,
   if (!parser.parseOptionalInteger(parsedInt).has_value()) {
     return std::nullopt;
   }
-  return doParseModularInteger(parser, parsedInt, parsedType,
-                               getModulusCallback);
+
+  if (failed(parser.parseColonType(parsedType))) {
+    return failure();
+  }
+
+  APInt modulus;
+  if (failed(getModulusCallback(modulus))) {
+    return failure();
+  }
+
+  return validateModularInteger(parser, modulus, parsedInt);
 }
 
 ParseResult parseModularIntegerList(OpAsmParser &parser,
@@ -162,6 +153,58 @@ ParseResult parseModularIntegerList(OpAsmParser &parser,
 
   for (APInt &parsedInt : parsedInts) {
     if (failed(validateModularInteger(parser, modulus, parsedInt))) {
+      return failure();
+    }
+  }
+  return success();
+}
+
+ParseResult parseModularOrExtendedModularInteger(
+    OpAsmParser &parser, SmallVector<APInt> &parsedInts, Type &parsedType,
+    GetModulusCallback getModulusCallback) {
+  auto parseResult = parseOptionalModularOrExtendedModularInteger(
+      parser, parsedInts, parsedType, getModulusCallback);
+  if (parseResult.has_value()) {
+    return parseResult.value();
+  }
+  return failure();
+}
+
+OptionalParseResult parseOptionalModularOrExtendedModularInteger(
+    OpAsmParser &parser, SmallVector<APInt> &parsedInts, Type &parsedType,
+    GetModulusCallback getModulusCallback) {
+  assert(parsedInts.empty() && "parsedInts must be empty");
+  if (failed(parser.parseOptionalLSquare())) {
+    APInt val;
+    auto res = parseOptionalModularInteger(parser, val, parsedType,
+                                           getModulusCallback);
+    if (res.has_value() && succeeded(*res)) {
+      parsedInts.push_back(val);
+    }
+    return res;
+  }
+
+  if (failed(parser.parseCommaSeparatedList(
+          [&]() { return parser.parseInteger(parsedInts.emplace_back()); })) ||
+      failed(parser.parseRSquare())) {
+    parsedInts.clear();
+    return failure();
+  }
+
+  if (failed(parser.parseColonType(parsedType))) {
+    parsedInts.clear();
+    return failure();
+  }
+
+  APInt modulus;
+  if (failed(getModulusCallback(modulus))) {
+    parsedInts.clear();
+    return failure();
+  }
+
+  for (APInt &parsedInt : parsedInts) {
+    if (failed(validateModularInteger(parser, modulus, parsedInt))) {
+      parsedInts.clear();
       return failure();
     }
   }

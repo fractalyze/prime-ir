@@ -130,6 +130,14 @@ ParseResult parseModularIntegerList(OpAsmParser &parser,
                                     Type &parsedType,
                                     GetModulusCallback getModulusCallback);
 
+ParseResult parseModularOrExtendedModularInteger(
+    OpAsmParser &parser, SmallVector<APInt> &parsedInts, Type &parsedType,
+    GetModulusCallback getModulusCallback);
+
+OptionalParseResult parseOptionalModularOrExtendedModularInteger(
+    OpAsmParser &parser, SmallVector<APInt> &parsedInts, Type &parsedType,
+    GetModulusCallback getModulusCallback);
+
 } // namespace mlir::zkir
 
 #endif // ZKIR_UTILS_ASSEMBLYFORMATUTILS_H_

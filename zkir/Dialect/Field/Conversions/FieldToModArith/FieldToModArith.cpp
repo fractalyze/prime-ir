@@ -90,12 +90,33 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    // NOTE(chokobole): **Extension Field Tensor Restriction Rationale**
+    //
+    // 1. **Prime Field Only:** Shaped types (like tensors/memrefs) using
+    //    `DenseIntElementsAttr` are currently only permitted for the **Prime
+    //    Field type**.
+    //
+    // 2. **Lowering Ambiguity:** Allowing tensor constants for Extension Fields
+    //    (e.g., `field.constant dense<[[1, 2], [3, 4]]> : !field.f2<!bn254_bf,
+    //    #nr>`) creates an **ambiguity** during lowering to the `mod_arith`
+    //    dialect.
+    //
+    //    The intended lower form,
+    //    `mod_arith.constant dense<[[1, 2], [3, 4]]> :
+    //    tensor<2x2x!mod_arith.int<#modulus>>`, is indistinguishable from a
+    //    standard **tensor of tensors** (`tensor<2x2x!bn254_bf>`) when the
+    //    extension field degree is higher than 1. This prevents reliable type
+    //    conversion and subsequent code generation.
+    if (auto pfType =
+            dyn_cast<PrimeFieldType>(getElementTypeOrSelf(op.getType()))) {
+      auto cval = b.create<mod_arith::ConstantOp>(
+          typeConverter->convertType(op.getType()), op.getValueAttr());
+      rewriter.replaceOp(op, cval);
+      return success();
+    }
+
     mod_arith::ModArithType modType;
-    if (auto pfType = dyn_cast<PrimeFieldType>(op.getType())) {
-      modType =
-          cast<mod_arith::ModArithType>(typeConverter->convertType(pfType));
-    } else if (auto efType =
-                   dyn_cast<ExtensionFieldTypeInterface>(op.getType())) {
+    if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(op.getType())) {
       modType = cast<mod_arith::ModArithType>(
           typeConverter->convertType(efType.getBaseFieldType()));
     } else {
@@ -103,16 +124,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       return failure();
     }
 
-    if (auto intAttr = dyn_cast<IntegerAttr>(op.getValueAttr())) {
-      if (isa<PrimeFieldType>(op.getType())) {
-        auto cval = b.create<mod_arith::ConstantOp>(modType, intAttr);
-        rewriter.replaceOp(op, cval);
-        return success();
-      }
-    }
-
     auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
-
     SmallVector<Value> coeffs;
     for (auto coeff : denseAttr.getValues<APInt>()) {
       auto coeffAttr = IntegerAttr::get(modType.getModulus().getType(), coeff);
@@ -620,14 +632,14 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   }
 };
 
-struct ConvertF2Constant : public OpConversionPattern<F2ConstantOp> {
-  explicit ConvertF2Constant(MLIRContext *context)
-      : OpConversionPattern<F2ConstantOp>(context) {}
+struct ConvertF2Create : public OpConversionPattern<F2CreateOp> {
+  explicit ConvertF2Create(MLIRContext *context)
+      : OpConversionPattern<F2CreateOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(F2ConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(F2CreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -638,14 +650,14 @@ struct ConvertF2Constant : public OpConversionPattern<F2ConstantOp> {
   }
 };
 
-struct ConvertF3Constant : public OpConversionPattern<F3ConstantOp> {
-  explicit ConvertF3Constant(MLIRContext *context)
-      : OpConversionPattern<F3ConstantOp>(context) {}
+struct ConvertF3Create : public OpConversionPattern<F3CreateOp> {
+  explicit ConvertF3Create(MLIRContext *context)
+      : OpConversionPattern<F3CreateOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(F3ConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(F3CreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -657,14 +669,14 @@ struct ConvertF3Constant : public OpConversionPattern<F3ConstantOp> {
   }
 };
 
-struct ConvertF4Constant : public OpConversionPattern<F4ConstantOp> {
-  explicit ConvertF4Constant(MLIRContext *context)
-      : OpConversionPattern<F4ConstantOp>(context) {}
+struct ConvertF4Create : public OpConversionPattern<F4CreateOp> {
+  explicit ConvertF4Create(MLIRContext *context)
+      : OpConversionPattern<F4CreateOp>(context) {}
 
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
-  matchAndRewrite(F4ConstantOp op, OpAdaptor adaptor,
+  matchAndRewrite(F4CreateOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
@@ -705,9 +717,9 @@ void FieldToModArith::runOnOperation() {
       ConvertConstant,
       ConvertCmp,
       ConvertDouble,
-      ConvertF2Constant,
-      ConvertF3Constant,
-      ConvertF4Constant,
+      ConvertF2Create,
+      ConvertF3Create,
+      ConvertF4Create,
       ConvertFromMont,
       ConvertInverse,
       ConvertMul,

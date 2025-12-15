@@ -18,7 +18,6 @@ limitations under the License.
 
 include "mlir/IR/PatternBase.td"
 include "zkir/Dialect/Field/IR/FieldOps.td"
-include "zkir/Dialect/TensorExt/IR/TensorExtOps.td"
 
 def GetAsConstant : NativeCodeCall<"$_builder.create<ConstantOp>(odsLoc, $0.getType(), cast<TypedAttr>($1))">;
 
@@ -175,9 +174,5 @@ def MulOfMulByConstant :
     Pat<(Field_MulOp (Field_MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)), (Field_MulOp $y, (ConstantLikeMatcher TypedAttrInterface:$c1))),
         (Field_MulOp (Field_MulOp $x, $y), (Field_MulOp (GetAsConstant $x, $c0), (GetAsConstant $y, $c1)))>;
 
-// bit_reverse(mul(bit_reverse(x), y)) -> mul(x, bit_reverse(y))
-def BitReverseMulBitReverse :
-    Pat<(TensorExt_BitReverseOp (Field_MulOp (TensorExt_BitReverseOp $x, $dst0), $y), $dst1),
-        (Field_MulOp $x, (TensorExt_BitReverseOp $y, $y))>;
 
 #endif // ZKIR_FIELD_IR_FIELD_CANONICALIZATION_TD

@@ -80,10 +80,10 @@ func.func @test_lower_inverse(%arg0: !CF) -> !CF {
     return %inv : !CF
 }
 
-// CHECK-LABEL: @test_lower_f3_constant
-func.func @test_lower_f3_constant(%arg0: !PF, %arg1: !PF, %arg2: !PF) -> !CF {
+// CHECK-LABEL: @test_lower_f3_create
+func.func @test_lower_f3_create(%arg0: !PF, %arg1: !PF, %arg2: !PF) -> !CF {
     // CHECK: field.ext_from_coeffs
-    %0 = field.f3.constant %arg0, %arg1, %arg2 : !CF
+    %0 = field.f3.create %arg0, %arg1, %arg2 : !CF
     return %0 : !CF
 }
 

@@ -30,7 +30,6 @@ limitations under the License.
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/OperationSupport.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
-#include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
 // Headers needed for FieldAttributes.cpp.inc
 #include "mlir/IR/BuiltinAttributes.h"

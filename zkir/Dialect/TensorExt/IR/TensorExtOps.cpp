@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
+#include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
 namespace mlir::zkir::tensor_ext {
@@ -60,5 +61,6 @@ namespace {
 void BitReverseOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                MLIRContext *context) {
   patterns.add<BitReverseIsInvolution>(context);
+  patterns.add<BitReverseMulBitReverse>(context);
 }
 } // namespace mlir::zkir::tensor_ext

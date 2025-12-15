@@ -17,9 +17,16 @@ limitations under the License.
 #define ZKIR_TENSOREXT_IR_TENSOREXT_CANONICALIZATION_TD
 
 include "mlir/IR/PatternBase.td"
+include "zkir/Dialect/Field/IR/FieldOps.td"
 include "zkir/Dialect/TensorExt/IR/TensorExtOps.td"
 
 // bit_reverse(bit_reverse(x)) -> x
 def BitReverseIsInvolution : Pat<(TensorExt_BitReverseOp (TensorExt_BitReverseOp $x, $dst0), $dst1), (replaceWithValue $x)>;
+
+// bit_reverse(mul(bit_reverse(x), y)) -> mul(x, bit_reverse(y))
+def BitReverseMulBitReverse :
+    Pat<(TensorExt_BitReverseOp (Field_MulOp (TensorExt_BitReverseOp $x, $dst0), $y), $dst1),
+        (Field_MulOp $x, (TensorExt_BitReverseOp $y, $y))>;
+
 
 #endif // ZKIR_TENSOREXT_IR_TENSOREXT_CANONICALIZATION_TD

@@ -30,7 +30,7 @@ func.func @test_initialization_and_conversion() {
   // CHECK: %[[VAR8:.*]] = field.constant [[ATTR8:.*]] : [[PF]]
   %var8 = field.constant 8 : !PFm
 
-  %g2_var1 = field.constant 1, 1 : !QFm
+  %g2_var1 = field.constant [1, 1] : !QFm
   %affine_g2 = elliptic_curve.point %g2_var1, %g2_var1 : (!QFm, !QFm) -> !g2affine
 
   // CHECK: elliptic_curve.point

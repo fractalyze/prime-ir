@@ -627,9 +627,8 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
       return success();
     }
 
-    parser.emitError(parser.getCurrentLocation(),
-                     "expected ModArithType for modulus");
-    return failure();
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected ModArithType for modulus");
   };
 
   auto parseResult = parseOptionalModularInteger(

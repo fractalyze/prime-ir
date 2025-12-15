@@ -41,7 +41,6 @@ cc_library(
         ":ops_inc_gen",
         ":types_inc_gen",
         "//zkir/Dialect/ModArith/IR:ModArith",
-        "//zkir/Dialect/TensorExt/IR:TensorExt",
         "//zkir/Utils:APIntUtils",
         "//zkir/Utils:AssemblyFormatUtils",
         "//zkir/Utils:KnownModulus",
@@ -67,7 +66,6 @@ td_library(
     ],
     deps = [
         "//zkir/Dialect/ModArith/IR:td_files",
-        "//zkir/Dialect/TensorExt/IR:td_files",
         "@llvm-project//mlir:ArithOpsTdFiles",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",

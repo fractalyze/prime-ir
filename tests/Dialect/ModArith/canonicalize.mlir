@@ -26,28 +26,24 @@
 
 // CHECK-LABEL: @test_bitcast_from_int_to_mod_arith_fold
 // CHECK-SAME: () -> [[T:.*]] {
-func.func @test_bitcast_from_int_to_mod_arith_fold() -> !Zp {
-  // CHECK: %[[C:.*]] = mod_arith.constant 3 : [[T]]
+func.func @test_bitcast_from_int_to_mod_arith_fold() -> tensor<2x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[2, 3]> : [[T]]
   // CHECK-NOT: mod_arith.bitcast
   // CHECK: return %[[C]] : [[T]]
-  %c1 = arith.constant 1: index
   %0 = arith.constant dense<[2, 3]> : tensor<2xi32>
   %1 = mod_arith.bitcast %0: tensor<2xi32> -> tensor<2x!Zp>
-  %2 = tensor.extract %1[%c1] : tensor<2x!Zp>
-  return %2 : !Zp
+  return %1 : tensor<2x!Zp>
 }
 
 // CHECK-LABEL: @test_bitcast_from_mod_arith_to_int_fold
 // CHECK-SAME: () -> [[T:.*]] {
-func.func @test_bitcast_from_mod_arith_to_int_fold() -> i32 {
-  // CHECK: %[[C:.*]] = arith.constant 3 : [[T]]
+func.func @test_bitcast_from_mod_arith_to_int_fold() -> tensor<2xi32> {
+  // CHECK: %[[C:.*]] = arith.constant dense<[2, 3]> : [[T]]
   // CHECK-NOT: mod_arith.bitcast
   // CHECK: return %[[C]] : [[T]]
-  %c1 = arith.constant 1: index
   %0 = mod_arith.constant dense<[2, 3]> : tensor<2x!Zp>
   %1 = mod_arith.bitcast %0: tensor<2x!Zp> -> tensor<2xi32>
-  %2 = tensor.extract %1[%c1] : tensor<2xi32>
-  return %2 : i32
+  return %1 : tensor<2xi32>
 }
 
 // CHECK-LABEL: @test_add_fold
@@ -1245,6 +1241,18 @@ func.func @test_tensor_from_elements() -> tensor<2x!Zp> {
   return %2 : tensor<2x!Zp>
 }
 
+// CHECK-LABEL: @test_tensor_extract
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_extract() -> !Zp {
+  // CHECK: %[[C:.*]] = mod_arith.constant 3 : [[T]]
+  // CHECK-NOT: tensor.extract
+  // CHECK: return %[[C]] : [[T]]
+  %c1 = arith.constant 1: index
+  %0 = mod_arith.constant dense<[2, 3]> : tensor<2x!Zp>
+  %1 = tensor.extract %0[%c1] : tensor<2x!Zp>
+  return %1 : !Zp
+}
+
 //===----------------------------------------------------------------------===//
 // Vector operations
 //===----------------------------------------------------------------------===//
@@ -1259,4 +1267,15 @@ func.func @test_vector_from_elements() -> vector<2x!Zp> {
   // CHECK-NOT: vector.from_elements
   // CHECK: return %[[FROM_ELEMENTS:.*]] : [[T]]
   return %2 : vector<2x!Zp>
+}
+
+// CHECK-LABEL: @test_vector_extract
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_vector_extract() -> !Zp {
+  // CHECK: %[[C:.*]] = mod_arith.constant 3 : [[T]]
+  // CHECK-NOT: vector.extract
+  // CHECK: return %[[C]] : [[T]]
+  %0 = mod_arith.constant dense<[2, 3]> : vector<2x!Zp>
+  %1 = vector.extract %0[1] : !Zp from vector<2x!Zp>
+  return %1 : !Zp
 }

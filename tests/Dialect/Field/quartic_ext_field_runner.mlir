@@ -27,25 +27,9 @@
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
 func.func @test_quartic_ext_field() {
-  // Test constants: a = (1, 2, 3, 4), b = (2, 3, 1, 2)
-  %c1 = arith.constant 1 : i32
-  %c2 = arith.constant 2 : i32
-  %c3 = arith.constant 3 : i32
-  %c4 = arith.constant 4 : i32
-
-  %a0 = field.bitcast %c1: i32 -> !PF
-  %a1 = field.bitcast %c2: i32 -> !PF
-  %a2 = field.bitcast %c3: i32 -> !PF
-  %a3 = field.bitcast %c4: i32 -> !PF
-
-  %b0 = field.bitcast %c2: i32 -> !PF
-  %b1 = field.bitcast %c3: i32 -> !PF
-  %b2 = field.bitcast %c1: i32 -> !PF
-  %b3 = field.bitcast %c2: i32 -> !PF
-
   // Create Fp4 elements: a = 1 + 2v + 3v² + 4v³, b = 2 + 3v + v² + 2v³
-  %a = field.f4.constant %a0, %a1, %a2, %a3 : !QF
-  %b = field.f4.constant %b0, %b1, %b2, %b3 : !QF
+  %a = field.constant [1, 2, 3, 4] : !QF
+  %b = field.constant [2, 3, 1, 2] : !QF
 
   // Test 1: Addition - a + b = (3, 5, 4, 6) in F₁₃
   %add_result = field.add %a, %b : !QF

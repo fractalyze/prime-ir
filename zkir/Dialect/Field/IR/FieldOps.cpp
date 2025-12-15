@@ -17,12 +17,14 @@ limitations under the License.
 
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "zkir/Dialect/Field/IR/FieldDialect.h"
+#include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "zkir/Utils/AssemblyFormatUtils.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldCanonicalization.cpp.inc
 #include "mlir/IR/Matchers.h"
-#include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
 // IWYU pragma: end_keep
 namespace mlir::zkir::field {
 
@@ -87,80 +89,104 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   return adaptor.getValue();
 }
 
+// static
+ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
+                                   Type type, Location loc) {
+  if (!isa<PrimeFieldType>(getElementTypeOrSelf(type)) &&
+      !isa<ExtensionFieldTypeInterface>(getElementTypeOrSelf(type))) {
+    return nullptr;
+  }
+
+  if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
+    return builder.create<ConstantOp>(loc, type, intAttr);
+  } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
+    return builder.create<ConstantOp>(loc, type, denseElementsAttr);
+  }
+  return nullptr;
+}
+
+Operation *FieldDialect::materializeConstant(OpBuilder &builder,
+                                             Attribute value, Type type,
+                                             Location loc) {
+  return ConstantOp::materialize(builder, value, type, loc);
+}
+
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
-  SmallVector<APInt> parsedInt;
+  // TODO(chokboole): support towers of extension fields
+  SmallVector<APInt> parsedInts;
   Type parsedType;
 
-  if (failed(parser.parseCommaSeparatedList(
-          [&]() { return parser.parseInteger(parsedInt.emplace_back()); })) ||
-      failed(parser.parseColonType(parsedType)))
-    return failure();
+  auto getModulusCallback = [&](APInt &modulus) -> ParseResult {
+    auto elementType = getElementTypeOrSelf(parsedType);
+    if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
+      modulus = pfType.getModulus().getValue();
+      return success();
+    } else if (auto extField =
+                   dyn_cast<ExtensionFieldTypeInterface>(elementType)) {
+      modulus = cast<PrimeFieldType>(extField.getBaseFieldType())
+                    .getModulus()
+                    .getValue();
+      return success();
+    }
 
-  if (auto pfType = dyn_cast<PrimeFieldType>(parsedType)) {
-    if (parsedInt.size() != 1) {
-      parser.emitError(parser.getCurrentLocation(),
-                       "prime field constant must have exactly one value");
+    return parser.emitError(
+        parser.getCurrentLocation(),
+        "expected PrimeFieldType or ExtensionFieldTypeInterface");
+  };
+
+  auto parseResult = parseOptionalModularOrExtendedModularInteger(
+      parser, parsedInts, parsedType, getModulusCallback);
+  if (parseResult.has_value()) {
+    if (failed(parseResult.value())) {
       return failure();
     }
-
-    auto modulus = pfType.getModulus().getValue();
-
-    // TODO(batzor): Check if the modulus is a prime number.
-    if (modulus.isNegative() || modulus.isZero()) {
-      parser.emitError(parser.getCurrentLocation(), "modulus must be positive");
-      return failure();
+    if (auto pfType = dyn_cast<PrimeFieldType>(parsedType)) {
+      if (parsedInts.size() != 1) {
+        return parser.emitError(parser.getCurrentLocation())
+               << "prime field constant must have a single value, but got "
+               << parsedInts.size();
+      }
+      result.addAttribute(
+          "value", IntegerAttr::get(pfType.getStorageType(), parsedInts[0]));
+    } else if (auto efType =
+                   dyn_cast<ExtensionFieldTypeInterface>(parsedType)) {
+      if (parsedInts.size() != efType.getDegreeOverPrime()) {
+        return parser.emitError(parser.getCurrentLocation())
+               << "extension field constant has " << parsedInts.size()
+               << " coefficients, but expected " << efType.getDegreeOverPrime();
+      }
+      auto pfType = cast<PrimeFieldType>(efType.getBaseFieldType());
+      result.addAttribute(
+          "value", DenseElementsAttr::get(
+                       RankedTensorType::get({efType.getDegreeOverPrime()},
+                                             pfType.getStorageType()),
+                       parsedInts));
+    } else {
+      return parser.emitError(parser.getCurrentLocation(),
+                              "unsupported type for constant: ")
+             << parsedType;
     }
-
-    auto outputBitWidth = pfType.getStorageBitWidth();
-    if (parsedInt[0].getActiveBits() > outputBitWidth)
-      return parser.emitError(
-          parser.getCurrentLocation(),
-          "constant value is too large for the underlying type");
-
-    // zero-extend or truncate to the correct bitwidth
-    parsedInt[0] = parsedInt[0].zextOrTrunc(outputBitWidth);
-    result.addAttribute(
-        "value", IntegerAttr::get(pfType.getStorageType(), parsedInt[0]));
-    result.addTypes(pfType);
-    return success();
-  } else if (auto extField =
-                 dyn_cast<ExtensionFieldTypeInterface>(parsedType)) {
-    unsigned numCoeffs = extField.getDegreeOverBase();
-    if (parsedInt.size() != numCoeffs) {
-      parser.emitError(parser.getCurrentLocation(),
-                       "extension field constant must have exactly " +
-                           std::to_string(numCoeffs) + " values");
-      return failure();
-    }
-
-    auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
-    auto modulus = baseField.getModulus().getValue();
-
-    // TODO(batzor): Check if the modulus is a prime number.
-    if (modulus.isNegative() || modulus.isZero()) {
-      parser.emitError(parser.getCurrentLocation(), "modulus must be positive");
-      return failure();
-    }
-
-    auto outputBitWidth = baseField.getStorageBitWidth();
-    for (const auto &value : parsedInt) {
-      if (value.getActiveBits() > outputBitWidth)
-        return parser.emitError(
-            parser.getCurrentLocation(),
-            "constant value is too large for the underlying type");
-    }
-
-    // zero-extend or truncate to the correct bitwidth
-    for (unsigned i = 0; i < numCoeffs; ++i) {
-      parsedInt[i] = parsedInt[i].zextOrTrunc(outputBitWidth);
-    }
-    result.addAttribute("value", extField.createConstantAttr(parsedInt));
     result.addTypes(parsedType);
     return success();
   }
-  parser.emitError(parser.getCurrentLocation(),
-                   "invalid constant type: expected prime or extension field");
-  return failure();
+
+  if (failed(parseModularIntegerList(parser, parsedInts, parsedType,
+                                     getModulusCallback))) {
+    return failure();
+  }
+
+  auto shapedType = cast<ShapedType>(parsedType);
+  auto elementType = getElementTypeOrSelf(parsedType);
+  if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
+    auto denseElementsAttr = DenseIntElementsAttr::get(
+        shapedType.clone(pfType.getStorageType()), parsedInts);
+    result.addAttribute("value", denseElementsAttr);
+    result.addTypes(parsedType);
+    return success();
+  }
+  return parser.emitError(parser.getCurrentLocation(),
+                          "dense attribute is only supported for shaped types "
+                          "with a prime field element type");
 }
 
 void ConstantOp::print(OpAsmPrinter &p) {
@@ -298,7 +324,6 @@ void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   patterns.add<MulSelfIsSquare>(context);
   patterns.add<MulConstantTwice>(context);
   patterns.add<MulOfMulByConstant>(context);
-  patterns.add<BitReverseMulBitReverse>(context);
 }
 
 } // namespace mlir::zkir::field

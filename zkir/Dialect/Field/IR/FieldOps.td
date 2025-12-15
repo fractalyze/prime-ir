@@ -121,9 +121,15 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
       return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int, c3Int}));
     }]>,
   ];
+  let extraClassDeclaration = [{
+    /// Build the constant op with `value` and `type` if possible, otherwise
+    /// returns null.
+    static ConstantOp materialize(OpBuilder &builder, Attribute value,
+                                  Type type, Location loc);
+  }];
 }
 
-def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<
+def Field_F2CreateOp : Op<Field_Dialect, "f2.create", [Pure, TypesMatchWith<
   "result type is the same as the operand type", "output", "c0", "cast<QuadraticExtFieldType>($_self).getBaseField()">,
   TypesMatchWith< "result type is the same as the operand type", "output", "c1", "cast<QuadraticExtFieldType>($_self).getBaseField()">]> {
   let summary = "Define a constant quadratic extension field element";
@@ -131,7 +137,7 @@ def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<
     Example:
     ```
     !QF = !field.f2<!PF, #beta>
-    %0 = field.f2.constant %c0, %c1 : !QF
+    %0 = field.f2.create %c0, %c1 : !QF
     ```
   }];
   let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1);
@@ -139,7 +145,7 @@ def Field_F2ConstantOp : Op<Field_Dialect, "f2.constant", [Pure, TypesMatchWith<
   let assemblyFormat = "$c0 `,` $c1 attr-dict `:` type($output)";
 }
 
-def Field_F3ConstantOp : Op<Field_Dialect, "f3.constant", [Pure, TypesMatchWith<
+def Field_F3CreateOp : Op<Field_Dialect, "f3.create", [Pure, TypesMatchWith<
   "result type is the same as the operand type", "output", "c0", "cast<CubicExtFieldType>($_self).getBaseField()">,
   TypesMatchWith< "result type is the same as the operand type", "output", "c1", "cast<CubicExtFieldType>($_self).getBaseField()">,
   TypesMatchWith< "result type is the same as the operand type", "output", "c2", "cast<CubicExtFieldType>($_self).getBaseField()">]> {
@@ -148,7 +154,7 @@ def Field_F3ConstantOp : Op<Field_Dialect, "f3.constant", [Pure, TypesMatchWith<
     Example:
     ```
     !CF = !field.f3<!PF, #xi>
-    %0 = field.f3.constant %c0, %c1, %c2 : !CF
+    %0 = field.f3.create %c0, %c1, %c2 : !CF
     ```
   }];
   let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1, Field_PrimeFieldType:$c2);
@@ -156,7 +162,7 @@ def Field_F3ConstantOp : Op<Field_Dialect, "f3.constant", [Pure, TypesMatchWith<
   let assemblyFormat = "$c0 `,` $c1 `,` $c2 attr-dict `:` type($output)";
 }
 
-def Field_F4ConstantOp : Op<Field_Dialect, "f4.constant", [Pure, TypesMatchWith<
+def Field_F4CreateOp : Op<Field_Dialect, "f4.create", [Pure, TypesMatchWith<
   "result type is the same as the operand type", "output", "c0", "cast<QuarticExtFieldType>($_self).getBaseField()">,
   TypesMatchWith< "result type is the same as the operand type", "output", "c1", "cast<QuarticExtFieldType>($_self).getBaseField()">,
   TypesMatchWith< "result type is the same as the operand type", "output", "c2", "cast<QuarticExtFieldType>($_self).getBaseField()">,
@@ -166,7 +172,7 @@ def Field_F4ConstantOp : Op<Field_Dialect, "f4.constant", [Pure, TypesMatchWith<
     Example:
     ```
     !QF = !field.f4<!PF, #xi>
-    %0 = field.f4.constant %c0, %c1, %c2, %c3 : !QF
+    %0 = field.f4.create %c0, %c1, %c2, %c3 : !QF
     ```
   }];
   let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1, Field_PrimeFieldType:$c2, Field_PrimeFieldType:$c3);
