@@ -26,3 +26,34 @@
 !g2affine = !elliptic_curve.affine<#g2curve>
 !g2jacobian = !elliptic_curve.jacobian<#g2curve>
 !g2xyzz = !elliptic_curve.xyzz<#g2curve>
+
+func.func private @printMemrefBn254G1AffineStd(memref<*x!affine>) attributes { llvm.emit_c_interface }
+
+func.func private @printMemrefG1Affine(%affine: memref<*x!affine>) {
+  func.call @printMemrefBn254G1AffineStd(%affine) : (memref<*x!affine>) -> ()
+  return
+}
+
+func.func private @printMemrefBn254G1JacobianStd(memref<*x!jacobian>) attributes { llvm.emit_c_interface }
+
+func.func private @printMemrefG1Jacobian(%jacobian: memref<*x!jacobian>) {
+  func.call @printMemrefBn254G1JacobianStd(%jacobian) : (memref<*x!jacobian>) -> ()
+  return
+}
+
+func.func private @printMemrefBn254G1XyzzStd(memref<*x!xyzz>) attributes { llvm.emit_c_interface }
+
+func.func private @printMemrefG1Xyzz(%xyzz: memref<*x!xyzz>) {
+  func.call @printMemrefBn254G1XyzzStd(%xyzz) : (memref<*x!xyzz>) -> ()
+  return
+}
+
+// assumes standard form scalar input and outputs affine with standard form coordinates
+func.func @getG1GeneratorMultiple(%k: !SF) -> !affine {
+  %one = field.constant 1 : !PF
+  %two = field.constant 2 : !PF
+  %g = elliptic_curve.point %one, %two : (!PF, !PF) -> !affine
+  %g_multiple = elliptic_curve.scalar_mul %k, %g : !SF, !affine -> !jacobian
+  %g_multiple_affine = elliptic_curve.convert_point_type %g_multiple : !jacobian -> !affine
+  return %g_multiple_affine : !affine
+}

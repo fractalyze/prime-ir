@@ -22,23 +22,22 @@ package(
 )
 
 cc_binary(
-    name = "printI256.so",
+    name = "libruntime_functions.so",
     testonly = True,
     linkshared = True,
     linkstatic = False,
-    deps = [
-        ":printI256",
-    ],
+    deps = [":RuntimeFunctions"],
 )
 
 cc_library(
-    name = "printI256",
+    name = "RuntimeFunctions",
     testonly = True,
-    srcs = ["printI256.cpp"],
+    srcs = ["RuntimeFunctions.cpp"],
+    hdrs = ["RuntimeFunctions.h"],
     deps = [
-        "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:ExecutionEngine",
         "@llvm-project//mlir:mlir_runner_utils",
+        "@zk_dtypes//zk_dtypes:all_types",
+        "@zk_dtypes//zk_dtypes:big_int",
     ],
     alwayslink = True,
 )
@@ -50,14 +49,13 @@ filegroup(
     data = [
         "bn254_ec_defs.mlir",
         "bn254_ec_mont_defs.mlir",
-        "bn254_ec_mont_utils.mlir",
         "bn254_ec_utils.mlir",
         "bn254_field_defs.mlir",
         "default_print_utils.mlir",
         "poseidon2.mlir",
         "poseidon2_packed.mlir",
+        ":libruntime_functions.so",
         ":lit.cfg.py",
-        ":printI256.so",
         "//tools:zkir-opt",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:lit",

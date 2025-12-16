@@ -13,16 +13,16 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_mont_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | zkir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_window_reduce -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../printI256%shlibext" > %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_WINDOW_REDUCE < %t
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_mont_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | zkir-opt -elliptic-curve-to-field -field-to-gpu=parallelize-affine \
 // RUN:   | mlir-runner -e test_window_reduce -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../printI256%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_WINDOW_REDUCE < %t
 
 func.func @test_window_reduce() {
@@ -39,9 +39,9 @@ func.func @test_window_reduce() {
   %pfm0 = field.constant 0 : !PFm
 
   %affine0 = elliptic_curve.point %pfm0, %pfm0 : (!PFm, !PFm) -> !affine
-  %affine1 = func.call @getGeneratorMultiple(%k1) : (!SF) -> (!affine)
-  %affine2 = func.call @getGeneratorMultiple(%k2) : (!SF) -> (!affine)
-  %affine3 = func.call @getGeneratorMultiple(%k3) : (!SF) -> (!affine)
+  %affine1 = func.call @getG1GeneratorMultiple(%k1) : (!SF) -> (!affine)
+  %affine2 = func.call @getG1GeneratorMultiple(%k2) : (!SF) -> (!affine)
+  %affine3 = func.call @getG1GeneratorMultiple(%k3) : (!SF) -> (!affine)
 
   %jacobian0 = elliptic_curve.convert_point_type %affine0 : !affine -> !jacobian
   %jacobian1 = elliptic_curve.convert_point_type %affine1 : !affine -> !jacobian
@@ -60,13 +60,13 @@ func.func @test_window_reduce() {
 
   // 57G
   %k57 = field.constant 57 : !SF
-  %true_result = func.call @getGeneratorMultiple(%k57) : (!SF) -> (!affine)
-  func.call @printAffine(%true_result) : (!affine) -> ()
+  %true_result = func.call @getG1GeneratorMultiple(%k57) : (!SF) -> (!affine)
+  func.call @printG1Affine(%true_result) : (!affine) -> ()
 
   %result = elliptic_curve.window_reduce %windows {bitsPerWindow = 2 : i16, scalarType = !SF}: (tensor<128x!jacobian>) -> !jacobian
-  func.call @printAffineFromJacobian(%result) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobian(%result) : (!jacobian) -> ()
   return
 }
 
-// CHECK_TEST_WINDOW_REDUCE: [5267322610033386327594727284085617807706598503218388887104616381227512437954, 201257782416518842482277204984225354519663728413732211137155795260901992108]
-// CHECK_TEST_WINDOW_REDUCE: [5267322610033386327594727284085617807706598503218388887104616381227512437954, 201257782416518842482277204984225354519663728413732211137155795260901992108]
+// CHECK_TEST_WINDOW_REDUCE: [(5267322610033386327594727284085617807706598503218388887104616381227512437954, 201257782416518842482277204984225354519663728413732211137155795260901992108)]
+// CHECK_TEST_WINDOW_REDUCE: [(5267322610033386327594727284085617807706598503218388887104616381227512437954, 201257782416518842482277204984225354519663728413732211137155795260901992108)]

@@ -13,16 +13,16 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_mont_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | zkir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_bucket_reduce -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../printI256%shlibext" > %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_BUCKET_REDUCE < %t
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_mont_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | zkir-opt -elliptic-curve-to-field -field-to-gpu=parallelize-affine \
 // RUN:   | mlir-runner -e test_bucket_reduce -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../printI256%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_BUCKET_REDUCE < %t
 
 func.func @test_bucket_reduce() {
@@ -38,9 +38,9 @@ func.func @test_bucket_reduce() {
   %pfm0 = field.constant 0 : !PFm
 
   %affine0 = elliptic_curve.point %pfm0, %pfm0 : (!PFm, !PFm) -> !affine
-  %affine1 = func.call @getGeneratorMultiple(%k1) : (!SF) -> (!affine)
-  %affine2 = func.call @getGeneratorMultiple(%k2) : (!SF) -> (!affine)
-  %affine3 = func.call @getGeneratorMultiple(%k3) : (!SF) -> (!affine)
+  %affine1 = func.call @getG1GeneratorMultiple(%k1) : (!SF) -> (!affine)
+  %affine2 = func.call @getG1GeneratorMultiple(%k2) : (!SF) -> (!affine)
+  %affine3 = func.call @getG1GeneratorMultiple(%k3) : (!SF) -> (!affine)
 
   %jacobian0 = elliptic_curve.convert_point_type %affine0 : !affine -> !jacobian
   %jacobian1 = elliptic_curve.convert_point_type %affine1 : !affine -> !jacobian
@@ -59,41 +59,41 @@ func.func @test_bucket_reduce() {
 
   // 8G
   %k8 = field.constant 8 : !SF
-  %result0 = func.call @getGeneratorMultiple(%k8) : (!SF) -> (!affine)
-  func.call @printAffine(%result0) : (!affine) -> ()
+  %result0 = func.call @getG1GeneratorMultiple(%k8) : (!SF) -> (!affine)
+  func.call @printG1Affine(%result0) : (!affine) -> ()
   %result_zero = tensor.extract %result[%i0] : tensor<4x!jacobian>
-  func.call @printAffineFromJacobian(%result_zero) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobian(%result_zero) : (!jacobian) -> ()
 
   // 4G
   %k4 = field.constant 4 : !SF
-  %result1 = func.call @getGeneratorMultiple(%k4) : (!SF) -> (!affine)
-  func.call @printAffine(%result1) : (!affine) -> ()
+  %result1 = func.call @getG1GeneratorMultiple(%k4) : (!SF) -> (!affine)
+  func.call @printG1Affine(%result1) : (!affine) -> ()
   %result_one = tensor.extract %result[%i1] : tensor<4x!jacobian>
-  func.call @printAffineFromJacobian(%result_one) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobian(%result_one) : (!jacobian) -> ()
 
   // 3G
-  %result2 = func.call @getGeneratorMultiple(%k3) : (!SF) -> (!affine)
-  func.call @printAffine(%result2) : (!affine) -> ()
+  %result2 = func.call @getG1GeneratorMultiple(%k3) : (!SF) -> (!affine)
+  func.call @printG1Affine(%result2) : (!affine) -> ()
   %result_two = tensor.extract %result[%i2] : tensor<4x!jacobian>
-  func.call @printAffineFromJacobian(%result_two) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobian(%result_two) : (!jacobian) -> ()
 
   // 7G
   %k7 = field.constant 7 : !SF
-  %result3 = func.call @getGeneratorMultiple(%k7) : (!SF) -> (!affine)
-  func.call @printAffine(%result3) : (!affine) -> ()
+  %result3 = func.call @getG1GeneratorMultiple(%k7) : (!SF) -> (!affine)
+  func.call @printG1Affine(%result3) : (!affine) -> ()
   %result_three = tensor.extract %result[%i3] : tensor<4x!jacobian>
-  func.call @printAffineFromJacobian(%result_three) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobian(%result_three) : (!jacobian) -> ()
   return
 }
 
-// CHECK_TEST_BUCKET_REDUCE: [3932705576657793550893430333273221375907985235130430286685735064194643946083, 18813763293032256545937756946359266117037834559191913266454084342712532869153]
-// CHECK_TEST_BUCKET_REDUCE: [3932705576657793550893430333273221375907985235130430286685735064194643946083, 18813763293032256545937756946359266117037834559191913266454084342712532869153]
+// CHECK_TEST_BUCKET_REDUCE: [(3932705576657793550893430333273221375907985235130430286685735064194643946083, 18813763293032256545937756946359266117037834559191913266454084342712532869153)]
+// CHECK_TEST_BUCKET_REDUCE: [(3932705576657793550893430333273221375907985235130430286685735064194643946083, 18813763293032256545937756946359266117037834559191913266454084342712532869153)]
 
-// CHECK_TEST_BUCKET_REDUCE: [3010198690406615200373504922352659861758983907867017329644089018310584441462, 4027184618003122424972590350825261965929648733675738730716654005365300998076]
-// CHECK_TEST_BUCKET_REDUCE: [3010198690406615200373504922352659861758983907867017329644089018310584441462, 4027184618003122424972590350825261965929648733675738730716654005365300998076]
+// CHECK_TEST_BUCKET_REDUCE: [(3010198690406615200373504922352659861758983907867017329644089018310584441462, 4027184618003122424972590350825261965929648733675738730716654005365300998076)]
+// CHECK_TEST_BUCKET_REDUCE: [(3010198690406615200373504922352659861758983907867017329644089018310584441462, 4027184618003122424972590350825261965929648733675738730716654005365300998076)]
 
-// CHECK_TEST_BUCKET_REDUCE: [3353031288059533942658390886683067124040920775575537747144343083137631628272, 19321533766552368860946552437480515441416830039777911637913418824951667761761]
-// CHECK_TEST_BUCKET_REDUCE: [3353031288059533942658390886683067124040920775575537747144343083137631628272, 19321533766552368860946552437480515441416830039777911637913418824951667761761]
+// CHECK_TEST_BUCKET_REDUCE: [(3353031288059533942658390886683067124040920775575537747144343083137631628272, 19321533766552368860946552437480515441416830039777911637913418824951667761761)]
+// CHECK_TEST_BUCKET_REDUCE: [(3353031288059533942658390886683067124040920775575537747144343083137631628272, 19321533766552368860946552437480515441416830039777911637913418824951667761761)]
 
-// CHECK_TEST_BUCKET_REDUCE: [10415861484417082502655338383609494480414113902179649885744799961447382638712, 10196215078179488638353184030336251401353352596818396260819493263908881608606]
-// CHECK_TEST_BUCKET_REDUCE: [10415861484417082502655338383609494480414113902179649885744799961447382638712, 10196215078179488638353184030336251401353352596818396260819493263908881608606]
+// CHECK_TEST_BUCKET_REDUCE: [(10415861484417082502655338383609494480414113902179649885744799961447382638712, 10196215078179488638353184030336251401353352596818396260819493263908881608606)]
+// CHECK_TEST_BUCKET_REDUCE: [(10415861484417082502655338383609494480414113902179649885744799961447382638712, 10196215078179488638353184030336251401353352596818396260819493263908881608606)]

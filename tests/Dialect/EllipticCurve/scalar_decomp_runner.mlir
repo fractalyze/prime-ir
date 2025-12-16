@@ -13,16 +13,16 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_mont_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | zkir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_scalar_decomp -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../printI256%shlibext" > %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_SCALAR_DECOMP < %t
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_mont_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | zkir-opt -elliptic-curve-to-field -field-to-gpu=parallelize-affine \
 // RUN:   | mlir-runner -e test_scalar_decomp -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../printI256%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_SCALAR_DECOMP < %t
 
 func.func @test_scalar_decomp() {

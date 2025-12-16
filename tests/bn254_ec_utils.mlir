@@ -13,54 +13,41 @@
 // limitations under the License.
 // ==============================================================================
 
-func.func @printAffine(%affine: !affine) {
-  %x, %y = elliptic_curve.extract %affine : !affine -> !PF, !PF
-  %point = tensor.from_elements %x, %y : tensor<2x!PF>
-  %point_native = field.bitcast %point : tensor<2x!PF> -> tensor<2xi256>
-  %mem = bufferization.to_buffer %point_native : tensor<2xi256> to memref<2xi256>
-  %mem_cast = memref.cast %mem : memref<2xi256> to memref<*xi256>
-  func.call @printMemrefI256(%mem_cast) : (memref<*xi256>) -> ()
+func.func @printG1Affine(%affine: !affine) {
+  %c0 = arith.constant 0 : index
+  %affine_memref = memref.alloca() : memref<1x!affine>
+  memref.store %affine, %affine_memref[%c0] : memref<1x!affine>
+  %affine_memref_cast = memref.cast %affine_memref : memref<1x!affine> to memref<*x!affine>
+  func.call @printMemrefG1Affine(%affine_memref_cast) : (memref<*x!affine>) -> ()
   return
 }
 
-func.func @printJacobian(%jacobian: !jacobian) {
-  %x, %y, %z = elliptic_curve.extract %jacobian : !jacobian -> !PF, !PF, !PF
-  %point = tensor.from_elements %x, %y, %z : tensor<3x!PF>
-  %point_native = field.bitcast %point : tensor<3x!PF> -> tensor<3xi256>
-  %mem = bufferization.to_buffer %point_native : tensor<3xi256> to memref<3xi256>
-  %mem_cast = memref.cast %mem : memref<3xi256> to memref<*xi256>
-  func.call @printMemrefI256(%mem_cast) : (memref<*xi256>) -> ()
+func.func @printG1Jacobian(%jacobian: !jacobian) {
+  %c0 = arith.constant 0 : index
+  %jacobian_memref = memref.alloca() : memref<1x!jacobian>
+  memref.store %jacobian, %jacobian_memref[%c0] : memref<1x!jacobian>
+  %jacobian_memref_cast = memref.cast %jacobian_memref : memref<1x!jacobian> to memref<*x!jacobian>
+  func.call @printMemrefG1Jacobian(%jacobian_memref_cast) : (memref<*x!jacobian>) -> ()
   return
 }
 
-func.func @printXYZZ(%xyzz: !xyzz) {
-  %x, %y, %zz, %zzz = elliptic_curve.extract %xyzz : !xyzz -> !PF, !PF, !PF, !PF
-  %point = tensor.from_elements %x, %y, %zz, %zzz : tensor<4x!PF>
-  %point_native = field.bitcast %point : tensor<4x!PF> -> tensor<4xi256>
-  %mem = bufferization.to_buffer %point_native : tensor<4xi256> to memref<4xi256>
-  %mem_cast = memref.cast %mem : memref<4xi256> to memref<*xi256>
-  func.call @printMemrefI256(%mem_cast) : (memref<*xi256>) -> ()
+func.func @printG1Xyzz(%xyzz: !xyzz) {
+  %c0 = arith.constant 0 : index
+  %xyzz_memref = memref.alloca() : memref<1x!xyzz>
+  memref.store %xyzz, %xyzz_memref[%c0] : memref<1x!xyzz>
+  %xyzz_memref_cast = memref.cast %xyzz_memref : memref<1x!xyzz> to memref<*x!xyzz>
+  func.call @printMemrefG1Xyzz(%xyzz_memref_cast) : (memref<*x!xyzz>) -> ()
   return
 }
 
-func.func @printAffineFromJacobian(%jacobian: !jacobian) {
+func.func @printG1AffineFromJacobian(%jacobian: !jacobian) {
   %affine = elliptic_curve.convert_point_type %jacobian : !jacobian -> !affine
-  func.call @printAffine(%affine) : (!affine) -> ()
+  func.call @printG1Affine(%affine) : (!affine) -> ()
   return
 }
 
-func.func @printAffineFromXYZZ(%xyzz: !xyzz) {
+func.func @printG1AffineFromXyzz(%xyzz: !xyzz) {
   %affine = elliptic_curve.convert_point_type %xyzz : !xyzz -> !affine
-  func.call @printAffine(%affine) : (!affine) -> ()
+  func.call @printG1Affine(%affine) : (!affine) -> ()
   return
-}
-
-// assumes standard form scalar input and outputs affine with standard form coordinates
-func.func @getGeneratorMultiple(%k: !SF) -> !affine {
-  %onePF = field.constant 1 : !PF
-  %twoPF = field.constant 2 : !PF
-  %g = elliptic_curve.point %onePF, %twoPF : (!PF, !PF) -> !affine
-  %g_multiple = elliptic_curve.scalar_mul %k, %g : !SF, !affine -> !jacobian
-  %g_multiple_affine = elliptic_curve.convert_point_type %g_multiple : !jacobian -> !affine
-  return %g_multiple_affine : !affine
 }

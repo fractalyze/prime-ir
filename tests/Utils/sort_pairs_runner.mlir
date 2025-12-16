@@ -16,7 +16,7 @@
 // RUN: cat %S/../default_print_utils.mlir %s \
 // RUN:   | zkir-opt -field-to-gpu=parallelize-affine \
 // RUN:   | mlir-runner -e testSortPairs -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../printI256%shlibext,%S/../../utils/cuda/cudaRuntimeUtils%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../libruntime_functions%shlibext,%S/../../utils/cuda/cudaRuntimeUtils%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_SORT_PAIRS < %t
 
 func.func private @sortPairsI64I64(!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, !llvm.ptr)

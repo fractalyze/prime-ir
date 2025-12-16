@@ -13,10 +13,10 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_mont_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | zkir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_msm -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../printI256%shlibext" > %t
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_MSM < %t
 
 // CHECK-LABEL: @test_msm
@@ -49,16 +49,16 @@ func.func @test_msm() {
   %add1 = elliptic_curve.add %scalar_mul1, %scalar_mul2 : !jacobian, !jacobian -> !jacobian
   %add2 = elliptic_curve.add %scalar_mul3, %scalar_mul4 : !jacobian, !jacobian -> !jacobian
   %msm_true = elliptic_curve.add %add1, %add2 : !jacobian, !jacobian -> !jacobian
-  func.call @printAffineFromJacobian(%msm_true) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobian(%msm_true) : (!jacobian) -> ()
 
   // RUNNING MSM
   %scalars = tensor.from_elements %scalar3, %scalar3, %scalar5, %scalar7 : tensor<4x!SFm>
   %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
   %msm_test = elliptic_curve.msm %scalars, %points degree=2 parallel : tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
-  func.call @printAffineFromJacobian(%msm_test) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobian(%msm_test) : (!jacobian) -> ()
 
   return
 }
 
-// CHECK_TEST_MSM: [17990338800136330219282030132013276894006083605897860662265286903319615807158, 3289917882057076627927906556860231277487594098124155054955738043890261042492]
-// CHECK_TEST_MSM: [17990338800136330219282030132013276894006083605897860662265286903319615807158, 3289917882057076627927906556860231277487594098124155054955738043890261042492]
+// CHECK_TEST_MSM: [(17990338800136330219282030132013276894006083605897860662265286903319615807158, 3289917882057076627927906556860231277487594098124155054955738043890261042492)]
+// CHECK_TEST_MSM: [(17990338800136330219282030132013276894006083605897860662265286903319615807158, 3289917882057076627927906556860231277487594098124155054955738043890261042492)]
