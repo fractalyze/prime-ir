@@ -82,8 +82,10 @@ cc_library(
     srcs = ["KnownModulus.cpp"],
     hdrs = ["KnownModulus.h"],
     deps = [
+        ":ZkDtypes",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:all_types",
     ],
 )
 
@@ -113,5 +115,13 @@ cc_library(
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LLVMCommonConversion",
         "@llvm-project//mlir:LLVMDialect",
+    ],
+)
+
+cc_library(
+    name = "ZkDtypes",
+    hdrs = ["ZkDtypes.h"],
+    deps = [
+        "@zk_dtypes//zk_dtypes:big_int",
     ],
 )

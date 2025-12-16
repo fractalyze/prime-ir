@@ -52,7 +52,7 @@ PrimeFieldCodeGen PrimeFieldCodeGen::Square() const {
                            b->create<mod_arith::SquareOp>(value).getOutput());
 }
 
-PrimeFieldCodeGen PrimeFieldCodeGen::Inverse() const {
+absl::StatusOr<PrimeFieldCodeGen> PrimeFieldCodeGen::Inverse() const {
   return PrimeFieldCodeGen(b,
                            b->create<mod_arith::InverseOp>(value).getOutput());
 }

@@ -15,31 +15,26 @@ limitations under the License.
 
 #include "zkir/Utils/KnownModulus.h"
 
-#include <mutex>
+#include <mutex> // NOLINT(build/c++11)
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/bit.h"
+#include "zk_dtypes/include/all_types.h"
+#include "zkir/Utils/ZkDtypes.h"
 
 namespace mlir::zkir {
 
 namespace {
 
-std::tuple<APInt, APInt> getBnScalarFieldModuluses(const APInt &x) {
-  // See section 2 "The proposed method for k = 12" in
-  // https://eprint.iacr.org/2005/133.pdf
-  APInt x2 = x * x;
-  APInt x3 = x2 * x;
-  APInt x4 = x3 * x;
-  APInt scalarFieldModulus = 36 * x4 + 36 * x3 + 18 * x2 + 6 * x + 1;
-  APInt baseFieldModulus = scalarFieldModulus + 6 * x2;
-  return {scalarFieldModulus, baseFieldModulus};
-}
-
-void registerBn254Modulus(
-    llvm::DenseMap<APInt, std::string> &knownModulusAliases) {
-  APInt x = APInt(254, 4965661367192848881);
-  auto [scalarFieldModulus, baseFieldModulus] = getBnScalarFieldModuluses(x);
-  knownModulusAliases[scalarFieldModulus] = "bn254_sf";
-  knownModulusAliases[baseFieldModulus] = "bn254_bf";
+template <typename T>
+void registerKnownModulusAliases(DenseMap<APInt, std::string> &map,
+                                 std::string_view name) {
+  APInt modulus;
+  modulus = convertToAPInt(T::Config::kModulus, T::Config::kModulusBits);
+  map[modulus] = name;
+  if constexpr (!isPowerOfTwo(T::Config::kModulusBits)) {
+    map[modulus.zext(llvm::bit_ceil(T::Config::kModulusBits))] = name;
+  }
 }
 
 } // namespace
@@ -47,20 +42,16 @@ void registerBn254Modulus(
 std::optional<std::string> getKnownModulusAlias(const APInt &modulus) {
   // NOTE(chokobole): We intentionally leak this object. See
   // https://google.github.io/styleguide/cppguide.html#Static_and_Global_Variables
-  // clang-format off
-  static auto &knownModulusAliases = *new llvm::DenseMap<APInt, std::string> {
-    // Babybear: 2³¹ - 2²⁷ + 1
-    {APInt(31, 2013265921), "babybear"},
-    // Koalabear: 2³¹ - 2²⁴ + 1
-    {APInt(31, 2130706433), "koalabear"},
-    // Mersenne31: 2³¹ - 1
-    {APInt(31, 2147483647), "mersenne31"},
-    // Goldilocks: 2⁶⁴ - 2³² + 1
-    {APInt(64, UINT64_C(18446744069414584321)), "goldilocks"},
-  };
-  // clang-format on
+  static auto &knownModulusAliases = *new DenseMap<APInt, std::string>();
   static std::once_flag onceFlag;
-  std::call_once(onceFlag, []() { registerBn254Modulus(knownModulusAliases); });
+  std::call_once(onceFlag, []() {
+#define REGISTER_KNOWN_MODULUS_ALIAS(ActualType, unused, unused2,              \
+                                     LowerSnakeCaseName)                       \
+  registerKnownModulusAliases<ActualType>(knownModulusAliases,                 \
+                                          #LowerSnakeCaseName);
+    ZK_DTYPES_ALL_PRIME_FIELD_TYPE_LIST(REGISTER_KNOWN_MODULUS_ALIAS)
+#undef REGISTER_KNOWN_MODULUS_ALIAS
+  });
   auto it = knownModulusAliases.find(modulus);
   if (it != knownModulusAliases.end()) {
     return it->second;

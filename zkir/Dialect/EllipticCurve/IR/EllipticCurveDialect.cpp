@@ -25,6 +25,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "zkir/Dialect/EllipticCurve/IR/KnownCurves.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 
 // IWYU pragma: begin_keep
@@ -111,22 +112,42 @@ class EllipticCurveOpAsmDialectInterface : public OpAsmDialectInterface {
 public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
-  // ex. !affine_curve-a3-b2-gx4-gy5_pf7_
   AliasResult getAlias(Type type, raw_ostream &os) const override {
     auto res = llvm::TypeSwitch<Type, AliasResult>(type)
                    .Case<AffineType>([&](auto &point) {
-                     os << "affine_curve";
+                     os << "affine";
                      return AliasResult::FinalAlias;
                    })
                    .Case<JacobianType>([&](auto &point) {
-                     os << "jacobian_curve";
+                     os << "jacobian";
                      return AliasResult::FinalAlias;
                    })
                    .Case<XYZZType>([&](auto &point) {
-                     os << "xyzz_curve";
+                     os << "xyzz";
                      return AliasResult::FinalAlias;
                    })
                    .Default([&](Type) { return AliasResult::NoAlias; });
+    return res;
+  }
+
+  AliasResult getAlias(Attribute attr, raw_ostream &os) const override {
+    auto res =
+        llvm::TypeSwitch<Attribute, AliasResult>(attr)
+            .Case<ShortWeierstrassAttr>([&](auto &swAttr) {
+              std::optional<std::string> alias = getKnownCurveAlias(swAttr);
+              if (alias) {
+                auto fieldType =
+                    cast<field::FieldTypeInterface>(swAttr.getBaseField());
+                os << *alias;
+                if (!fieldType.isMontgomery()) {
+                  os << "_std";
+                }
+                return AliasResult::FinalAlias;
+              }
+              os << "unknown_sw_curve";
+              return AliasResult::OverridableAlias;
+            })
+            .Default([&](Attribute) { return AliasResult::NoAlias; });
     return res;
   }
 };

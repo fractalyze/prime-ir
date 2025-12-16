@@ -68,26 +68,22 @@ public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
   AliasResult getAlias(Type type, raw_ostream &os) const override {
-    auto res = llvm::TypeSwitch<Type, AliasResult>(type)
-                   .Case<ModArithType>([&](auto &modArithType) {
-                     auto modulus = modArithType.getModulus().getValue();
-                     std::optional<std::string> alias =
-                         getKnownModulusAlias(modulus);
-                     if (alias) {
-                       os << "z_";
-                       os << *alias;
-                       if (!modArithType.isMontgomery()) {
-                         os << "_std";
-                       }
-                       return AliasResult::FinalAlias;
-                     }
-                     os << "z";
-                     os << modulus;
-                     os << "_";
-                     os << modArithType.getStorageType();
-                     return AliasResult::FinalAlias;
-                   })
-                   .Default([&](Type) { return AliasResult::NoAlias; });
+    auto res =
+        llvm::TypeSwitch<Type, AliasResult>(type)
+            .Case<ModArithType>([&](auto &modArithType) {
+              auto modulus = modArithType.getModulus().getValue();
+              std::optional<std::string> alias = getKnownModulusAlias(modulus);
+              if (alias) {
+                os << "z_" << *alias;
+                if (!modArithType.isMontgomery()) {
+                  os << "_std";
+                }
+                return AliasResult::FinalAlias;
+              }
+              os << "z" << modulus << "_" << modArithType.getStorageType();
+              return AliasResult::OverridableAlias;
+            })
+            .Default([&](Type) { return AliasResult::NoAlias; });
     return res;
   }
 };

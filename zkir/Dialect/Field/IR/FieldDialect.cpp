@@ -73,23 +73,34 @@ public:
   using OpAsmDialectInterface::OpAsmDialectInterface;
 
   AliasResult getAlias(Type type, raw_ostream &os) const override {
-    auto res = llvm::TypeSwitch<Type, AliasResult>(type)
-                   .Case<PrimeFieldType>([&](auto &pfElemType) {
-                     auto modulus = pfElemType.getModulus().getValue();
-                     std::optional<std::string> alias =
-                         getKnownModulusAlias(modulus);
-                     if (alias) {
-                       os << "pf_";
-                       os << *alias;
-                       return AliasResult::FinalAlias;
-                     }
-                     os << "pf";
-                     os << modulus;
-                     os << "_";
-                     os << pfElemType.getStorageType();
-                     return AliasResult::FinalAlias;
-                   })
-                   .Default([&](Type) { return AliasResult::NoAlias; });
+    auto res =
+        llvm::TypeSwitch<Type, AliasResult>(type)
+            .Case<PrimeFieldType>([&](auto &pfElemType) {
+              auto modulus = pfElemType.getModulus().getValue();
+              std::optional<std::string> alias = getKnownModulusAlias(modulus);
+              if (alias) {
+                os << "pf_" << *alias;
+                if (!pfElemType.isMontgomery()) {
+                  os << "_std";
+                }
+                return AliasResult::FinalAlias;
+              }
+              os << "pf" << modulus << "_" << pfElemType.getStorageType();
+              return AliasResult::OverridableAlias;
+            })
+            .Default([&](Type) { return AliasResult::NoAlias; });
+    return res;
+  }
+
+  AliasResult getAlias(Attribute attr, raw_ostream &os) const override {
+    auto res =
+        llvm::TypeSwitch<Attribute, AliasResult>(attr)
+            .Case<RootOfUnityAttr>([&](auto &rootOfUnityAttr) {
+              os << "root_of_unity_"
+                 << rootOfUnityAttr.getDegree().getValue().countTrailingZeros();
+              return AliasResult::FinalAlias;
+            })
+            .Default([&](Attribute) { return AliasResult::NoAlias; });
     return res;
   }
 };

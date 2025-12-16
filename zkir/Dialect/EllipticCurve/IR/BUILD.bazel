@@ -26,12 +26,14 @@ cc_library(
         "EllipticCurveAttributes.cpp",
         "EllipticCurveDialect.cpp",
         "EllipticCurveOps.cpp",
+        "KnownCurves.cpp",
     ],
     hdrs = [
         "EllipticCurveAttributes.h",
         "EllipticCurveDialect.h",
         "EllipticCurveOps.h",
         "EllipticCurveTypes.h",
+        "KnownCurves.h",
     ],
     deps = [
         ":attributes_inc_gen",
@@ -41,13 +43,17 @@ cc_library(
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/Poly/IR:Poly",
+        "//zkir/Utils:KnownModulus",
         "//zkir/Utils:OpUtils",
+        "//zkir/Utils:ZkDtypes",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:InferTypeOpInterface",
         "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:bn254_g1",
+        "@zk_dtypes//zk_dtypes:bn254_g2",
     ],
 )
 
