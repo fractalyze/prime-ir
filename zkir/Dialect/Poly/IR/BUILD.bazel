@@ -60,6 +60,7 @@ td_library(
         "PolyOps.td",
         "PolyTypes.td",
     ],
+    includes = ["../../../.."],
     deps = [
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:DestinationStyleOpInterfaceTdFiles",

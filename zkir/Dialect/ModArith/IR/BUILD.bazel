@@ -66,6 +66,7 @@ td_library(
         "ModArithOps.td",
         "ModArithTypes.td",
     ],
+    includes = ["../../../.."],
     deps = [
         "//zkir/Utils:CommonTraits",
         "@llvm-project//mlir:ArithOpsTdFiles",

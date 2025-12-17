@@ -65,6 +65,7 @@ td_library(
         "FieldOps.td",
         "FieldTypes.td",
     ],
+    includes = ["../../../.."],
     deps = [
         "//zkir/Dialect/ModArith/IR:td_files",
         "@llvm-project//mlir:ArithOpsTdFiles",

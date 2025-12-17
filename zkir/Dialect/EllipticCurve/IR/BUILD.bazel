@@ -65,6 +65,7 @@ td_library(
         "EllipticCurveOps.td",
         "EllipticCurveTypes.td",
     ],
+    includes = ["../../../.."],
     deps = [
         "//zkir/Dialect/Field/IR:td_files",
         "//zkir/Utils:CommonTraits",
