@@ -94,6 +94,14 @@ http_archive(
     urls = ["https://github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT)],
 )
 
+# Uncomment this (and comment the llvm-raw http_archive above) when following the
+# llvm patch workflow from CONTRIBUTING.md to point Bazel at a local clone.
+# new_local_repository(
+#     name = "llvm-raw",
+#     build_file_content = "# empty",
+#     path = "../llvm-project",
+# )
+
 # This is needed since https://reviews.llvm.org/D143344.
 # Not sure if it's a bug or a feature, but it doesn't hurt to keep an additional
 # dependency here.
