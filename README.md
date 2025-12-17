@@ -157,8 +157,10 @@ performance and correctness across a wide range of devices.
 
 Building a substantial ZK compiler requires collaboration across the broader ZK
 ecosystem — and we’d love your help in shaping ZKIR. See
-[CONTRIBUTING.md](https://github.com/fractalyze/.github/blob/main/CONTRIBUTING.md)
-for more details.
+[fractalyze/CONTRIBUTING.md](https://github.com/fractalyze/.github/blob/main/CONTRIBUTING.md)
+for general guidelines, and refer to `CONTRIBUTING.md` in this repository if you
+plan to update our vendored LLVM patches or need pointers on working with an
+external LLVM checkout.
 
 We use GitHub Issues and Pull Requests to coordinate development, and
 longer-form discussions take place in the
