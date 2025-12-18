@@ -13,46 +13,34 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "benchmark/BenchmarkUtils.h"
 #include "benchmark/benchmark.h"
 #include "mlir/ExecutionEngine/MemRefUtils.h"
 #include "mlir/Support/LLVM.h"
+#include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 
 #define N (1 << 20)
 
 namespace mlir::zkir::benchmark {
 namespace {
 
-using i256 = BigInt<4>;
+using F = zk_dtypes::bn254::Fr;
 
-// `kPrime` =
-// 21888242871839275222246405745257275088548364400416034343698204186575808495617
-const i256 kPrime = i256::fromHexString(
-    "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");
+extern "C" void _mlir_ciface_mul(StridedMemRefType<F, 1> *input1,
+                                 StridedMemRefType<F, 1> *input2,
+                                 StridedMemRefType<F, 0> *output);
+extern "C" void _mlir_ciface_mont_mul(StridedMemRefType<F, 1> *input1,
+                                      StridedMemRefType<F, 1> *input2,
+                                      StridedMemRefType<F, 0> *output);
 
-extern "C" void _mlir_ciface_mul(StridedMemRefType<i256, 1> *input1,
-                                 StridedMemRefType<i256, 1> *input2,
-                                 StridedMemRefType<i256, 0> *output);
-extern "C" void _mlir_ciface_mont_mul(StridedMemRefType<i256, 1> *input1,
-                                      StridedMemRefType<i256, 1> *input2,
-                                      StridedMemRefType<i256, 0> *output);
-
-// Set up the random number generator.
-std::mt19937_64 rng(std::random_device{}()); // NOLINT(whitespace/braces)
-std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
-
-// Set each element to a random number in [0, `kPrime`).
-void fillWithRandom(i256 &elem, ArrayRef<int64_t> coords) {
-  elem = i256::randomLT(kPrime, rng, dist);
-}
+void fillWithRandom(F &elem, ArrayRef<int64_t> coords) { elem = F::Random(); }
 
 template <bool kIsMont>
 void BM_mul_benchmark(::benchmark::State &state) {
-  OwningMemRef<i256, 1> input1(/*shape=*/{N}, /*shapeAlloc=*/{},
-                               /*init=*/fillWithRandom);
-  OwningMemRef<i256, 1> input2(/*shape=*/{N}, /*shapeAlloc=*/{},
-                               /*init=*/fillWithRandom);
-  OwningMemRef<i256, 0> output(/*shape=*/{}, /*shapeAlloc=*/{}, /*init=*/{});
+  OwningMemRef<F, 1> input1(/*shape=*/{N}, /*shapeAlloc=*/{},
+                            /*init=*/fillWithRandom);
+  OwningMemRef<F, 1> input2(/*shape=*/{N}, /*shapeAlloc=*/{},
+                            /*init=*/fillWithRandom);
+  OwningMemRef<F, 0> output(/*shape=*/{}, /*shapeAlloc=*/{}, /*init=*/{});
   for (auto _ : state) {
     if constexpr (kIsMont) {
       _mlir_ciface_mont_mul(&*input1, &*input2, &*output);

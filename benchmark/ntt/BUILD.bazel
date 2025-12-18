@@ -29,9 +29,9 @@ zkir_benchmark(
     srcs = ["ntt_benchmark_test.cc"],
     deps = [
         ":ntt_ciface",
-        "//benchmark:BenchmarkUtils",
         "@llvm-project//mlir:ExecutionEngine",
         "@llvm-project//mlir:Support",
         "@local_config_omp//:omp",
+        "@zk_dtypes//zk_dtypes:bn254_fr",
     ],
 )

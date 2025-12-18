@@ -14,50 +14,37 @@ limitations under the License.
 ==============================================================================*/
 
 #include <climits>
-#include <random>
 
-#include "benchmark/BenchmarkUtils.h"
 #include "benchmark/benchmark.h"
 #include "gtest/gtest.h"
 #include "mlir/ExecutionEngine/MemRefUtils.h"
 #include "mlir/Support/LLVM.h"
+#include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 
 #define NUM_COEFFS (1 << 20)
 
 namespace mlir::zkir::benchmark {
 namespace {
 
-using i256 = BigInt<4>;
+using F = zk_dtypes::bn254::Fr;
 
-// `kPrime` =
-// 21888242871839275222246405745257275088548364400416034343698204186575808495617
-const i256 kPrime = i256::fromHexString(
-    "0x30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001");
+void fillWithRandom(F &elem, ArrayRef<int64_t> coords) { elem = F::Random(); }
 
-// Set up the random number generator.
-std::mt19937_64 rng(std::random_device{}()); // NOLINT(whitespace/braces)
-std::uniform_int_distribution<uint64_t> dist(0, UINT64_MAX);
+extern "C" void _mlir_ciface_ntt(StridedMemRefType<F, 1> *buffer);
+extern "C" void _mlir_ciface_intt(StridedMemRefType<F, 1> *buffer);
 
-// Set the element to a random number in [0, `kPrime`).
-void fillWithRandom(i256 &elem, ArrayRef<int64_t> coords) {
-  elem = i256::randomLT(kPrime, rng, dist);
-}
-
-extern "C" void _mlir_ciface_ntt(StridedMemRefType<i256, 1> *buffer);
-extern "C" void _mlir_ciface_intt(StridedMemRefType<i256, 1> *buffer);
-
-extern "C" void _mlir_ciface_ntt_mont(StridedMemRefType<i256, 1> *buffer);
-extern "C" void _mlir_ciface_intt_mont(StridedMemRefType<i256, 1> *buffer);
+extern "C" void _mlir_ciface_ntt_mont(StridedMemRefType<F, 1> *buffer);
+extern "C" void _mlir_ciface_intt_mont(StridedMemRefType<F, 1> *buffer);
 
 template <bool kIsMont>
 void BM_ntt_benchmark(::benchmark::State &state) {
-  OwningMemRef<i256, 1> input(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{},
-                              /*init=*/fillWithRandom);
+  OwningMemRef<F, 1> input(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{},
+                           /*init=*/fillWithRandom);
 
-  OwningMemRef<i256, 1> ntt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
+  OwningMemRef<F, 1> ntt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
   for (auto _ : state) {
     state.PauseTiming();
-    memcpy((*ntt).data, (*input).data, sizeof(i256) * NUM_COEFFS);
+    memcpy((*ntt).data, (*input).data, sizeof(F) * NUM_COEFFS);
     state.ResumeTiming();
     if constexpr (kIsMont) {
       _mlir_ciface_ntt_mont(&*ntt);
@@ -79,21 +66,21 @@ void BM_ntt_benchmark(::benchmark::State &state) {
 
 template <bool kIsMont>
 void BM_intt_benchmark(::benchmark::State &state) {
-  OwningMemRef<i256, 1> input(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{},
-                              /*init=*/fillWithRandom);
+  OwningMemRef<F, 1> input(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{},
+                           /*init=*/fillWithRandom);
 
-  OwningMemRef<i256, 1> ntt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
-  memcpy((*ntt).data, (*input).data, sizeof(i256) * NUM_COEFFS);
+  OwningMemRef<F, 1> ntt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
+  memcpy((*ntt).data, (*input).data, sizeof(F) * NUM_COEFFS);
   if constexpr (kIsMont) {
     _mlir_ciface_ntt_mont(&*ntt);
   } else {
     _mlir_ciface_ntt(&*ntt);
   }
 
-  OwningMemRef<i256, 1> intt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
+  OwningMemRef<F, 1> intt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
   for (auto _ : state) {
     state.PauseTiming();
-    memcpy((*intt).data, (*ntt).data, sizeof(i256) * NUM_COEFFS);
+    memcpy((*intt).data, (*ntt).data, sizeof(F) * NUM_COEFFS);
     state.ResumeTiming();
     if constexpr (kIsMont) {
       _mlir_ciface_intt_mont(&*intt);
