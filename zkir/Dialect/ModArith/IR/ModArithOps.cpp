@@ -120,36 +120,29 @@ public:
   APInt one;
 };
 
+Type convertFormType(Type type, bool toMontgomery) {
+  Type elementType = getElementTypeOrSelf(type);
+  auto modArithType = dyn_cast<ModArithType>(elementType);
+  if (!modArithType || modArithType.isMontgomery() == toMontgomery) {
+    return type;
+  }
+
+  auto newElementType = ModArithType::get(
+      type.getContext(), modArithType.getModulus(), toMontgomery);
+  if (auto shapedType = dyn_cast<ShapedType>(type)) {
+    return shapedType.clone(newElementType);
+  }
+  return newElementType;
+}
+
 } // namespace
 
 Type getStandardFormType(Type type) {
-  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
-  if (modArithType.isMontgomery()) {
-    auto standardType =
-        ModArithType::get(type.getContext(), modArithType.getModulus());
-    if (auto shapedType = dyn_cast<ShapedType>(type)) {
-      return shapedType.clone(standardType);
-    } else {
-      return standardType;
-    }
-  } else {
-    return type;
-  }
+  return convertFormType(type, /*toMontgomery=*/false);
 }
 
 Type getMontgomeryFormType(Type type) {
-  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
-  if (!modArithType.isMontgomery()) {
-    auto montType =
-        ModArithType::get(type.getContext(), modArithType.getModulus(), true);
-    if (auto shapedType = dyn_cast<ShapedType>(type)) {
-      return shapedType.clone(montType);
-    } else {
-      return montType;
-    }
-  } else {
-    return type;
-  }
+  return convertFormType(type, /*toMontgomery=*/true);
 }
 
 bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
