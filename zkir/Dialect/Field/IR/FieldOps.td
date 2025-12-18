@@ -60,7 +60,7 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
   let description = [{
     Example:
     ```
-    %0 = field.constant 123 : field.pf<7>
+    %0 = field.constant 123 : !field.pf<7>
     ```
   }];
   let arguments = (ins TypedAttrInterface:$value);
@@ -197,7 +197,7 @@ def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
 
     Example:
     ```
-    !PF = field.pf<7 : i32>
+    !PF = !field.pf<7 : i32>
     %c0 = field.bitcast %f0 : !PF -> i32
     %f1 = field.bitcast %c0 : i32 -> !PF
     %f2 = field.bitcast %f0 : !PF -> !PF2
@@ -286,7 +286,7 @@ def Field_InverseOp : Field_UnaryOp<"inverse", [Involution]> {
 
     Example:
     ```
-    %inv_a = field.inverse %a : field.pf<primeModulus>
+    %inv_a = field.inverse %a : !field.pf<primeModulus>
     ```
   }];
 }
@@ -299,7 +299,7 @@ def Field_DoubleOp : Field_UnaryOp<"double"> {
 
     Example:
     ```
-    %double = field.double %a : field.pf<primeModulus>
+    %double = field.double %a : !field.pf<primeModulus>
     ```
   }];
 }
@@ -312,7 +312,7 @@ def Field_SquareOp : Field_UnaryOp<"square"> {
 
     Example:
     ```
-    %square = field.square %a : field.pf<primeModulus>
+    %square = field.square %a : !field.pf<primeModulus>
     ```
   }];
 }
@@ -325,7 +325,7 @@ def Field_NegateOp : Field_UnaryOp<"negate", [Involution]> {
 
     Example:
     ```
-    %negation = field.negate %a : field.pf<primeModulus>
+    %negation = field.negate %a : !field.pf<primeModulus>
     ```
   }];
 }
@@ -338,7 +338,7 @@ def Field_AddOp : Field_BinaryOp<"add", [Commutative]> {
 
     Example:
     ```
-    %r = field.add %a, %b : field.pf<primeModulus>
+    %r = field.add %a, %b : !field.pf<primeModulus>
     ```
   }];
   let hasCanonicalizer = 1;
@@ -352,7 +352,7 @@ def Field_SubOp : Field_BinaryOp<"sub"> {
 
     Example:
     ```
-    %r = field.sub %a, %b : field.pf<primeModulus>
+    %r = field.sub %a, %b : !field.pf<primeModulus>
     ```
   }];
   let hasCanonicalizer = 1;
@@ -366,7 +366,7 @@ def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
 
     Example:
     ```
-    %r = field.mul %a, %b : field.pf<primeModulus>
+    %r = field.mul %a, %b : !field.pf<primeModulus>
     ```
   }];
   let hasCanonicalizer = 1;
@@ -381,7 +381,7 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
 
     Example:
     ```
-    %power = field.powui %a, %b : field.pf<primeModulus>, i32
+    %power = field.powui %a, %b : !field.pf<primeModulus>, i32
     ```
   }];
   let arguments = (ins FieldLike:$base, SignlessIntegerLike:$exp);

@@ -87,9 +87,9 @@ def ModArith_BitcastOp : Op<ModArith_Dialect, "bitcast", [Pure,
 
     Example:
     ```
-    mod_arith.bitcast %c0 : i32 -> mod_arith.int<65537 : i32>
-    mod_arith.bitcast %m1 : mod_arith.int<65537 : i64> -> i64
-    mod_arith.bitcast %m2 : mod_arith.int<65537 : i64> -> mod_arith.int<7 : i64>
+    mod_arith.bitcast %c0 : i32 -> !mod_arith.int<65537 : i32>
+    mod_arith.bitcast %m1 : !mod_arith.int<65537 : i64> -> i64
+    mod_arith.bitcast %m2 : !mod_arith.int<65537 : i64> -> !mod_arith.int<7 : i64>
     ```
   }];
   let arguments = (ins AnyTypeOf<[ModArithLike, SignlessIntegerLike]>:$input);
@@ -108,7 +108,7 @@ def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [SameTypeOperands]> {
     Example:
     ```
     %c0 = arith.constant 65538231231312311 : i512
-    %m0 = mod_arith.mont_reduce %c0 : i512 -> mod_arith.int<65537 : i256>
+    %m0 = mod_arith.mont_reduce %c0 : i512 -> !mod_arith.int<65537 : i256>
     ```
   }];
   let arguments = (ins
@@ -129,7 +129,7 @@ def ModArith_ToMontOp : ModArith_Op<"to_mont", [TypesMatchWith<
 
     Example:
     ```
-    %m0 = mod_arith.to_mont %c0 : mod_arith.int<65537 : i256>
+    %m0 = mod_arith.to_mont %c0 : !mod_arith.int<65537 : i256>
     ```
   }];
   let arguments = (ins ModArithLike:$input);
@@ -148,7 +148,7 @@ def ModArith_FromMontOp : ModArith_Op<"from_mont", [TypesMatchWith<
 
     Example:
     ```
-    %m0 = mod_arith.from_mont %c0 : mod_arith.int<65537 : i256>
+    %m0 = mod_arith.from_mont %c0 : !mod_arith.int<65537 : i256>
     ```
   }];
   let arguments = (ins ModArithLike:$input);
@@ -181,7 +181,7 @@ def ModArith_CmpOp : ModArith_Op<"cmp", [SameTypeOperands, TypesMatchWith<
 
     Example:
     ```
-    %res = mod_arith.cmp slt, %a, %b : mod_arith.int<65537 : i256>
+    %res = mod_arith.cmp slt, %a, %b : !mod_arith.int<65537 : i256>
     ```
   }];
   let arguments = (ins Arith_CmpIPredicateAttr:$predicate,
@@ -199,7 +199,7 @@ def ModArith_NegateOp : ModArith_UnaryOp<"negate", [Involution]> {
 
     Example:
     ```
-    %1 = mod_arith.negate %0 : mod_arith.int<65537: i32>
+    %1 = mod_arith.negate %0 : !mod_arith.int<65537: i32>
     ```
   }];
   let arguments = (ins ModArithLike:$input);
@@ -228,7 +228,7 @@ def ModArith_MontSquareOp : ModArith_UnaryOp<"mont_square"> {
 
     Example:
     ```
-    %m0 = mod_arith.mont_square %a : mod_arith.int<65537 : i256>
+    %m0 = mod_arith.mont_square %a : !mod_arith.int<65537 : i256>
     ```
   }];
   let hasFolder = 1;
@@ -314,7 +314,7 @@ def ModArith_MontMulOp : ModArith_BinaryOp<"mont_mul", [Commutative]> {
 
     Example:
     ```
-    %m0 = mod_arith.mont_mul %a, %b : mod_arith.int<65537 : i256>
+    %m0 = mod_arith.mont_mul %a, %b : !mod_arith.int<65537 : i256>
     ```
   }];
   let hasFolder = 1;
