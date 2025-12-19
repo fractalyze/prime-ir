@@ -120,44 +120,29 @@ public:
   APInt one;
 };
 
+Type convertFormType(Type type, bool toMontgomery) {
+  Type elementType = getElementTypeOrSelf(type);
+  auto modArithType = dyn_cast<ModArithType>(elementType);
+  if (!modArithType || modArithType.isMontgomery() == toMontgomery) {
+    return type;
+  }
+
+  auto newElementType = ModArithType::get(
+      type.getContext(), modArithType.getModulus(), toMontgomery);
+  if (auto shapedType = dyn_cast<ShapedType>(type)) {
+    return shapedType.clone(newElementType);
+  }
+  return newElementType;
+}
+
 } // namespace
 
 Type getStandardFormType(Type type) {
-  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
-  if (modArithType.isMontgomery()) {
-    auto standardType =
-        ModArithType::get(type.getContext(), modArithType.getModulus());
-    if (auto memrefType = dyn_cast<MemRefType>(type)) {
-      return MemRefType::get(memrefType.getShape(), standardType,
-                             memrefType.getLayout(),
-                             memrefType.getMemorySpace());
-    } else if (auto shapedType = dyn_cast<ShapedType>(type)) {
-      return shapedType.cloneWith(shapedType.getShape(), standardType);
-    } else {
-      return standardType;
-    }
-  } else {
-    return type;
-  }
+  return convertFormType(type, /*toMontgomery=*/false);
 }
 
 Type getMontgomeryFormType(Type type) {
-  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
-  if (!modArithType.isMontgomery()) {
-    auto montType =
-        ModArithType::get(type.getContext(), modArithType.getModulus(), true);
-    if (auto memrefType = dyn_cast<MemRefType>(type)) {
-      return MemRefType::get(memrefType.getShape(), montType,
-                             memrefType.getLayout(),
-                             memrefType.getMemorySpace());
-    } else if (auto shapedType = dyn_cast<ShapedType>(type)) {
-      return shapedType.cloneWith(shapedType.getShape(), montType);
-    } else {
-      return montType;
-    }
-  } else {
-    return type;
-  }
+  return convertFormType(type, /*toMontgomery=*/true);
 }
 
 bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {

@@ -16,6 +16,7 @@ limitations under the License.
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
@@ -25,15 +26,8 @@ namespace mlir::zkir::field {
 #include "zkir/Dialect/Field/IR/FieldTypesInterfaces.cpp.inc"
 
 bool isMontgomery(Type type) {
-  Type element;
-  if (auto shapedType = dyn_cast<ShapedType>(type)) {
-    element = shapedType.getElementType();
-  } else if (auto memrefType = dyn_cast<MemRefType>(type)) {
-    element = memrefType.getElementType();
-  } else {
-    element = type;
-  }
-  if (auto fieldType = dyn_cast<FieldTypeInterface>(element)) {
+  Type elementType = getElementTypeOrSelf(type);
+  if (auto fieldType = dyn_cast<FieldTypeInterface>(elementType)) {
     return fieldType.isMontgomery();
   }
   return false;
