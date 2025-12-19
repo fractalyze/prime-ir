@@ -28,25 +28,55 @@ refresh the patches we carry in this repository.
      )
      ```
 
-1. Implement and test your LLVM changes (see “Managing multiple patches” if you
-   are extending an existing patch).
+1. Implement and test your changes within the LLVM source tree.
 
-1. Produce an updated patch and copy it back under `third_party/llvm-project/`.
-   To generate the patch, run this:
+1. Produce a patch file using your preferred method:
 
-   ```sh
-   git show HEAD > /path/to/zkir/repo/third_party/llvm-project/<descriptive_name>.patch
-   ```
+   - `git diff` (Unstaged changes)
+   - `git diff --cached` (Staged changes)
+   - `git show HEAD --pretty=""` (The most recent commit)
 
-### Managing multiple patches
+1. Copy the generated patch file into `third_party/llvm-project/`.
+
+### Extending patches
 
 - Keep a dedicated local branch (created automatically by the helper script) so
   each patch remains its own commit and can be edited independently.
+
 - When work must happen “within” an existing patch:
-  - Reset to the commit that represents the patch:
-    `git reset --hard <applying-patch-commit>`.
-  - Implement your changes and create a temporary commit:
-    `git commit -m "whatever"`.
-  - Fold it back into the original commit
-    (`git rebase -i <applying-patch-commit>^` and choose `fixup`).
-  - Regenerate the patch: `git show HEAD`.
+
+  1. **Enter Edit Mode:** Locate the commit for the specific patch you want to
+     update. Use interactive rebase:
+
+     ```shell
+     git rebase -i <target-patch-commit>^
+     ```
+
+     Then, mark the target commit as `edit`.
+
+  1. **Apply Changes:** Make the necessary code modifications.
+
+  1. **Stage Changes:**
+
+     ```shell
+     git add --update
+     ```
+
+  1. **Amend the Commit:**
+
+     ```shell
+     git commit --amend
+     ```
+
+  1. **Regenerate the Patch:** Overwrite the existing patch file in your project
+     directory:
+
+     ```shell
+     git show HEAD --pretty="" > /path/to/zkir/third_party/llvm-project/<patch_name>.patch
+     ```
+
+  1. **Finalize Rebase:** Return to the current `HEAD`:
+
+     ```shell
+     git rebase --continue
+     ```
