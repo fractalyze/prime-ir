@@ -1358,3 +1358,17 @@ func.func @test_insert_fold() -> vector<2x!Zp> {
   // CHECK: return %[[C]] : [[T]]
   return %result : vector<2x!Zp>
 }
+
+// CHECK-LABEL: @test_insert_strided_slice_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_insert_strided_slice_fold() -> vector<4x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[3, 1, 2, 3]> : [[T]]
+  // CHECK-NOT: vector.insert_strided_slice
+  // CHECK: return %[[C]] : [[T]]
+  %source = mod_arith.constant dense<[1, 2]> : vector<2x!Zp>
+  %dest = mod_arith.constant dense<3> : vector<4x!Zp>
+  %result = vector.insert_strided_slice %source, %dest
+            {offsets = [1], strides = [1]}
+            : vector<2x!Zp> into vector<4x!Zp>
+  return %result : vector<4x!Zp>
+}
