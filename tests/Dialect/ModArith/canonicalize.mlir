@@ -1302,3 +1302,25 @@ func.func @test_shuffle_fold() -> vector<4x!Zp> {
   // CHECK: return %[[C]] : [[T]]
   return %shuffled : vector<4x!Zp>
 }
+
+// CHECK-LABEL: @test_extract_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_extract_fold() -> vector<2x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[3, 4]> : [[T]]
+  // CHECK-NOT: vector.extract
+  // CHECK: return %[[C]] : [[T]]
+  %0 = mod_arith.constant dense<[[1, 2],[3, 4]]> : vector<2x2x!Zp>
+  %1 = vector.extract %0[1] : vector<2x!Zp> from vector<2x2x!Zp>
+  return %1 : vector<2x!Zp>
+}
+
+// CHECK-LABEL: @test_extract_fold_from_splat
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_extract_fold_from_splat() -> vector<2x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<1> : [[T]]
+  // CHECK-NOT: vector.extract
+  // CHECK: return %[[C]] : [[T]]
+  %0 = mod_arith.constant dense<1> : vector<2x2x!Zp>
+  %1 = vector.extract %0[1] : vector<2x!Zp> from vector<2x2x!Zp>
+  return %1 : vector<2x!Zp>
+}

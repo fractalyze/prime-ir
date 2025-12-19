@@ -1,5 +1,5 @@
 diff --git mlir/lib/Dialect/Vector/IR/VectorOps.cpp mlir/lib/Dialect/Vector/IR/VectorOps.cpp
-index 1fb8c7a928e0..73bd1e0e7f12 100644
+index 1fb8c7a928e0..a5e69a7619b7 100644
 --- mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 +++ mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 @@ -38,6 +38,9 @@
@@ -43,7 +43,28 @@ index 1fb8c7a928e0..73bd1e0e7f12 100644
    if (isa<ub::PoisonAttrInterface>(value))
      return value.getDialect().materializeConstant(builder, value, type, loc);
  
-@@ -2497,6 +2514,8 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
+@@ -2116,8 +2133,11 @@ static Attribute foldDenseElementsAttrSrcExtractOp(ExtractOp extractOp,
+ 
+   if (denseAttr.isSplat()) {
+     Attribute newAttr = denseAttr.getSplatValue<Attribute>();
+-    if (auto vecDstType = dyn_cast<VectorType>(extractOp.getType()))
++    if (auto vecDstType = dyn_cast<VectorType>(extractOp.getType())) {
++      vecDstType =
++          cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(vecDstType));
+       newAttr = DenseElementsAttr::get(vecDstType, newAttr);
++    }
+     return newAttr;
+   }
+ 
+@@ -2149,6 +2169,7 @@ static Attribute foldDenseElementsAttrSrcExtractOp(ExtractOp extractOp,
+   if (auto resVecTy = dyn_cast<VectorType>(extractOp.getType())) {
+     SmallVector<Attribute> elementValues(
+         denseValuesBegin, denseValuesBegin + resVecTy.getNumElements());
++    resVecTy = cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(resVecTy));
+     newAttr = DenseElementsAttr::get(resVecTy, elementValues);
+   } else {
+     newAttr = *denseValuesBegin;
+@@ -2497,6 +2518,8 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
      return convertIntegerAttr(attr, destEltType);
    });
  
@@ -52,7 +73,7 @@ index 1fb8c7a928e0..73bd1e0e7f12 100644
    return DenseElementsAttr::get(destVecType, convertedElements);
  }
  
-@@ -3058,8 +3077,9 @@ OpFoldResult vector::ShuffleOp::fold(FoldAdaptor adaptor) {
+@@ -3058,8 +3081,9 @@ OpFoldResult vector::ShuffleOp::fold(FoldAdaptor adaptor) {
  
      results.push_back(indexedElm);
    }
