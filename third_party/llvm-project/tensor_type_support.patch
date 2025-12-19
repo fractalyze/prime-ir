@@ -1,5 +1,5 @@
 diff --git mlir/lib/Dialect/Tensor/IR/TensorOps.cpp mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
-index 22a25fd1a5af..24e7372e4207 100644
+index 22a25fd1a5af..1832036990e4 100644
 --- mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 +++ mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 @@ -41,6 +41,10 @@
@@ -38,6 +38,17 @@ index 22a25fd1a5af..24e7372e4207 100644
    return {};
  }
  
+@@ -4052,7 +4063,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+ 
+   // SplatElementsAttr::get treats single value for second arg as being a
+   // splat.
+-  return SplatElementsAttr::get(getType(), {constOperand});
++  ShapedType destType =
++      cast<ShapedType>(zkir::maybeConvertZkirToBuiltinType(getType()));
++  return SplatElementsAttr::get(destType, {constOperand});
+ }
+ 
+ //===----------------------------------------------------------------------===//
 diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 index 4fc82f6c1d27..f7722951646c 100644
 --- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel

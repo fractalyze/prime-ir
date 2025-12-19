@@ -1253,6 +1253,17 @@ func.func @test_tensor_extract() -> !Zp {
   return %1 : !Zp
 }
 
+// CHECK-LABEL: @test_tensor_splat_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_splat_fold() -> tensor<4x!Zp> {
+  %0 = mod_arith.constant 9 : !Zp
+  %1 = tensor.splat %0 : tensor<4x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<9> : [[T]]
+  // CHECK-NOT: tensor.splat
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<4x!Zp>
+}
+
 //===----------------------------------------------------------------------===//
 // Vector operations
 //===----------------------------------------------------------------------===//
