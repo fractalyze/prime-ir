@@ -1,5 +1,5 @@
 diff --git mlir/lib/Dialect/Vector/IR/VectorOps.cpp mlir/lib/Dialect/Vector/IR/VectorOps.cpp
-index 1fb8c7a928e0..dd1babe536f5 100644
+index 1fb8c7a928e0..c2baa1745454 100644
 --- mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 +++ mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 @@ -38,6 +38,9 @@
@@ -104,6 +104,25 @@ index 1fb8c7a928e0..dd1babe536f5 100644
  }
  
  namespace {
+@@ -3207,7 +3232,9 @@ OpFoldResult vector::InsertElementOp::fold(FoldAdaptor adaptor) {
+     return {};
+   results[posIdx] = src;
+ 
+-  return DenseElementsAttr::get(getDestVectorType(), results);
++  VectorType destType = cast<VectorType>(
++      zkir::maybeConvertZkirToBuiltinType(getDestVectorType()));
++  return DenseElementsAttr::get(destType, results);
+ }
+ 
+ //===----------------------------------------------------------------------===//
+@@ -3382,6 +3409,7 @@ foldDenseElementsAttrDestInsertOp(InsertOp insertOp, Attribute srcAttr,
+ 
+   auto allValues = llvm::to_vector(denseDst.getValues<Attribute>());
+   copy(insertedValues, allValues.begin() + insertBeginPosition);
++  destTy = cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(destTy));
+   auto newAttr = DenseElementsAttr::get(destTy, allValues);
+ 
+   return newAttr;
 diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 index f7722951646c..008946b81e69 100644
 --- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel

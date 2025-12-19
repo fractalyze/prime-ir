@@ -1346,3 +1346,15 @@ func.func @test_broadcast_splat_fold() -> vector<2x2x!Zp> {
   %2 = vector.broadcast %1 : vector<2x!Zp> to vector<2x2x!Zp>
   return %2 : vector<2x2x!Zp>
 }
+
+// CHECK-LABEL: @test_insert_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_insert_fold() -> vector<2x!Zp> {
+  %0 = mod_arith.constant dense<[1, 3]> : vector<2x!Zp>
+  %1 = mod_arith.constant 2 : !Zp
+  %result = vector.insert %1, %0[1] : !Zp into vector<2x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[1, 2]> : [[T]]
+  // CHECK-NOT: vector.insert
+  // CHECK: return %[[C]] : [[T]]
+  return %result : vector<2x!Zp>
+}
