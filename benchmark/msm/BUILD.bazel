@@ -29,9 +29,10 @@ zkir_benchmark(
     srcs = ["msm_benchmark_test.cc"],
     deps = [
         ":msm_ciface",
-        "//benchmark:BenchmarkUtils",
         "@llvm-project//mlir:ExecutionEngine",
         "@llvm-project//mlir:Support",
         "@local_config_omp//:omp",
+        "@zk_dtypes//zk_dtypes:bn254_fr",
+        "@zk_dtypes//zk_dtypes:bn254_g1",
     ],
 )

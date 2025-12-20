@@ -29,8 +29,8 @@ zkir_benchmark(
     srcs = ["mul_benchmark_test.cc"],
     deps = [
         ":mul_ciface",
-        "//benchmark:BenchmarkUtils",
         "@llvm-project//mlir:ExecutionEngine",
         "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:bn254_fr",
     ],
 )

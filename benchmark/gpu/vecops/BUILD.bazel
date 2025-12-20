@@ -46,7 +46,6 @@ zkir_benchmark(
     deps = [
         ":vecops_cpu_ciface",
         ":vecops_gpu_ciface",
-        "//benchmark:BenchmarkUtils",
         "//utils/cuda:CudaUtils",
         "@cuda//:cuda_headers",
         "@cuda//:cuda_runtime",
@@ -54,5 +53,6 @@ zkir_benchmark(
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:mlir_cuda_runtime",
         "@local_config_omp//:omp",
+        "@zk_dtypes//zk_dtypes:goldilocks",
     ],
 )
