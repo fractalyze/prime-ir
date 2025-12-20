@@ -61,6 +61,15 @@ func.func @test_linalg_map(%input : tensor<4x!PF>, %output: tensor<4x!PF>) -> te
   return %res : tensor<4x!PF>
 }
 
+// CHECK-LABEL: @test_linalg_reduce
+// CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]], %[[INIT:.*]]: [[INIT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_linalg_reduce(%input: tensor<4x!PF>, %init: tensor<!PF>) -> tensor<!PF> {
+  // CHECK: %[[RES:.*]] = linalg.reduce { mod_arith.add } ins(%[[INPUT]] : [[INPUT_TYPE]]) outs(%[[INIT]] : [[INIT_TYPE]]) dimensions = [0]
+  %res = linalg.reduce { field.add } ins(%input : tensor<4x!PF>) outs(%init : tensor<!PF>) dimensions = [0]
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<!PF>
+}
+
 // CHECK-LABEL: @test_linalg_transpose
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[OUTPUT_TYPE:.*]] {
 func.func @test_linalg_transpose(%input : tensor<2x3x!PF>) -> tensor<3x2x!PF> {
