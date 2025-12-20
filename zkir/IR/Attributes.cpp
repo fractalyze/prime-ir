@@ -23,10 +23,10 @@ namespace mlir::zkir {
 ShapedType maybeConvertZkirToBuiltinType(ShapedType type) {
   if (auto modArithType =
           dyn_cast<mod_arith::ModArithType>(type.getElementType())) {
-    return type.clone(modArithType.getModulus().getType());
+    return type.clone(modArithType.getStorageType());
   } else if (auto fieldType =
                  dyn_cast<field::PrimeFieldType>(type.getElementType())) {
-    return type.clone(fieldType.getModulus().getType());
+    return type.clone(fieldType.getStorageType());
   }
   return type;
 }
