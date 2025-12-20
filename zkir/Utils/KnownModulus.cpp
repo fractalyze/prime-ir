@@ -29,6 +29,10 @@ namespace {
 template <typename T>
 void registerKnownModulusAliases(DenseMap<APInt, std::string> &map,
                                  std::string_view name) {
+  if (name.size() >= 4 && name.substr(name.size() - 4) == "_std") {
+    return;
+  }
+
   APInt modulus;
   modulus = convertToAPInt(T::Config::kModulus, T::Config::kModulusBits);
   map[modulus] = name;
