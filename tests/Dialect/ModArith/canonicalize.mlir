@@ -1253,6 +1253,17 @@ func.func @test_tensor_extract() -> !Zp {
   return %1 : !Zp
 }
 
+// CHECK-LABEL: @test_tensor_splat_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_splat_fold() -> tensor<4x!Zp> {
+  %0 = mod_arith.constant 9 : !Zp
+  %1 = tensor.splat %0 : tensor<4x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<9> : [[T]]
+  // CHECK-NOT: tensor.splat
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<4x!Zp>
+}
+
 //===----------------------------------------------------------------------===//
 // Vector operations
 //===----------------------------------------------------------------------===//
@@ -1278,4 +1289,119 @@ func.func @test_vector_extract() -> !Zp {
   %0 = mod_arith.constant dense<[2, 3]> : vector<2x!Zp>
   %1 = vector.extract %0[1] : !Zp from vector<2x!Zp>
   return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_splat_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_splat_fold() -> vector<2x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<1> : [[T]]
+  // CHECK-NOT: vector.splat
+  // CHECK: return %[[C]] : [[T]]
+  %0 = mod_arith.constant 1 : !Zp
+  %1 = vector.splat %0 : vector<2x!Zp>
+  return %1 : vector<2x!Zp>
+}
+
+// CHECK-LABEL: @test_shuffle_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_shuffle_fold() -> vector<4x!Zp> {
+  %v1 = mod_arith.constant dense<[10, 20, 30, 36]> : vector<4x!Zp>
+  %v2 = mod_arith.constant dense<[15, 25]> : vector<2x!Zp>
+  %shuffled = vector.shuffle %v1, %v2 [0, 4, 1, 5] : vector<4x!Zp>, vector<2x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[10, 15, 20, 25]> : [[T]]
+  // CHECK-NOT: vector.shuffle
+  // CHECK: return %[[C]] : [[T]]
+  return %shuffled : vector<4x!Zp>
+}
+
+// CHECK-LABEL: @test_extract_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_extract_fold() -> vector<2x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[3, 4]> : [[T]]
+  // CHECK-NOT: vector.extract
+  // CHECK: return %[[C]] : [[T]]
+  %0 = mod_arith.constant dense<[[1, 2],[3, 4]]> : vector<2x2x!Zp>
+  %1 = vector.extract %0[1] : vector<2x!Zp> from vector<2x2x!Zp>
+  return %1 : vector<2x!Zp>
+}
+
+// CHECK-LABEL: @test_extract_fold_from_splat
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_extract_fold_from_splat() -> vector<2x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<1> : [[T]]
+  // CHECK-NOT: vector.extract
+  // CHECK: return %[[C]] : [[T]]
+  %0 = mod_arith.constant dense<1> : vector<2x2x!Zp>
+  %1 = vector.extract %0[1] : vector<2x!Zp> from vector<2x2x!Zp>
+  return %1 : vector<2x!Zp>
+}
+
+// CHECK-LABEL: @test_broadcast_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_broadcast_fold() -> vector<2x2x!Zp> {
+  %0 = mod_arith.constant 5 : !Zp
+  %1 = vector.broadcast %0 : !Zp to vector<2x2x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<5> : [[T]]
+  // CHECK-NOT: vector.broadcast
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : vector<2x2x!Zp>
+}
+
+// CHECK-LABEL: @test_broadcast_splat_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_broadcast_splat_fold() -> vector<2x2x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<5> : [[T]]
+  // CHECK-NOT: vector.broadcast
+  // CHECK: return %[[C]] : [[T]]
+  %1 = mod_arith.constant dense<5> : vector<2x!Zp>
+  %2 = vector.broadcast %1 : vector<2x!Zp> to vector<2x2x!Zp>
+  return %2 : vector<2x2x!Zp>
+}
+
+// CHECK-LABEL: @test_insert_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_insert_fold() -> vector<2x!Zp> {
+  %0 = mod_arith.constant dense<[1, 3]> : vector<2x!Zp>
+  %1 = mod_arith.constant 2 : !Zp
+  %result = vector.insert %1, %0[1] : !Zp into vector<2x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[1, 2]> : [[T]]
+  // CHECK-NOT: vector.insert
+  // CHECK: return %[[C]] : [[T]]
+  return %result : vector<2x!Zp>
+}
+
+// CHECK-LABEL: @test_insert_strided_slice_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_insert_strided_slice_fold() -> vector<4x!Zp> {
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[3, 1, 2, 3]> : [[T]]
+  // CHECK-NOT: vector.insert_strided_slice
+  // CHECK: return %[[C]] : [[T]]
+  %source = mod_arith.constant dense<[1, 2]> : vector<2x!Zp>
+  %dest = mod_arith.constant dense<3> : vector<4x!Zp>
+  %result = vector.insert_strided_slice %source, %dest
+            {offsets = [1], strides = [1]}
+            : vector<2x!Zp> into vector<4x!Zp>
+  return %result : vector<4x!Zp>
+}
+
+// CHECK-LABEL: @test_extract_strided_slice_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_extract_strided_slice_fold() -> vector<2x!Zp> {
+  %0 = mod_arith.constant dense<[1, 2, 3, 4]> : vector<4x!Zp>
+  %slice = vector.extract_strided_slice %0 {offsets = [0], sizes = [2], strides = [1]} : vector<4x!Zp> to vector<2x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<[1, 2]> : [[T]]
+  // CHECK-NOT: vector.extract_strided_slice
+  // CHECK: return %[[C]] : [[T]]
+  return %slice : vector<2x!Zp>
+}
+
+// CHECK-LABEL: @test_splat_extract_strided_slice_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_splat_extract_strided_slice_fold() -> vector<2x!Zp> {
+  %0 = mod_arith.constant dense<5> : vector<4x!Zp>
+  %slice = vector.extract_strided_slice %0 {offsets = [0], sizes = [2], strides = [1]} : vector<4x!Zp> to vector<2x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<5> : [[T]]
+  // CHECK-NOT: vector.extract_strided_slice
+  // CHECK: return %[[C]] : [[T]]
+  return %slice : vector<2x!Zp>
 }

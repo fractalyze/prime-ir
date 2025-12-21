@@ -1,5 +1,5 @@
 diff --git mlir/lib/Dialect/Vector/IR/VectorOps.cpp mlir/lib/Dialect/Vector/IR/VectorOps.cpp
-index 1fb8c7a928e0..c0a19a1b5ee4 100644
+index 1fb8c7a928e0..bce5fd54a14d 100644
 --- mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 +++ mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 @@ -38,6 +38,9 @@
@@ -43,7 +43,28 @@ index 1fb8c7a928e0..c0a19a1b5ee4 100644
    if (isa<ub::PoisonAttrInterface>(value))
      return value.getDialect().materializeConstant(builder, value, type, loc);
  
-@@ -2497,6 +2514,8 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
+@@ -2116,8 +2133,11 @@ static Attribute foldDenseElementsAttrSrcExtractOp(ExtractOp extractOp,
+ 
+   if (denseAttr.isSplat()) {
+     Attribute newAttr = denseAttr.getSplatValue<Attribute>();
+-    if (auto vecDstType = dyn_cast<VectorType>(extractOp.getType()))
++    if (auto vecDstType = dyn_cast<VectorType>(extractOp.getType())) {
++      vecDstType =
++          cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(vecDstType));
+       newAttr = DenseElementsAttr::get(vecDstType, newAttr);
++    }
+     return newAttr;
+   }
+ 
+@@ -2149,6 +2169,7 @@ static Attribute foldDenseElementsAttrSrcExtractOp(ExtractOp extractOp,
+   if (auto resVecTy = dyn_cast<VectorType>(extractOp.getType())) {
+     SmallVector<Attribute> elementValues(
+         denseValuesBegin, denseValuesBegin + resVecTy.getNumElements());
++    resVecTy = cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(resVecTy));
+     newAttr = DenseElementsAttr::get(resVecTy, elementValues);
+   } else {
+     newAttr = *denseValuesBegin;
+@@ -2497,6 +2518,8 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
      return convertIntegerAttr(attr, destEltType);
    });
  
@@ -52,6 +73,106 @@ index 1fb8c7a928e0..c0a19a1b5ee4 100644
    return DenseElementsAttr::get(destVecType, convertedElements);
  }
  
+@@ -2800,7 +2823,7 @@ BroadcastableToResult mlir::vector::isBroadcastableTo(
+     Type srcType, VectorType dstVectorType,
+     std::pair<VectorDim, VectorDim> *mismatchingDims) {
+   // Broadcast scalar to vector of the same element type.
+-  if (srcType.isIntOrIndexOrFloat() && dstVectorType &&
++  if (isa<VectorElementTypeInterface>(srcType) && dstVectorType &&
+       getElementTypeOrSelf(srcType) == getElementTypeOrSelf(dstVectorType))
+     return BroadcastableToResult::Success;
+   // From now on, only vectors broadcast.
+@@ -2878,7 +2901,8 @@ OpFoldResult BroadcastOp::fold(FoldAdaptor adaptor) {
+     return getSource();
+   if (!adaptor.getSource())
+     return {};
+-  auto vectorType = getResultVectorType();
++  VectorType vectorType = cast<VectorType>(
++      zkir::maybeConvertZkirToBuiltinType(getResultVectorType()));
+   if (auto attr = llvm::dyn_cast<IntegerAttr>(adaptor.getSource())) {
+     if (vectorType.getElementType() != attr.getType())
+       return {};
+@@ -3058,8 +3082,9 @@ OpFoldResult vector::ShuffleOp::fold(FoldAdaptor adaptor) {
+ 
+     results.push_back(indexedElm);
+   }
+-
+-  return DenseElementsAttr::get(getResultVectorType(), results);
++  VectorType resType = cast<VectorType>(
++      zkir::maybeConvertZkirToBuiltinType(getResultVectorType()));
++  return DenseElementsAttr::get(resType, results);
+ }
+ 
+ namespace {
+@@ -3207,7 +3232,9 @@ OpFoldResult vector::InsertElementOp::fold(FoldAdaptor adaptor) {
+     return {};
+   results[posIdx] = src;
+ 
+-  return DenseElementsAttr::get(getDestVectorType(), results);
++  VectorType destType = cast<VectorType>(
++      zkir::maybeConvertZkirToBuiltinType(getDestVectorType()));
++  return DenseElementsAttr::get(destType, results);
+ }
+ 
+ //===----------------------------------------------------------------------===//
+@@ -3382,6 +3409,7 @@ foldDenseElementsAttrDestInsertOp(InsertOp insertOp, Attribute srcAttr,
+ 
+   auto allValues = llvm::to_vector(denseDst.getValues<Attribute>());
+   copy(insertedValues, allValues.begin() + insertBeginPosition);
++  destTy = cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(destTy));
+   auto newAttr = DenseElementsAttr::get(destTy, allValues);
+ 
+   return newAttr;
+@@ -3711,6 +3739,15 @@ public:
+     } while (succeeded(
+         incSlicePosition(currSlicePosition, sliceShape, sliceOffsets)));
+ 
++    if (auto modArithType =
++            dyn_cast<zkir::mod_arith::ModArithType>(destTy.getElementType())) {
++      VectorType converted =
++          cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(destTy));
++      auto newAttr = DenseElementsAttr::get(converted, newValues);
++      rewriter.replaceOpWithNewOp<zkir::mod_arith::ConstantOp>(op, destTy,
++                                                               newAttr);
++      return success();
++    }
+     auto newAttr = DenseElementsAttr::get(destTy, newValues);
+     rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, newAttr);
+     return success();
+@@ -4057,6 +4094,8 @@ foldExtractStridedSliceNonSplatConstant(ExtractStridedSliceOp op,
+   assert(static_cast<int64_t>(sliceValues.size()) ==
+              sliceVecTy.getNumElements() &&
+          "Invalid number of slice elements");
++  sliceVecTy =
++      cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(sliceVecTy));
+   return DenseElementsAttr::get(sliceVecTy, sliceValues);
+ }
+ 
+@@ -4068,8 +4107,11 @@ OpFoldResult ExtractStridedSliceOp::fold(FoldAdaptor adaptor) {
+ 
+   // ExtractStridedSliceOp(splat ConstantOp) -> ConstantOp.
+   if (auto splat =
+-          llvm::dyn_cast_if_present<SplatElementsAttr>(adaptor.getVector()))
+-    DenseElementsAttr::get(getType(), splat.getSplatValue<Attribute>());
++          llvm::dyn_cast_if_present<SplatElementsAttr>(adaptor.getVector())) {
++    VectorType destTy =
++        cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(getType()));
++    return DenseElementsAttr::get(destTy, splat.getSplatValue<Attribute>());
++  }
+ 
+   // ExtractStridedSliceOp(non-splat ConstantOp) -> ConstantOp.
+   return foldExtractStridedSliceNonSplatConstant(*this, adaptor.getVector());
+@@ -7080,7 +7122,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+     return {};
+ 
+   // SplatElementsAttr::get treats single value for second arg as being a splat.
+-  return SplatElementsAttr::get(getType(), {constOperand});
++  ShapedType destType =
++      cast<ShapedType>(zkir::maybeConvertZkirToBuiltinType(getType()));
++  return SplatElementsAttr::get(destType, {constOperand});
+ }
+ 
+ void SplatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 index f7722951646c..008946b81e69 100644
 --- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
