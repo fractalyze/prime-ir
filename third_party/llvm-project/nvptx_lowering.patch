@@ -1,7 +1,7 @@
-diff --git i/llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp w/llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
+diff --git a/llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp b/llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
 index d817a3c6a877..480e1c676dc1 100644
---- llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
-+++ llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
+--- a/llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
++++ b/llvm/lib/Target/NVPTX/NVPTXISelLowering.cpp
 @@ -308,6 +308,17 @@ static void ComputePTXValueVTs(const TargetLowering &TLI, const DataLayout &DL,
      return;
    }

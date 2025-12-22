@@ -1,8 +1,8 @@
 diff --git a/mlir/include/mlir/ExecutionEngine/MemRefUtils.h b/mlir/include/mlir/ExecutionEngine/MemRefUtils.h
-index 918647d9feac..be12881883ad 100644
---- mlir/include/mlir/ExecutionEngine/MemRefUtils.h
-+++ mlir/include/mlir/ExecutionEngine/MemRefUtils.h
-@@ -150,7 +150,7 @@ public:
+index f355dfb8648e..34e69c95fda7 100644
+--- a/mlir/include/mlir/ExecutionEngine/MemRefUtils.h
++++ b/mlir/include/mlir/ExecutionEngine/MemRefUtils.h
+@@ -151,7 +151,7 @@ public:
        AllocFunType allocFun = &::malloc,
        std::function<void(StridedMemRefType<T, Rank>)> freeFun =
            [](StridedMemRefType<T, Rank> descriptor) {

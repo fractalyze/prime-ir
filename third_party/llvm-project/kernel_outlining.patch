@@ -1,7 +1,7 @@
-diff --git i/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp w/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
-index a64ec8d52daf..9a29005e0591 100644
---- mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
-+++ mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
+diff --git a/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp b/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
+index a64ec8d52daf..85a41e136f74 100644
+--- a/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
++++ b/mlir/lib/Dialect/GPU/Transforms/KernelOutlining.cpp
 @@ -19,6 +19,7 @@
  #include "mlir/Dialect/Func/IR/FuncOps.h"
  #include "mlir/Dialect/GPU/IR/GPUDialect.h"

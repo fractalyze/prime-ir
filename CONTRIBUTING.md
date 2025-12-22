@@ -32,11 +32,10 @@ refresh the patches we carry in this repository.
    are extending an existing patch).
 
 1. Produce an updated patch and copy it back under `third_party/llvm-project/`.
-   Using `--no-prefix` is required so `tools/setup_llvm_clone.sh` can apply the
-   patch without stripping path components:
+   To generate the patch, run this:
 
    ```sh
-   git show HEAD --no-prefix > /path/to/zkir/repo/third_party/llvm-project/<descriptive_name>.patch
+   git show HEAD > /path/to/zkir/repo/third_party/llvm-project/<descriptive_name>.patch
    ```
 
 ### Managing multiple patches
@@ -50,4 +49,4 @@ refresh the patches we carry in this repository.
     `git commit -m "whatever"`.
   - Fold it back into the original commit
     (`git rebase -i <applying-patch-commit>^` and choose `fixup`).
-  - Regenerate the patch: `git show HEAD --no-prefix`.
+  - Regenerate the patch: `git show HEAD`.

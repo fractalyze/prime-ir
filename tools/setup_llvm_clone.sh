@@ -30,10 +30,10 @@ if [[ ! -d "$dest_dir/.git" ]]; then
     git clone https://github.com/llvm/llvm-project.git "$dest_dir"
 fi
 
-llvm_commit=$(awk -F'"' '/LLVM_COMMIT/ {print $2; exit}' "$repo_root/WORKSPACE.bazel")
+llvm_commit=$(awk -F'"' '/LLVM_COMMIT/ {print $2; exit}' "$repo_root/third_party/llvm-project/workspace.bzl")
 
 if [[ -z $llvm_commit ]]; then
-    echo "error: unable to locate LLVM_COMMIT in WORKSPACE.bazel" >&2
+    echo "error: unable to locate LLVM_COMMIT in third_party/llvm-project/workspace.bzl" >&2
     exit 1
 fi
 
@@ -60,11 +60,11 @@ fi
     cd "$dest_dir"
     for patch in "${patches[@]}"; do
         patch_name=$(basename "$patch")
-        if git apply --check -p0 "$patch" >/dev/null 2>&1; then
-            git apply --verbose -p0 "$patch"
-        else
-            git apply --verbose "$patch"
+        if ! git apply --check -p1 "$patch" >/dev/null 2>&1; then
+            echo "error: patch '$patch_name' cannot be applied with -p1." >&2
+            exit 1
         fi
+        git apply --verbose -p1 "$patch"
         if [[ -n $(git status --porcelain) ]]; then
             git add -A
             git commit -m "Apply $patch_name"

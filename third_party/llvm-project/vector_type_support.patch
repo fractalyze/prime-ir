@@ -1,7 +1,7 @@
-diff --git mlir/lib/Dialect/Vector/IR/VectorOps.cpp mlir/lib/Dialect/Vector/IR/VectorOps.cpp
+diff --git a/mlir/lib/Dialect/Vector/IR/VectorOps.cpp b/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 index 1fb8c7a928e0..bce5fd54a14d 100644
---- mlir/lib/Dialect/Vector/IR/VectorOps.cpp
-+++ mlir/lib/Dialect/Vector/IR/VectorOps.cpp
+--- a/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
++++ b/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 @@ -38,6 +38,9 @@
  #include "mlir/Interfaces/ValueBoundsOpInterface.h"
  #include "mlir/Support/LLVM.h"
@@ -173,10 +173,10 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  }
  
  void SplatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
-diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 index f7722951646c..008946b81e69 100644
---- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-+++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+--- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 @@ -4713,6 +4713,9 @@ cc_library(
          ":VectorOpsIncGen",
          ":ViewLikeInterface",

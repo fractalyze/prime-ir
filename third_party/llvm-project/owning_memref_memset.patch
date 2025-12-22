@@ -1,7 +1,7 @@
 diff --git a/mlir/include/mlir/ExecutionEngine/MemRefUtils.h b/mlir/include/mlir/ExecutionEngine/MemRefUtils.h
-index f355dfb8648e..1b2cd162ff5d 100644
---- mlir/include/mlir/ExecutionEngine/MemRefUtils.h
-+++ mlir/include/mlir/ExecutionEngine/MemRefUtils.h
+index 34e69c95fda7..8e0d1e6bae83 100644
+--- a/mlir/include/mlir/ExecutionEngine/MemRefUtils.h
++++ b/mlir/include/mlir/ExecutionEngine/MemRefUtils.h
 @@ -174,9 +174,7 @@ public:
             it != end; ++it)
          init(*it, it.getIndices());

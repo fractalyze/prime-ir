@@ -1,7 +1,7 @@
-diff --git mlir/lib/Dialect/Tensor/IR/TensorOps.cpp mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
+diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 index 22a25fd1a5af..1832036990e4 100644
---- mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
-+++ mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
+--- a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
++++ b/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 @@ -41,6 +41,10 @@
  #include <optional>
  #include <vector>
@@ -49,10 +49,10 @@ index 22a25fd1a5af..1832036990e4 100644
  }
  
  //===----------------------------------------------------------------------===//
-diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 index 4fc82f6c1d27..f7722951646c 100644
---- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-+++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+--- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 @@ -7134,6 +7134,9 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",

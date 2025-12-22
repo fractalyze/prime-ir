@@ -1,7 +1,7 @@
-diff --git mlir/lib/Dialect/Bufferization/IR/BufferizationOps.cpp mlir/lib/Dialect/Bufferization/IR/BufferizationOps.cpp
+diff --git a/mlir/lib/Dialect/Bufferization/IR/BufferizationOps.cpp b/mlir/lib/Dialect/Bufferization/IR/BufferizationOps.cpp
 index 9bd87d66c7d3..0d0b41f51926 100644
---- mlir/lib/Dialect/Bufferization/IR/BufferizationOps.cpp
-+++ mlir/lib/Dialect/Bufferization/IR/BufferizationOps.cpp
+--- a/mlir/lib/Dialect/Bufferization/IR/BufferizationOps.cpp
++++ b/mlir/lib/Dialect/Bufferization/IR/BufferizationOps.cpp
 @@ -835,7 +835,7 @@ struct LoadOfToBuffer : public OpRewritePattern<memref::LoadOp> {
    LogicalResult matchAndRewrite(memref::LoadOp load,
                                  PatternRewriter &rewriter) const override {
@@ -9,5 +9,5 @@ index 9bd87d66c7d3..0d0b41f51926 100644
 -    if (!toBuffer)
 +    if (!toBuffer || !toBuffer.getReadOnly())
        return failure();
-
+ 
      rewriter.replaceOpWithNewOp<tensor::ExtractOp>(load, toBuffer.getTensor(),

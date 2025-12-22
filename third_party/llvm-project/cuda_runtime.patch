@@ -1,17 +1,21 @@
 diff --git a/mlir/lib/Target/LLVM/NVVM/Target.cpp b/mlir/lib/Target/LLVM/NVVM/Target.cpp
 index 565f153b50c4..839e3284e5b4 100644
---- mlir/lib/Target/LLVM/NVVM/Target.cpp
-+++ mlir/lib/Target/LLVM/NVVM/Target.cpp
-@@ -49,3 +49,3 @@ using namespace mlir;
+--- a/mlir/lib/Target/LLVM/NVVM/Target.cpp
++++ b/mlir/lib/Target/LLVM/NVVM/Target.cpp
+@@ -47,7 +47,7 @@ using namespace mlir;
+ using namespace mlir::NVVM;
+ 
  #ifndef __DEFAULT_CUDATOOLKIT_PATH__
 -#define __DEFAULT_CUDATOOLKIT_PATH__ ""
 +#define __DEFAULT_CUDATOOLKIT_PATH__ "/usr/local/cuda"
  #endif
+ 
+ extern "C" const unsigned char _mlir_embedded_libdevice[];
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 05c2fb481980..9a3d4a534569 100644
---- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-+++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -9243,7 +9243,7 @@ cc_library(
+index cc266c2fe3a7..7543739b3a44 100644
+--- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+@@ -9434,8 +9434,8 @@ cc_library(
          ":LLVMSupportHeaders",
          ":mlir_c_runner_utils_hdrs",
          "@cuda//:cuda_headers",
@@ -21,3 +25,4 @@ index 05c2fb481980..9a3d4a534569 100644
 +        "@cuda//:cusparse_so",
      ],
  )
+ 

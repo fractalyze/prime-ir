@@ -1,7 +1,7 @@
-diff --git mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp w/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
+diff --git a/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp b/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
 index ca7f31dd6b51..5b0e32f98e8e 100644
---- mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
-+++ mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
+--- a/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
++++ b/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
 @@ -25,12 +25,18 @@
  #include "llvm/ADT/SmallVector.h"
  #include "llvm/Support/Casting.h"
@@ -14,11 +14,11 @@ index ca7f31dd6b51..5b0e32f98e8e 100644
  #include <algorithm>
  #include <numeric>
  #include <optional>
-
+ 
  using namespace mlir;
  using namespace mlir::linalg;
 +using namespace mlir::zkir;
-
+ 
  /// Include the definitions of the copy operation interface.
  #include "mlir/Dialect/Linalg/IR/LinalgInterfaces.cpp.inc"
 @@ -525,6 +531,9 @@ mlir::linalg::detail::isContractionInterfaceImpl(
@@ -31,10 +31,10 @@ index ca7f31dd6b51..5b0e32f98e8e 100644
          arith::MulFOp, arith::AddFOp,
          arith::MulIOp, arith::AddIOp,
          complex::MulOp, complex::AddOp,
-diff --git mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp w/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
-index 8075df730ccc..0da75c4c81cc 100644
---- mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
-+++ mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
+diff --git a/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp b/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
+index 8075df730ccc..5989b699fcfa 100644
+--- a/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
++++ b/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
 @@ -51,6 +51,14 @@
  #include "llvm/Support/LogicalResult.h"
  #include "llvm/Support/MathExtras.h"
@@ -49,11 +49,11 @@ index 8075df730ccc..0da75c4c81cc 100644
 +
  #include <cassert>
  #include <optional>
-
+ 
 @@ -439,8 +447,16 @@ static void printNamedStructuredOp(OpAsmPrinter &p, Operation *op,
-
+ 
  namespace {
-
+ 
 +using namespace ::mlir::zkir;
  class RegionBuilderHelper {
  public:
@@ -66,7 +66,7 @@ index 8075df730ccc..0da75c4c81cc 100644
 +
    RegionBuilderHelper(OpBuilder &builder, Block &block)
        : builder(builder), block(block) {}
-
+ 
 @@ -506,11 +522,20 @@ public:
      bool allInteger = isInteger(arg0) && isInteger(arg1);
      bool allBool = allInteger && arg0.getType().getIntOrFloatBitWidth() == 1 &&
@@ -271,13 +271,13 @@ index 8075df730ccc..0da75c4c81cc 100644
 +           llvm::isa<JacobianType>(value.getType()) ||
 +           llvm::isa<XYZZType>(value.getType());
 +  }
-
+ 
    OpBuilder &builder;
    Block &block;
-diff --git utils/bazel/llvm-project-overlay/mlir/BUILD.bazel w/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index cc266c2fe3a7..13b7e256ea64 100644
---- utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-+++ utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+index 7543739b3a44..4fc82f6c1d27 100644
+--- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 @@ -10544,6 +10544,9 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
@@ -287,4 +287,4 @@ index cc266c2fe3a7..13b7e256ea64 100644
 +        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
      ],
  )
-
+ 
