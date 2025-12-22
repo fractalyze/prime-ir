@@ -1,0 +1,164 @@
+<type>(<scope>)[!]: <summary>
+# ──────────────────────────────── 80 chars ───────────────────────────────────┤
+
+<Describe the motivation behind this change - explain WHY you are making this
+change. Wrap all lines at 80 characters.>
+
+See #<reference>
+
+Resolves: #<issue number>
+Related: #<issue number>
+
+# ──────────────────────────────── 80 chars ───────────────────────────────────┤
+
+
+# Example Commit Messages
+# =======================
+
+
+# ─── Example: Simple refactor ────────────────────────────────────────────────┤
+# refactor(field): rename `field.f{2,3,4}.constant` to `create`
+#
+# Renames `field.f{2,3,4}.constant` to `create` to align with the conventions
+# of the MLIR `complex` dialect.
+#
+# Just as `complex.constant` accepts attributes and `complex.create` accepts
+# values, this commit renames the operations that construct extension fields
+# from values to `create`.
+#
+# See:
+# - https://mlir.llvm.org/docs/Dialects/ComplexOps/#complexconstant-complexconstantop
+# - https://mlir.llvm.org/docs/Dialects/ComplexOps/#complexcreate-complexcreateop
+# ─────────────────────────────────────────────────────────────────────────────┤
+
+
+# ─── Example: Simple docs change ─────────────────────────────────────────────┤
+# docs: update commit message format
+# ─────────────────────────────────────────────────────────────────────────────┤
+
+
+# ─── Example: A bug fix ──────────────────────────────────────────────────────┤
+# fix(mod_arith): fix constant folding bug for tensor constants; add tests
+#
+# The constant folding code for `AddOp`, `SubOp`, `MulOp`, and `MontMulOp` in
+# the `mod_arith` dialect was not executing for tensor constants because the
+# earlier matchPattern logic prevented tensor cases from being handled.
+#
+# This commit fixes the folding logic to support tensor constants and adds
+# the missing unit test cases for tensor constant folding.
+# ─────────────────────────────────────────────────────────────────────────────┤
+
+# ─── Example: A feature ──────────────────────────────────────────────────────┤
+# feat(field): support zk_dtypes Karatsuba operation
+#
+# Add GetSquareAlgorithm() and CreateZeroBaseField() methods to
+# ExtensionFieldCodeGen. Also add operator+=, operator-=, and
+# operator*= to PrimeFieldCodeGen.
+# ─────────────────────────────────────────────────────────────────────────────┤
+
+# Commit Message Format
+# =====================
+#
+# We have very precise rules over how our Git commit messages must be formatted.
+# This format leads to easier to read commit history and makes it analyzable
+# for changelog generation.
+#
+# Each commit message consists of a header, a body, and a footer.
+#
+# <header>
+# <BLANK LINE>
+# <body>
+# <BLANK LINE>
+# <footer>
+#
+# The header is mandatory.
+#
+# The body is mandatory for all commits except for those of type “docs”.
+# When the body is present it must be at least 20 characters long.
+#
+# The footer is optional.
+#
+# Any line of the commit message cannot be longer than 80 characters.
+#
+# Commit Message Header
+# ---------------------
+#
+# ```
+# <type>(<scope>)[!]: <short summary>
+#   │       │     │             │
+#   │       │     │             └─⫸ Summary in present tense. Not capitalized.
+#   │       │     │                  No period at the end.
+#   │       │     │
+#   │       │     └─⫸ Optional "!" after scope indicates a BREAKING CHANGE
+#   │       │
+#   │       └─⫸ Commit Scope: arith_ext|benchmark|field|elliptic_curve|mod_arith|
+#   │                         poly|tensor_ext|tools
+#   │
+#   └─⫸ Commit Type: build|chore|ci|docs|feat|fix|perf|refactor|style|test
+# ```
+#
+# Commit Message Body
+# -------------------
+#
+# Just as in the summary, use the imperative, present tense: “fix” not “fixed”
+# nor “fixes”.
+#
+# Explain the motivation for the change in the commit message body. This commit
+# message should explain why you are making the change. You can include a
+# comparison of the previous behavior with the new behavior in order to
+# illustrate the impact of the change.
+#
+# Commit Message Footer
+# ---------------------
+#
+# The footer can contain information about breaking changes and deprecations and
+# is also the place to reference GitHub issues and other PRs that this commit
+# closes or is related to.
+#
+# ```
+# BREAKING CHANGE: <breaking change summary>
+# <BLANK LINE>
+# <breaking change description + migration instructions>
+# <BLANK LINE>
+# <BLANK LINE>
+# Fixes #<issue number>
+# ```
+#
+# or
+#
+# ```
+# DEPRECATED: <what is deprecated>
+# <BLANK LINE>
+# <deprecation description + recommended update path>
+# <BLANK LINE>
+# <BLANK LINE>
+# Closes #<pr number>
+# ```
+#
+# A Breaking Change section should start with the phrase `BREAKING CHANGE: `
+# followed by a _brief_ summary of the breaking change, a blank line, and a
+# detailed description of the breaking change that also includes migration
+# instructions.
+#
+# Similarly, a Deprecation section should start with `DEPRECATED: ` followed by
+# a short description of what is deprecated, a blank line, and a detailed
+# description of the deprecation that also mentions the recommended update path.
+#
+# Revert commits
+# --------------
+# If the commit reverts a previous commit, it should begin with `revert: `,
+# followed by the header of the reverted commit.
+#
+# The content of the commit message body should contain:
+#
+# - information about the SHA of the commit being reverted in the following
+#   format: `This reverts commit <SHA>`,
+# - a clear description of the reason for reverting the commit message.
+#
+# Example:
+#
+# ```
+# revert: feat(xyz): add xyz
+#
+# This reverts commit 1234567.
+# ```
