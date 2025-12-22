@@ -1,0 +1,52 @@
+INFO: Invocation ID: 790cd95b-1087-40ad-bd91-e630a79ac84b
+Computing main repo mapping: 
+Loading: 
+Loading: 0 packages loaded
+Analyzing: target //tools:zkir-opt (0 packages loaded, 0 targets configured)
+Analyzing: target //tools:zkir-opt (0 packages loaded, 0 targets configured)
+
+INFO: Analyzed target //tools:zkir-opt (0 packages loaded, 0 targets configured).
+[717 / 1,020] Compiling zkir/Dialect/ModArith/IR/ModArithOps.cpp [for tool]; 1s disk-cache, local ... (2 actions, 1 running)
+[1,017 / 1,019] Linking tools/zkir-opt; 0s disk-cache, local
+[1,017 / 1,019] Linking tools/zkir-opt; 7s disk-cache, local
+[1,017 / 1,019] Linking tools/zkir-opt; 8s disk-cache, local
+INFO: Found 1 target...
+Target //tools:zkir-opt up-to-date:
+  bazel-bin/tools/zkir-opt
+INFO: Elapsed time: 11.603s, Critical Path: 10.72s
+INFO: 7 processes: 1 internal, 6 local.
+INFO: Build completed successfully, 7 total actions
+INFO: Running command line: bazel-bin/tools/zkir-opt -canonicalize -mlir-print-ir-after-all -mlir-print-ir-before-all /Volumes/ExtSSD/Workspace/a41/zkir/a.mlir
+// -----// IR Dump Before Canonicalizer (canonicalize) //----- //
+!z37_i32 = !mod_arith.int<37 : i32>
+module {
+  func.func @main() -> i32 {
+    %c1 = arith.constant 1 : index
+    %0 = mod_arith.constant #mod_arith.dense<[2, 6]> : tensor<2x!z37_i32>
+    %1 = mod_arith.bitcast %0 : tensor<2x!z37_i32> -> tensor<2xi32>
+    %extracted = tensor.extract %1[%c1] : tensor<2xi32>
+    return %extracted : i32
+  }
+}
+
+
+denseElementsAttr: #mod_arith.dense<[2, 6]> : tensor<2x!mod_arith.int<37 : i32>>
+ModArithDialect::materializeConstant: dense<[2, 6]> : tensor<2xi32>
+ConstantOp::materialize: 6 : i32
+i32
+// -----// IR Dump After Canonicalizer (canonicalize) //----- //
+module {
+  func.func @main() -> i32 {
+    %c6_i32 = arith.constant 6 : i32
+    return %c6_i32 : i32
+  }
+}
+
+
+module {
+  func.func @main() -> i32 {
+    %c6_i32 = arith.constant 6 : i32
+    return %c6_i32 : i32
+  }
+}
+
