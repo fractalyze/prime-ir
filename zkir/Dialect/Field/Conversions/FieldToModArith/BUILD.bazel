@@ -36,11 +36,17 @@ cc_library(
 
 cc_library(
     name = "ExtensionFieldCodeGen",
-    hdrs = ["ExtensionFieldCodeGen.h"],
+    hdrs = [
+        "ExtensionFieldCodeGen.h",
+        "FrobeniusCoeffs.h",
+        "VandermondeMatrix.h",
+    ],
     deps = [
         ":ConversionUtils",
         ":PrimeFieldCodeGen",
         "//zkir/Dialect/Field/IR:Field",
+        "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Utils:APIntUtils",
         "@llvm-project//mlir:IR",
         "@zk_dtypes//zk_dtypes:extension_field_operations",
     ],

@@ -18,9 +18,11 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s --check-prefix=CHECK_QUARTIC < %t
 
-// p = 13, ξ = 2 (non-4th-power in F₁₃)
-!PF = !field.pf<13:i32>
-!PFm = !field.pf<13:i32, true>
+// p = 149 ≡ 5 mod 8, ξ = 2 (non-4th-power in F₁₄₉)
+// Modulus must be > 120 for Toom-Cook Vandermonde matrix coefficients.
+// p ≡ 5 mod 8 ensures proper Frobenius-based inverse computation.
+!PF = !field.pf<149:i32>
+!PFm = !field.pf<149:i32, true>
 !QF = !field.f4<!PF, 2:i32>
 !QFm = !field.f4<!PFm, 2:i32>
 
@@ -31,7 +33,7 @@ func.func @test_quartic_ext_field() {
   %a = field.constant [1, 2, 3, 4] : !QF
   %b = field.constant [2, 3, 1, 2] : !QF
 
-  // Test 1: Addition - a + b = (3, 5, 4, 6) in F₁₃
+  // Test 1: Addition - a + b = (3, 5, 4, 6) in F₁₄₉
   %add_result = field.add %a, %b : !QF
   %add0, %add1, %add2, %add3 = field.ext_to_coeffs %add_result : (!QF) -> (!PF, !PF, !PF, !PF)
   %add0_i32 = field.bitcast %add0 : !PF -> i32
@@ -43,7 +45,7 @@ func.func @test_quartic_ext_field() {
   %add_unranked = memref.cast %add_memref : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%add_unranked) : (memref<*xi32>) -> ()
 
-  // Test 2: Subtraction - a - b = (-1, -1, 2, 2) = (12, 12, 2, 2) in F₁₃
+  // Test 2: Subtraction - a - b = (-1, -1, 2, 2) = (148, 148, 2, 2) in F₁₄₉
   %sub_result = field.sub %a, %b : !QF
   %sub0, %sub1, %sub2, %sub3 = field.ext_to_coeffs %sub_result : (!QF) -> (!PF, !PF, !PF, !PF)
   %sub0_i32 = field.bitcast %sub0 : !PF -> i32
@@ -107,35 +109,35 @@ func.func @test_quartic_ext_field() {
   return
 }
 
-// a + b = (1+2, 2+3, 3+1, 4+2) = (3, 5, 4, 6) mod 13
+// a + b = (1+2, 2+3, 3+1, 4+2) = (3, 5, 4, 6) mod 149
 // CHECK_QUARTIC: [3, 5, 4, 6]
 
-// a - b = (1-2, 2-3, 3-1, 4-2) = (-1, -1, 2, 2) = (12, 12, 2, 2) mod 13
-// CHECK_QUARTIC: [12, 12, 2, 2]
+// a - b = (1-2, 2-3, 3-1, 4-2) = (-1, -1, 2, 2) = (148, 148, 2, 2) mod 149
+// CHECK_QUARTIC: [148, 148, 2, 2]
 
-// a * b: Using v⁴ = ξ = 2, p = 13
+// a * b: Using v⁴ = ξ = 2, p = 149
 // a = 1 + 2v + 3v² + 4v³
 // b = 2 + 3v + v² + 2v³
 // Schoolbook multiplication:
 // c₀ = a₀b₀ + ξ(a₁b₃ + a₂b₂ + a₃b₁)
-//    = 1·2 + 2(2·2 + 3·1 + 4·3) = 2 + 2·19 = 40 = 1 mod 13
+//    = 1·2 + 2(2·2 + 3·1 + 4·3) = 2 + 2·19 = 40 mod 149
 // c₁ = a₀b₁ + a₁b₀ + ξ(a₂b₃ + a₃b₂)
-//    = 1·3 + 2·2 + 2(3·2 + 4·1) = 7 + 20 = 27 = 1 mod 13
+//    = 1·3 + 2·2 + 2(3·2 + 4·1) = 7 + 20 = 27 mod 149
 // c₂ = a₀b₂ + a₁b₁ + a₂b₀ + ξ(a₃b₃)
-//    = 1·1 + 2·3 + 3·2 + 2(4·2) = 13 + 16 = 29 = 3 mod 13
+//    = 1·1 + 2·3 + 3·2 + 2(4·2) = 13 + 16 = 29 mod 149
 // c₃ = a₀b₃ + a₁b₂ + a₂b₁ + a₃b₀
-//    = 1·2 + 2·1 + 3·3 + 4·2 = 21 = 8 mod 13
-// CHECK_QUARTIC: [1, 1, 3, 8]
+//    = 1·2 + 2·1 + 3·3 + 4·2 = 21 mod 149
+// CHECK_QUARTIC: [40, 27, 29, 21]
 
-// a² = (1 + 2v + 3v² + 4v³)²: Using v⁴ = ξ = 2, p = 13
-// c₀ = a₀² + ξ(2a₁a₃ + a₂²) = 1 + 2(16 + 9) = 51 = 12 mod 13
-// c₁ = 2a₀a₁ + ξ(2a₂a₃) = 4 + 48 = 52 = 0 mod 13
-// c₂ = 2a₀a₂ + a₁² + ξ(a₃²) = 6 + 4 + 32 = 42 = 3 mod 13
-// c₃ = 2a₀a₃ + 2a₁a₂ = 8 + 12 = 20 = 7 mod 13
-// CHECK_QUARTIC: [12, 0, 3, 7]
+// a² = (1 + 2v + 3v² + 4v³)²: Using v⁴ = ξ = 2, p = 149
+// c₀ = a₀² + ξ(2a₁a₃ + a₂²) = 1 + 2(16 + 9) = 51 mod 149
+// c₁ = 2a₀a₁ + ξ(2a₂a₃) = 4 + 48 = 52 mod 149
+// c₂ = 2a₀a₂ + a₁² + ξ(a₃²) = 6 + 4 + 32 = 42 mod 149
+// c₃ = 2a₀a₃ + 2a₁a₂ = 8 + 12 = 20 mod 149
+// CHECK_QUARTIC: [51, 52, 42, 20]
 
 // Test 5: a⁻¹ (inverse of a = (1, 2, 3, 4) in Fp4)
-// CHECK_QUARTIC: [9, 1, 8, 10]
+// CHECK_QUARTIC: [114, 85, 92, 148]
 
 // Test 6: Montgomery form round-trip should return original: (1, 2, 3, 4)
 // CHECK_QUARTIC: [1, 2, 3, 4]

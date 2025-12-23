@@ -15,8 +15,10 @@
 
 // RUN: zkir-opt -field-to-mod-arith %s | FileCheck %s
 
-!PF = !field.pf<7:i32>
-!PFm = !field.pf<7:i32, true>
+// Modulus must be > 120 because Toom-Cook uses Vandermonde matrix coefficients.
+// TODO(junbeomlee): Select multiplication algorithm based on modulus value.
+!PF = !field.pf<127:i32>
+!PFm = !field.pf<127:i32, true>
 !QF = !field.f4<!PF, 2:i32>
 !QFm = !field.f4<!PFm, 2:i32>
 
@@ -66,31 +68,51 @@ func.func @test_lower_square(%arg0: !QF) -> !QF {
 
 // CHECK-LABEL: @test_lower_inverse
 func.func @test_lower_inverse(%arg0: !QF) -> !QF {
-    // Frobenius-based inverse using Algorithm 11.3.4 from
-    // "Handbook of Elliptic and Hyperelliptic Curve Cryptography"
-    // x⁻¹ = xʳ⁻¹ * (xʳ)⁻¹ where r = p³ + p² + p + 1
-    // xʳ⁻¹ = φ(x) * φ²(x) * φ³(x)
+    // TODO(junbeomlee): After canonicalization, the norm computation should be
+    // optimized from Toom-Cook (7 muls) to direct formula (5 muls):
+    //   Norm = x₀ * t₀ + ξ * (x₁ * t₃ + x₂ * t₂ + x₃ * t₁)
+    // where t = φ¹(x) * φ²(x) * φ³(x).
+    // This reduces total from 34 muls to 32 muls.
+    //
+    // Frobenius-based inverse: x⁻¹ = Frobenius_product(x) * Norm(x)⁻¹
+    // Frobenius_product = φ¹(x) * φ²(x) * φ³(x)
+    //
+    // Frobenius φ¹(x): coeffs scaled by ξ^(i * (p - 1) / 4)
     // CHECK: field.ext_to_coeffs
-    // 3 Frobenius maps (φ, φ², φ³), each with 4 muls
-    // CHECK-COUNT-4: mod_arith.mul
+    // CHECK-COUNT-3: mod_arith.mul
     // CHECK: field.ext_from_coeffs
+    //
+    // Frobenius φ²(x): coeffs scaled by ξ^(i * (p² - 1) / 4)
     // CHECK: field.ext_to_coeffs
-    // CHECK-COUNT-4: mod_arith.mul
+    // CHECK-COUNT-3: mod_arith.mul
     // CHECK: field.ext_from_coeffs
+    //
+    // Frobenius φ³(x): coeffs scaled by ξ^(i * (p³ - 1) / 4)
     // CHECK: field.ext_to_coeffs
-    // CHECK-COUNT-4: mod_arith.mul
+    // CHECK-COUNT-3: mod_arith.mul
     // CHECK: field.ext_from_coeffs
-    // 2 Toom-Cook multiplications for xʳ⁻¹ = φ(x) * φ²(x) * φ³(x)
+    //
+    // Toom-Cook mul: φ²(x) * φ³(x)
     // CHECK-COUNT-2: field.ext_to_coeffs
     // CHECK-COUNT-7: mod_arith.mul
     // CHECK: field.ext_from_coeffs
+    //
+    // Toom-Cook mul: result * φ¹(x)
     // CHECK-COUNT-2: field.ext_to_coeffs
     // CHECK-COUNT-7: mod_arith.mul
     // CHECK: field.ext_from_coeffs
-    // Norm computation and final scaling
+    //
+    // Toom-Cook mul: x * frob_product (for norm)
     // CHECK-COUNT-2: field.ext_to_coeffs
-    // CHECK-COUNT-5: mod_arith.mul
+    // CHECK-COUNT-7: mod_arith.mul
+    // CHECK: field.ext_from_coeffs
+    //
+    // Extract norm (constant term) and inverse
+    // CHECK: field.ext_to_coeffs
     // CHECK: mod_arith.inverse
+    //
+    // Final scaling: frob_product * norm⁻¹
+    // CHECK: field.ext_to_coeffs
     // CHECK-COUNT-4: mod_arith.mul
     // CHECK: field.ext_from_coeffs
     %inv = field.inverse %arg0 : !QF

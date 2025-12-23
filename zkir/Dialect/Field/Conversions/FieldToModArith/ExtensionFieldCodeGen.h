@@ -18,24 +18,83 @@ limitations under the License.
 
 #include <cstddef>
 
-#include "llvm/ADT/APInt.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
+#include "zk_dtypes/include/field/cubic_extension_field_operation.h"
 #include "zk_dtypes/include/field/quadratic_extension_field_operation.h"
+#include "zk_dtypes/include/field/quartic_extension_field_operation.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/FrobeniusCoeffs.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/PrimeFieldCodeGen.h"
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/VandermondeMatrix.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
-#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
 namespace mlir::zkir::field {
 
+// Forward declaration
+template <size_t N>
+class ExtensionFieldCodeGen;
+
+} // namespace mlir::zkir::field
+
+namespace zk_dtypes {
+
+template <size_t N>
+class ExtensionFieldOperationTraits<
+    mlir::zkir::field::ExtensionFieldCodeGen<N>> {
+public:
+  // TODO(chokobole): Support towers of extension field.
+  using BaseField = mlir::zkir::field::PrimeFieldCodeGen;
+  static constexpr size_t kDegree = N;
+};
+
+} // namespace zk_dtypes
+
+namespace mlir::zkir::field {
+
+// Selects the appropriate extension field operation based on degree.
+template <size_t N>
+struct ExtensionFieldOperationSelector;
+
+template <>
+struct ExtensionFieldOperationSelector<2> {
+  template <typename Derived>
+  using Type = zk_dtypes::QuadraticExtensionFieldOperation<Derived>;
+};
+
+template <>
+struct ExtensionFieldOperationSelector<3> {
+  template <typename Derived>
+  using Type = zk_dtypes::CubicExtensionFieldOperation<Derived>;
+};
+
+template <>
+struct ExtensionFieldOperationSelector<4> {
+  template <typename Derived>
+  using Type = zk_dtypes::QuarticExtensionFieldOperation<Derived>;
+};
+
 template <size_t N>
 class ExtensionFieldCodeGen
-    : public zk_dtypes::QuadraticExtensionFieldOperation<
-          ExtensionFieldCodeGen<N>> {
+    : public ExtensionFieldOperationSelector<N>::template Type<
+          ExtensionFieldCodeGen<N>>,
+      public VandermondeMatrix<ExtensionFieldCodeGen<N>>,
+      public FrobeniusCoeffs<ExtensionFieldCodeGen<N>, N> {
+  using Base = typename ExtensionFieldOperationSelector<N>::template Type<
+      ExtensionFieldCodeGen<N>>;
+
 public:
+  // Bring base class operator* into scope. Without this, the derived class's
+  // operator*(const PrimeFieldCodeGen&) hides all operator* overloads from
+  // Base.
+  using Base::operator*;
+  // TODO(junbeomlee): Remove these using declarations after refactoring
+  // zk_dtypes to not define these methods in QuarticExtensionFieldOperation.
+  using VandermondeMatrix<
+      ExtensionFieldCodeGen<N>>::GetVandermondeInverseMatrix;
+  using FrobeniusCoeffs<ExtensionFieldCodeGen<N>, N>::GetFrobeniusCoeffs;
+
   ExtensionFieldCodeGen(ImplicitLocOpBuilder *b, Type type, Value value,
                         Value nonResidue)
       : b(b), type(type), value(value), nonResidue(nonResidue) {}
@@ -43,7 +102,22 @@ public:
 
   operator Value() const { return value; }
 
-  // zk_dtypes::QuadraticExtensionFieldOperation methods
+  // Accessors for mixin classes
+  ImplicitLocOpBuilder &getBuilder() const {
+    assert(b);
+    return *b;
+  }
+  Type getType() const { return type; }
+
+  ExtensionFieldCodeGen operator*(const PrimeFieldCodeGen &scalar) const {
+    std::array<PrimeFieldCodeGen, N> coeffs = ToBaseField();
+    for (size_t i = 0; i < N; ++i) {
+      coeffs[i] = coeffs[i] * scalar;
+    }
+    return FromBaseFields(coeffs);
+  }
+
+  // zk_dtypes ExtensionFieldOperation methods
   std::array<PrimeFieldCodeGen, N> ToBaseField() const {
     Operation::result_range coeffs = toCoeffs(*b, value);
     std::array<PrimeFieldCodeGen, N> ret;
@@ -67,18 +141,26 @@ public:
   PrimeFieldCodeGen NonResidue() const {
     return PrimeFieldCodeGen(b, nonResidue);
   }
+  zk_dtypes::ExtensionFieldMulAlgorithm GetMulAlgorithm() const {
+    if constexpr (N == 4) {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+    } else {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    }
+  }
+  // TODO(junbeomlee): Consider using kCustom algorithm based on limb count
+  // and non-residue value, which can be obtained from the type.
   zk_dtypes::ExtensionFieldMulAlgorithm GetSquareAlgorithm() const {
-    return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    if constexpr (N == 4) {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+    } else {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    }
   }
   PrimeFieldCodeGen CreateZeroBaseField() const {
     auto extField = cast<ExtensionFieldTypeInterface>(type);
     auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
-    unsigned bitWidth = baseField.getStorageType().getWidth();
-    APInt zeroVal(bitWidth, 0);
-    auto convertedType = convertPrimeFieldType(baseField);
-    Value zero = b->create<mod_arith::ConstantOp>(
-        convertedType, IntegerAttr::get(baseField.getStorageType(), zeroVal));
-    return PrimeFieldCodeGen(b, zero);
+    return PrimeFieldCodeGen(b, createConst(*b, baseField, 0));
   }
 
 private:
@@ -89,21 +171,6 @@ private:
 };
 
 } // namespace mlir::zkir::field
-
-namespace zk_dtypes {
-
-template <size_t N>
-class ExtensionFieldOperationTraits<
-    mlir::zkir::field::ExtensionFieldCodeGen<N>> {
-public:
-  // TODO(chokobole): Support towers of extension field.
-  using BaseField = mlir::zkir::field::PrimeFieldCodeGen;
-  static constexpr size_t kDegree = N;
-
-  constexpr static bool kHasHint = false;
-};
-
-} // namespace zk_dtypes
 
 // NOLINTNEXTLINE(whitespace/line_length)
 #endif // ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_EXTENSIONFIELDCODEGEN_H_

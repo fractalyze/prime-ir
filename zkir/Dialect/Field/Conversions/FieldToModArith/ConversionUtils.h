@@ -31,12 +31,15 @@ Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
 Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs);
 
 // Create a mod_arith constant with value n.
-Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                  const TypeConverter *converter, uint64_t n);
+Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField, int64_t n);
 
 // Create a mod_arith constant with the multiplicative inverse of n.
 Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                     const TypeConverter *converter, uint64_t n);
+                     int64_t n);
+
+// Create a mod_arith constant with value numerator / denominator.
+Value createRationalConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                          int64_t numerator, int64_t denominator);
 
 } // namespace mlir::zkir::field
 

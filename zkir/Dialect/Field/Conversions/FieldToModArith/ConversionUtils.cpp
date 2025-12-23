@@ -17,8 +17,8 @@ limitations under the License.
 
 #include "mlir/Support/LLVM.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
-#include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::field {
 namespace {
@@ -45,24 +45,78 @@ Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs) {
 }
 
 Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                  const TypeConverter *converter, uint64_t n) {
-  unsigned bitWidth = baseField.getModulus().getValue().getBitWidth();
-  auto convertedType = converter->convertType(baseField);
-  llvm::APInt nVal(bitWidth, n);
+                  int64_t n) {
+  APInt modulus = baseField.getModulus().getValue();
+  unsigned bitWidth = baseField.getStorageBitWidth();
+  auto convertedType = convertPrimeFieldType(baseField);
+
+  assert(n > -modulus.getSExtValue() && n < modulus.getSExtValue() &&
+         "n must be in range (-P, P)");
+
+  APInt nVal;
+  if (n < 0) {
+    nVal = modulus - APInt(bitWidth, -n);
+  } else {
+    nVal = APInt(bitWidth, n);
+  }
+
   return b.create<mod_arith::ConstantOp>(
       convertedType, IntegerAttr::get(baseField.getStorageType(), nVal));
 }
 
 Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                     const TypeConverter *converter, uint64_t n) {
-  llvm::APInt modulus = baseField.getModulus().getValue();
-  unsigned bitWidth = modulus.getBitWidth();
-  auto convertedType = converter->convertType(baseField);
-  // Reduce n modulo modulus first, since multiplicativeInverse requires x < m.
-  llvm::APInt nReduced = llvm::APInt(bitWidth, n).urem(modulus);
-  llvm::APInt inv = multiplicativeInverse(nReduced, modulus);
+                     int64_t n) {
+  APInt modulus = baseField.getModulus().getValue();
+  unsigned bitWidth = baseField.getStorageBitWidth();
+  auto convertedType = convertPrimeFieldType(baseField);
+
+  assert(n > -modulus.getSExtValue() && n < modulus.getSExtValue() &&
+         "n must be in range (-P, P)");
+
+  APInt nVal;
+  if (n < 0) {
+    nVal = modulus - APInt(bitWidth, -n);
+  } else {
+    nVal = APInt(bitWidth, n);
+  }
+
+  APInt inv = mod_arith::ModArithOperation(nVal, convertedType).Inverse();
   return b.create<mod_arith::ConstantOp>(
       convertedType, IntegerAttr::get(baseField.getStorageType(), inv));
+}
+
+Value createRationalConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                          int64_t num, int64_t denom) {
+  APInt modulus = baseField.getModulus().getValue();
+  unsigned bitWidth = baseField.getStorageType().getWidth();
+  auto convertedType = convertPrimeFieldType(baseField);
+
+  assert(num > -modulus.getSExtValue() && num < modulus.getSExtValue() &&
+         "num must be in range (-P, P)");
+  assert(denom > -modulus.getSExtValue() && denom < modulus.getSExtValue() &&
+         "denom must be in range (-P, P)");
+
+  APInt numVal;
+  if (num < 0) {
+    numVal = modulus - APInt(bitWidth, -num);
+  } else {
+    numVal = APInt(bitWidth, num);
+  }
+
+  APInt denomVal;
+  if (denom < 0) {
+    denomVal = modulus - APInt(bitWidth, -denom);
+  } else {
+    denomVal = APInt(bitWidth, denom);
+  }
+
+  // Compute num * denom⁻¹ mod modulus
+  mod_arith::ModArithOperation numOp(numVal, convertedType);
+  mod_arith::ModArithOperation denomOp(denomVal, convertedType);
+  APInt result = numOp / denomOp;
+
+  return b.create<mod_arith::ConstantOp>(
+      convertedType, IntegerAttr::get(baseField.getStorageType(), result));
 }
 
 } // namespace mlir::zkir::field

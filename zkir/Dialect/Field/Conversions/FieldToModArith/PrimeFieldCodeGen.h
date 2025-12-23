@@ -31,6 +31,9 @@ public:
 
   operator Value() const { return value; }
 
+  // TODO(junbeomlee): Remove this and use DegreeOverBasePrimeField() instead.
+  static constexpr size_t ExtensionDegree() { return 1; }
+
   PrimeFieldCodeGen operator+(const PrimeFieldCodeGen &other) const;
   PrimeFieldCodeGen &operator+=(const PrimeFieldCodeGen &other);
   PrimeFieldCodeGen operator-(const PrimeFieldCodeGen &other) const;
