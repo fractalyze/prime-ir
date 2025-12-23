@@ -77,33 +77,33 @@ The following are project-specific deviations and clarifications from the
 
 - Prefer **`std::string_view`** instead of `absl::string_view`.
 
-### Field Type Bit Width
+### Field/ModArith Type Accessors
 
-Use different bit width sources depending on the purpose:
+When working with `ModArithType` or `PrimeFieldType`:
 
-- **Storage** (creating values, IntegerType, IntegerAttr): Use
-  `getStorageBitWidth()`.
+| Purpose              | Method                                  |
+| -------------------- | --------------------------------------- |
+| Storage type         | `getStorageType()`                      |
+| Storage bit width    | `getStorageBitWidth()`                  |
+| Arithmetic bit width | `getModulus().getValue().getBitWidth()` |
 
-  ```c++
-  // Creating a constant for storage
-  unsigned bitWidth = baseField.getStorageBitWidth();
-  APInt nVal(bitWidth, n);
-  IntegerAttr::get(baseField.getStorageType(), nVal);
-  ```
+**Do NOT use `getModulus().getType()`** for storage type. For binary fields
+GF(2ⁿ), the modulus 2ⁿ requires n+1 bits but storage only needs n bits.
+`getStorageType()` handles this automatically.
 
-- **Arithmetic** (operations involving modulus like urem,
-  multiplicativeInverse): Use `getModulus().getValue().getBitWidth()`.
+```c++
+// ✅ Storage: use getStorageType() / getStorageBitWidth()
+unsigned bitWidth = fieldType.getStorageBitWidth();
+APInt nVal(bitWidth, n);
+IntegerAttr::get(fieldType.getStorageType(), nVal);
 
-  ```c++
-  // Arithmetic with modulus
-  APInt modulus = baseField.getModulus().getValue();
-  unsigned bitWidth = modulus.getBitWidth();
-  APInt result = n.urem(modulus);
-  ```
+// ✅ Arithmetic: use getModulus().getValue().getBitWidth()
+APInt modulus = fieldType.getModulus().getValue();
+APInt result = n.urem(modulus);
 
-This distinction is important for future binary field support, where modulus bit
-width is 1 bit larger than storage bit width (e.g., GF(2ⁿ) has modulus 2ⁿ which
-requires n+1 bits, but elements only need n bits for storage).
+// ❌ Bad: using getModulus().getType() for storage
+IntegerAttr::get(fieldType.getModulus().getType(), value);  // Wrong!
+```
 
 ### Header Inclusion
 
