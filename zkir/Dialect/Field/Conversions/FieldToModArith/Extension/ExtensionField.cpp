@@ -18,9 +18,7 @@ limitations under the License.
 #include "llvm/Support/ErrorHandling.h"
 #include "mlir/Support/LLVM.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
-#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/CubicExtensionField.h"
-#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/QuadraticExtensionField.h"
-#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/QuarticExtensionField.h"
+#include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/ExtensionFieldImpl.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
@@ -99,5 +97,9 @@ Value ExtensionField::negate(Value x) {
 Value ExtensionField::frobeniusMap(Value x, const APInt &exponent) {
   llvm_unreachable("frobeniusMap not implemented for this extension field");
 }
+
+template class ExtensionFieldImpl<2>;
+template class ExtensionFieldImpl<3>;
+template class ExtensionFieldImpl<4>;
 
 } // namespace mlir::zkir::field

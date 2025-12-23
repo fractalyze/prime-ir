@@ -22,13 +22,8 @@ package(
 cc_library(
     name = "ExtensionField",
     srcs = [
-        "CubicExtensionField.cpp",
-        "CubicExtensionField.h",
         "ExtensionField.cpp",
-        "QuadraticExtensionField.cpp",
-        "QuadraticExtensionField.h",
-        "QuarticExtensionField.cpp",
-        "QuarticExtensionField.h",
+        "ExtensionFieldImpl.h",
     ],
     hdrs = ["ExtensionField.h"],
     deps = [
