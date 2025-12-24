@@ -34,10 +34,10 @@ void registerKnownModulusAliases(DenseMap<APInt, std::string> &map,
   }
 
   APInt modulus;
-  modulus = convertToAPInt(T::Config::kModulus, T::Config::kModulusBits);
+  modulus = convertToAPInt(T::Config::kModulus, T::Config::kStorageBits);
   map[modulus] = name;
-  if constexpr (!isPowerOfTwo(T::Config::kModulusBits)) {
-    map[modulus.zext(llvm::bit_ceil(T::Config::kModulusBits))] = name;
+  if constexpr (!isPowerOfTwo(T::Config::kStorageBits)) {
+    map[modulus.zext(llvm::bit_ceil(T::Config::kStorageBits))] = name;
   }
 }
 
