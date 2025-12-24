@@ -77,6 +77,34 @@ The following are project-specific deviations and clarifications from the
 
 - Prefer **`std::string_view`** instead of `absl::string_view`.
 
+### Field/ModArith Type Accessors
+
+When working with `ModArithType` or `PrimeFieldType`:
+
+| Purpose              | Method                                  |
+| -------------------- | --------------------------------------- |
+| Storage type         | `getStorageType()`                      |
+| Storage bit width    | `getStorageBitWidth()`                  |
+| Arithmetic bit width | `getModulus().getValue().getBitWidth()` |
+
+**Do NOT use `getModulus().getType()`** for storage type. For binary fields
+GF(2ⁿ), the modulus 2ⁿ requires n+1 bits but storage only needs n bits.
+`getStorageType()` handles this automatically.
+
+```c++
+// ✅ Storage: use getStorageType() / getStorageBitWidth()
+unsigned bitWidth = fieldType.getStorageBitWidth();
+APInt nVal(bitWidth, n);
+IntegerAttr::get(fieldType.getStorageType(), nVal);
+
+// ✅ Arithmetic: use getModulus().getValue().getBitWidth()
+APInt modulus = fieldType.getModulus().getValue();
+APInt result = n.urem(modulus);
+
+// ❌ Bad: using getModulus().getType() for storage
+IntegerAttr::get(fieldType.getModulus().getType(), value);  // Wrong!
+```
+
 ### Header Inclusion
 
 - **Avoid redundant includes**: Do not repeat headers in `.cc` files that are

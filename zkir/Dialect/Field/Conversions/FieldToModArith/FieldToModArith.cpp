@@ -127,7 +127,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
     SmallVector<Value> coeffs;
     for (auto coeff : denseAttr.getValues<APInt>()) {
-      auto coeffAttr = IntegerAttr::get(modType.getModulus().getType(), coeff);
+      auto coeffAttr = IntegerAttr::get(modType.getStorageType(), coeff);
       coeffs.push_back(b.create<mod_arith::ConstantOp>(modType, coeffAttr));
     }
     auto ext = b.create<ExtFromCoeffsOp>(TypeRange{op.getType()}, coeffs);

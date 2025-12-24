@@ -115,7 +115,13 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   ];
   let extraClassDeclaration = [{
     IntegerType getStorageType() const {
-      // TODO(batzor): decouple the storage type from the modulus type
+      APInt mod = getModulus().getValue();
+      if (mod.isPowerOf2()) {
+        // Binary field: 2ⁿ needs n bits for storage (not n + 1)
+        unsigned storageBits = mod.logBase2();
+        return IntegerType::get(getContext(), storageBits);
+      }
+      // Prime field: use modulus type as-is
       return cast<IntegerType>(getModulus().getType());
     }
     unsigned getStorageBitWidth() const {

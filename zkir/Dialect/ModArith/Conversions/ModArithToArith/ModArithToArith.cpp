@@ -80,8 +80,7 @@ public:
 
 private:
   static IntegerType convertModArithType(ModArithType type) {
-    APInt modulus = type.getModulus().getValue();
-    return IntegerType::get(type.getContext(), modulus.getBitWidth());
+    return IntegerType::get(type.getContext(), type.getStorageBitWidth());
   }
 };
 
@@ -880,12 +879,10 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    unsigned outputBitWidth = dyn_cast<ModArithType>(op.getLhs().getType())
-                                  .getModulus()
-                                  .getValue()
-                                  .getBitWidth();
+    auto modArithType = dyn_cast<ModArithType>(op.getLhs().getType());
     auto signlessIntType =
-        IntegerType::get(b.getContext(), outputBitWidth, IntegerType::Signless);
+        IntegerType::get(b.getContext(), modArithType.getStorageBitWidth(),
+                         IntegerType::Signless);
     auto extractedLHS = b.create<BitcastOp>(signlessIntType, op.getLhs());
     auto extractedRHS = b.create<BitcastOp>(signlessIntType, op.getRhs());
 
