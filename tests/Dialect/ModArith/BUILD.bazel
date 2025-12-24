@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+load("@rules_cc//cc:defs.bzl", "cc_test")
 load("//bazel:lit.bzl", "glob_lit_tests")
 
 glob_lit_tests(
@@ -20,4 +21,19 @@ glob_lit_tests(
     data = ["//tests:test_utilities"],
     driver = "//tests:run_lit.sh",
     test_file_exts = ["mlir"],
+)
+
+cc_test(
+    name = "ModArithOperationTest",
+    srcs = ["ModArithOperationTest.cpp"],
+    deps = [
+        "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Utils:ZkDtypes",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+        "@zk_dtypes//zk_dtypes:babybear",
+        "@zk_dtypes//zk_dtypes:goldilocks",
+    ],
 )
