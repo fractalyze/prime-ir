@@ -55,6 +55,7 @@ cc_library(
         "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:Support",
         "@zk_dtypes//zk_dtypes:modular_operations",
+        "@zk_dtypes//zk_dtypes:mont_multiplication",
     ],
 )
 
