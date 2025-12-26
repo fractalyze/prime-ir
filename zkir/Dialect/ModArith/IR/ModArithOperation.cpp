@@ -15,58 +15,131 @@ limitations under the License.
 
 #include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 
+#include "zk_dtypes/include/field/modular_operations.h"
 #include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::mod_arith {
+namespace {
+
+constexpr size_t kMaximumLimbNum = 9;
+
+struct AddOp {
+  template <typename T>
+  static void apply(const T &a, const T &b, T &c, const T &mod,
+                    bool hasModulusSpareBit) {
+    zk_dtypes::ModAdd<T>(a, b, c, mod, hasModulusSpareBit);
+  }
+};
+
+struct SubOp {
+  template <typename T>
+  static void apply(const T &a, const T &b, T &c, const T &mod,
+                    bool hasModulusSpareBit) {
+    zk_dtypes::ModSub<T>(a, b, c, mod, hasModulusSpareBit);
+  }
+};
+
+struct DoubleOp {
+  template <typename T>
+  static void apply(const T &a, T &b, const T &mod, bool hasModulusSpareBit) {
+    zk_dtypes::ModDouble<T>(a, b, mod, hasModulusSpareBit);
+  }
+};
+
+template <typename Op, size_t CurrentN, size_t MaxN>
+struct UnaryModDispatcher {
+  static void dispatch(size_t targetN, const APInt &a, APInt &b,
+                       const APInt &mod, bool hasModulusSpareBit) {
+    if (targetN == CurrentN) {
+      using T = zk_dtypes::BigInt<CurrentN>;
+      Op::template apply<T>(
+          *reinterpret_cast<const T *>(a.getRawData()),
+          *const_cast<T *>(reinterpret_cast<const T *>(b.getRawData())),
+          *reinterpret_cast<const T *>(mod.getRawData()), hasModulusSpareBit);
+    } else if constexpr (CurrentN < MaxN) {
+      UnaryModDispatcher<Op, CurrentN + 1, MaxN>::dispatch(targetN, a, b, mod,
+                                                           hasModulusSpareBit);
+    }
+  }
+};
+
+template <typename Op>
+APInt executeUnaryModOp(const APInt &a, const ModArithType &type) {
+  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  bool hasModulusSpareBit = bitWidth > modulus.getActiveBits();
+
+  APInt b(bitWidth, 0);
+  size_t neededLimbs = (bitWidth + 63) / 64;
+
+  if (neededLimbs > 1 && neededLimbs <= kMaximumLimbNum) {
+    UnaryModDispatcher<Op, 1, kMaximumLimbNum>::dispatch(
+        neededLimbs, a, b, modulus, hasModulusSpareBit);
+  } else if (neededLimbs == 1) {
+    Op::template apply<uint64_t>(a.getZExtValue(),
+                                 *const_cast<uint64_t *>(b.getRawData()),
+                                 modulus.getZExtValue(), hasModulusSpareBit);
+  } else {
+    llvm_unreachable("Unsupported limb size");
+  }
+  return b;
+}
+
+template <typename Op, size_t CurrentN, size_t MaxN>
+struct BinaryModDispatcher {
+  static void dispatch(size_t targetN, const APInt &a, const APInt &b, APInt &c,
+                       const APInt &mod, bool hasModulusSpareBit) {
+    if (targetN == CurrentN) {
+      using T = zk_dtypes::BigInt<CurrentN>;
+      Op::template apply<T>(
+          *reinterpret_cast<const T *>(a.getRawData()),
+          *reinterpret_cast<const T *>(b.getRawData()),
+          *const_cast<T *>(reinterpret_cast<const T *>(c.getRawData())),
+          *reinterpret_cast<const T *>(mod.getRawData()), hasModulusSpareBit);
+    } else if constexpr (CurrentN < MaxN) {
+      BinaryModDispatcher<Op, CurrentN + 1, MaxN>::dispatch(
+          targetN, a, b, c, mod, hasModulusSpareBit);
+    }
+  }
+};
+
+template <typename Op>
+APInt executeBinaryModOp(const APInt &a, const APInt &b,
+                         const ModArithType &type) {
+  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  bool hasModulusSpareBit = bitWidth > modulus.getActiveBits();
+
+  APInt c(bitWidth, 0);
+  size_t neededLimbs = (bitWidth + 63) / 64;
+
+  if (neededLimbs > 1 && neededLimbs <= kMaximumLimbNum) {
+    BinaryModDispatcher<Op, 1, kMaximumLimbNum>::dispatch(
+        neededLimbs, a, b, c, modulus, hasModulusSpareBit);
+  } else if (neededLimbs == 1) {
+    Op::template apply<uint64_t>(a.getZExtValue(), b.getZExtValue(),
+                                 *const_cast<uint64_t *>(c.getRawData()),
+                                 modulus.getZExtValue(), hasModulusSpareBit);
+  } else {
+    llvm_unreachable("Unsupported limb size");
+  }
+  return c;
+}
+
+} // namespace
 
 ModArithOperation
 ModArithOperation::operator+(const ModArithOperation &other) const {
   assert(type == other.type);
-
-  const APInt &a = value;
-  const APInt &b = other.value;
-  APInt modulus = type.getModulus().getValue();
-
-  unsigned bitWidth = modulus.getBitWidth();
-  if (bitWidth > modulus.getActiveBits()) {
-    APInt add = a + b;
-    if (add.uge(modulus)) {
-      add -= modulus;
-    }
-    return ModArithOperation(add, type);
-  }
-
-  APInt extA = a.zext(bitWidth + 1);
-  APInt extB = b.zext(bitWidth + 1);
-  APInt extModulus = modulus.zext(bitWidth + 1);
-  APInt extAdd = extA + extB;
-  if (extAdd.uge(extModulus)) {
-    extAdd -= extModulus;
-  }
-  return ModArithOperation(extAdd.trunc(bitWidth), type);
+  return ModArithOperation(executeBinaryModOp<AddOp>(value, other.value, type),
+                           type);
 }
 
 ModArithOperation
 ModArithOperation::operator-(const ModArithOperation &other) const {
   assert(type == other.type);
-
-  const APInt &a = value;
-  const APInt &b = other.value;
-  APInt modulus = type.getModulus().getValue();
-
-  if (a.uge(b)) {
-    return ModArithOperation(a - b, type);
-  }
-  unsigned bitWidth = modulus.getBitWidth();
-  if (bitWidth > modulus.getActiveBits()) {
-    return ModArithOperation(a + modulus - b, type);
-  }
-
-  APInt extA = a.zext(bitWidth + 1);
-  APInt extB = b.zext(bitWidth + 1);
-  APInt extModulus = modulus.zext(bitWidth + 1);
-  APInt extSub = extA + extModulus - extB;
-  return ModArithOperation(extSub.trunc(bitWidth), type);
+  return ModArithOperation(executeBinaryModOp<SubOp>(value, other.value, type),
+                           type);
 }
 
 ModArithOperation
@@ -102,24 +175,7 @@ ModArithOperation ModArithOperation::operator-() const {
 }
 
 ModArithOperation ModArithOperation::Double() const {
-  APInt modulus = type.getModulus().getValue();
-
-  unsigned bitWidth = modulus.getBitWidth();
-  if (bitWidth > modulus.getActiveBits()) {
-    APInt shl = value.shl(1);
-    if (shl.uge(modulus)) {
-      shl -= modulus;
-    }
-    return ModArithOperation(shl, type);
-  }
-
-  APInt extValue = value.zext(bitWidth + 1);
-  APInt extModulus = modulus.zext(bitWidth + 1);
-  APInt extAdd = extValue + extValue;
-  if (extAdd.uge(extModulus)) {
-    extAdd -= extModulus;
-  }
-  return ModArithOperation(extAdd.trunc(bitWidth), type);
+  return ModArithOperation(executeUnaryModOp<DoubleOp>(value, type), type);
 }
 
 ModArithOperation ModArithOperation::Square() const {
