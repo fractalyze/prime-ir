@@ -275,7 +275,7 @@ ModArithOperation
 ModArithOperation::operator/(const ModArithOperation &other) const {
   assert(type == other.type);
 
-  return *this * other.Inverse();
+  return *this * other.inverse();
 }
 
 ModArithOperation ModArithOperation::operator-() const {
@@ -287,7 +287,7 @@ ModArithOperation ModArithOperation::operator-() const {
   return ModArithOperation(modulus - value, type);
 }
 
-ModArithOperation ModArithOperation::Double() const {
+ModArithOperation ModArithOperation::dbl() const {
   return ModArithOperation(executeUnaryModOp<DoubleOp>(value, type), type);
 }
 
@@ -354,7 +354,7 @@ APInt executeMontSquareOp(const APInt &a, const ModArithType &type) {
 
 } // namespace
 
-ModArithOperation ModArithOperation::Square() const {
+ModArithOperation ModArithOperation::square() const {
   if (type.isMontgomery()) {
     return ModArithOperation(executeMontSquareOp(value, type), type);
   }
@@ -369,7 +369,7 @@ ModArithOperation power(const ModArithOperation &value, const APInt &exponent) {
   auto it = zk_dtypes::BitIteratorBE<APInt>::begin(&exponent, true);
   auto end = zk_dtypes::BitIteratorBE<APInt>::end(&exponent);
   while (it != end) {
-    ret = ret.Square();
+    ret = ret.square();
     if (*it) {
       ret *= value;
     }
@@ -380,7 +380,7 @@ ModArithOperation power(const ModArithOperation &value, const APInt &exponent) {
 
 } // namespace
 
-ModArithOperation ModArithOperation::Power(APInt exponent) const {
+ModArithOperation ModArithOperation::power(APInt exponent) const {
   return mod_arith::power(*this, exponent);
 }
 
@@ -451,7 +451,7 @@ APInt executeInverseOp(const APInt &a, const ModArithType &type) {
 
 } // namespace
 
-ModArithOperation ModArithOperation::Inverse() const {
+ModArithOperation ModArithOperation::inverse() const {
   return ModArithOperation(executeInverseOp(value, type), type);
 }
 
@@ -529,11 +529,11 @@ APInt executeFromMontOp(const APInt &a, const ModArithType &type) {
 
 } // namespace
 
-ModArithOperation ModArithOperation::FromMont() const {
+ModArithOperation ModArithOperation::fromMont() const {
   return ModArithOperation(executeFromMontOp(value, type), type);
 }
 
-ModArithOperation ModArithOperation::ToMont() const {
+ModArithOperation ModArithOperation::toMont() const {
   MontgomeryAttr montAttr = type.getMontgomeryAttr();
   return ModArithOperation(
       executeMontMulOp(value, montAttr.getRSquared().getValue(), type), type);
@@ -553,7 +553,7 @@ llvm::SmallString<40> ModArithOperation::toString() const {
   llvm::SmallString<40> str;
   APInt val = value;
   if (type.isMontgomery()) {
-    val = FromMont().value;
+    val = fromMont().value;
   }
   val.toString(str, 10, false);
   return str;
@@ -561,7 +561,7 @@ llvm::SmallString<40> ModArithOperation::toString() const {
 
 raw_ostream &operator<<(raw_ostream &os, const ModArithOperation &op) {
   if (op.type.isMontgomery()) {
-    op.FromMont().value.print(os, false);
+    op.fromMont().value.print(os, false);
   } else {
     op.value.print(os, false);
   }

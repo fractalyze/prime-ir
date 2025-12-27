@@ -49,7 +49,7 @@ RootOfUnityAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                         IntegerAttr degree) {
   PrimeFieldOperation rootOp(root, type);
   APInt degreeValue = degree.getValue();
-  if (rootOp.Power(degreeValue).isOne()) {
+  if (rootOp.power(degreeValue).isOne()) {
     return success();
   }
 

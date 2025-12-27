@@ -76,7 +76,7 @@ ShortWeierstrassAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
     field::PrimeFieldOperation gXOp(cast<IntegerAttr>(gX), pfType);
     field::PrimeFieldOperation gYOp(cast<IntegerAttr>(gY), pfType);
 
-    if (gYOp.Square() != gXOp.Square() * gXOp + aOp * gXOp + bOp) {
+    if (gYOp.square() != gXOp.square() * gXOp + aOp * gXOp + bOp) {
       emitError()
           << "a, b, gX, and gY must satisfy the equation y² = x³ + ax + b";
       return failure();

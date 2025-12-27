@@ -226,7 +226,7 @@ TYPED_TEST(ModArithOperationTest, Double) {
 
   this->runUnaryOperationTest(
       [](const PrimeFieldType &a) { return a.Double(); },
-      [](const ModArithOperation &a) { return a.Double(); });
+      [](const ModArithOperation &a) { return a.dbl(); });
 }
 
 TYPED_TEST(ModArithOperationTest, Square) {
@@ -234,7 +234,7 @@ TYPED_TEST(ModArithOperationTest, Square) {
 
   this->runUnaryOperationTest(
       [](const PrimeFieldType &a) { return a.Square(); },
-      [](const ModArithOperation &a) { return a.Square(); });
+      [](const ModArithOperation &a) { return a.square(); });
 }
 
 TYPED_TEST(ModArithOperationTest, Power) {
@@ -255,7 +255,7 @@ TYPED_TEST(ModArithOperationTest, Power) {
         [exponent](const ModArithOperation &a) {
           auto modulusBits =
               llvm::bit_ceil(PrimeFieldType::Config::kModulusBits);
-          return a.Power(convertToAPInt(exponent, modulusBits));
+          return a.power(convertToAPInt(exponent, modulusBits));
         });
   }
 }
@@ -265,7 +265,7 @@ TYPED_TEST(ModArithOperationTest, Inverse) {
 
   this->runUnaryOperationTest(
       [](const PrimeFieldType &a) { return *a.Inverse(); },
-      [](const ModArithOperation &a) { return a.Inverse(); },
+      [](const ModArithOperation &a) { return a.inverse(); },
       /*aMustBeNonZero=*/true);
 }
 
@@ -276,7 +276,7 @@ TYPED_TEST(ModArithOperationTest, FromMont) {
       [](const PrimeFieldType &a) {
         return PrimeFieldType::FromUnchecked(a.MontReduce().value());
       },
-      [](const ModArithOperation &a) { return a.FromMont(); });
+      [](const ModArithOperation &a) { return a.fromMont(); });
 }
 
 TYPED_TEST(ModArithOperationTest, ToMont) {
@@ -284,7 +284,7 @@ TYPED_TEST(ModArithOperationTest, ToMont) {
 
   this->runUnaryOperationTest(
       [](const PrimeFieldType &a) { return PrimeFieldType(a.value()); },
-      [](const ModArithOperation &a) { return a.ToMont(); });
+      [](const ModArithOperation &a) { return a.toMont(); });
 }
 
 TYPED_TEST(ModArithOperationTest, IsZero) {
