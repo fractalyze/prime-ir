@@ -37,6 +37,9 @@ public:
   ModArithOperation getOne() const;
 
   operator APInt() const { return value; }
+  IntegerAttr getIntegerAttr() const {
+    return IntegerAttr::get(type.getStorageType(), value);
+  }
 
   ModArithOperation operator+(const ModArithOperation &other) const;
   ModArithOperation &operator+=(const ModArithOperation &other) {
