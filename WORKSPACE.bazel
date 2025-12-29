@@ -115,6 +115,8 @@ llvm_configure(name = "llvm-project")
 # https://github.com/hedronvision/bazel-compile-commands-extractor
 http_archive(
     name = "hedron_compile_commands",
+    patch_args = ["-p1"],
+    patches = ["@zk_dtypes//third_party/bazel-compile-commands-extractor:allow_header_as_a_source_file.patch"],
     strip_prefix = "bazel-compile-commands-extractor-ed994039a951b736091776d677f324b3903ef939",
     url = "https://github.com/hedronvision/bazel-compile-commands-extractor/archive/ed994039a951b736091776d677f324b3903ef939.tar.gz",
 )
