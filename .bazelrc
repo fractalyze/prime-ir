@@ -47,7 +47,6 @@ build:asan --cc_output_directory_tag=asan
 # asan tests tend to take longer, so increase the timeouts
 # defaults are: 60,300,900,3600
 test:asan --test_timeout=300,600,1800,-1
-test:ci --test_timeout=300,600,1800,-1
 
 build:ubsan --config=san-common
 build:ubsan --features=ubsan
@@ -71,6 +70,18 @@ test --nobuild_runfile_links
 # https://bazel.build/reference/command-line-reference#flag--legacy_external_runfiles
 build --nolegacy_external_runfiles
 test --nolegacy_external_runfiles
+
+# Quick test configuration for CI (default)
+build:quick --//:quick_mode=true
+test:quick --test_timeout=60,300,900,3600
+
+# Comprehensive test configuration for nightly builds
+build:comprehensive --//:quick_mode=false
+test:comprehensive --test_timeout=300,600,1800,-1
+
+# Default to quick mode for local development
+build --config=quick
+test --config=quick
 
 # Load rc file with user-specific options.
 try-import %workspace%/.bazelrc.user

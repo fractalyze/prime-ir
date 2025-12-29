@@ -162,8 +162,180 @@ def zkir_mlir_cc_import(name, mlir_src, zkir_opt_flags = [], llc_flags = [], tag
         **kwargs
     )
 
+def zkir_mlir_template(name, template_src, replacements_quick, replacements_comprehensive):
+    """Creates quick and comprehensive MLIR variants from a template using sed.
+
+    DEPRECATED: Use zkir_mlir_template_parameterized instead for better flexibility.
+
+    This macro generates two genrules that produce MLIR files from a template
+    by replacing placeholders with concrete values via sed substitutions.
+
+    Args:
+      name: Base name for the generated rules and output files.
+      template_src: The .mlir.template file containing placeholders.
+      replacements_quick: Dictionary of placeholder->value for quick mode.
+      replacements_comprehensive: Dictionary of placeholder->value for comprehensive mode.
+
+    Example:
+      zkir_mlir_template(
+          name = "msm_benchmark_mlir",
+          template_src = "msm_benchmark.mlir.template",
+          replacements_quick = {
+              "TENSOR_SIZE": "65536",
+              "MSM_DEGREE": "16",
+          },
+          replacements_comprehensive = {
+              "TENSOR_SIZE": "1048576",
+              "MSM_DEGREE": "20",
+          },
+      )
+    """
+
+    # Build sed command for quick mode
+    quick_sed_exprs = []
+    for placeholder, value in replacements_quick.items():
+        quick_sed_exprs.append("s/{}/{}/g".format(placeholder, value))
+    quick_sed_cmd = "sed '{}' $< > $@".format("; ".join(quick_sed_exprs))
+
+    # Build sed command for comprehensive mode
+    comprehensive_sed_exprs = []
+    for placeholder, value in replacements_comprehensive.items():
+        comprehensive_sed_exprs.append("s/{}/{}/g".format(placeholder, value))
+    comprehensive_sed_cmd = "sed '{}' $< > $@".format("; ".join(comprehensive_sed_exprs))
+
+    native.genrule(
+        name = name + "_quick",
+        srcs = [template_src],
+        outs = [name + "_quick.mlir"],
+        cmd = quick_sed_cmd,
+    )
+
+    native.genrule(
+        name = name + "_comprehensive",
+        srcs = [template_src],
+        outs = [name + "_comprehensive.mlir"],
+        cmd = comprehensive_sed_cmd,
+    )
+
+def zkir_mlir_template_parameterized(name, template_src, log_sizes, size_flag, default_log_size = 16, extra_replacements_fn = None):
+    """Creates parameterized MLIR files from a template.
+
+    This macro generates multiple genrules, one for each supported log_size,
+    and uses config_setting + select() to choose the appropriate one based
+    on a build flag.
+
+    Args:
+      name: Base name for the generated rules and output files.
+      template_src: The .mlir.template file with NUM_COEFFS and ROOT_OF_UNITY placeholders.
+      log_sizes: List of log2 sizes to support (e.g., [10, 16, 20, 24]).
+      size_flag: Label of the string_flag that specifies the log_size (e.g., ":ntt_log_size").
+      default_log_size: Default log_size to use (default: 16).
+      extra_replacements_fn: Optional function that takes log_size and returns a dict of
+                             PLACEHOLDER->VALUE for additional replacements.
+
+    Example:
+      zkir_mlir_template_parameterized(
+          name = "ntt_benchmark_mlir",
+          template_src = "ntt_benchmark.mlir.template",
+          log_sizes = [10, 16, 20, 24],
+          size_flag = ":ntt_log_size",
+          default_log_size = 16,
+      )
+
+      Then use: bazel build --//benchmark/ntt:ntt_log_size=20 //benchmark/ntt:ntt_benchmark_mlir
+
+      With extra replacements:
+      def msm_replacements(log_size):
+          return {"MSM_DEGREE": str(log_size)}
+
+      zkir_mlir_template_parameterized(
+          name = "msm_benchmark_mlir",
+          template_src = "msm_benchmark.mlir.template",
+          log_sizes = [16, 20],
+          size_flag = ":msm_log_size",
+          extra_replacements_fn = msm_replacements,
+      )
+    """
+
+    # Create a genrule for each log_size
+    genrule_targets = {}
+    for log_size in log_sizes:
+        target_name = "{}_size_{}".format(name, log_size)
+        output_name = "{}_size_{}.mlir".format(name, log_size)
+
+        # Build command with extra replacements if provided
+        cmd_parts = ["$(location //benchmark:generate_mlir)", "--template $<", "--output $@", "--log-size {}".format(log_size)]
+
+        if extra_replacements_fn:
+            replacements = extra_replacements_fn(log_size)
+            for placeholder, value in replacements.items():
+                cmd_parts.append("--extra-replacements {}={}".format(placeholder, value))
+
+        cmd = " ".join(cmd_parts)
+
+        native.genrule(
+            name = target_name,
+            srcs = [template_src],
+            outs = [output_name],
+            cmd = cmd,
+            tools = ["//benchmark:generate_mlir"],
+        )
+
+        genrule_targets[str(log_size)] = ":" + target_name
+
+    # Create config_settings for each log_size
+    config_settings = {}
+    for log_size in log_sizes:
+        setting_name = "_{}_size_{}".format(name, log_size)
+        native.config_setting(
+            name = setting_name,
+            flag_values = {size_flag: str(log_size)},
+        )
+        config_settings[log_size] = ":" + setting_name
+
+    # Create select() mapping
+    select_map = {}
+    for log_size in log_sizes:
+        select_map[config_settings[log_size]] = genrule_targets[str(log_size)]
+
+    # Set default
+    select_map["//conditions:default"] = genrule_targets[str(default_log_size)]
+
+    # Create alias to select the appropriate target
+    native.alias(
+        name = name,
+        actual = select(select_map),
+    )
+
+def msm_extra_replacements(log_size):
+    """Returns extra replacements for MSM template.
+
+    For MSM, TENSOR_SIZE = 2^log_size and MSM_DEGREE = log_size
+    """
+
+    # Pre-calculated powers of 2
+    sizes = {
+        12: 4096,
+        14: 16384,
+        16: 65536,
+        18: 262144,
+        20: 1048576,
+        22: 4194304,
+    }
+
+    return {
+        "TENSOR_SIZE": str(sizes[log_size]),
+        "MSM_DEGREE": str(log_size),
+    }
+
 def zkir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags = [], **kwargs):
     """A rule for running a benchmark test."""
+
+    # Add conditional compilation flag based on build mode
+    quick_mode_copts = select({
+        "//:zkir_quick_mode": ["-DZKIR_QUICK_BENCHMARK"],
+        "//conditions:default": [],
+    })
 
     cc_test(
         name = name,
@@ -174,7 +346,7 @@ def zkir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags 
             "@llvm-project//mlir:mlir_runner_utils",
         ],
         tags = tags,
-        copts = copts,
+        copts = copts + quick_mode_copts,
         linkopts = linkopts,
         data = data,
         **kwargs

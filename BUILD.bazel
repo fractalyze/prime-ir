@@ -20,6 +20,11 @@ bool_flag(
     build_setting_default = False,
 )
 
+bool_flag(
+    name = "quick_mode",
+    build_setting_default = False,
+)
+
 config_setting(
     name = "linux_x86_64",
     constraint_values = [
@@ -56,4 +61,9 @@ config_setting(
     name = "zkir_has_avx512",
     constraint_values = ["@platforms//cpu:x86_64"],
     flag_values = {":has_avx512": "true"},
+)
+
+config_setting(
+    name = "zkir_quick_mode",
+    flag_values = {":quick_mode": "true"},
 )

@@ -13,11 +13,28 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import")
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import", "zkir_mlir_template_parameterized")
+
+# Build flag to specify NTT size as log2(size)
+# Usage: bazel build --//benchmark/ntt:ntt_log_size=20
+string_flag(
+    name = "ntt_log_size",
+    build_setting_default = "16",
+    values = ["10", "12", "14", "16", "18", "20", "22", "24"],
+)
+
+zkir_mlir_template_parameterized(
+    name = "ntt_benchmark_mlir",
+    default_log_size = 16,
+    log_sizes = [10, 12, 14, 16, 18, 20, 22, 24],
+    size_flag = ":ntt_log_size",
+    template_src = "ntt_benchmark.mlir.template",
+)
 
 zkir_mlir_cc_import(
     name = "ntt_ciface",
-    mlir_src = "ntt_benchmark.mlir",
+    mlir_src = ":ntt_benchmark_mlir",
     zkir_opt_flags = [
         "-poly-to-field",
         "-field-to-llvm=enable-openmp=true",

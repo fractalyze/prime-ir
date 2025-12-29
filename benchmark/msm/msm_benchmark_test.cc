@@ -21,7 +21,13 @@ limitations under the License.
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/g1.h"
 
-#define NUM_SCALARMULS (1 << 20)
+#ifdef ZKIR_QUICK_BENCHMARK
+#define NUM_SCALARMULS (1 << 16) // 65,536 elements
+#define BENCHMARK_ITERATIONS 5
+#else
+#define NUM_SCALARMULS (1 << 20) // 1,048,576 elements
+#define BENCHMARK_ITERATIONS 20
+#endif
 
 namespace mlir::zkir::benchmark {
 namespace {
@@ -63,12 +69,12 @@ void BM_msm_benchmark(::benchmark::State &state) {
 }
 
 BENCHMARK_TEMPLATE(BM_msm_benchmark, /*kIsParallel=*/false)
-    ->Iterations(20)
+    ->Iterations(BENCHMARK_ITERATIONS)
     ->Unit(::benchmark::kMillisecond)
     ->Name("msm_serial");
 
 BENCHMARK_TEMPLATE(BM_msm_benchmark, /*kIsParallel=*/true)
-    ->Iterations(20)
+    ->Iterations(BENCHMARK_ITERATIONS)
     ->Unit(::benchmark::kMillisecond)
     ->Name("msm_parallel");
 

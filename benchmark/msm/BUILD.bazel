@@ -13,11 +13,29 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import")
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
+load("//benchmark:benchmark.bzl", "msm_extra_replacements", "zkir_benchmark", "zkir_mlir_cc_import", "zkir_mlir_template_parameterized")
+
+# Build flag to specify MSM size as log2(size)
+# Usage: bazel build --//benchmark/msm:msm_log_size=20
+string_flag(
+    name = "msm_log_size",
+    build_setting_default = "16",
+    values = ["12", "14", "16", "18", "20", "22"],
+)
+
+zkir_mlir_template_parameterized(
+    name = "msm_benchmark_mlir",
+    default_log_size = 16,
+    extra_replacements_fn = msm_extra_replacements,
+    log_sizes = [12, 14, 16, 18, 20, 22],
+    size_flag = ":msm_log_size",
+    template_src = "msm_benchmark.mlir.template",
+)
 
 zkir_mlir_cc_import(
     name = "msm_ciface",
-    mlir_src = "msm_benchmark.mlir",
+    mlir_src = ":msm_benchmark_mlir",
     zkir_opt_flags = [
         "-elliptic-curve-to-field",
         "-field-to-llvm=enable-openmp=true",

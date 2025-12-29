@@ -14,11 +14,40 @@
 # ==============================================================================
 
 load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
-load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import")
+load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import", "zkir_mlir_template")
+
+zkir_mlir_template(
+    name = "msm_cpu_mlir",
+    replacements_comprehensive = {
+        "TENSOR_SIZE": "1048576",
+        "MSM_DEGREE": "20",
+    },
+    replacements_quick = {
+        "TENSOR_SIZE": "65536",
+        "MSM_DEGREE": "16",
+    },
+    template_src = "msm_cpu.mlir.template",
+)
+
+zkir_mlir_template(
+    name = "msm_gpu_mlir",
+    replacements_comprehensive = {
+        "TENSOR_SIZE": "1048576",
+        "MSM_DEGREE": "20",
+    },
+    replacements_quick = {
+        "TENSOR_SIZE": "65536",
+        "MSM_DEGREE": "16",
+    },
+    template_src = "msm_gpu.mlir.template",
+)
 
 zkir_mlir_cc_import(
     name = "msm_cpu_ciface",
-    mlir_src = "msm_cpu.mlir",
+    mlir_src = select({
+        "//:zkir_quick_mode": ":msm_cpu_mlir_quick.mlir",
+        "//conditions:default": ":msm_cpu_mlir_comprehensive.mlir",
+    }),
     zkir_opt_flags = [
         "-elliptic-curve-to-field",
         "-field-to-llvm=enable-openmp=true",
@@ -27,7 +56,10 @@ zkir_mlir_cc_import(
 
 zkir_mlir_cc_import(
     name = "msm_gpu_ciface",
-    mlir_src = "msm_gpu.mlir",
+    mlir_src = select({
+        "//:zkir_quick_mode": ":msm_gpu_mlir_quick.mlir",
+        "//conditions:default": ":msm_gpu_mlir_comprehensive.mlir",
+    }),
     target_compatible_with = requires_cuda(),
     zkir_opt_flags = [
         "-elliptic-curve-to-field",
