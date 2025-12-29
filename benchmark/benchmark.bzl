@@ -328,14 +328,28 @@ def msm_extra_replacements(log_size):
         "MSM_DEGREE": str(log_size),
     }
 
+def vecops_extra_replacements(log_size):
+    """Returns extra replacements for vecops template.
+
+    For vecops, MATRIX_ROWS = 2^log_size
+    """
+
+    # Pre-calculated powers of 2
+    sizes = {
+        12: 4096,
+        14: 16384,
+        16: 65536,
+        18: 262144,
+        20: 1048576,
+        22: 4194304,
+    }
+
+    return {
+        "MATRIX_ROWS": str(sizes[log_size]),
+    }
+
 def zkir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags = [], **kwargs):
     """A rule for running a benchmark test."""
-
-    # Add conditional compilation flag based on build mode
-    quick_mode_copts = select({
-        "//:zkir_quick_mode": ["-DZKIR_QUICK_BENCHMARK"],
-        "//conditions:default": [],
-    })
 
     cc_test(
         name = name,
@@ -346,7 +360,7 @@ def zkir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags 
             "@llvm-project//mlir:mlir_runner_utils",
         ],
         tags = tags,
-        copts = copts + quick_mode_copts,
+        copts = copts,
         linkopts = linkopts,
         data = data,
         **kwargs

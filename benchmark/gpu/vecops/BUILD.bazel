@@ -13,37 +13,37 @@
 # limitations under the License.
 # ==============================================================================
 
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
-load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import", "zkir_mlir_template")
+load("//benchmark:benchmark.bzl", "vecops_extra_replacements", "zkir_benchmark", "zkir_mlir_cc_import", "zkir_mlir_template_parameterized")
 
-zkir_mlir_template(
+string_flag(
+    name = "vecops_log_size",
+    build_setting_default = "16",
+    values = ["12", "14", "16", "18", "20", "22"],
+)
+
+zkir_mlir_template_parameterized(
     name = "vecops_cpu_mlir",
-    replacements_comprehensive = {
-        "MATRIX_ROWS": "1048576",
-    },
-    replacements_quick = {
-        "MATRIX_ROWS": "65536",
-    },
+    default_log_size = 16,
+    extra_replacements_fn = vecops_extra_replacements,
+    log_sizes = [12, 14, 16, 18, 20, 22],
+    size_flag = ":vecops_log_size",
     template_src = "vecops_cpu.mlir.template",
 )
 
-zkir_mlir_template(
+zkir_mlir_template_parameterized(
     name = "vecops_gpu_mlir",
-    replacements_comprehensive = {
-        "MATRIX_ROWS": "1048576",
-    },
-    replacements_quick = {
-        "MATRIX_ROWS": "65536",
-    },
+    default_log_size = 16,
+    extra_replacements_fn = vecops_extra_replacements,
+    log_sizes = [12, 14, 16, 18, 20, 22],
+    size_flag = ":vecops_log_size",
     template_src = "vecops_gpu.mlir.template",
 )
 
 zkir_mlir_cc_import(
     name = "vecops_cpu_ciface",
-    mlir_src = select({
-        "//:zkir_quick_mode": ":vecops_cpu_mlir_quick.mlir",
-        "//conditions:default": ":vecops_cpu_mlir_comprehensive.mlir",
-    }),
+    mlir_src = ":vecops_cpu_mlir",
     zkir_opt_flags = [
         "-field-to-llvm=enable-openmp=true",
     ],
@@ -51,10 +51,7 @@ zkir_mlir_cc_import(
 
 zkir_mlir_cc_import(
     name = "vecops_gpu_ciface",
-    mlir_src = select({
-        "//:zkir_quick_mode": ":vecops_gpu_mlir_quick.mlir",
-        "//conditions:default": ":vecops_gpu_mlir_comprehensive.mlir",
-    }),
+    mlir_src = ":vecops_gpu_mlir",
     target_compatible_with = requires_cuda(),
     zkir_opt_flags = [
         # FIXME(batzor): Converting affine loops to GPU directly is causing

@@ -21,13 +21,8 @@ limitations under the License.
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/g1.h"
 
-#ifdef ZKIR_QUICK_BENCHMARK
-#define NUM_SCALARMULS (1 << 16) // 65,536 elements
+#define NUM_SCALARMULS (1 << 16) // 65,536 elements (default)
 #define BENCHMARK_ITERATIONS 5
-#else
-#define NUM_SCALARMULS (1 << 20) // 1,048,576 elements
-#define BENCHMARK_ITERATIONS 20
-#endif
 
 namespace mlir::zkir::benchmark {
 namespace {

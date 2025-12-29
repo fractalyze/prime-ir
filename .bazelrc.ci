@@ -1,7 +1,7 @@
-build:ci --config=quick
 build:ci --remote_cache=grpc://127.0.0.1:9092
 build:ci --//benchmark/ntt:ntt_log_size=16
 build:ci --//benchmark/msm:msm_log_size=16
-test:ci --config=quick
+build:ci --//benchmark/gpu/msm:msm_gpu_log_size=16
+build:ci --//benchmark/gpu/vecops:vecops_log_size=16
 test:ci --test_output=errors
 test:ci --//:has_avx512

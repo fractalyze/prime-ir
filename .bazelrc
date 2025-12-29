@@ -71,17 +71,5 @@ test --nobuild_runfile_links
 build --nolegacy_external_runfiles
 test --nolegacy_external_runfiles
 
-# Quick test configuration for CI (default)
-build:quick --//:quick_mode=true
-test:quick --test_timeout=60,300,900,3600
-
-# Comprehensive test configuration for nightly builds
-build:comprehensive --//:quick_mode=false
-test:comprehensive --test_timeout=300,600,1800,-1
-
-# Default to quick mode for local development
-build --config=quick
-test --config=quick
-
 # Load rc file with user-specific options.
 try-import %workspace%/.bazelrc.user
