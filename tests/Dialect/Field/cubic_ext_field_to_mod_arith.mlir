@@ -88,13 +88,13 @@ func.func @test_lower_inverse(%arg0: !CF) -> !CF {
     // CHECK-COUNT-6: mod_arith.mul
     // CHECK: field.ext_from_coeffs
     //
-    // Karatsuba mul: x * frob_product (for norm)
-    // CHECK-COUNT-2: field.ext_to_coeffs
-    // CHECK-COUNT-6: mod_arith.mul
-    // CHECK: field.ext_from_coeffs
+    // Direct mul: x * frob_product (for norm)
+    // CHECK-COUNT-2: mod_arith.mul
+    // CHECK: mod_arith.add
+    // CHECK-COUNT-2: mod_arith.mul
+    // CHECK: mod_arith.add
     //
-    // Extract norm (constant term) and inverse
-    // CHECK: field.ext_to_coeffs
+    // Norm inverse:
     // CHECK: mod_arith.inverse
     //
     // Final scaling: frob_product * norm⁻¹
