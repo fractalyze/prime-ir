@@ -24,6 +24,8 @@ limitations under the License.
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::field {
 
@@ -31,6 +33,9 @@ namespace mlir::zkir::field {
 //
 // Frobenius coefficients: coeffs[e - 1][i - 1] = ξ^(i * e * (p - 1) / n)
 // where e = 1..n - 1, i = 1..n - 1, n is extension degree, p is modulus
+//
+// Note: This formula is equivalent to ξ^(i * (pᵉ - 1) / n) when p ≡ 1 (mod n),
+// due to Fermat's Little Theorem: (pᵉ - 1) / n ≡ e * (p - 1) / n (mod p - 1).
 //
 // See:
 // https://fractalyze.gitbook.io/intro/primitives/abstract-algebra/extension-field/inversion#id-2.2.-optimized-computation-when
@@ -52,14 +57,16 @@ public:
 
     std::array<std::array<PrimeFieldCodeGen, N - 1>, N - 1> coeffs;
 
-    APInt pMinus1 = modulus - 1;
-    APInt nVal(modulus.getBitWidth(), N);
+    // Use larger bit width to avoid overflow
+    unsigned extBitWidth = modulus.getBitWidth() * 2;
+    APInt pMinus1 = (modulus - 1).zext(extBitWidth);
+    APInt nVal(extBitWidth, N);
 
     for (size_t e = 1; e < N; ++e) {
       for (size_t i = 1; i < N; ++i) {
         // exp = i * e * (p - 1) / n
-        APInt exp = APInt(modulus.getBitWidth(), i) *
-                    APInt(modulus.getBitWidth(), e) * pMinus1.udiv(nVal);
+        APInt exp =
+            APInt(extBitWidth, i) * APInt(extBitWidth, e) * pMinus1.udiv(nVal);
         // Compute ξ^exp mod p
         APInt coeff =
             mod_arith::ModArithOperation(xi, convertedType).Power(exp);
