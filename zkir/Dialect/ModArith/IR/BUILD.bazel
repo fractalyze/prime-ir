@@ -54,6 +54,10 @@ cc_library(
         "@llvm-project//mlir:InferTypeOpInterface",
         "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:bit_iterator",
+        "@zk_dtypes//zk_dtypes:byinverter",
+        "@zk_dtypes//zk_dtypes:modular_operations",
+        "@zk_dtypes//zk_dtypes:mont_multiplication",
     ],
 )
 

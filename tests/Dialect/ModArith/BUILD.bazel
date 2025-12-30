@@ -34,6 +34,7 @@ cc_test(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@zk_dtypes//zk_dtypes:babybear",
+        "@zk_dtypes//zk_dtypes:bn254_fr",
         "@zk_dtypes//zk_dtypes:goldilocks",
     ],
 )

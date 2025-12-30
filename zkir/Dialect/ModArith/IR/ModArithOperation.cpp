@@ -15,81 +15,267 @@ limitations under the License.
 
 #include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 
+#include "zk_dtypes/include/bit_iterator.h"
+#include "zk_dtypes/include/byinverter.h"
+#include "zk_dtypes/include/field/modular_operations.h"
+#include "zk_dtypes/include/field/mont_multiplication.h"
 #include "zkir/Utils/APIntUtils.h"
 
+namespace zk_dtypes {
+
+template <>
+class BitTraits<mlir::APInt> {
+public:
+  static size_t GetNumBits(const mlir::APInt &value) {
+    return value.getBitWidth();
+  }
+
+  static bool TestBit(const mlir::APInt &value, size_t index) {
+    return value[index];
+  }
+
+  static void SetBit(mlir::APInt &value, size_t index, bool bitValue) {
+    value.setBitVal(index, bitValue);
+  }
+};
+
+} // namespace zk_dtypes
+
 namespace mlir::zkir::mod_arith {
+namespace {
+
+constexpr size_t kMaximumLimbNum = 9;
+
+struct AddOp {
+  template <typename T>
+  static void apply(const T &a, const T &b, T &c, const T &mod,
+                    bool hasModulusSpareBit) {
+    zk_dtypes::ModAdd<T>(a, b, c, mod, hasModulusSpareBit);
+  }
+};
+
+struct SubOp {
+  template <typename T>
+  static void apply(const T &a, const T &b, T &c, const T &mod,
+                    bool hasModulusSpareBit) {
+    zk_dtypes::ModSub<T>(a, b, c, mod, hasModulusSpareBit);
+  }
+};
+
+struct DoubleOp {
+  template <typename T>
+  static void apply(const T &a, T &b, const T &mod, bool hasModulusSpareBit) {
+    zk_dtypes::ModDouble<T>(a, b, mod, hasModulusSpareBit);
+  }
+};
+
+template <typename Op, size_t CurrentN, size_t MaxN>
+struct UnaryModDispatcher {
+  static void dispatch(size_t targetN, const APInt &a, APInt &b,
+                       const APInt &mod, bool hasModulusSpareBit) {
+    if (targetN == CurrentN) {
+      using T = zk_dtypes::BigInt<CurrentN>;
+      Op::template apply<T>(
+          *reinterpret_cast<const T *>(a.getRawData()),
+          *const_cast<T *>(reinterpret_cast<const T *>(b.getRawData())),
+          *reinterpret_cast<const T *>(mod.getRawData()), hasModulusSpareBit);
+    } else if constexpr (CurrentN < MaxN) {
+      UnaryModDispatcher<Op, CurrentN + 1, MaxN>::dispatch(targetN, a, b, mod,
+                                                           hasModulusSpareBit);
+    }
+  }
+};
+
+template <typename Op>
+APInt executeUnaryModOp(const APInt &a, const ModArithType &type) {
+  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  bool hasModulusSpareBit = bitWidth > modulus.getActiveBits();
+
+  APInt b(bitWidth, 0);
+  size_t neededLimbs = (bitWidth + 63) / 64;
+
+  if (neededLimbs > 1 && neededLimbs <= kMaximumLimbNum) {
+    UnaryModDispatcher<Op, 1, kMaximumLimbNum>::dispatch(
+        neededLimbs, a, b, modulus, hasModulusSpareBit);
+  } else if (neededLimbs == 1) {
+    Op::template apply<uint64_t>(a.getZExtValue(),
+                                 *const_cast<uint64_t *>(b.getRawData()),
+                                 modulus.getZExtValue(), hasModulusSpareBit);
+  } else {
+    llvm_unreachable("Unsupported limb size");
+  }
+  return b;
+}
+
+template <typename Op, size_t CurrentN, size_t MaxN>
+struct BinaryModDispatcher {
+  static void dispatch(size_t targetN, const APInt &a, const APInt &b, APInt &c,
+                       const APInt &mod, bool hasModulusSpareBit) {
+    if (targetN == CurrentN) {
+      using T = zk_dtypes::BigInt<CurrentN>;
+      Op::template apply<T>(
+          *reinterpret_cast<const T *>(a.getRawData()),
+          *reinterpret_cast<const T *>(b.getRawData()),
+          *const_cast<T *>(reinterpret_cast<const T *>(c.getRawData())),
+          *reinterpret_cast<const T *>(mod.getRawData()), hasModulusSpareBit);
+    } else if constexpr (CurrentN < MaxN) {
+      BinaryModDispatcher<Op, CurrentN + 1, MaxN>::dispatch(
+          targetN, a, b, c, mod, hasModulusSpareBit);
+    }
+  }
+};
+
+template <typename Op>
+APInt executeBinaryModOp(const APInt &a, const APInt &b,
+                         const ModArithType &type) {
+  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  bool hasModulusSpareBit = bitWidth > modulus.getActiveBits();
+
+  APInt c(bitWidth, 0);
+  size_t neededLimbs = (bitWidth + 63) / 64;
+
+  if (neededLimbs > 1 && neededLimbs <= kMaximumLimbNum) {
+    BinaryModDispatcher<Op, 1, kMaximumLimbNum>::dispatch(
+        neededLimbs, a, b, c, modulus, hasModulusSpareBit);
+  } else if (neededLimbs == 1) {
+    Op::template apply<uint64_t>(a.getZExtValue(), b.getZExtValue(),
+                                 *const_cast<uint64_t *>(c.getRawData()),
+                                 modulus.getZExtValue(), hasModulusSpareBit);
+  } else {
+    llvm_unreachable("Unsupported limb size");
+  }
+  return c;
+}
+
+} // namespace
+
+ModArithOperation ModArithOperation::getOne() const {
+  APInt one;
+  if (type.isMontgomery()) {
+    MontgomeryAttr montAttr = type.getMontgomeryAttr();
+    one = montAttr.getR().getValue();
+  } else {
+    one = APInt(value.getBitWidth(), 1);
+  }
+  return ModArithOperation(one, type);
+}
 
 ModArithOperation
 ModArithOperation::operator+(const ModArithOperation &other) const {
   assert(type == other.type);
-
-  const APInt &a = value;
-  const APInt &b = other.value;
-  APInt modulus = type.getModulus().getValue();
-
-  unsigned bitWidth = modulus.getBitWidth();
-  if (bitWidth > modulus.getActiveBits()) {
-    APInt add = a + b;
-    if (add.uge(modulus)) {
-      add -= modulus;
-    }
-    return ModArithOperation(add, type);
-  }
-
-  APInt extA = a.zext(bitWidth + 1);
-  APInt extB = b.zext(bitWidth + 1);
-  APInt extModulus = modulus.zext(bitWidth + 1);
-  APInt extAdd = extA + extB;
-  if (extAdd.uge(extModulus)) {
-    extAdd -= extModulus;
-  }
-  return ModArithOperation(extAdd.trunc(bitWidth), type);
+  return ModArithOperation(executeBinaryModOp<AddOp>(value, other.value, type),
+                           type);
 }
 
 ModArithOperation
 ModArithOperation::operator-(const ModArithOperation &other) const {
   assert(type == other.type);
-
-  const APInt &a = value;
-  const APInt &b = other.value;
-  APInt modulus = type.getModulus().getValue();
-
-  if (a.uge(b)) {
-    return ModArithOperation(a - b, type);
-  }
-  unsigned bitWidth = modulus.getBitWidth();
-  if (bitWidth > modulus.getActiveBits()) {
-    return ModArithOperation(a + modulus - b, type);
-  }
-
-  APInt extA = a.zext(bitWidth + 1);
-  APInt extB = b.zext(bitWidth + 1);
-  APInt extModulus = modulus.zext(bitWidth + 1);
-  APInt extSub = extA + extModulus - extB;
-  return ModArithOperation(extSub.trunc(bitWidth), type);
+  return ModArithOperation(executeBinaryModOp<SubOp>(value, other.value, type),
+                           type);
 }
+
+namespace {
+
+struct MontMulOp {
+  template <typename T>
+  static void apply(const T &a, const T &b, T &c, const T &mod, uint64_t nPrime,
+                    bool hasModulusSpareBit, unsigned bitWidth) {
+    if constexpr (std::is_integral_v<T>) {
+      if (bitWidth > 32) {
+        zk_dtypes::MontMul(a, b, c, mod, nPrime);
+      } else if (bitWidth > 16) {
+        uint32_t result;
+        zk_dtypes::MontMul<uint32_t>(a, b, result, mod, nPrime);
+        c = result;
+      } else if (bitWidth > 8) {
+        uint16_t result;
+        zk_dtypes::MontMul<uint16_t>(a, b, result, mod, nPrime);
+        c = result;
+      } else {
+        uint8_t result;
+        zk_dtypes::MontMul<uint8_t>(a, b, result, mod, nPrime);
+        c = result;
+      }
+    } else {
+      zk_dtypes::MontMul(a, b, c, mod, nPrime, hasModulusSpareBit,
+                         zk_dtypes::CanUseNoCarryMulOptimization(mod));
+    }
+  }
+};
+
+template <size_t CurrentN, size_t MaxN>
+struct MontMulDispatcher {
+  static void dispatch(size_t targetN, const APInt &a, const APInt &b, APInt &c,
+                       const APInt &mod, uint64_t nPrime,
+                       bool hasModulusSpareBit, unsigned bitWidth) {
+    if (targetN == CurrentN) {
+      using T = zk_dtypes::BigInt<CurrentN>;
+      MontMulOp::apply<T>(
+          *reinterpret_cast<const T *>(a.getRawData()),
+          *reinterpret_cast<const T *>(b.getRawData()),
+          *const_cast<T *>(reinterpret_cast<const T *>(c.getRawData())),
+          *reinterpret_cast<const T *>(mod.getRawData()), nPrime,
+          hasModulusSpareBit, bitWidth);
+    } else if constexpr (CurrentN < MaxN) {
+      MontMulDispatcher<CurrentN + 1, MaxN>::dispatch(
+          targetN, a, b, c, mod, nPrime, hasModulusSpareBit, bitWidth);
+    }
+  }
+};
+
+APInt executeMontMulOp(const APInt &a, const APInt &b,
+                       const ModArithType &type) {
+  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  bool hasModulusSpareBit = bitWidth > modulus.getActiveBits();
+  MontgomeryAttr montAttr = type.getMontgomeryAttr();
+
+  APInt c(bitWidth, 0);
+  size_t neededLimbs = (bitWidth + 63) / 64;
+  uint64_t nPrime;
+  if (bitWidth > 64) {
+    nPrime = montAttr.getNPrime().getValue().getZExtValue();
+  } else {
+    nPrime = montAttr.getNInv().getValue().getZExtValue();
+  }
+
+  if (neededLimbs > 1 && neededLimbs <= kMaximumLimbNum) {
+    MontMulDispatcher<1, kMaximumLimbNum>::dispatch(
+        neededLimbs, a, b, c, modulus, nPrime, hasModulusSpareBit, bitWidth);
+  } else if (neededLimbs == 1) {
+    MontMulOp::apply<uint64_t>(a.getZExtValue(), b.getZExtValue(),
+                               *const_cast<uint64_t *>(c.getRawData()),
+                               modulus.getZExtValue(), nPrime,
+                               hasModulusSpareBit, bitWidth);
+  } else {
+    llvm_unreachable("Unsupported limb size");
+  }
+  return c;
+}
+
+} // namespace
 
 ModArithOperation
 ModArithOperation::operator*(const ModArithOperation &other) const {
   assert(type == other.type);
 
+  if (type.isMontgomery()) {
+    return ModArithOperation(executeMontMulOp(value, other.value, type), type);
+  }
+
   const APInt &a = value;
   const APInt &b = other.value;
   APInt modulus = type.getModulus().getValue();
-
-  APInt product = mulMod(a, b, modulus);
-  if (type.isMontgomery()) {
-    MontgomeryAttr montAttr = type.getMontgomeryAttr();
-    product = mulMod(product, montAttr.getRInv().getValue(), modulus);
-  }
-  return ModArithOperation(product, type);
+  return ModArithOperation(mulMod(a, b, modulus), type);
 }
 
 ModArithOperation
 ModArithOperation::operator/(const ModArithOperation &other) const {
   assert(type == other.type);
 
-  return *this * other.Inverse();
+  return *this * other.inverse();
 }
 
 ModArithOperation ModArithOperation::operator-() const {
@@ -101,73 +287,256 @@ ModArithOperation ModArithOperation::operator-() const {
   return ModArithOperation(modulus - value, type);
 }
 
-ModArithOperation ModArithOperation::Double() const {
-  APInt modulus = type.getModulus().getValue();
+ModArithOperation ModArithOperation::dbl() const {
+  return ModArithOperation(executeUnaryModOp<DoubleOp>(value, type), type);
+}
 
-  unsigned bitWidth = modulus.getBitWidth();
-  if (bitWidth > modulus.getActiveBits()) {
-    APInt shl = value.shl(1);
-    if (shl.uge(modulus)) {
-      shl -= modulus;
+namespace {
+
+struct MontSquareOp {
+  template <typename T>
+  static void apply(const T &a, T &b, const T &mod, uint64_t nPrime,
+                    bool hasModulusSpareBit, unsigned bitWidth) {
+    if constexpr (std::is_integral_v<T>) {
+      MontMulOp::apply<T>(a, a, b, mod, nPrime, hasModulusSpareBit, bitWidth);
+    } else {
+      zk_dtypes::MontSquare(a, b, mod, nPrime, hasModulusSpareBit);
     }
-    return ModArithOperation(shl, type);
   }
+};
 
-  APInt extValue = value.zext(bitWidth + 1);
-  APInt extModulus = modulus.zext(bitWidth + 1);
-  APInt extAdd = extValue + extValue;
-  if (extAdd.uge(extModulus)) {
-    extAdd -= extModulus;
+template <size_t CurrentN, size_t MaxN>
+struct MontSquareDispatcher {
+  static void dispatch(size_t targetN, const APInt &a, APInt &b,
+                       const APInt &mod, uint64_t nPrime,
+                       bool hasModulusSpareBit, unsigned bitWidth) {
+    if (targetN == CurrentN) {
+      using T = zk_dtypes::BigInt<CurrentN>;
+      MontSquareOp::apply<T>(
+          *reinterpret_cast<const T *>(a.getRawData()),
+          *const_cast<T *>(reinterpret_cast<const T *>(b.getRawData())),
+          *reinterpret_cast<const T *>(mod.getRawData()), nPrime,
+          hasModulusSpareBit, bitWidth);
+    } else if constexpr (CurrentN < MaxN) {
+      MontSquareDispatcher<CurrentN + 1, MaxN>::dispatch(
+          targetN, a, b, mod, nPrime, hasModulusSpareBit, bitWidth);
+    }
   }
-  return ModArithOperation(extAdd.trunc(bitWidth), type);
-}
+};
 
-ModArithOperation ModArithOperation::Square() const {
+APInt executeMontSquareOp(const APInt &a, const ModArithType &type) {
   APInt modulus = type.getModulus().getValue();
-  APInt square = mulMod(value, value, modulus);
-  if (type.isMontgomery()) {
-    MontgomeryAttr montAttr = type.getMontgomeryAttr();
-    square = mulMod(square, montAttr.getRInv().getValue(), modulus);
-  }
-  return ModArithOperation(square, type);
-}
-
-ModArithOperation ModArithOperation::Power(APInt exponent) const {
-  APInt base = value;
-  if (type.isMontgomery()) {
-    base = FromMont().value;
-  }
-  APInt modulus = type.getModulus().getValue();
-  APInt power = expMod(base, exponent, modulus);
-  if (type.isMontgomery()) {
-    MontgomeryAttr montAttr = type.getMontgomeryAttr();
-    power = mulMod(power, montAttr.getR().getValue(), modulus);
-  }
-  return ModArithOperation(power, type);
-}
-
-ModArithOperation ModArithOperation::Inverse() const {
-  APInt modulus = type.getModulus().getValue();
-  auto inverse = multiplicativeInverse(value, modulus);
-  if (type.isMontgomery()) {
-    MontgomeryAttr montAttr = type.getMontgomeryAttr();
-    inverse = mulMod(inverse, montAttr.getRSquared().getValue(), modulus);
-  }
-  return ModArithOperation(inverse, type);
-}
-
-ModArithOperation ModArithOperation::FromMont() const {
-  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+  bool hasModulusSpareBit = bitWidth > modulus.getActiveBits();
   MontgomeryAttr montAttr = type.getMontgomeryAttr();
-  APInt product = mulMod(value, montAttr.getRInv().getValue(), modulus);
-  return ModArithOperation(product, type);
+
+  APInt b(bitWidth, 0);
+  size_t neededLimbs = (bitWidth + 63) / 64;
+  uint64_t nPrime;
+  if (bitWidth > 64) {
+    nPrime = montAttr.getNPrime().getValue().getZExtValue();
+  } else {
+    nPrime = montAttr.getNInv().getValue().getZExtValue();
+  }
+
+  if (neededLimbs > 1 && neededLimbs <= kMaximumLimbNum) {
+    MontSquareDispatcher<1, kMaximumLimbNum>::dispatch(
+        neededLimbs, a, b, modulus, nPrime, hasModulusSpareBit, bitWidth);
+  } else if (neededLimbs == 1) {
+    MontSquareOp::apply<uint64_t>(
+        a.getZExtValue(), *const_cast<uint64_t *>(b.getRawData()),
+        modulus.getZExtValue(), nPrime, hasModulusSpareBit, bitWidth);
+  } else {
+    llvm_unreachable("Unsupported limb size");
+  }
+  return b;
 }
 
-ModArithOperation ModArithOperation::ToMont() const {
+} // namespace
+
+ModArithOperation ModArithOperation::square() const {
+  if (type.isMontgomery()) {
+    return ModArithOperation(executeMontSquareOp(value, type), type);
+  }
   APInt modulus = type.getModulus().getValue();
+  return ModArithOperation(mulMod(value, value, modulus), type);
+}
+
+namespace {
+
+ModArithOperation power(const ModArithOperation &value, const APInt &exponent) {
+  auto ret = value.getOne();
+  auto it = zk_dtypes::BitIteratorBE<APInt>::begin(&exponent, true);
+  auto end = zk_dtypes::BitIteratorBE<APInt>::end(&exponent);
+  while (it != end) {
+    ret = ret.square();
+    if (*it) {
+      ret *= value;
+    }
+    ++it;
+  }
+  return ret;
+}
+
+} // namespace
+
+ModArithOperation ModArithOperation::power(APInt exponent) const {
+  return mod_arith::power(*this, exponent);
+}
+
+namespace {
+
+struct InverseOp {
+  template <typename T>
+  static void apply(const T &a, T &b, const T &mod, const T &adjuster) {
+    if constexpr (std::is_integral_v<T>) {
+      using BigInt = zk_dtypes::BigInt<1>;
+      auto inverter = zk_dtypes::BYInverter<1>(BigInt(mod), BigInt(adjuster));
+      BigInt result;
+      [[maybe_unused]] bool ok = inverter.Invert(BigInt(a), result);
+      assert(ok);
+      b = static_cast<uint64_t>(result);
+    } else {
+      auto inverter = zk_dtypes::BYInverter<T::kLimbNums>(mod, adjuster);
+      [[maybe_unused]] bool ok = inverter.Invert(a, b);
+      assert(ok);
+    }
+  }
+};
+
+template <size_t CurrentN, size_t MaxN>
+struct InverseDispatcher {
+  static void dispatch(size_t targetN, const APInt &a, APInt &b,
+                       const APInt &mod, const APInt &adjuster) {
+    if (targetN == CurrentN) {
+      using T = zk_dtypes::BigInt<CurrentN>;
+      InverseOp::apply<T>(
+          *reinterpret_cast<const T *>(a.getRawData()),
+          *const_cast<T *>(reinterpret_cast<const T *>(b.getRawData())),
+          *reinterpret_cast<const T *>(mod.getRawData()),
+          *reinterpret_cast<const T *>(adjuster.getRawData()));
+    } else if constexpr (CurrentN < MaxN) {
+      InverseDispatcher<CurrentN + 1, MaxN>::dispatch(targetN, a, b, mod,
+                                                      adjuster);
+    }
+  }
+};
+
+APInt executeInverseOp(const APInt &a, const ModArithType &type) {
+  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
+
+  APInt b(bitWidth, 0);
+  size_t neededLimbs = (bitWidth + 63) / 64;
+  APInt adjuster;
+  if (type.isMontgomery()) {
+    MontgomeryAttr montAttr = type.getMontgomeryAttr();
+    adjuster = montAttr.getRSquared().getValue();
+  } else {
+    adjuster = APInt(bitWidth, 1);
+  }
+
+  if (neededLimbs > 1 && neededLimbs <= kMaximumLimbNum) {
+    InverseDispatcher<1, kMaximumLimbNum>::dispatch(neededLimbs, a, b, modulus,
+                                                    adjuster);
+  } else if (neededLimbs == 1) {
+    InverseOp::apply<uint64_t>(a.getZExtValue(),
+                               *const_cast<uint64_t *>(b.getRawData()),
+                               modulus.getZExtValue(), adjuster.getZExtValue());
+  } else {
+    llvm_unreachable("Unsupported limb size");
+  }
+  return b;
+}
+
+} // namespace
+
+ModArithOperation ModArithOperation::inverse() const {
+  return ModArithOperation(executeInverseOp(value, type), type);
+}
+
+namespace {
+
+struct FromMontOp {
+  template <typename T>
+  static void apply(const T &a, T &b, const T &mod, uint64_t nPrime,
+                    unsigned bitWidth) {
+    if constexpr (std::is_integral_v<T>) {
+      if (bitWidth > 32) {
+        zk_dtypes::MontReduce(a, b, mod, nPrime);
+      } else if (bitWidth > 16) {
+        uint32_t result;
+        zk_dtypes::MontReduce<uint32_t>(a, result, mod, nPrime);
+        b = result;
+      } else if (bitWidth > 8) {
+        uint16_t result;
+        zk_dtypes::MontReduce<uint16_t>(a, result, mod, nPrime);
+        b = result;
+      } else {
+        uint8_t result;
+        zk_dtypes::MontReduce<uint8_t>(a, result, mod, nPrime);
+        b = result;
+      }
+    } else {
+      zk_dtypes::MontReduce(a, b, mod, nPrime);
+    }
+  }
+};
+
+template <size_t CurrentN, size_t MaxN>
+struct FromMontDispatcher {
+  static void dispatch(size_t targetN, const APInt &a, APInt &b,
+                       const APInt &mod, uint64_t nPrime, unsigned bitWidth) {
+    if (targetN == CurrentN) {
+      using T = zk_dtypes::BigInt<CurrentN>;
+      FromMontOp::apply<T>(
+          *reinterpret_cast<const T *>(a.getRawData()),
+          *const_cast<T *>(reinterpret_cast<const T *>(b.getRawData())),
+          *reinterpret_cast<const T *>(mod.getRawData()), nPrime, bitWidth);
+    } else if constexpr (CurrentN < MaxN) {
+      FromMontDispatcher<CurrentN + 1, MaxN>::dispatch(targetN, a, b, mod,
+                                                       nPrime, bitWidth);
+    }
+  }
+};
+
+APInt executeFromMontOp(const APInt &a, const ModArithType &type) {
+  APInt modulus = type.getModulus().getValue();
+  unsigned bitWidth = modulus.getBitWidth();
   MontgomeryAttr montAttr = type.getMontgomeryAttr();
-  APInt product = mulMod(value, montAttr.getR().getValue(), modulus);
-  return ModArithOperation(product, type);
+
+  APInt b(bitWidth, 0);
+  size_t neededLimbs = (bitWidth + 63) / 64;
+  uint64_t nPrime;
+  if (bitWidth > 64) {
+    nPrime = montAttr.getNPrime().getValue().getZExtValue();
+  } else {
+    nPrime = montAttr.getNInv().getValue().getZExtValue();
+  }
+
+  if (neededLimbs > 1 && neededLimbs <= kMaximumLimbNum) {
+    FromMontDispatcher<1, kMaximumLimbNum>::dispatch(neededLimbs, a, b, modulus,
+                                                     nPrime, bitWidth);
+  } else if (neededLimbs == 1) {
+    FromMontOp::apply<uint64_t>(a.getZExtValue(),
+                                *const_cast<uint64_t *>(b.getRawData()),
+                                modulus.getZExtValue(), nPrime, bitWidth);
+  } else {
+    llvm_unreachable("Unsupported limb size");
+  }
+  return b;
+}
+
+} // namespace
+
+ModArithOperation ModArithOperation::fromMont() const {
+  return ModArithOperation(executeFromMontOp(value, type), type);
+}
+
+ModArithOperation ModArithOperation::toMont() const {
+  MontgomeryAttr montAttr = type.getMontgomeryAttr();
+  return ModArithOperation(
+      executeMontMulOp(value, montAttr.getRSquared().getValue(), type), type);
 }
 
 bool ModArithOperation::isOne() const {
@@ -184,7 +553,7 @@ llvm::SmallString<40> ModArithOperation::toString() const {
   llvm::SmallString<40> str;
   APInt val = value;
   if (type.isMontgomery()) {
-    val = FromMont().value;
+    val = fromMont().value;
   }
   val.toString(str, 10, false);
   return str;
@@ -192,7 +561,7 @@ llvm::SmallString<40> ModArithOperation::toString() const {
 
 raw_ostream &operator<<(raw_ostream &os, const ModArithOperation &op) {
   if (op.type.isMontgomery()) {
-    op.FromMont().value.print(os, false);
+    op.fromMont().value.print(os, false);
   } else {
     op.value.print(os, false);
   }

@@ -80,7 +80,7 @@ Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
     nVal = APInt(bitWidth, n);
   }
 
-  APInt inv = mod_arith::ModArithOperation(nVal, convertedType).Inverse();
+  APInt inv = mod_arith::ModArithOperation(nVal, convertedType).inverse();
   return b.create<mod_arith::ConstantOp>(
       convertedType, IntegerAttr::get(baseField.getStorageType(), inv));
 }

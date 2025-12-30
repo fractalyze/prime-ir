@@ -18,6 +18,7 @@ limitations under the License.
 #include "gtest/gtest.h"
 #include "llvm/ADT/bit.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/field/babybear/babybear.h"
 #include "zk_dtypes/include/field/goldilocks/goldilocks.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
@@ -109,7 +110,11 @@ using PrimeFieldTypes = testing::Types<
     // modulus bits = 2⁶⁴
     // modulus.getBitWidth() == 64
     // modulus.getActiveBits() == 64
-    zk_dtypes::Goldilocks>;
+    zk_dtypes::Goldilocks,
+    // modulus bits = 2²⁵⁴
+    // modulus.getBitWidth() == 254
+    // modulus.getActiveBits() == 254
+    zk_dtypes::bn254::Fr>;
 TYPED_TEST_SUITE(ModArithOperationTest, PrimeFieldTypes);
 
 //===----------------------------------------------------------------------===//
@@ -221,7 +226,7 @@ TYPED_TEST(ModArithOperationTest, Double) {
 
   this->runUnaryOperationTest(
       [](const PrimeFieldType &a) { return a.Double(); },
-      [](const ModArithOperation &a) { return a.Double(); });
+      [](const ModArithOperation &a) { return a.dbl(); });
 }
 
 TYPED_TEST(ModArithOperationTest, Square) {
@@ -229,7 +234,7 @@ TYPED_TEST(ModArithOperationTest, Square) {
 
   this->runUnaryOperationTest(
       [](const PrimeFieldType &a) { return a.Square(); },
-      [](const ModArithOperation &a) { return a.Square(); });
+      [](const ModArithOperation &a) { return a.square(); });
 }
 
 TYPED_TEST(ModArithOperationTest, Power) {
@@ -238,7 +243,8 @@ TYPED_TEST(ModArithOperationTest, Power) {
   uint32_t exponents[] = {
       0,
       1,
-      static_cast<uint32_t>(PrimeFieldType::Random().value()),
+      static_cast<uint32_t>(
+          static_cast<uint64_t>(PrimeFieldType::Random().value())),
   };
 
   for (uint32_t exponent : exponents) {
@@ -249,7 +255,7 @@ TYPED_TEST(ModArithOperationTest, Power) {
         [exponent](const ModArithOperation &a) {
           auto modulusBits =
               llvm::bit_ceil(PrimeFieldType::Config::kModulusBits);
-          return a.Power(convertToAPInt(exponent, modulusBits));
+          return a.power(convertToAPInt(exponent, modulusBits));
         });
   }
 }
@@ -259,7 +265,7 @@ TYPED_TEST(ModArithOperationTest, Inverse) {
 
   this->runUnaryOperationTest(
       [](const PrimeFieldType &a) { return *a.Inverse(); },
-      [](const ModArithOperation &a) { return a.Inverse(); },
+      [](const ModArithOperation &a) { return a.inverse(); },
       /*aMustBeNonZero=*/true);
 }
 
@@ -270,7 +276,7 @@ TYPED_TEST(ModArithOperationTest, FromMont) {
       [](const PrimeFieldType &a) {
         return PrimeFieldType::FromUnchecked(a.MontReduce().value());
       },
-      [](const ModArithOperation &a) { return a.FromMont(); });
+      [](const ModArithOperation &a) { return a.fromMont(); });
 }
 
 TYPED_TEST(ModArithOperationTest, ToMont) {
@@ -278,7 +284,7 @@ TYPED_TEST(ModArithOperationTest, ToMont) {
 
   this->runUnaryOperationTest(
       [](const PrimeFieldType &a) { return PrimeFieldType(a.value()); },
-      [](const ModArithOperation &a) { return a.ToMont(); });
+      [](const ModArithOperation &a) { return a.toMont(); });
 }
 
 TYPED_TEST(ModArithOperationTest, IsZero) {

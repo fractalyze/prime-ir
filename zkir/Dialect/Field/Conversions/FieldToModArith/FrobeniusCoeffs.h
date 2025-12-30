@@ -62,7 +62,7 @@ public:
                     APInt(modulus.getBitWidth(), e) * pMinus1.udiv(nVal);
         // Compute ξ^exp mod p
         APInt coeff =
-            mod_arith::ModArithOperation(xi, convertedType).Power(exp);
+            mod_arith::ModArithOperation(xi, convertedType).power(exp);
 
         Value constant =
             self.getBuilder().template create<mod_arith::ConstantOp>(

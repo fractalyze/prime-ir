@@ -34,6 +34,8 @@ public:
   ModArithOperation(IntegerAttr attr, ModArithType type)
       : value(attr.getValue()), type(type) {}
 
+  ModArithOperation getOne() const;
+
   operator APInt() const { return value; }
 
   ModArithOperation operator+(const ModArithOperation &other) const;
@@ -54,13 +56,13 @@ public:
   }
 
   ModArithOperation operator-() const;
-  ModArithOperation Double() const;
-  ModArithOperation Square() const;
-  ModArithOperation Power(APInt exponent) const;
-  ModArithOperation Inverse() const;
+  ModArithOperation dbl() const;
+  ModArithOperation square() const;
+  ModArithOperation power(APInt exponent) const;
+  ModArithOperation inverse() const;
 
-  ModArithOperation FromMont() const;
-  ModArithOperation ToMont() const;
+  ModArithOperation fromMont() const;
+  ModArithOperation toMont() const;
 
   bool isOne() const;
   bool isZero() const;
@@ -76,28 +78,28 @@ public:
   bool operator<(const ModArithOperation &other) const {
     assert(type == other.type);
     if (type.isMontgomery()) {
-      return FromMont().value.ult(other.FromMont().value);
+      return fromMont().value.ult(other.fromMont().value);
     }
     return value.ult(other.value);
   }
   bool operator>(const ModArithOperation &other) const {
     assert(type == other.type);
     if (type.isMontgomery()) {
-      return FromMont().value.ugt(other.FromMont().value);
+      return fromMont().value.ugt(other.fromMont().value);
     }
     return value.ugt(other.value);
   }
   bool operator<=(const ModArithOperation &other) const {
     assert(type == other.type);
     if (type.isMontgomery()) {
-      return FromMont().value.ule(other.FromMont().value);
+      return fromMont().value.ule(other.fromMont().value);
     }
     return value.ule(other.value);
   }
   bool operator>=(const ModArithOperation &other) const {
     assert(type == other.type);
     if (type.isMontgomery()) {
-      return FromMont().value.uge(other.FromMont().value);
+      return fromMont().value.uge(other.fromMont().value);
     }
     return value.uge(other.value);
   }

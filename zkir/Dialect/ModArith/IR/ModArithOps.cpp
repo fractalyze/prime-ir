@@ -229,7 +229,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).ToMont();
+    return ModArithOperation(value, modArithType).toMont();
   }
 };
 
@@ -247,7 +247,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).FromMont();
+    return ModArithOperation(value, modArithType).fromMont();
   }
 };
 
@@ -347,7 +347,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).Double();
+    return ModArithOperation(value, modArithType).dbl();
   }
 };
 
@@ -365,7 +365,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).Square();
+    return ModArithOperation(value, modArithType).square();
   }
 };
 
@@ -383,7 +383,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).Square();
+    return ModArithOperation(value, modArithType).square();
   }
 };
 
@@ -401,7 +401,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).Inverse();
+    return ModArithOperation(value, modArithType).inverse();
   }
 };
 
@@ -419,7 +419,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).Inverse();
+    return ModArithOperation(value, modArithType).inverse();
   }
 };
 
