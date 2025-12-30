@@ -377,7 +377,6 @@ struct ConvertMontInverse : public OpConversionPattern<MontInverseOp> {
 };
 
 // It is assumed inputs are canonical representatives
-// ModArithType ensures add/sub result can not overflow
 struct ConvertAdd : public OpConversionPattern<AddOp> {
   explicit ConvertAdd(MLIRContext *context)
       : OpConversionPattern<AddOp>(context) {}
@@ -401,9 +400,17 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
       result =
           montReducer.getCanonicalFromExtended(add.getSum(), add.getOverflow());
     } else {
-      auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
-          b.getContext(),
-          arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
+      // nuw (no unsigned wrap) is safe when storageWidth - modWidth >= 1.
+      // nsw (no signed wrap) is only safe when storageWidth - modWidth >= 2,
+      // because the sum of two (modWidth)-bit values can be up to
+      // 2^(modWidth+1) - 2, which overflows signed if modWidth + 1 >=
+      // storageWidth.
+      auto flags = arith::IntegerOverflowFlags::nuw;
+      if (storageWidth - modWidth >= 2) {
+        flags = flags | arith::IntegerOverflowFlags::nsw;
+      }
+      auto noOverflow =
+          arith::IntegerOverflowFlagsAttr::get(b.getContext(), flags);
       auto add = b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs(),
                                          noOverflow);
       MontReducer montReducer(b, getResultModArithType(op));
@@ -437,9 +444,14 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
       TypedAttr modAttr = modulusAttr(op);
       Value one =
           createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 1);
-      auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
-          b.getContext(),
-          arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
+      // nuw (no unsigned wrap) is safe when storageWidth - modWidth >= 1.
+      // nsw (no signed wrap) is only safe when storageWidth - modWidth >= 2.
+      auto flags = arith::IntegerOverflowFlags::nuw;
+      if (storageWidth - modWidth >= 2) {
+        flags = flags | arith::IntegerOverflowFlags::nsw;
+      }
+      auto noOverflow =
+          arith::IntegerOverflowFlagsAttr::get(b.getContext(), flags);
       auto shifted =
           b.create<arith::ShLIOp>(adaptor.getInput(), one, noOverflow);
       MontReducer montReducer(b, getResultModArithType(op));
