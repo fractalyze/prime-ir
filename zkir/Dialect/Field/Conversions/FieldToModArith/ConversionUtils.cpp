@@ -19,6 +19,8 @@ limitations under the License.
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
+#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "zkir/Utils/APIntUtils.h"
 
 namespace mlir::zkir::field {
 namespace {
@@ -58,6 +60,13 @@ Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
     nVal = modulus - APInt(bitWidth, -n);
   } else {
     nVal = APInt(bitWidth, n);
+  }
+
+  // Convert to Montgomery form if needed
+  if (baseField.getIsMontgomery()) {
+    auto modArithType =
+        mod_arith::ModArithType::get(b.getContext(), baseField.getModulus());
+    nVal = mod_arith::ModArithOperation(nVal, modArithType).ToMont();
   }
 
   return b.create<mod_arith::ConstantOp>(
