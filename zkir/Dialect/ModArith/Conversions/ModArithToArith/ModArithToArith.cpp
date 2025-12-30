@@ -42,10 +42,10 @@ limitations under the License.
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/Inverter/BYInverter.h"
 #include "zkir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/MontReducer.h"
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
-#include "zkir/Utils/APIntUtils.h"
 #include "zkir/Utils/ConversionUtils.h"
 #include "zkir/Utils/ShapedTypeConverter.h"
 
@@ -500,17 +500,20 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
       }
       if (rhsInt) {
         IntegerAttr rhsStd, negRhsStd;
-        if (modType.isMontgomery()) {
-          IntegerAttr rInv = montAttr.getRInv();
-          rhsStd = IntegerAttr::get(
-              rhsInt.getType(),
-              mulMod(rhsInt.getValue(), rInv.getValue(), modulus));
-          negRhsStd =
-              IntegerAttr::get(rhsInt.getType(), modulus - rhsStd.getValue());
-        } else {
-          rhsStd = rhsInt;
-          negRhsStd =
-              IntegerAttr::get(rhsInt.getType(), modulus - rhsInt.getValue());
+        {
+          ModArithOperation rhsStdOp(rhsInt.getValue(), modType);
+          if (modType.isMontgomery()) {
+            // NOTE(chokobole): Ideally, we should convert the underlying
+            // 'modType' to standard form here. Normalizing to standard form
+            // would improve performance by allowing us to bypass redundant
+            // Montgomery reductions during comparisons.
+            //
+            // For now, we perform a local 'fromMont()' conversion to extract
+            // the values only.
+            rhsStdOp = rhsStdOp.fromMont();
+          }
+          rhsStd = rhsStdOp.getIntegerAttr();
+          negRhsStd = (-rhsStdOp).getIntegerAttr();
         }
 
         // modulus = k * 2^twoAdicity + 1

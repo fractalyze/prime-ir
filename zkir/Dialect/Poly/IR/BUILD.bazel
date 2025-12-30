@@ -41,7 +41,6 @@ cc_library(
         ":types_inc_gen",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
-        "//zkir/Utils:APIntUtils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:DestinationStyleOpInterface",

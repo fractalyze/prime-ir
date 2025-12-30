@@ -34,7 +34,6 @@ cc_library(
         "//zkir/Dialect/ModArith/Conversions/ModArithToArith/Reducer:MontReducer",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/TensorExt/IR:TensorExt",
-        "//zkir/Utils:APIntUtils",
         "//zkir/Utils:ConversionUtils",
         "//zkir/Utils:ShapedTypeConverter",
         "@llvm-project//llvm:Support",

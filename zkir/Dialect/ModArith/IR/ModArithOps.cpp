@@ -20,7 +20,6 @@ limitations under the License.
 #include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "zkir/Utils/APIntUtils.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
 #include "zkir/Utils/ConstantFolder.h"
 
@@ -590,16 +589,15 @@ bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
   }
   if (intAttr) {
     auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
-    APInt modulus = modArithType.getModulus().getValue();
+    ModArithOperation valueOp(intAttr.getValue(), modArithType);
+    ModArithType stdType = modArithType;
     if (modArithType.isMontgomery()) {
-      MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-      APInt montReduced =
-          mulMod(intAttr.getValue(), montAttr.getRInv().getValue(), modulus);
-      return montReduced == modulus - offset;
-    } else {
-      auto intAttr = cast<IntegerAttr>(attr);
-      return intAttr.getValue() == modulus - offset;
+      stdType = cast<ModArithType>(getStandardFormType(modArithType));
+      valueOp = ModArithOperation(valueOp.fromMont(), stdType);
     }
+    ModArithOperation offsetOp(APInt(intAttr.getValue().getBitWidth(), offset),
+                               stdType);
+    return valueOp == -offsetOp;
   }
   return false;
 }

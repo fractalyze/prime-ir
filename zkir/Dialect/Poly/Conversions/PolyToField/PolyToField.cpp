@@ -21,6 +21,7 @@ limitations under the License.
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
+#include "zkir/Dialect/Field/IR/FieldOperation.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Dialect/Poly/IR/PolyAttributes.h"
@@ -28,7 +29,6 @@ limitations under the License.
 #include "zkir/Dialect/Poly/IR/PolyOps.h"
 #include "zkir/Dialect/Poly/IR/PolyTypes.h"
 #include "zkir/Dialect/TensorExt/IR/TensorExtOps.h"
-#include "zkir/Utils/APIntUtils.h"
 #include "zkir/Utils/ConversionUtils.h"
 
 namespace mlir::zkir::poly {
@@ -427,14 +427,12 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
   // of the degree.
   if (kInverse) {
     APInt modulus = coeffType.getModulus().getValue();
-    APInt invDegree =
-        multiplicativeInverse(APInt(modulus.getBitWidth(), degree), modulus);
-    auto invDegreeAttr =
-        IntegerAttr::get(coeffType.getStorageType(), invDegree);
+    field::PrimeFieldOperation degreeOp(APInt(modulus.getBitWidth(), degree),
+                                        coeffType);
     if (coeffType.isMontgomery()) {
-      invDegreeAttr = mod_arith::getAttrAsMontgomeryForm(coeffType.getModulus(),
-                                                         invDegreeAttr);
+      degreeOp = degreeOp.toMont();
     }
+    IntegerAttr invDegreeAttr = degreeOp.inverse().getIntegerAttr();
     // TODO(batzor): Use scalar multiplication directly when it's available.
     auto invDegreeConst = b.create<field::ConstantOp>(coeffType, invDegreeAttr);
     b.create<linalg::MapOp>(

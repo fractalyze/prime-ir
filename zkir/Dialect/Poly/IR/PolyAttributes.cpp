@@ -17,64 +17,11 @@ limitations under the License.
 
 #include <utility>
 
-#include "llvm/Support/ThreadPool.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "zkir/Dialect/Field/IR/FieldOps.h"
-#include "zkir/Utils/APIntUtils.h"
+#include "zkir/Dialect/Field/IR/FieldOperation.h"
 
 namespace mlir::zkir::poly {
-
-// Compute the first degree powers of root modulo mod.
-static void precomputeRoots(const APInt &root, const APInt &mod,
-                            unsigned degree, SmallVector<APInt> &roots,
-                            SmallVector<APInt> &invRoots,
-                            std::optional<IntegerAttr> montgomeryR) {
-  unsigned kBitWidth = llvm::bit_width(degree);
-
-  // Precompute powers-of-two: `powerOfTwo[k]` = `root^(2^k)` mod `mod`.
-  SmallVector<APInt> powerOfTwo(kBitWidth);
-  powerOfTwo[0] = root;
-  for (unsigned k = 1; k < kBitWidth; k++) {
-    powerOfTwo[k] = mulMod(powerOfTwo[k - 1], powerOfTwo[k - 1], mod);
-  }
-
-  // Coset factor
-  APInt coset(mod.getBitWidth(), 1);
-  if (montgomeryR) {
-    coset = montgomeryR->getValue();
-  }
-
-  // Prepare the result vector.
-  roots.resize(degree);
-  invRoots.resize(degree);
-  roots[0] = coset;
-  invRoots[0] = coset;
-
-  llvm::StdThreadPool pool(llvm::hardware_concurrency());
-
-  // For each exponent i, decompose it into powers of two using its binary
-  // representation.
-  for (unsigned i = 1; i < degree; i++) {
-    pool.async([&, i] {
-      APInt result(root.getBitWidth(), 1); // Identity element.
-      unsigned exp = i;
-      unsigned bit = 0;
-      while (exp > 0) {
-        if (exp & 1)
-          result = mulMod(result, powerOfTwo[bit], mod);
-        exp >>= 1;
-        bit++;
-      }
-
-      roots[i] = mulMod(coset, result, mod);
-      invRoots[degree - i] = mulMod(coset, result, mod);
-    });
-  }
-
-  // Wait for all scheduled tasks to complete.
-  pool.wait();
-}
 
 field::RootOfUnityAttr PrimitiveRootAttr::getRootOfUnity() const {
   return getImpl()->rootOfUnity;
@@ -110,54 +57,45 @@ namespace detail {
 PrimitiveRootAttrStorage *
 PrimitiveRootAttrStorage::construct(AttributeStorageAllocator &allocator,
                                     KeyTy &&key) {
-  // Extract the root and degree from the key.
   field::RootOfUnityAttr rootOfUnity = std::get<0>(key);
-  IntegerAttr root = rootOfUnity.getRoot();
-  IntegerAttr degree = rootOfUnity.getDegree();
   mod_arith::MontgomeryAttr montgomery = std::get<1>(key);
 
-  std::optional<IntegerAttr> montgomeryR;
-  if (montgomery != mod_arith::MontgomeryAttr()) {
-    montgomeryR = montgomery.getR();
+  field::PrimeFieldOperation root(
+      rootOfUnity.getRoot(),
+      cast<field::PrimeFieldType>(rootOfUnity.getType()));
+  field::PrimeFieldOperation invRoot = root.inverse();
+  field::PrimeFieldOperation degree(rootOfUnity.getDegree().getValue(),
+                                    rootOfUnity.getType());
+  if (rootOfUnity.getType().isMontgomery()) {
+    degree = degree.toMont();
   }
-
-  APInt mod = rootOfUnity.getType().getModulus().getValue();
-  APInt rootVal;
-  if (montgomery != mod_arith::MontgomeryAttr()) {
-    rootVal = mulMod(root.getValue(), montgomery.getRInv().getValue(), mod);
-  } else {
-    rootVal = root.getValue();
-  }
-  APInt invRootVal = multiplicativeInverse(rootVal, mod);
-  APInt invDegreeVal = multiplicativeInverse(
-      degree.getValue().zextOrTrunc(mod.getBitWidth()), mod);
-
-  if (montgomeryR) {
-    invDegreeVal = mulMod(invDegreeVal, montgomeryR->getValue(), mod);
-  }
-
-  if (montgomery != mod_arith::MontgomeryAttr()) {
-    APInt rootMontVal =
-        mulMod(root.getValue(), montgomery.getR().getValue(), mod);
-    root = IntegerAttr::get(root.getType(), rootMontVal);
-  }
-  IntegerAttr invDegree = IntegerAttr::get(root.getType(), invDegreeVal);
-  IntegerAttr invRoot = IntegerAttr::get(root.getType(), invRootVal);
-
+  field::PrimeFieldOperation invDegree = degree.inverse();
   // Compute the exponent table.
   SmallVector<APInt> roots, invRoots;
-  precomputeRoots(rootVal, mod, degree.getInt(), roots, invRoots, montgomeryR);
+  unsigned degreeInt = rootOfUnity.getDegree().getInt();
+  auto computePowers = [&](const field::PrimeFieldOperation &root,
+                           SmallVector<APInt> &roots) {
+    roots.reserve(degreeInt);
+    field::PrimeFieldOperation cur = root.getOne();
+    for (unsigned i = 0; i < degreeInt; ++i) {
+      roots.push_back(cur);
+      cur *= root;
+    }
+  };
+  computePowers(root, roots);
+  computePowers(invRoot, invRoots);
   // Create a ranked tensor type for the exponents attribute.
-  auto tensorType = RankedTensorType::get({degree.getInt()}, root.getType());
+  auto tensorType =
+      RankedTensorType::get({degreeInt}, rootOfUnity.getRoot().getType());
 
   // Create the DenseIntElementsAttr from the computed exponent values.
   DenseElementsAttr rootsAttr = DenseElementsAttr::get(tensorType, roots);
   DenseElementsAttr invRootsAttr = DenseElementsAttr::get(tensorType, invRoots);
   return new (allocator.allocate<PrimitiveRootAttrStorage>())
-      PrimitiveRootAttrStorage(std::move(rootOfUnity), std::move(root),
-                               std::move(invDegree), std::move(invRoot),
-                               std::move(rootsAttr), std::move(invRootsAttr),
-                               std::move(montgomery));
+      PrimitiveRootAttrStorage(std::move(rootOfUnity), root.getIntegerAttr(),
+                               invDegree.getIntegerAttr(),
+                               invRoot.getIntegerAttr(), std::move(rootsAttr),
+                               std::move(invRootsAttr), std::move(montgomery));
 }
 
 } // namespace detail

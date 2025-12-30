@@ -31,7 +31,6 @@ cc_library(
         "//zkir/Dialect/Field/Conversions/FieldToModArith:ExtensionFieldCodeGen",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
-        "//zkir/Utils:APIntUtils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",

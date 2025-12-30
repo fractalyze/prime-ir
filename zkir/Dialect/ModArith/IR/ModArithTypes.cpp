@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
-#include "zkir/Utils/APIntUtils.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::zkir::mod_arith {
@@ -41,42 +41,32 @@ ModArithType::getABIAlignment(DataLayout const &dataLayout,
 }
 
 IntegerAttr getAttrAsStandardForm(IntegerAttr modulusAttr, IntegerAttr attr) {
-  APInt value = attr.getValue();
-  APInt modulus = modulusAttr.getValue();
   auto modArithType = ModArithType::get(attr.getContext(), modulusAttr);
-  MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-  value = mulMod(value, montAttr.getRInv().getValue(), modulus);
-
-  return IntegerAttr::get(attr.getType(), value);
+  ModArithOperation value(attr.getValue(), modArithType);
+  return value.fromMont().getIntegerAttr();
 }
 
 IntegerAttr getAttrAsMontgomeryForm(IntegerAttr modulusAttr, IntegerAttr attr) {
-  APInt value = attr.getValue();
-  APInt modulus = modulusAttr.getValue();
   auto modArithType = ModArithType::get(attr.getContext(), modulusAttr);
-  MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-  value = mulMod(value, montAttr.getR().getValue(), modulus);
-
-  return IntegerAttr::get(attr.getType(), value);
+  ModArithOperation value(attr.getValue(), modArithType);
+  return value.toMont().getIntegerAttr();
 }
 
 DenseElementsAttr getAttrAsStandardForm(IntegerAttr modulusAttr,
                                         DenseElementsAttr attr) {
-  APInt modulus = modulusAttr.getValue();
   auto modArithType = ModArithType::get(attr.getContext(), modulusAttr);
-  MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
   return attr.mapValues(attr.getElementType(), [&](APInt value) -> APInt {
-    return mulMod(value, montAttr.getRInv().getValue(), modulus);
+    ModArithOperation valueOp(value, modArithType);
+    return valueOp.fromMont();
   });
 }
 
 DenseElementsAttr getAttrAsMontgomeryForm(IntegerAttr modulusAttr,
                                           DenseElementsAttr attr) {
-  APInt modulus = modulusAttr.getValue();
   auto modArithType = ModArithType::get(attr.getContext(), modulusAttr);
-  MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
   return attr.mapValues(attr.getElementType(), [&](APInt value) -> APInt {
-    return mulMod(value, montAttr.getR().getValue(), modulus);
+    ModArithOperation valueOp(value, modArithType);
+    return valueOp.toMont();
   });
 }
 } // namespace mlir::zkir::mod_arith

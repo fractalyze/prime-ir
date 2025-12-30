@@ -32,7 +32,6 @@ cc_library(
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/Poly/IR:Poly",
         "//zkir/Dialect/TensorExt/IR:TensorExt",
-        "//zkir/Utils:APIntUtils",
         "//zkir/Utils:ConversionUtils",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BufferizationDialect",

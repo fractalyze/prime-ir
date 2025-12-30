@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "llvm/ADT/STLExtras.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/APIntUtils.h"
 
@@ -57,16 +58,15 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   APInt b = APInt::getOneBitSet(w + 1, w);
 
   // `bReduced` = `b` (mod `modulus`)
-  // `bInv` = `b`⁻¹ mod `modulus`
   APInt modExt = modulus.zextOrTrunc(b.getBitWidth());
   APInt bReduced = b.urem(modExt);
   bReduced = bReduced.zextOrTrunc(modulus.getBitWidth());
-  APInt bInv = multiplicativeInverse(bReduced, modulus);
+  ModArithType modType = ModArithType::get(modAttr.getContext(), modAttr);
+  ModArithOperation bReducedOp(bReduced, modType);
 
   // Compute `R` = `b^l` (mod `modulus`) where `l` is the number of limbs
-  APInt r = expMod(bReduced, APInt(modulus.getBitWidth(), numWords), modulus);
-  APInt rInv = multiplicativeInverse(r, modulus);
-  APInt rSquared = mulMod(r, r, modulus);
+  ModArithOperation rOp =
+      bReducedOp.power(APInt(modulus.getBitWidth(), numWords));
 
   // `modulusModB` = `modulus` (mod `b`)
   APInt modulusModB = modulus.zextOrTrunc(b.getBitWidth());
@@ -82,16 +82,16 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   nPrime = nPrime.trunc(w);
 
   // Construct the `rAttr` with the bitwidth of the modulus
-  IntegerAttr rAttr = IntegerAttr::get(modAttr.getType(), r);
+  IntegerAttr rAttr = rOp.getIntegerAttr();
 
   // Construct the `rInvAttr` with the bitwidth of the modulus
-  IntegerAttr rInvAttr = IntegerAttr::get(modAttr.getType(), rInv);
+  IntegerAttr rInvAttr = rOp.inverse().getIntegerAttr();
 
   // Construct the `bInvAttr` with the bitwidth of the modulus
-  IntegerAttr bInvAttr = IntegerAttr::get(modAttr.getType(), bInv);
+  IntegerAttr bInvAttr = bReducedOp.inverse().getIntegerAttr();
 
   // Construct the `rSquaredAttr` with the bitwidth of the modulus
-  IntegerAttr rSquaredAttr = IntegerAttr::get(modAttr.getType(), rSquared);
+  IntegerAttr rSquaredAttr = rOp.square().getIntegerAttr();
 
   // Construct the `nPrimeAttr` with the bitwidth `w`
   IntegerAttr nPrimeAttr = IntegerAttr::get(
@@ -104,15 +104,15 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   // Construct the `invTwoPowersAttr` with the bitwidth `w`
   SmallVector<IntegerAttr> invTwoPowers;
   invTwoPowers.reserve(modulus.getBitWidth());
-  invTwoPowers.push_back(IntegerAttr::get(
-      modAttr.getType(),
-      multiplicativeInverse(APInt::getOneBitSet(modulus.getBitWidth(), 1),
-                            modulus)));
+  auto invTwo =
+      ModArithOperation(APInt::getOneBitSet(modulus.getBitWidth(), 1), modType)
+          .inverse();
+  auto cur = invTwo;
+  invTwoPowers.push_back(invTwo.getIntegerAttr());
   size_t twoAdicity = (modulus - 1).countTrailingZeros();
   for (size_t i = 1; i < twoAdicity; i++) {
-    invTwoPowers.push_back(IntegerAttr::get(
-        modAttr.getType(), mulMod(invTwoPowers[i - 1].getValue(),
-                                  invTwoPowers[0].getValue(), modulus)));
+    cur *= invTwo;
+    invTwoPowers.push_back(cur.getIntegerAttr());
   }
 
   return new (allocator.allocate<MontgomeryAttrStorage>())
