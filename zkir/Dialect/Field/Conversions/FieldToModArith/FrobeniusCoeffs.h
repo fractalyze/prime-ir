@@ -52,14 +52,16 @@ public:
 
     std::array<std::array<PrimeFieldCodeGen, N - 1>, N - 1> coeffs;
 
-    APInt pMinus1 = modulus - 1;
-    APInt nVal(modulus.getBitWidth(), N);
+    // Use larger bit width to avoid overflow
+    unsigned extBitWidth = modulus.getBitWidth() * 2;
+    APInt pMinus1 = (modulus - 1).zext(extBitWidth);
+    APInt nVal(extBitWidth, N);
 
     for (size_t e = 1; e < N; ++e) {
       for (size_t i = 1; i < N; ++i) {
         // exp = i * e * (p - 1) / n
-        APInt exp = APInt(modulus.getBitWidth(), i) *
-                    APInt(modulus.getBitWidth(), e) * pMinus1.udiv(nVal);
+        APInt exp =
+            APInt(extBitWidth, i) * APInt(extBitWidth, e) * pMinus1.udiv(nVal);
         // Compute ξ^exp mod p
         APInt coeff =
             mod_arith::ModArithOperation(xi, convertedType).power(exp);
