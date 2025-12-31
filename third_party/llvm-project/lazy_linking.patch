@@ -1,0 +1,21 @@
+diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+index c64660420c9c..5f2b4b904311 100644
+--- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+@@ -8912,6 +8912,7 @@ cc_library(
+         ":TranslateLib",
+         "//llvm:Support",
+         "//mlir/test:TestToLLVMIRTranslation",
++        "@zkir//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+     ],
+ )
+ 
+@@ -9404,6 +9405,8 @@ cc_binary(
+         "//llvm:Linker",
+         "//llvm:Support",
+         "//llvm:X86AsmParser",
++        "@zkir//zkir/Dialect/Field/IR:Field",
++        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
+     ],
+ )
+ 

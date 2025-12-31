@@ -21,6 +21,23 @@ package(
 )
 
 cc_library(
+    name = "EllipticCurveHdrs",
+    hdrs = [
+        "EllipticCurveAttributes.h",
+        "EllipticCurveOps.h",
+        "EllipticCurveTypes.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":ops_inc_gen",
+        ":types_inc_gen",
+        "//zkir/Dialect/Field/IR:FieldHdrs",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+    ],
+)
+
+cc_library(
     name = "EllipticCurve",
     srcs = [
         "EllipticCurveAttributes.cpp",

@@ -275,16 +275,16 @@ index 8075df730ccc..5989b699fcfa 100644
    OpBuilder &builder;
    Block &block;
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 7543739b3a44..4fc82f6c1d27 100644
+index 7543739b3a44..632ead246b84 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 @@ -10544,6 +10544,9 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",
-+        "@zkir//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
-+        "@zkir//zkir/Dialect/Field/IR:Field",
-+        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
++        "@zkir//zkir/Dialect/EllipticCurve/IR:EllipticCurveHdrs",
++        "@zkir//zkir/Dialect/Field/IR:FieldHdrs",
++        "@zkir//zkir/Dialect/ModArith/IR:ModArithHdrs",
      ],
  )
  

@@ -19,6 +19,8 @@ LLVM_SHA256 = "95792e50d5f84847721545b645a6ca2c2b3b7610d02e3de07d65a6148e68508c"
 
 # TODO(chokobole): We must review the applied patches below and remove any that
 # are not strictly necessary for this project.
+# NOTE(chokobole): The order of the patches is important. If you update this,
+# please update the order in the tools/setup_llvm_clone.sh script.
 LLVM_PATCHES = [
     # TODO(chokobole): Remove once the issues are resolved upstream.
     "@zkir//third_party/llvm-project:cuda_runtime.patch",
@@ -35,4 +37,5 @@ LLVM_PATCHES = [
     "@zkir//third_party/llvm-project:tensor_type_support.patch",
     "@zkir//third_party/llvm-project:vector_type_support.patch",
     "@zkir//third_party/llvm-project:memref_folding.patch",
+    "@zkir//third_party/llvm-project:lazy_linking.patch",
 ]

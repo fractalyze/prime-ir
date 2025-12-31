@@ -21,6 +21,25 @@ package(
 )
 
 cc_library(
+    name = "ModArithHdrs",
+    hdrs = [
+        "ModArithAttributes.h",
+        "ModArithOps.h",
+        "ModArithTypes.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":ops_inc_gen",
+        ":types_inc_gen",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:DataLayoutInterfaces",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+    ],
+)
+
+cc_library(
     name = "ModArith",
     srcs = [
         "ModArithAttributes.cpp",

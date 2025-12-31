@@ -174,15 +174,15 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  
  void SplatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index f7722951646c..008946b81e69 100644
+index e86158d51727..a18225d441de 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 @@ -4713,6 +4713,9 @@ cc_library(
          ":VectorOpsIncGen",
          ":ViewLikeInterface",
          "//llvm:Support",
-+        "@zkir//zkir/Dialect/Field/IR:Field",
-+        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
++        "@zkir//zkir/Dialect/Field/IR:FieldHdrs",
++        "@zkir//zkir/Dialect/ModArith/IR:ModArithHdrs",
 +        "@zkir//zkir/IR:Attributes",
      ],
  )

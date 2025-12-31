@@ -25,6 +25,8 @@ nanobind_pywrap_extension(
     name = "_mlir",
     srcs = ["@llvm-project//mlir:lib/Bindings/Python/MainModule.cpp"],
     deps = [
+        # TODO(chokobole): Remove this after we have `_elliptic_curve` target.
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
         "@llvm-project//mlir:MLIRBindingsPythonCore",
         "@llvm-project//mlir:MLIRBindingsPythonNanobindHeaders",
         "@nanobind",

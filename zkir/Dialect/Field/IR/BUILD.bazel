@@ -21,6 +21,27 @@ package(
 )
 
 cc_library(
+    name = "FieldHdrs",
+    hdrs = [
+        "FieldAttributes.h",
+        "FieldOps.h",
+        "FieldTypes.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":ops_inc_gen",
+        ":types_inc_gen",
+        "//zkir/Dialect/ModArith/IR:ModArithHdrs",
+        "//zkir/Utils:SimpleStructBuilder",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:DataLayoutInterfaces",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+    ],
+)
+
+cc_library(
     name = "Field",
     srcs = [
         "FieldAttributes.cpp",
