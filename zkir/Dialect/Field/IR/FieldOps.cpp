@@ -330,4 +330,58 @@ void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   patterns.add<MulOfMulByConstant>(context);
 }
 
+namespace {
+
+struct ExtFromCoeffsOfExtToCoeffs
+    : public mlir::OpRewritePattern<ExtFromCoeffsOp> {
+  using OpRewritePattern<ExtFromCoeffsOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtFromCoeffsOp op,
+                                PatternRewriter &rewriter) const override {
+    // Match: field.ext_from_coeffs(field.ext_to_coeffs(arg))
+    if (op.getOperands().empty())
+      return failure();
+
+    auto extToCoeffsOp =
+        op.getOperands().front().getDefiningOp<ExtToCoeffsOp>();
+    if (!extToCoeffsOp)
+      return failure();
+
+    // The operands must be exactly the results of the ExtToCoeffsOp, in order.
+    if (op.getOperands() != extToCoeffsOp->getResults())
+      return failure();
+
+    rewriter.replaceOp(op, extToCoeffsOp->getOperands());
+    return success();
+  }
+};
+
+struct ExtToCoeffsOfExtFromCoeffs
+    : public mlir::OpRewritePattern<ExtToCoeffsOp> {
+  using OpRewritePattern<ExtToCoeffsOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtToCoeffsOp op,
+                                PatternRewriter &rewriter) const override {
+    // Match: field.ext_to_coeffs(field.ext_from_coeffs(arg...))
+    auto extFromCoeffsOp = op.getOperand().getDefiningOp<ExtFromCoeffsOp>();
+    if (!extFromCoeffsOp)
+      return failure();
+
+    rewriter.replaceOp(op, extFromCoeffsOp->getOperands());
+    return success();
+  }
+};
+
+} // namespace
+
+void ExtFromCoeffsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                  MLIRContext *context) {
+  patterns.add<ExtFromCoeffsOfExtToCoeffs>(context);
+}
+
+void ExtToCoeffsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                MLIRContext *context) {
+  patterns.add<ExtToCoeffsOfExtFromCoeffs>(context);
+}
+
 } // namespace mlir::zkir::field

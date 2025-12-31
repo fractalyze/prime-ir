@@ -16,6 +16,42 @@
 // RUN: zkir-opt -canonicalize %s | FileCheck %s -enable-var-scope
 
 !PF = !field.pf<7:i32>
+!QF = !field.f2<!PF, 6:i32>
+
+//===----------------------------------------------------------------------===//
+// ExtToCoeffsOp and ExtFromCoeffsOp
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_ext_to_coeffs_of_ext_from_coeffs
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_ext_to_coeffs_of_ext_from_coeffs(%arg0: !QF) -> !QF {
+  %0:2 = field.ext_to_coeffs %arg0 : (!QF) -> (!PF, !PF)
+  %1 = field.ext_from_coeffs %0#0, %0#1 : (!PF, !PF) -> !QF
+  // CHECK-NOT: field.ext_from_coeffs
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %1 : !QF
+}
+
+// CHECK-LABEL: @test_ext_to_coeffs_of_swapped_ext_from_coeffs
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_ext_to_coeffs_of_swapped_ext_from_coeffs(%arg0: !QF) -> !QF {
+  %0:2 = field.ext_to_coeffs %arg0 : (!QF) -> (!PF, !PF)
+  %1 = field.ext_from_coeffs %0#1, %0#0 : (!PF, !PF) -> !QF
+  // CHECK: %[[EXT_TO_COEFFS:.*]]:2 = field.ext_to_coeffs %[[ARG0]] : ([[T]]) -> ([[T2:.*]], [[T2]])
+  // CHECK: %[[EXT_FROM_COEFFS:.*]] = field.ext_from_coeffs %[[EXT_TO_COEFFS]]#1, %[[EXT_TO_COEFFS]]#0 : ([[T2]], [[T2]]) -> [[T]]
+  // CHECK: return %[[EXT_FROM_COEFFS]] : [[T]]
+  return %1 : !QF
+}
+
+// CHECK-LABEL: @test_ext_from_coeffs_of_ext_to_coeffs
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
+func.func @test_ext_from_coeffs_of_ext_to_coeffs(%arg0: !PF, %arg1: !PF) -> (!PF, !PF) {
+  %0 = field.ext_from_coeffs %arg0, %arg1 : (!PF, !PF) -> (!QF)
+  %1:2 = field.ext_to_coeffs %0 : (!QF) -> (!PF, !PF)
+  // CHECK-NOT: field.ext_to_coeffs
+  // CHECK: return %[[ARG0]], %[[ARG1]] : [[T]], [[T]]
+  return %1#0, %1#1 : !PF, !PF
+}
 
 //===----------------------------------------------------------------------===//
 // Tensor operations

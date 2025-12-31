@@ -407,6 +407,7 @@ def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
   let arguments = (ins Field_AnyExtFieldType:$input);
   let results = (outs Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasCanonicalizer = 1;
   let hasVerifier = 1;
 }
 
@@ -428,6 +429,7 @@ def Field_ExtFromCoeffsOp : Field_Op<"ext_from_coeffs", [Pure]> {
   let arguments = (ins Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$input);
   let results = (outs Field_AnyExtFieldType:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasCanonicalizer = 1;
   let hasVerifier = 1;
 }
 

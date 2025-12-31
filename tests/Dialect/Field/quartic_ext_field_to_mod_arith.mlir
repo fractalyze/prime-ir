@@ -68,12 +68,6 @@ func.func @test_lower_square(%arg0: !QF) -> !QF {
 
 // CHECK-LABEL: @test_lower_inverse
 func.func @test_lower_inverse(%arg0: !QF) -> !QF {
-    // TODO(junbeomlee): After canonicalization, the norm computation should be
-    // optimized from Toom-Cook (7 muls) to direct formula (5 muls):
-    //   Norm = x₀ * t₀ + ξ * (x₁ * t₃ + x₂ * t₂ + x₃ * t₁)
-    // where t = φ¹(x) * φ²(x) * φ³(x).
-    // This reduces total from 34 muls to 32 muls.
-    //
     // Frobenius-based inverse: x⁻¹ = Frobenius_product(x) * Norm(x)⁻¹
     // Frobenius_product = φ¹(x) * φ²(x) * φ³(x)
     //
@@ -102,13 +96,15 @@ func.func @test_lower_inverse(%arg0: !QF) -> !QF {
     // CHECK-COUNT-7: mod_arith.mul
     // CHECK: field.ext_from_coeffs
     //
-    // Toom-Cook mul: x * frob_product (for norm)
-    // CHECK-COUNT-2: field.ext_to_coeffs
-    // CHECK-COUNT-7: mod_arith.mul
-    // CHECK: field.ext_from_coeffs
+    // Direct mul: x * frob_product (for norm)
+    // CHECK-COUNT-2: mod_arith.mul
+    // CHECK: mod_arith.add
+    // CHECK: mod_arith.mul
+    // CHECK: mod_arith.add
+    // CHECK-COUNT-2: mod_arith.mul
+    // CHECK: mod_arith.add
     //
-    // Extract norm (constant term) and inverse
-    // CHECK: field.ext_to_coeffs
+    // Norm inverse:
     // CHECK: mod_arith.inverse
     //
     // Final scaling: frob_product * norm⁻¹
