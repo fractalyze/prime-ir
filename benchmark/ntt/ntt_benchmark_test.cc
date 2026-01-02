@@ -21,7 +21,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 
-#define NUM_COEFFS (1 << 20)
+#define NUM_COEFFS (1 << 16) // 65,536 coefficients (default)
 
 namespace mlir::zkir::benchmark {
 namespace {

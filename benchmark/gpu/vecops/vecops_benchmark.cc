@@ -24,7 +24,7 @@ limitations under the License.
 #include "utils/cuda/CudaUtils.h"
 #include "zk_dtypes/include/field/goldilocks/goldilocks.h"
 
-#define NUM_COEFFS (1 << 20)
+#define NUM_COEFFS (1 << 16) // 65,536 rows (default)
 
 namespace mlir::zkir::benchmark {
 namespace {
