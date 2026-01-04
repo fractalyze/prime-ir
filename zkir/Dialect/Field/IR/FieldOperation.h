@@ -25,13 +25,35 @@ namespace mlir::zkir::field {
 
 class PrimeFieldOperation {
 public:
+  PrimeFieldOperation() = default;
   PrimeFieldOperation(APInt value, PrimeFieldType type)
       : op(value, convertPrimeFieldType(type)), type(type) {}
   PrimeFieldOperation(IntegerAttr attr, PrimeFieldType type)
       : op(attr, convertPrimeFieldType(type)), type(type) {}
+  PrimeFieldOperation(int64_t value, PrimeFieldType type)
+      : op(value, convertPrimeFieldType(type)), type(type) {}
+  PrimeFieldOperation(uint64_t value, PrimeFieldType type)
+      : op(value, convertPrimeFieldType(type)), type(type) {}
+
+  static PrimeFieldOperation fromUnchecked(APInt value, PrimeFieldType type) {
+    return fromUnchecked(mod_arith::ModArithOperation::fromUnchecked(
+                             value, convertPrimeFieldType(type)),
+                         type);
+  }
+  static PrimeFieldOperation fromUnchecked(IntegerAttr attr,
+                                           PrimeFieldType type) {
+    return fromUnchecked(attr.getValue(), type);
+  }
+  static PrimeFieldOperation fromUnchecked(mod_arith::ModArithOperation op,
+                                           PrimeFieldType type) {
+    PrimeFieldOperation ret;
+    ret.op = op;
+    ret.type = type;
+    return ret;
+  }
 
   PrimeFieldOperation getOne() const {
-    return PrimeFieldOperation(op.getOne(), type);
+    return PrimeFieldOperation::fromUnchecked(op.getOne(), type);
   }
 
   operator APInt() const { return static_cast<APInt>(op); }
@@ -41,7 +63,7 @@ public:
 
   PrimeFieldOperation operator+(const PrimeFieldOperation &other) const {
     assert(type == other.type);
-    return PrimeFieldOperation(op + other.op, type);
+    return PrimeFieldOperation::fromUnchecked(op + other.op, type);
   }
   PrimeFieldOperation &operator+=(const PrimeFieldOperation &other) {
     assert(type == other.type);
@@ -50,7 +72,7 @@ public:
   }
   PrimeFieldOperation operator-(const PrimeFieldOperation &other) const {
     assert(type == other.type);
-    return PrimeFieldOperation(op - other.op, type);
+    return PrimeFieldOperation::fromUnchecked(op - other.op, type);
   }
   PrimeFieldOperation &operator-=(const PrimeFieldOperation &other) {
     assert(type == other.type);
@@ -59,7 +81,7 @@ public:
   }
   PrimeFieldOperation operator*(const PrimeFieldOperation &other) const {
     assert(type == other.type);
-    return PrimeFieldOperation(op * other.op, type);
+    return PrimeFieldOperation::fromUnchecked(op * other.op, type);
   }
   PrimeFieldOperation &operator*=(const PrimeFieldOperation &other) {
     assert(type == other.type);
@@ -68,7 +90,7 @@ public:
   }
   PrimeFieldOperation operator/(const PrimeFieldOperation &other) const {
     assert(type == other.type);
-    return PrimeFieldOperation(op / other.op, type);
+    return PrimeFieldOperation::fromUnchecked(op / other.op, type);
   }
   PrimeFieldOperation &operator/=(const PrimeFieldOperation &other) {
     assert(type == other.type);
@@ -76,25 +98,25 @@ public:
     return *this;
   }
   PrimeFieldOperation operator-() const {
-    return PrimeFieldOperation(-op, type);
+    return PrimeFieldOperation::fromUnchecked(-op, type);
   }
   PrimeFieldOperation dbl() const {
-    return PrimeFieldOperation(op.dbl(), type);
+    return PrimeFieldOperation::fromUnchecked(op.dbl(), type);
   }
   PrimeFieldOperation square() const {
-    return PrimeFieldOperation(op.square(), type);
+    return PrimeFieldOperation::fromUnchecked(op.square(), type);
   }
   PrimeFieldOperation power(APInt exponent) const {
-    return PrimeFieldOperation(op.power(exponent), type);
+    return PrimeFieldOperation::fromUnchecked(op.power(exponent), type);
   }
   PrimeFieldOperation inverse() const {
-    return PrimeFieldOperation(op.inverse(), type);
+    return PrimeFieldOperation::fromUnchecked(op.inverse(), type);
   }
   PrimeFieldOperation fromMont() const {
-    return PrimeFieldOperation(op.fromMont(), type);
+    return PrimeFieldOperation::fromUnchecked(op.fromMont(), type);
   }
   PrimeFieldOperation toMont() const {
-    return PrimeFieldOperation(op.toMont(), type);
+    return PrimeFieldOperation::fromUnchecked(op.toMont(), type);
   }
   bool isOne() const { return op.isOne(); }
   bool isZero() const { return op.isZero(); }

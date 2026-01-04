@@ -61,10 +61,10 @@ public:
                                       const ModArithOperation &)>
           m_operation,
       const F &a, const F &b) {
-    ModArithOperation modA =
-        ModArithOperation(convertToAPInt(a.value()), modArithType);
-    ModArithOperation modB =
-        ModArithOperation(convertToAPInt(b.value()), modArithType);
+    auto modA = ModArithOperation::fromUnchecked(convertToAPInt(a.value()),
+                                                 modArithType);
+    auto modB = ModArithOperation::fromUnchecked(convertToAPInt(b.value()),
+                                                 modArithType);
     auto c = f_operation(a, b);
     EXPECT_EQ(convertToAPInt(c.value()), m_operation(modA, modB));
   }
@@ -86,8 +86,8 @@ public:
       std::function<F(const F &)> f_operation,
       std::function<ModArithOperation(const ModArithOperation &)> m_operation,
       const F &a) {
-    ModArithOperation modA =
-        ModArithOperation(convertToAPInt(a.value()), modArithType);
+    auto modA = ModArithOperation::fromUnchecked(convertToAPInt(a.value()),
+                                                 modArithType);
     auto c = f_operation(a);
     EXPECT_EQ(convertToAPInt(c.value()), m_operation(modA));
   }
@@ -189,10 +189,10 @@ TYPED_TEST(ModArithOperationTest, Cmp) {
 
   auto a = PrimeFieldType::Random();
   auto b = PrimeFieldType::Random();
-  ModArithOperation modA =
-      ModArithOperation(convertToAPInt(a.value()), this->modArithType);
-  ModArithOperation modB =
-      ModArithOperation(convertToAPInt(b.value()), this->modArithType);
+  auto modA = ModArithOperation::fromUnchecked(convertToAPInt(a.value()),
+                                               this->modArithType);
+  auto modB = ModArithOperation::fromUnchecked(convertToAPInt(b.value()),
+                                               this->modArithType);
 
   EXPECT_EQ(a < b, modA < modB);
   EXPECT_EQ(a <= b, modA <= modB);
@@ -291,14 +291,14 @@ TYPED_TEST(ModArithOperationTest, IsZero) {
   using PrimeFieldType = TypeParam;
 
   auto zero = PrimeFieldType::Zero();
-  ModArithOperation modZero =
-      ModArithOperation(convertToAPInt(zero.value()), this->modArithType);
+  auto modZero = ModArithOperation::fromUnchecked(convertToAPInt(zero.value()),
+                                                  this->modArithType);
   EXPECT_TRUE(modZero.isZero());
   EXPECT_FALSE(modZero.isOne());
 
   auto one = PrimeFieldType::One();
-  ModArithOperation modOne =
-      ModArithOperation(convertToAPInt(one.value()), this->modArithType);
+  auto modOne = ModArithOperation::fromUnchecked(convertToAPInt(one.value()),
+                                                 this->modArithType);
   EXPECT_FALSE(modOne.isZero());
   EXPECT_TRUE(modOne.isOne());
 
@@ -306,8 +306,8 @@ TYPED_TEST(ModArithOperationTest, IsZero) {
   while (rnd.IsZero() || rnd.IsOne()) {
     rnd = PrimeFieldType::Random();
   }
-  ModArithOperation modRnd =
-      ModArithOperation(convertToAPInt(rnd.value()), this->modArithType);
+  auto modRnd = ModArithOperation::fromUnchecked(convertToAPInt(rnd.value()),
+                                                 this->modArithType);
   EXPECT_FALSE(modRnd.isZero());
   EXPECT_FALSE(modRnd.isOne());
 }

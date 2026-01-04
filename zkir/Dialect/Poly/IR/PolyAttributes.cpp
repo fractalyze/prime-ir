@@ -60,15 +60,12 @@ PrimitiveRootAttrStorage::construct(AttributeStorageAllocator &allocator,
   field::RootOfUnityAttr rootOfUnity = std::get<0>(key);
   mod_arith::MontgomeryAttr montgomery = std::get<1>(key);
 
-  field::PrimeFieldOperation root(
+  auto root = field::PrimeFieldOperation::fromUnchecked(
       rootOfUnity.getRoot(),
       cast<field::PrimeFieldType>(rootOfUnity.getType()));
   field::PrimeFieldOperation invRoot = root.inverse();
-  field::PrimeFieldOperation degree(rootOfUnity.getDegree().getValue(),
-                                    rootOfUnity.getType());
-  if (rootOfUnity.getType().isMontgomery()) {
-    degree = degree.toMont();
-  }
+  auto degree = field::PrimeFieldOperation(rootOfUnity.getDegree().getValue(),
+                                           rootOfUnity.getType());
   field::PrimeFieldOperation invDegree = degree.inverse();
   // Compute the exponent table.
   SmallVector<APInt> roots, invRoots;

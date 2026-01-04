@@ -47,7 +47,7 @@ LogicalResult
 RootOfUnityAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
                         PrimeFieldType type, IntegerAttr root,
                         IntegerAttr degree) {
-  PrimeFieldOperation rootOp(root, type);
+  auto rootOp = PrimeFieldOperation::fromUnchecked(root, type);
   APInt degreeValue = degree.getValue();
   if (rootOp.power(degreeValue).isOne()) {
     return success();

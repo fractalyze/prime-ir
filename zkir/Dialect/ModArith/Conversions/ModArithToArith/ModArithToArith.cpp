@@ -513,7 +513,8 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
       if (rhsInt) {
         IntegerAttr rhsStd, negRhsStd;
         {
-          ModArithOperation rhsStdOp(rhsInt.getValue(), modType);
+          auto rhsStdOp =
+              ModArithOperation::fromUnchecked(rhsInt.getValue(), modType);
           if (modType.isMontgomery()) {
             // NOTE(chokobole): Ideally, we should convert the underlying
             // 'modType' to standard form here. Normalizing to standard form

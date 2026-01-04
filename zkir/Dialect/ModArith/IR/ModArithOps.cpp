@@ -228,7 +228,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).toMont();
+    return ModArithOperation::fromUnchecked(value, modArithType).toMont();
   }
 };
 
@@ -246,7 +246,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).fromMont();
+    return ModArithOperation::fromUnchecked(value, modArithType).fromMont();
   }
 };
 
@@ -328,7 +328,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return -ModArithOperation(value, modArithType);
+    return -ModArithOperation::fromUnchecked(value, modArithType);
   }
 };
 
@@ -346,7 +346,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).dbl();
+    return ModArithOperation::fromUnchecked(value, modArithType).dbl();
   }
 };
 
@@ -364,7 +364,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).square();
+    return ModArithOperation::fromUnchecked(value, modArithType).square();
   }
 };
 
@@ -382,7 +382,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).square();
+    return ModArithOperation::fromUnchecked(value, modArithType).square();
   }
 };
 
@@ -400,7 +400,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).inverse();
+    return ModArithOperation::fromUnchecked(value, modArithType).inverse();
   }
 };
 
@@ -418,7 +418,7 @@ public:
   using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
 
   APInt operate(const APInt &value) const final {
-    return ModArithOperation(value, modArithType).inverse();
+    return ModArithOperation::fromUnchecked(value, modArithType).inverse();
   }
 };
 
@@ -439,8 +439,8 @@ public:
   OpFoldResult getLhs() const final { return op->getLhs(); }
 
   APInt operate(const APInt &a, const APInt &b) const final {
-    return ModArithOperation(a, modArithType) +
-           ModArithOperation(b, modArithType);
+    return ModArithOperation::fromUnchecked(a, modArithType) +
+           ModArithOperation::fromUnchecked(b, modArithType);
   }
 
 private:
@@ -464,8 +464,8 @@ public:
   OpFoldResult getLhs() const final { return op->getLhs(); }
 
   APInt operate(const APInt &a, const APInt &b) const final {
-    return ModArithOperation(a, modArithType) -
-           ModArithOperation(b, modArithType);
+    return ModArithOperation::fromUnchecked(a, modArithType) -
+           ModArithOperation::fromUnchecked(b, modArithType);
   }
 
 private:
@@ -489,8 +489,8 @@ public:
   OpFoldResult getLhs() const final { return op->getLhs(); }
 
   APInt operate(const APInt &a, const APInt &b) const final {
-    return ModArithOperation(a, modArithType) *
-           ModArithOperation(b, modArithType);
+    return ModArithOperation::fromUnchecked(a, modArithType) *
+           ModArithOperation::fromUnchecked(b, modArithType);
   }
 
 private:
@@ -514,8 +514,8 @@ public:
   OpFoldResult getLhs() const final { return op->getLhs(); }
 
   APInt operate(const APInt &a, const APInt &b) const final {
-    return ModArithOperation(a, modArithType) *
-           ModArithOperation(b, modArithType);
+    return ModArithOperation::fromUnchecked(a, modArithType) *
+           ModArithOperation::fromUnchecked(b, modArithType);
   }
 
 private:
@@ -589,7 +589,8 @@ bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
   }
   if (intAttr) {
     auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
-    ModArithOperation valueOp(intAttr.getValue(), modArithType);
+    auto valueOp =
+        ModArithOperation::fromUnchecked(intAttr.getValue(), modArithType);
     ModArithType stdType = modArithType;
     if (modArithType.isMontgomery()) {
       stdType = cast<ModArithType>(getStandardFormType(modArithType));

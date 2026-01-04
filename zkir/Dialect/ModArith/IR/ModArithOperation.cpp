@@ -159,21 +159,21 @@ ModArithOperation ModArithOperation::getOne() const {
   } else {
     one = APInt(value.getBitWidth(), 1);
   }
-  return ModArithOperation(one, type);
+  return ModArithOperation::fromUnchecked(one, type);
 }
 
 ModArithOperation
 ModArithOperation::operator+(const ModArithOperation &other) const {
   assert(type == other.type);
-  return ModArithOperation(executeBinaryModOp<AddOp>(value, other.value, type),
-                           type);
+  return ModArithOperation::fromUnchecked(
+      executeBinaryModOp<AddOp>(value, other.value, type), type);
 }
 
 ModArithOperation
 ModArithOperation::operator-(const ModArithOperation &other) const {
   assert(type == other.type);
-  return ModArithOperation(executeBinaryModOp<SubOp>(value, other.value, type),
-                           type);
+  return ModArithOperation::fromUnchecked(
+      executeBinaryModOp<SubOp>(value, other.value, type), type);
 }
 
 namespace {
@@ -262,13 +262,14 @@ ModArithOperation::operator*(const ModArithOperation &other) const {
   assert(type == other.type);
 
   if (type.isMontgomery()) {
-    return ModArithOperation(executeMontMulOp(value, other.value, type), type);
+    return ModArithOperation::fromUnchecked(
+        executeMontMulOp(value, other.value, type), type);
   }
 
   const APInt &a = value;
   const APInt &b = other.value;
   APInt modulus = type.getModulus().getValue();
-  return ModArithOperation(mulMod(a, b, modulus), type);
+  return ModArithOperation::fromUnchecked(mulMod(a, b, modulus), type);
 }
 
 ModArithOperation
@@ -282,13 +283,14 @@ ModArithOperation ModArithOperation::operator-() const {
   APInt modulus = type.getModulus().getValue();
 
   if (value.isZero()) {
-    return ModArithOperation(value, type);
+    return ModArithOperation::fromUnchecked(value, type);
   }
-  return ModArithOperation(modulus - value, type);
+  return ModArithOperation::fromUnchecked(modulus - value, type);
 }
 
 ModArithOperation ModArithOperation::dbl() const {
-  return ModArithOperation(executeUnaryModOp<DoubleOp>(value, type), type);
+  return ModArithOperation::fromUnchecked(
+      executeUnaryModOp<DoubleOp>(value, type), type);
 }
 
 namespace {
@@ -356,10 +358,11 @@ APInt executeMontSquareOp(const APInt &a, const ModArithType &type) {
 
 ModArithOperation ModArithOperation::square() const {
   if (type.isMontgomery()) {
-    return ModArithOperation(executeMontSquareOp(value, type), type);
+    return ModArithOperation::fromUnchecked(executeMontSquareOp(value, type),
+                                            type);
   }
   APInt modulus = type.getModulus().getValue();
-  return ModArithOperation(mulMod(value, value, modulus), type);
+  return ModArithOperation::fromUnchecked(mulMod(value, value, modulus), type);
 }
 
 namespace {
@@ -452,7 +455,7 @@ APInt executeInverseOp(const APInt &a, const ModArithType &type) {
 } // namespace
 
 ModArithOperation ModArithOperation::inverse() const {
-  return ModArithOperation(executeInverseOp(value, type), type);
+  return ModArithOperation::fromUnchecked(executeInverseOp(value, type), type);
 }
 
 namespace {
@@ -530,12 +533,12 @@ APInt executeFromMontOp(const APInt &a, const ModArithType &type) {
 } // namespace
 
 ModArithOperation ModArithOperation::fromMont() const {
-  return ModArithOperation(executeFromMontOp(value, type), type);
+  return ModArithOperation::fromUnchecked(executeFromMontOp(value, type), type);
 }
 
 ModArithOperation ModArithOperation::toMont() const {
   MontgomeryAttr montAttr = type.getMontgomeryAttr();
-  return ModArithOperation(
+  return ModArithOperation::fromUnchecked(
       executeMontMulOp(value, montAttr.getRSquared().getValue(), type), type);
 }
 

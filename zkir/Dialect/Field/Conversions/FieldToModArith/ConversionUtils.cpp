@@ -16,10 +16,9 @@ limitations under the License.
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 
 #include "mlir/Support/LLVM.h"
+#include "zkir/Dialect/Field/IR/FieldOperation.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
-#include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
-#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 
 namespace mlir::zkir::field {
 namespace {
@@ -47,87 +46,24 @@ Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs) {
 
 Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
                   int64_t n) {
-  APInt modulus = baseField.getModulus().getValue();
-  unsigned bitWidth = baseField.getStorageBitWidth();
-  auto convertedType = convertPrimeFieldType(baseField);
-
-  assert(n > -modulus.getSExtValue() && n < modulus.getSExtValue() &&
-         "n must be in range (-P, P)");
-
-  APInt nVal;
-  if (n < 0) {
-    nVal = modulus - APInt(bitWidth, -n);
-  } else {
-    nVal = APInt(bitWidth, n);
-  }
-
-  // TODO(junbeomlee): This conversion should be handled at a lower level (e.g.,
-  // constructor) to avoid manual conversion errors. createInvConst and
-  // createRationalConst have the same issue.
-  // https://github.com/fractalyze/zkir/issues/164
-  if (baseField.getIsMontgomery()) {
-    auto modArithType =
-        mod_arith::ModArithType::get(b.getContext(), baseField.getModulus());
-    nVal = mod_arith::ModArithOperation(nVal, modArithType).toMont();
-  }
-
   return b.create<mod_arith::ConstantOp>(
-      convertedType, IntegerAttr::get(baseField.getStorageType(), nVal));
+      convertPrimeFieldType(baseField),
+      PrimeFieldOperation(n, baseField).getIntegerAttr());
 }
 
 Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
                      int64_t n) {
-  APInt modulus = baseField.getModulus().getValue();
-  unsigned bitWidth = baseField.getStorageBitWidth();
-  auto convertedType = convertPrimeFieldType(baseField);
-
-  assert(n > -modulus.getSExtValue() && n < modulus.getSExtValue() &&
-         "n must be in range (-P, P)");
-
-  APInt nVal;
-  if (n < 0) {
-    nVal = modulus - APInt(bitWidth, -n);
-  } else {
-    nVal = APInt(bitWidth, n);
-  }
-
-  APInt inv = mod_arith::ModArithOperation(nVal, convertedType).inverse();
   return b.create<mod_arith::ConstantOp>(
-      convertedType, IntegerAttr::get(baseField.getStorageType(), inv));
+      convertPrimeFieldType(baseField),
+      PrimeFieldOperation(n, baseField).inverse().getIntegerAttr());
 }
 
 Value createRationalConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
                           int64_t num, int64_t denom) {
-  APInt modulus = baseField.getModulus().getValue();
-  unsigned bitWidth = baseField.getStorageType().getWidth();
-  auto convertedType = convertPrimeFieldType(baseField);
-
-  assert(num > -modulus.getSExtValue() && num < modulus.getSExtValue() &&
-         "num must be in range (-P, P)");
-  assert(denom > -modulus.getSExtValue() && denom < modulus.getSExtValue() &&
-         "denom must be in range (-P, P)");
-
-  APInt numVal;
-  if (num < 0) {
-    numVal = modulus - APInt(bitWidth, -num);
-  } else {
-    numVal = APInt(bitWidth, num);
-  }
-
-  APInt denomVal;
-  if (denom < 0) {
-    denomVal = modulus - APInt(bitWidth, -denom);
-  } else {
-    denomVal = APInt(bitWidth, denom);
-  }
-
-  // Compute num * denom⁻¹ mod modulus
-  mod_arith::ModArithOperation numOp(numVal, convertedType);
-  mod_arith::ModArithOperation denomOp(denomVal, convertedType);
-  APInt result = numOp / denomOp;
-
-  return b.create<mod_arith::ConstantOp>(
-      convertedType, IntegerAttr::get(baseField.getStorageType(), result));
+  return b.create<mod_arith::ConstantOp>(convertPrimeFieldType(baseField),
+                                         (PrimeFieldOperation(num, baseField) /
+                                          PrimeFieldOperation(denom, baseField))
+                                             .getIntegerAttr());
 }
 
 } // namespace mlir::zkir::field

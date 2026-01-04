@@ -427,11 +427,8 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
   // of the degree.
   if (kInverse) {
     APInt modulus = coeffType.getModulus().getValue();
-    field::PrimeFieldOperation degreeOp(APInt(modulus.getBitWidth(), degree),
-                                        coeffType);
-    if (coeffType.isMontgomery()) {
-      degreeOp = degreeOp.toMont();
-    }
+    auto degreeOp = field::PrimeFieldOperation(
+        APInt(modulus.getBitWidth(), degree), coeffType);
     IntegerAttr invDegreeAttr = degreeOp.inverse().getIntegerAttr();
     // TODO(batzor): Use scalar multiplication directly when it's available.
     auto invDegreeConst = b.create<field::ConstantOp>(coeffType, invDegreeAttr);

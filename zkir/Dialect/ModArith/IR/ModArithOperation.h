@@ -29,10 +29,33 @@ namespace mlir::zkir::mod_arith {
 
 class ModArithOperation {
 public:
-  ModArithOperation(APInt value, ModArithType type)
-      : value(value), type(type) {}
+  ModArithOperation() = default;
+  ModArithOperation(APInt value, ModArithType type) : value(value), type(type) {
+    assert(value.ult(type.getModulus().getValue()) && "value must less than P");
+    if (type.isMontgomery()) {
+      MontgomeryAttr montAttr = type.getMontgomeryAttr();
+      operator*=(ModArithOperation::fromUnchecked(
+          montAttr.getRSquared().getValue(), type));
+    }
+  }
   ModArithOperation(IntegerAttr attr, ModArithType type)
-      : value(attr.getValue()), type(type) {}
+      : ModArithOperation(attr.getValue(), type) {}
+  ModArithOperation(int64_t value, ModArithType type)
+      : ModArithOperation(static_cast<uint64_t>(value < 0 ? -value : value),
+                          type) {
+    if (value < 0) {
+      *this = -(*this);
+    }
+  }
+  ModArithOperation(uint64_t value, ModArithType type)
+      : ModArithOperation(APInt(type.getStorageBitWidth(), value), type) {}
+
+  static ModArithOperation fromUnchecked(APInt value, ModArithType type) {
+    ModArithOperation ret;
+    ret.value = value;
+    ret.type = type;
+    return ret;
+  }
 
   ModArithOperation getOne() const;
 

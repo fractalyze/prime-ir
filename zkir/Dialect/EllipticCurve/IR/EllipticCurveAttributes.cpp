@@ -71,10 +71,14 @@ ShortWeierstrassAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
       return failure();
     }
 
-    field::PrimeFieldOperation aOp(cast<IntegerAttr>(a), pfType);
-    field::PrimeFieldOperation bOp(cast<IntegerAttr>(b), pfType);
-    field::PrimeFieldOperation gXOp(cast<IntegerAttr>(gX), pfType);
-    field::PrimeFieldOperation gYOp(cast<IntegerAttr>(gY), pfType);
+    auto aOp =
+        field::PrimeFieldOperation::fromUnchecked(cast<IntegerAttr>(a), pfType);
+    auto bOp =
+        field::PrimeFieldOperation::fromUnchecked(cast<IntegerAttr>(b), pfType);
+    auto gXOp = field::PrimeFieldOperation::fromUnchecked(cast<IntegerAttr>(gX),
+                                                          pfType);
+    auto gYOp = field::PrimeFieldOperation::fromUnchecked(cast<IntegerAttr>(gY),
+                                                          pfType);
 
     if (gYOp.square() != gXOp.square() * gXOp + aOp * gXOp + bOp) {
       emitError()
