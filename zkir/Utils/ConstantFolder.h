@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef ZKIR_UTILS_CONSTANTFOLDER_H_
 #define ZKIR_UTILS_CONSTANTFOLDER_H_
 
+#include <optional>
+
 #include "llvm/ADT/SmallVectorExtras.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/OpDefinition.h"
@@ -225,6 +227,43 @@ public:
         // x * 1 -> x
         return getLhs();
       }
+    }
+    return {};
+  }
+};
+
+// TODO(junbeomlee): Unify with UnaryConstantFolder after deciding how to handle
+// Inverse(0). See https://github.com/fractalyze/zkir/issues/177
+// Extension field constant folder for unary operations.
+template <typename Config>
+class ExtensionFieldUnaryConstantFolder {
+public:
+  using NativeInputType = typename Config::NativeInputType;
+  using NativeOutputType = typename Config::NativeOutputType;
+  using ScalarAttr = typename Config::ScalarAttr;
+
+  class Delegate {
+  public:
+    virtual ~Delegate() = default;
+
+    virtual NativeInputType getNativeInput(ScalarAttr attr) const = 0;
+    virtual std::optional<NativeOutputType>
+    operate(const NativeInputType &coeffs) const = 0;
+    virtual OpFoldResult
+    getScalarAttr(const NativeOutputType &coeffs) const = 0;
+
+    OpFoldResult foldScalar(ScalarAttr input) const {
+      auto result = operate(getNativeInput(input));
+      if (!result)
+        return {};
+      return getScalarAttr(*result);
+    }
+  };
+
+  template <typename FoldAdaptor, typename DelegateT>
+  static OpFoldResult fold(FoldAdaptor adaptor, DelegateT *delegate) {
+    if (auto inputAttr = dyn_cast_if_present<ScalarAttr>(adaptor.getInput())) {
+      return delegate->foldScalar(inputAttr);
     }
     return {};
   }

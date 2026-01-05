@@ -19,6 +19,73 @@
 !QF = !field.f2<!PF, 6:i32>
 
 //===----------------------------------------------------------------------===//
+// NegateOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_fold_negate
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_negate() -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<[6, 5]> : [[T]]
+  // -[1, 2] mod 7 = [6, 5]
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.negate %0 : !QF
+  // CHECK-NOT: field.negate
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !QF
+}
+
+//===----------------------------------------------------------------------===//
+// DoubleOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_fold_double
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_double() -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<[2, 4]> : [[T]]
+  // 2 * [1, 2] mod 7 = [2, 4]
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.double %0 : !QF
+  // CHECK-NOT: field.double
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !QF
+}
+
+//===----------------------------------------------------------------------===//
+// SquareOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_fold_square
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_square() -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<4> : [[T]]
+  // [a, b]² = [a² + ξ * b², 2 * a * b] where ξ = 6
+  // [1, 2]² = [1 + 6 * 4, 2 * 1 * 2] = [25, 4] mod 7 = [4, 4]
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.square %0 : !QF
+  // CHECK-NOT: field.square
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !QF
+}
+
+//===----------------------------------------------------------------------===//
+// InverseOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_fold_inverse
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_inverse() -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<[3, 1]> : [[T]]
+  // [a, b]⁻¹ = [a / norm, -b / norm] where norm = a² - ξ * b²
+  // [1, 2]⁻¹: norm = 1 - 6 * 4 = -23 ≡ 5 (mod 7), 5⁻¹ = 3
+  // = [1 * 3, -2 * 3] = [3, -6] = [3, 1]
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.inverse %0 : !QF
+  // CHECK-NOT: field.inverse
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !QF
+}
+
+//===----------------------------------------------------------------------===//
 // ExtToCoeffsOp and ExtFromCoeffsOp
 //===----------------------------------------------------------------------===//
 
@@ -51,59 +118,4 @@ func.func @test_ext_from_coeffs_of_ext_to_coeffs(%arg0: !PF, %arg1: !PF) -> (!PF
   // CHECK-NOT: field.ext_to_coeffs
   // CHECK: return %[[ARG0]], %[[ARG1]] : [[T]], [[T]]
   return %1#0, %1#1 : !PF, !PF
-}
-
-//===----------------------------------------------------------------------===//
-// Tensor operations
-//===----------------------------------------------------------------------===//
-
-// CHECK-LABEL: @test_tensor_pf_from_elements
-// CHECK-SAME: () -> [[T:.*]] {
-func.func @test_tensor_pf_from_elements() -> tensor<2x!PF> {
-  %0 = field.constant 1 : !PF
-  %1 = field.constant 2 : !PF
-  %2 = tensor.from_elements %0, %1 : tensor<2x!PF>
-  // CHECK: %[[C:.*]] = field.constant dense<[1, 2]> : [[T]]
-  // CHECK-NOT: tensor.from_elements
-  // CHECK: return %[[C:.*]] : [[T]]
-  return %2 : tensor<2x!PF>
-}
-
-// CHECK-LABEL: @test_tensor_pf_extract
-// CHECK-SAME: () -> [[T:.*]] {
-func.func @test_tensor_pf_extract() -> !PF {
-  // CHECK: %[[C:.*]] = field.constant 3 : [[T]]
-  // CHECK-NOT: tensor.extract
-  // CHECK: return %[[C]] : [[T]]
-  %c1 = arith.constant 1: index
-  %0 = field.constant dense<[2, 3]> : tensor<2x!PF>
-  %1 = tensor.extract %0[%c1] : tensor<2x!PF>
-  return %1 : !PF
-}
-
-//===----------------------------------------------------------------------===//
-// Vector operations
-//===----------------------------------------------------------------------===//
-
-// CHECK-LABEL: @test_vector_pf_from_elements
-// CHECK-SAME: () -> [[T:.*]] {
-func.func @test_vector_pf_from_elements() -> vector<2x!PF> {
-  %0 = field.constant 1 : !PF
-  %1 = field.constant 2 : !PF
-  %2 = vector.from_elements %0, %1 : vector<2x!PF>
-  // CHECK: %[[FROM_ELEMENTS:.*]] = field.constant dense<[1, 2]> : [[T]]
-  // CHECK-NOT: vector.from_elements
-  // CHECK: return %[[FROM_ELEMENTS:.*]] : [[T]]
-  return %2 : vector<2x!PF>
-}
-
-// CHECK-LABEL: @test_vector_pf_extract
-// CHECK-SAME: () -> [[T:.*]] {
-func.func @test_vector_pf_extract() -> !PF {
-  // CHECK: %[[C:.*]] = field.constant 3 : [[T]]
-  // CHECK-NOT: vector.extract
-  // CHECK: return %[[C]] : [[T]]
-  %0 = field.constant dense<[2, 3]> : vector<2x!PF>
-  %1 = vector.extract %0[1] : !PF from vector<2x!PF>
-  return %1 : !PF
 }

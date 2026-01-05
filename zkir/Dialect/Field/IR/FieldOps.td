@@ -289,6 +289,7 @@ def Field_InverseOp : Field_UnaryOp<"inverse", [Involution]> {
     %inv_a = field.inverse %a : !field.pf<primeModulus>
     ```
   }];
+  let hasFolder = 1;
 }
 
 // Field double.
@@ -302,6 +303,7 @@ def Field_DoubleOp : Field_UnaryOp<"double"> {
     %double = field.double %a : !field.pf<primeModulus>
     ```
   }];
+  let hasFolder = 1;
 }
 
 // Field square.
@@ -315,6 +317,7 @@ def Field_SquareOp : Field_UnaryOp<"square"> {
     %square = field.square %a : !field.pf<primeModulus>
     ```
   }];
+  let hasFolder = 1;
 }
 
 // Field negation
@@ -328,6 +331,7 @@ def Field_NegateOp : Field_UnaryOp<"negate", [Involution]> {
     %negation = field.negate %a : !field.pf<primeModulus>
     ```
   }];
+  let hasFolder = 1;
 }
 
 // Field addition.

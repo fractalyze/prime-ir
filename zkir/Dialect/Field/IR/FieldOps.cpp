@@ -21,6 +21,7 @@ limitations under the License.
 #include "zkir/Dialect/Field/IR/FieldOperation.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
+#include "zkir/Utils/ConstantFolder.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for FieldCanonicalization.cpp.inc
@@ -285,6 +286,155 @@ LogicalResult ExtFromCoeffsOp::verify() {
   }
   return emitOpError() << "output type must be an extension field; got "
                        << outputType;
+}
+
+//===----------------------------------------------------------------------===//
+// Extension Field Constant Folding
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// Config for extension field constant folder.
+struct ExtensionFieldConstantFolderConfig {
+  using NativeInputType = SmallVector<APInt>;
+  using NativeOutputType = SmallVector<APInt>;
+  using ScalarAttr = DenseIntElementsAttr;
+};
+
+// Base delegate for extension field unary operations.
+class UnaryExtFieldConstantFolder
+    : public ExtensionFieldUnaryConstantFolder<
+          ExtensionFieldConstantFolderConfig>::Delegate {
+public:
+  explicit UnaryExtFieldConstantFolder(Type type)
+      : extFieldType(cast<ExtensionFieldTypeInterface>(type)),
+        baseFieldType(cast<PrimeFieldType>(extFieldType.getBaseFieldType())) {}
+
+  SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
+    SmallVector<APInt> coeffs;
+    for (const APInt &v : attr.getValues<APInt>()) {
+      coeffs.push_back(v);
+    }
+    return coeffs;
+  }
+
+  OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
+    auto tensorType = RankedTensorType::get(
+        {static_cast<int64_t>(coeffs.size())}, baseFieldType.getStorageType());
+    return DenseIntElementsAttr::get(tensorType, coeffs);
+  }
+
+protected:
+  ExtensionFieldTypeInterface extFieldType;
+  PrimeFieldType baseFieldType;
+};
+
+// Negate: -[a₀, a₁, ...] = [-a₀, -a₁, ...]
+template <size_t N>
+class NegateConstantFolder : public UnaryExtFieldConstantFolder {
+public:
+  using UnaryExtFieldConstantFolder::UnaryExtFieldConstantFolder;
+
+  std::optional<SmallVector<APInt>>
+  operate(const SmallVector<APInt> &coeffs) const final {
+    auto nr = cast<IntegerAttr>(extFieldType.getNonResidue()).getValue();
+    return (-ExtensionFieldOperation<N>(coeffs, nr, baseFieldType)).toAPInts();
+  }
+};
+
+// Double: uses zk_dtypes for extension field doubling.
+template <size_t N>
+class DoubleConstantFolder : public UnaryExtFieldConstantFolder {
+public:
+  using UnaryExtFieldConstantFolder::UnaryExtFieldConstantFolder;
+
+  std::optional<SmallVector<APInt>>
+  operate(const SmallVector<APInt> &coeffs) const final {
+    auto nr = cast<IntegerAttr>(extFieldType.getNonResidue()).getValue();
+    return ExtensionFieldOperation<N>(coeffs, nr, baseFieldType)
+        .Double()
+        .toAPInts();
+  }
+};
+
+// Square: uses zk_dtypes for proper extension field squaring algorithm.
+template <size_t N>
+class SquareConstantFolder : public UnaryExtFieldConstantFolder {
+public:
+  using UnaryExtFieldConstantFolder::UnaryExtFieldConstantFolder;
+
+  std::optional<SmallVector<APInt>>
+  operate(const SmallVector<APInt> &coeffs) const final {
+    auto nr = cast<IntegerAttr>(extFieldType.getNonResidue()).getValue();
+    return ExtensionFieldOperation<N>(coeffs, nr, baseFieldType)
+        .Square()
+        .toAPInts();
+  }
+};
+
+// Inverse: uses zk_dtypes for Frobenius-based inversion.
+template <size_t N>
+class InverseConstantFolder : public UnaryExtFieldConstantFolder {
+public:
+  using UnaryExtFieldConstantFolder::UnaryExtFieldConstantFolder;
+
+  std::optional<SmallVector<APInt>>
+  operate(const SmallVector<APInt> &coeffs) const final {
+    auto nr = cast<IntegerAttr>(extFieldType.getNonResidue()).getValue();
+    auto result =
+        ExtensionFieldOperation<N>(coeffs, nr, baseFieldType).Inverse();
+    if (!result.ok())
+      return std::nullopt;
+    return result->toAPInts();
+  }
+};
+
+// Helper to dispatch extension field folding by degree using fold expression.
+// Eliminates repetitive if-else chains for degree 2, 3, 4.
+template <template <size_t> class FolderT, size_t N, typename Adaptor>
+void tryFoldOne(Type type, size_t degree, Adaptor adaptor,
+                OpFoldResult &result) {
+  if (!result && degree == N) {
+    FolderT<N> folder(type);
+    result = ExtensionFieldUnaryConstantFolder<
+        ExtensionFieldConstantFolderConfig>::fold(adaptor, &folder);
+  }
+}
+
+template <template <size_t> class FolderT, typename Adaptor, size_t... Ns>
+OpFoldResult foldExtFieldImpl(Type type, size_t degree, Adaptor adaptor,
+                              std::index_sequence<Ns...>) {
+  OpFoldResult result;
+  (tryFoldOne<FolderT, Ns + kMinExtDegree>(type, degree, adaptor, result), ...);
+  return result;
+}
+
+template <template <size_t> class FolderT, typename Adaptor>
+OpFoldResult foldExtField(Type type, Adaptor adaptor) {
+  auto extFieldType = dyn_cast<ExtensionFieldTypeInterface>(type);
+  if (!extFieldType)
+    return {};
+  return foldExtFieldImpl<FolderT>(type, extFieldType.getDegreeOverBase(),
+                                   adaptor,
+                                   std::make_index_sequence<kNumExtDegrees>{});
+}
+
+} // namespace
+
+OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
+  return foldExtField<NegateConstantFolder>(getType(), adaptor);
+}
+
+OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
+  return foldExtField<DoubleConstantFolder>(getType(), adaptor);
+}
+
+OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
+  return foldExtField<SquareConstantFolder>(getType(), adaptor);
+}
+
+OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
+  return foldExtField<InverseConstantFolder>(getType(), adaptor);
 }
 
 namespace {
