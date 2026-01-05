@@ -166,6 +166,14 @@ private:
   Value nonResidue;
 };
 
+extern template class ExtensionFieldCodeGen<2>;
+extern template class ExtensionFieldCodeGen<3>;
+extern template class ExtensionFieldCodeGen<4>;
+
+using QuadraticExtensionFieldCodeGen = ExtensionFieldCodeGen<2>;
+using CubicExtensionFieldCodeGen = ExtensionFieldCodeGen<3>;
+using QuarticExtensionFieldCodeGen = ExtensionFieldCodeGen<4>;
+
 } // namespace mlir::zkir::field
 
 // NOLINTNEXTLINE(whitespace/line_length)

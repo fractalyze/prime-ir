@@ -35,6 +35,7 @@ cc_library(
 
 cc_library(
     name = "ExtensionFieldCodeGen",
+    srcs = ["ExtensionFieldCodeGen.cpp"],
     hdrs = [
         "ExtensionFieldCodeGen.h",
         "FrobeniusCoeffs.h",
