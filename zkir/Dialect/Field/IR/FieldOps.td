@@ -201,6 +201,28 @@ def Field_F4CreateOp : Op<Field_Dialect, "f4.create", [Pure, TypesMatchWith<
   let assemblyFormat = "$c0 `,` $c1 `,` $c2 `,` $c3 attr-dict `:` type($output)";
 }
 
+def Field_CreateOp : Op<Field_Dialect, "create", [Pure]> {
+  let summary = "Create an extension field element from coefficients";
+  let description = [{
+    Constructs an extension field element from a list of prime field coefficients.
+    The number of coefficients must match the degree of the extension field.
+
+    Example:
+    ```
+    !PF = !field.pf<7:i32>
+    !EF2 = !field.ef<2x!PF, 6:i32>
+    !EF3 = !field.ef<3x!PF, 2:i32>
+
+    %qf = field.create [%c0, %c1] : !EF2
+    %cf = field.create [%c0, %c1, %c2] : !EF3
+    ```
+  }];
+  let arguments = (ins Variadic<Field_PrimeFieldType>:$coefficients);
+  let results = (outs Field_ExtensionFieldType:$output);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
 def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
  SameOperandsAndResultShape, AllSameTensorDims<["input", "output"]>,
  DeclareOpInterfaceMethods<CastOpInterface>]> {

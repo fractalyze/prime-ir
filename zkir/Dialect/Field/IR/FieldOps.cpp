@@ -437,6 +437,74 @@ OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
   return foldExtField<InverseConstantFolder>(getType(), adaptor);
 }
 
+//===----------------------------------------------------------------------===//
+// CreateOp
+//===----------------------------------------------------------------------===//
+
+ParseResult CreateOp::parse(OpAsmParser &parser, OperationState &result) {
+  SmallVector<OpAsmParser::UnresolvedOperand> operands;
+  if (parser.parseLSquare())
+    return failure();
+
+  if (parser.parseOptionalRSquare()) {
+    do {
+      OpAsmParser::UnresolvedOperand operand;
+      if (parser.parseOperand(operand))
+        return failure();
+      operands.push_back(operand);
+    } while (succeeded(parser.parseOptionalComma()));
+
+    if (parser.parseRSquare())
+      return failure();
+  }
+
+  Type resultType;
+  if (parser.parseColonType(resultType))
+    return failure();
+
+  auto efType = dyn_cast<ExtensionFieldType>(resultType);
+  if (!efType) {
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected extension field type");
+  }
+
+  Type coeffType = efType.getBaseField();
+  if (parser.resolveOperands(operands, coeffType, result.operands))
+    return failure();
+
+  result.addTypes(resultType);
+  return success();
+}
+
+void CreateOp::print(OpAsmPrinter &printer) {
+  printer << " [";
+  llvm::interleaveComma(getCoefficients(), printer,
+                        [&](Value v) { printer << v; });
+  printer << "] : " << getType();
+}
+
+LogicalResult CreateOp::verify() {
+  auto efType = cast<ExtensionFieldType>(getType());
+  unsigned degree = efType.getDegree();
+
+  if (getCoefficients().size() != degree) {
+    return emitOpError() << "expected " << degree
+                         << " coefficients for extension field of degree "
+                         << degree << ", but got " << getCoefficients().size();
+  }
+
+  PrimeFieldType baseField = efType.getBaseField();
+  for (auto [idx, coeff] : llvm::enumerate(getCoefficients())) {
+    auto coeffType = dyn_cast<PrimeFieldType>(coeff.getType());
+    if (!coeffType || coeffType != baseField) {
+      return emitOpError() << "coefficient " << idx << " has type "
+                           << coeff.getType() << ", expected " << baseField;
+    }
+  }
+
+  return success();
+}
+
 namespace {
 
 bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
