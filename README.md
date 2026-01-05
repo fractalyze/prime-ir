@@ -81,8 +81,7 @@ performance and correctness across a wide range of devices.
 ### [Elliptic Curve](/zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.td)
 
 - ✅ Group Operations(Add, Double, Sub, Negate, ScalarMul, ...)
-- ✅ MSM for CPU
-- ⚪ MSM for GPU
+- ✅ MSM
 
 ### [Poly](/zkir/Dialect/Poly/IR/PolyOps.td)
 
