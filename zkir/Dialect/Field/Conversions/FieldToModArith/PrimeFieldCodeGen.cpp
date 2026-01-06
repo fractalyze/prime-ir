@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/PrimeFieldCodeGen.h"
 
+#include "zkir/Dialect/ModArith/IR//ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
 namespace mlir::zkir::field {
@@ -73,6 +74,14 @@ PrimeFieldCodeGen PrimeFieldCodeGen::Square() const {
 PrimeFieldCodeGen PrimeFieldCodeGen::Inverse() const {
   return PrimeFieldCodeGen(b,
                            b->create<mod_arith::InverseOp>(value).getOutput());
+}
+
+PrimeFieldCodeGen PrimeFieldCodeGen::CreateConst(int64_t constant) const {
+  mod_arith::ModArithOperation op(
+      constant, cast<mod_arith::ModArithType>(value.getType()));
+  return PrimeFieldCodeGen(
+      b, b->create<mod_arith::ConstantOp>(value.getType(), op.getIntegerAttr())
+             .getOutput());
 }
 
 } // namespace mlir::zkir::field

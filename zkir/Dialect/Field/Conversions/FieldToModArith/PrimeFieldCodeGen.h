@@ -43,6 +43,7 @@ public:
   PrimeFieldCodeGen Double() const;
   PrimeFieldCodeGen Square() const;
   PrimeFieldCodeGen Inverse() const;
+  PrimeFieldCodeGen CreateConst(int64_t constant) const;
 
 private:
   ImplicitLocOpBuilder *b = nullptr; // not owned

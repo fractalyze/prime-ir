@@ -181,6 +181,9 @@ private:
   PrimeFieldOperation Square() const { return square(); }
   // Returns Zero() if not invertible.
   PrimeFieldOperation Inverse() const { return inverse(); }
+  PrimeFieldOperation CreateConst(int64_t constant) const {
+    return PrimeFieldOperation(constant, type);
+  }
   // Prime field has extension degree 1 (used by Frobenius)
   static constexpr size_t ExtensionDegree() { return 1; }
 
