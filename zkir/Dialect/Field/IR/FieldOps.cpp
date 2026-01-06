@@ -289,6 +289,79 @@ LogicalResult ExtFromCoeffsOp::verify() {
 }
 
 //===----------------------------------------------------------------------===//
+// Prime Field Constant Folding
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+struct PrimeFieldConstantFolderConfig {
+  using NativeInputType = APInt;
+  using NativeOutputType = APInt;
+  using ScalarAttr = IntegerAttr;
+  using TensorAttr = DenseIntElementsAttr;
+};
+
+class UnaryPrimeFieldConstantFolder
+    : public UnaryConstantFolder<PrimeFieldConstantFolderConfig>::Delegate {
+public:
+  explicit UnaryPrimeFieldConstantFolder(Type type)
+      : primeFieldType(cast<PrimeFieldType>(getElementTypeOrSelf(type))) {}
+
+  APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
+
+  OpFoldResult getScalarAttr(const APInt &value) const final {
+    return IntegerAttr::get(primeFieldType.getStorageType(), value);
+  }
+
+  OpFoldResult getTensorAttr(ShapedType type,
+                             ArrayRef<APInt> values) const final {
+    return DenseIntElementsAttr::get(
+        type.clone(primeFieldType.getStorageType()), values);
+  }
+
+protected:
+  PrimeFieldType primeFieldType;
+};
+
+class PrimeFieldNegateConstantFolder : public UnaryPrimeFieldConstantFolder {
+public:
+  using UnaryPrimeFieldConstantFolder::UnaryPrimeFieldConstantFolder;
+
+  APInt operate(const APInt &value) const final {
+    return -PrimeFieldOperation::fromUnchecked(value, primeFieldType);
+  }
+};
+
+class PrimeFieldDoubleConstantFolder : public UnaryPrimeFieldConstantFolder {
+public:
+  using UnaryPrimeFieldConstantFolder::UnaryPrimeFieldConstantFolder;
+
+  APInt operate(const APInt &value) const final {
+    return PrimeFieldOperation::fromUnchecked(value, primeFieldType).dbl();
+  }
+};
+
+class PrimeFieldSquareConstantFolder : public UnaryPrimeFieldConstantFolder {
+public:
+  using UnaryPrimeFieldConstantFolder::UnaryPrimeFieldConstantFolder;
+
+  APInt operate(const APInt &value) const final {
+    return PrimeFieldOperation::fromUnchecked(value, primeFieldType).square();
+  }
+};
+
+class PrimeFieldInverseConstantFolder : public UnaryPrimeFieldConstantFolder {
+public:
+  using UnaryPrimeFieldConstantFolder::UnaryPrimeFieldConstantFolder;
+
+  APInt operate(const APInt &value) const final {
+    return PrimeFieldOperation::fromUnchecked(value, primeFieldType).inverse();
+  }
+};
+
+} // namespace
+
+//===----------------------------------------------------------------------===//
 // Extension Field Constant Folding
 //===----------------------------------------------------------------------===//
 
@@ -422,18 +495,38 @@ OpFoldResult foldExtField(Type type, Adaptor adaptor) {
 } // namespace
 
 OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
+  if (isa<PrimeFieldType>(getElementTypeOrSelf(getType()))) {
+    PrimeFieldNegateConstantFolder folder(getType());
+    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
+                                                                     &folder);
+  }
   return foldExtField<NegateConstantFolder>(getType(), adaptor);
 }
 
 OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
+  if (isa<PrimeFieldType>(getElementTypeOrSelf(getType()))) {
+    PrimeFieldDoubleConstantFolder folder(getType());
+    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
+                                                                     &folder);
+  }
   return foldExtField<DoubleConstantFolder>(getType(), adaptor);
 }
 
 OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
+  if (isa<PrimeFieldType>(getElementTypeOrSelf(getType()))) {
+    PrimeFieldSquareConstantFolder folder(getType());
+    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
+                                                                     &folder);
+  }
   return foldExtField<SquareConstantFolder>(getType(), adaptor);
 }
 
 OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
+  if (isa<PrimeFieldType>(getElementTypeOrSelf(getType()))) {
+    PrimeFieldInverseConstantFolder folder(getType());
+    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
+                                                                     &folder);
+  }
   return foldExtField<InverseConstantFolder>(getType(), adaptor);
 }
 

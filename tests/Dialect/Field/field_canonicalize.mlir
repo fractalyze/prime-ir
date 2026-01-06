@@ -17,8 +17,107 @@
 
 !PF17 = !field.pf<17:i32>
 
-// TODO(batzor): add tests related with constant folding after constant folding
-// is enabled
+//===----------------------------------------------------------------------===//
+// Constant Folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_fold_negate_scalar
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_negate_scalar() -> !PF17 {
+  // CHECK: %[[C:.*]] = field.constant 12 : [[T]]
+  // -5 mod 17 = 12
+  %0 = field.constant 5 : !PF17
+  %1 = field.negate %0 : !PF17
+  // CHECK-NOT: field.negate
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_fold_negate_tensor
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_negate_tensor() -> tensor<2x!PF17> {
+  // CHECK: %[[C:.*]] = field.constant dense<[14, 12]> : [[T]]
+  // -[3, 5] mod 17 = [14, 12]
+  %0 = field.constant dense<[3, 5]> : tensor<2x!PF17>
+  %1 = field.negate %0 : tensor<2x!PF17>
+  // CHECK-NOT: field.negate
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!PF17>
+}
+
+// CHECK-LABEL: @test_fold_double_scalar
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_double_scalar() -> !PF17 {
+  // CHECK: %[[C:.*]] = field.constant 14 : [[T]]
+  // 2 * 7 mod 17 = 14
+  %0 = field.constant 7 : !PF17
+  %1 = field.double %0 : !PF17
+  // CHECK-NOT: field.double
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_fold_double_tensor
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_double_tensor() -> tensor<2x!PF17> {
+  // CHECK: %[[C:.*]] = field.constant dense<[6, 16]> : [[T]]
+  // 2 * [3, 8] mod 17 = [6, 16]
+  %0 = field.constant dense<[3, 8]> : tensor<2x!PF17>
+  %1 = field.double %0 : tensor<2x!PF17>
+  // CHECK-NOT: field.double
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!PF17>
+}
+
+// CHECK-LABEL: @test_fold_square_scalar
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_square_scalar() -> !PF17 {
+  // CHECK: %[[C:.*]] = field.constant 9 : [[T]]
+  // 3² mod 17 = 9
+  %0 = field.constant 3 : !PF17
+  %1 = field.square %0 : !PF17
+  // CHECK-NOT: field.square
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_fold_square_tensor
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_square_tensor() -> tensor<2x!PF17> {
+  // CHECK: %[[C:.*]] = field.constant dense<[4, 15]> : [[T]]
+  // [2, 7]² mod 17 = [4, 49 mod 17] = [4, 15]
+  %0 = field.constant dense<[2, 7]> : tensor<2x!PF17>
+  %1 = field.square %0 : tensor<2x!PF17>
+  // CHECK-NOT: field.square
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!PF17>
+}
+
+// CHECK-LABEL: @test_fold_inverse_scalar
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_inverse_scalar() -> !PF17 {
+  // CHECK: %[[C:.*]] = field.constant 6 : [[T]]
+  // 3⁻¹ mod 17: 3 * 6 = 18 = 1 mod 17, so 3⁻¹ = 6
+  %0 = field.constant 3 : !PF17
+  %1 = field.inverse %0 : !PF17
+  // CHECK-NOT: field.inverse
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_fold_inverse_tensor
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_inverse_tensor() -> tensor<2x!PF17> {
+  // CHECK: %[[C:.*]] = field.constant dense<[9, 6]> : [[T]]
+  // 2⁻¹ mod 17: 2 * 9 = 18 = 1 mod 17, so 2⁻¹ = 9
+  // 3⁻¹ mod 17: 3 * 6 = 18 = 1 mod 17, so 3⁻¹ = 6
+  %0 = field.constant dense<[2, 3]> : tensor<2x!PF17>
+  %1 = field.inverse %0 : tensor<2x!PF17>
+  // CHECK-NOT: field.inverse
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!PF17>
+}
+
 //===----------------------------------------------------------------------===//
 // AddOp patterns
 //===----------------------------------------------------------------------===//
