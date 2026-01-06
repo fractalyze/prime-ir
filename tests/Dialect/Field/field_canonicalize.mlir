@@ -186,3 +186,58 @@ func.func @test_mul_self_is_square(%arg0: !PF17) -> !PF17 {
   // CHECK: return %[[RES]] : [[T]]
   return %mul : !PF17
 }
+
+//===----------------------------------------------------------------------===//
+// Tensor operations
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_from_elements
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_from_elements() -> tensor<2x!PF17> {
+  %0 = field.constant 1 : !PF17
+  %1 = field.constant 2 : !PF17
+  %2 = tensor.from_elements %0, %1 : tensor<2x!PF17>
+  // CHECK: %[[C:.*]] = field.constant dense<[1, 2]> : [[T]]
+  // CHECK-NOT: tensor.from_elements
+  // CHECK: return %[[C:.*]] : [[T]]
+  return %2 : tensor<2x!PF17>
+}
+
+// CHECK-LABEL: @test_tensor_extract
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_extract() -> !PF17 {
+  // CHECK: %[[C:.*]] = field.constant 3 : [[T]]
+  // CHECK-NOT: tensor.extract
+  // CHECK: return %[[C]] : [[T]]
+  %c1 = arith.constant 1: index
+  %0 = field.constant dense<[2, 3]> : tensor<2x!PF17>
+  %1 = tensor.extract %0[%c1] : tensor<2x!PF17>
+  return %1 : !PF17
+}
+
+//===----------------------------------------------------------------------===//
+// Vector operations
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_vector_from_elements
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_vector_from_elements() -> vector<2x!PF17> {
+  %0 = field.constant 1 : !PF17
+  %1 = field.constant 2 : !PF17
+  %2 = vector.from_elements %0, %1 : vector<2x!PF17>
+  // CHECK: %[[FROM_ELEMENTS:.*]] = field.constant dense<[1, 2]> : [[T]]
+  // CHECK-NOT: vector.from_elements
+  // CHECK: return %[[FROM_ELEMENTS:.*]] : [[T]]
+  return %2 : vector<2x!PF17>
+}
+
+// CHECK-LABEL: @test_vector_extract
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_vector_extract() -> !PF17 {
+  // CHECK: %[[C:.*]] = field.constant 3 : [[T]]
+  // CHECK-NOT: vector.extract
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant dense<[2, 3]> : vector<2x!PF17>
+  %1 = vector.extract %0[1] : !PF17 from vector<2x!PF17>
+  return %1 : !PF17
+}

@@ -36,6 +36,11 @@ limitations under the License.
 
 namespace mlir::zkir::field {
 
+// Supported extension field degrees: quadratic (2), cubic (3), quartic (4).
+constexpr size_t kMinExtDegree = 2;
+constexpr size_t kMaxExtDegree = 4;
+constexpr size_t kNumExtDegrees = kMaxExtDegree - kMinExtDegree + 1;
+
 class PrimeFieldType;
 
 bool isMontgomery(Type type);
