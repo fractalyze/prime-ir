@@ -86,6 +86,58 @@ func.func @test_fold_inverse() -> !QF {
 }
 
 //===----------------------------------------------------------------------===//
+// AddOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_fold_add
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_add() -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<[4, 6]> : [[T]]
+  // [1, 2] + [3, 4] = [4, 6]
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.constant [3, 4] : !QF
+  %2 = field.add %0, %1 : !QF
+  // CHECK-NOT: field.add
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : !QF
+}
+
+//===----------------------------------------------------------------------===//
+// SubOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_fold_sub
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_sub() -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<5> : [[T]]
+  // [1, 2] - [3, 4] = [-2, -2] mod 7 = [5, 5]
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.constant [3, 4] : !QF
+  %2 = field.sub %0, %1 : !QF
+  // CHECK-NOT: field.sub
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : !QF
+}
+
+//===----------------------------------------------------------------------===//
+// MulOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_fold_mul
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_fold_mul() -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<[2, 3]> : [[T]]
+  // [a₀, a₁] * [b₀, b₁] = [a₀b₀ + ξa₁b₁, a₀b₁ + a₁b₀] where ξ = 6
+  // [1, 2] * [3, 4] = [1*3 + 6*2*4, 1*4 + 2*3] = [51, 10] mod 7 = [2, 3]
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.constant [3, 4] : !QF
+  %2 = field.mul %0, %1 : !QF
+  // CHECK-NOT: field.mul
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : !QF
+}
+
+//===----------------------------------------------------------------------===//
 // ExtToCoeffsOp and ExtFromCoeffsOp
 //===----------------------------------------------------------------------===//
 

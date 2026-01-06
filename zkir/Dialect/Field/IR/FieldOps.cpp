@@ -384,11 +384,8 @@ public:
         baseFieldType(cast<PrimeFieldType>(extFieldType.getBaseFieldType())) {}
 
   SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
-    SmallVector<APInt> coeffs;
-    for (const APInt &v : attr.getValues<APInt>()) {
-      coeffs.push_back(v);
-    }
-    return coeffs;
+    auto values = attr.getValues<APInt>();
+    return {values.begin(), values.end()};
   }
 
   OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
@@ -462,6 +459,76 @@ public:
   }
 };
 
+// Base delegate for extension field binary operations.
+class BinaryExtFieldConstantFolder
+    : public ExtensionFieldBinaryConstantFolder<
+          ExtensionFieldConstantFolderConfig>::Delegate {
+public:
+  explicit BinaryExtFieldConstantFolder(Type type)
+      : extFieldType(cast<ExtensionFieldTypeInterface>(type)),
+        baseFieldType(cast<PrimeFieldType>(extFieldType.getBaseFieldType())) {}
+
+  SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
+    auto values = attr.getValues<APInt>();
+    return {values.begin(), values.end()};
+  }
+
+  OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
+    auto tensorType = RankedTensorType::get(
+        {static_cast<int64_t>(coeffs.size())}, baseFieldType.getStorageType());
+    return DenseIntElementsAttr::get(tensorType, coeffs);
+  }
+
+protected:
+  ExtensionFieldTypeInterface extFieldType;
+  PrimeFieldType baseFieldType;
+};
+
+// Add: [a₀, a₁, ...] + [b₀, b₁, ...] = [a₀ + b₀, a₁ + b₁, ...]
+template <size_t N>
+class ExtFieldAddConstantFolder : public BinaryExtFieldConstantFolder {
+public:
+  using BinaryExtFieldConstantFolder::BinaryExtFieldConstantFolder;
+
+  SmallVector<APInt> operate(const SmallVector<APInt> &lhs,
+                             const SmallVector<APInt> &rhs) const final {
+    auto nr = cast<IntegerAttr>(extFieldType.getNonResidue()).getValue();
+    return (ExtensionFieldOperation<N>(lhs, nr, baseFieldType) +
+            ExtensionFieldOperation<N>(rhs, nr, baseFieldType))
+        .toAPInts();
+  }
+};
+
+// Sub: [a₀, a₁, ...] - [b₀, b₁, ...] = [a₀ - b₀, a₁ - b₁, ...]
+template <size_t N>
+class ExtFieldSubConstantFolder : public BinaryExtFieldConstantFolder {
+public:
+  using BinaryExtFieldConstantFolder::BinaryExtFieldConstantFolder;
+
+  SmallVector<APInt> operate(const SmallVector<APInt> &lhs,
+                             const SmallVector<APInt> &rhs) const final {
+    auto nr = cast<IntegerAttr>(extFieldType.getNonResidue()).getValue();
+    return (ExtensionFieldOperation<N>(lhs, nr, baseFieldType) -
+            ExtensionFieldOperation<N>(rhs, nr, baseFieldType))
+        .toAPInts();
+  }
+};
+
+// Mul: uses zk_dtypes for proper extension field multiplication algorithm.
+template <size_t N>
+class ExtFieldMulConstantFolder : public BinaryExtFieldConstantFolder {
+public:
+  using BinaryExtFieldConstantFolder::BinaryExtFieldConstantFolder;
+
+  SmallVector<APInt> operate(const SmallVector<APInt> &lhs,
+                             const SmallVector<APInt> &rhs) const final {
+    auto nr = cast<IntegerAttr>(extFieldType.getNonResidue()).getValue();
+    return (ExtensionFieldOperation<N>(lhs, nr, baseFieldType) *
+            ExtensionFieldOperation<N>(rhs, nr, baseFieldType))
+        .toAPInts();
+  }
+};
+
 // Helper to dispatch extension field folding by degree using fold expression.
 // Eliminates repetitive if-else chains for degree 2, 3, 4.
 template <template <size_t> class FolderT, size_t N, typename Adaptor>
@@ -490,6 +557,36 @@ OpFoldResult foldExtField(Type type, Adaptor adaptor) {
   return foldExtFieldImpl<FolderT>(type, extFieldType.getDegreeOverBase(),
                                    adaptor,
                                    std::make_index_sequence<kNumExtDegrees>{});
+}
+
+// Helper to dispatch extension field binary folding by degree.
+template <template <size_t> class FolderT, size_t N, typename Adaptor>
+void tryFoldOneBinary(Type type, size_t degree, Adaptor adaptor,
+                      OpFoldResult &result) {
+  if (!result && degree == N) {
+    FolderT<N> folder(type);
+    result = ExtensionFieldBinaryConstantFolder<
+        ExtensionFieldConstantFolderConfig>::fold(adaptor, &folder);
+  }
+}
+
+template <template <size_t> class FolderT, typename Adaptor, size_t... Ns>
+OpFoldResult foldExtFieldBinaryImpl(Type type, size_t degree, Adaptor adaptor,
+                                    std::index_sequence<Ns...>) {
+  OpFoldResult result;
+  (tryFoldOneBinary<FolderT, Ns + kMinExtDegree>(type, degree, adaptor, result),
+   ...);
+  return result;
+}
+
+template <template <size_t> class FolderT, typename Adaptor>
+OpFoldResult foldExtFieldBinary(Type type, Adaptor adaptor) {
+  auto extFieldType = dyn_cast<ExtensionFieldTypeInterface>(type);
+  if (!extFieldType)
+    return {};
+  return foldExtFieldBinaryImpl<FolderT>(
+      type, extFieldType.getDegreeOverBase(), adaptor,
+      std::make_index_sequence<kNumExtDegrees>{});
 }
 
 } // namespace
@@ -528,6 +625,18 @@ OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
                                                                      &folder);
   }
   return foldExtField<InverseConstantFolder>(getType(), adaptor);
+}
+
+OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
+  return foldExtFieldBinary<ExtFieldAddConstantFolder>(getType(), adaptor);
+}
+
+OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
+  return foldExtFieldBinary<ExtFieldSubConstantFolder>(getType(), adaptor);
+}
+
+OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  return foldExtFieldBinary<ExtFieldMulConstantFolder>(getType(), adaptor);
 }
 
 //===----------------------------------------------------------------------===//

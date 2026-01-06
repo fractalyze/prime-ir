@@ -232,8 +232,9 @@ public:
   }
 };
 
-// TODO(junbeomlee): Unify with UnaryConstantFolder after deciding how to handle
-// Inverse(0). See https://github.com/fractalyze/zkir/issues/177
+// TODO(junbeomlee): Unify with UnaryConstantFolder and BinaryConstantFolder
+// after deciding how to handle Inverse(0).
+// See https://github.com/fractalyze/zkir/issues/177
 // Extension field constant folder for unary operations.
 template <typename Config>
 class ExtensionFieldUnaryConstantFolder {
@@ -264,6 +265,40 @@ public:
   static OpFoldResult fold(FoldAdaptor adaptor, DelegateT *delegate) {
     if (auto inputAttr = dyn_cast_if_present<ScalarAttr>(adaptor.getInput())) {
       return delegate->foldScalar(inputAttr);
+    }
+    return {};
+  }
+};
+
+// Extension field constant folder for binary operations.
+template <typename Config>
+class ExtensionFieldBinaryConstantFolder {
+public:
+  using NativeInputType = typename Config::NativeInputType;
+  using NativeOutputType = typename Config::NativeOutputType;
+  using ScalarAttr = typename Config::ScalarAttr;
+
+  class Delegate {
+  public:
+    virtual ~Delegate() = default;
+
+    virtual NativeInputType getNativeInput(ScalarAttr attr) const = 0;
+    virtual NativeOutputType operate(const NativeInputType &lhs,
+                                     const NativeInputType &rhs) const = 0;
+    virtual OpFoldResult
+    getScalarAttr(const NativeOutputType &coeffs) const = 0;
+
+    OpFoldResult foldScalar(ScalarAttr lhs, ScalarAttr rhs) const {
+      return getScalarAttr(operate(getNativeInput(lhs), getNativeInput(rhs)));
+    }
+  };
+
+  template <typename FoldAdaptor, typename DelegateT>
+  static OpFoldResult fold(FoldAdaptor adaptor, DelegateT *delegate) {
+    auto lhsAttr = dyn_cast_if_present<ScalarAttr>(adaptor.getLhs());
+    auto rhsAttr = dyn_cast_if_present<ScalarAttr>(adaptor.getRhs());
+    if (lhsAttr && rhsAttr) {
+      return delegate->foldScalar(lhsAttr, rhsAttr);
     }
     return {};
   }

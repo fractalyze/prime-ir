@@ -388,6 +388,7 @@ def Field_AddOp : Field_BinaryOp<"add", [Commutative]> {
     %r = field.add %a, %b : !field.pf<primeModulus>
     ```
   }];
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -402,6 +403,7 @@ def Field_SubOp : Field_BinaryOp<"sub"> {
     %r = field.sub %a, %b : !field.pf<primeModulus>
     ```
   }];
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -416,6 +418,7 @@ def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
     %r = field.mul %a, %b : !field.pf<primeModulus>
     ```
   }];
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 
