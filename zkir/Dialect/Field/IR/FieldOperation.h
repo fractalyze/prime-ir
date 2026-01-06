@@ -268,6 +268,8 @@ private:
   friend class zk_dtypes::ExtensionFieldOperation;
   template <typename>
   friend class zk_dtypes::FrobeniusOperation;
+  template <typename, size_t>
+  friend class zk_dtypes::VandermondeMatrix;
 
   const std::array<PrimeFieldOperation, N> &ToCoeffs() const { return coeffs; }
 
@@ -278,15 +280,31 @@ private:
 
   PrimeFieldOperation NonResidue() const { return nonResidue; }
 
-  // TODO(junbeomlee): Refactor zk_dtypes C() and C2() macros into reusable
-  // functions that accept CreateConstBaseField, then implement
-  // GetVandermondeInverseMatrix and apply algorithm selection logic based on
-  // limb count and non-residue value (similar to ExtensionFieldCodeGen).
+  // https://github.com/fractalyze/zk_dtypes/blob/8d5f43c/zk_dtypes/include/field/extension_field.h#L500
   zk_dtypes::ExtensionFieldMulAlgorithm GetSquareAlgorithm() const {
-    return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    if constexpr (N == 2) {
+      // Heuristic: custom squaring when n² > 2n + C
+      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      if (limbNums * N >= 2) {
+        return zk_dtypes::ExtensionFieldMulAlgorithm::kCustom2;
+      }
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    } else if constexpr (N == 3) {
+      // Heuristic: custom squaring when n² > 4n
+      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      if (limbNums * N >= 4) {
+        return zk_dtypes::ExtensionFieldMulAlgorithm::kCustom;
+      }
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    } else {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+    }
   }
 
   zk_dtypes::ExtensionFieldMulAlgorithm GetMulAlgorithm() const {
+    if constexpr (N == 4) {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+    }
     return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
   }
 
@@ -314,12 +332,6 @@ private:
       }
     }
     return result;
-  }
-
-  // Required by ToomCookOperation but never called (we use kKaratsuba).
-  std::array<std::array<PrimeFieldOperation, 7>, 7>
-  GetVandermondeInverseMatrix() const {
-    llvm_unreachable("GetVandermondeInverseMatrix should not be called");
   }
 
   std::array<PrimeFieldOperation, N> coeffs;
