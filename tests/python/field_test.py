@@ -63,6 +63,50 @@ class FieldTest(absltest.TestCase):
       self.assertEqual(ce_type.non_residue, non_residue_attr)
       self.assertTrue(ce_type.is_montgomery)
 
+  def testExtensionFieldTypes(self):
+    with Context() as ctx, Location.unknown():
+      field.register_dialect(ctx)
+      pf = _createBabybearType(ctx)
+
+      # Test degree 2 (11 is a valid quadratic non-residue)
+      non_residue_2 = (11 * BABYBEAR_R) % BABYBEAR_MODULUS
+      non_residue_attr_2 = _createBabybearAttribute(non_residue_2)
+      ef2_type = field.ExtensionFieldType.get(2, pf, non_residue_attr_2)
+      self.assertEqual(
+          str(ef2_type),
+          "!field.ef<2x!field.pf<2013265921 : i32, true>, 11 : i32>",
+      )
+      self.assertEqual(ef2_type.degree, 2)
+      self.assertEqual(ef2_type.base_field, pf)
+      self.assertEqual(ef2_type.non_residue, non_residue_attr_2)
+      self.assertTrue(ef2_type.is_montgomery)
+
+      # Test degree 3 (2 is a valid cubic non-residue)
+      non_residue_3 = (2 * BABYBEAR_R) % BABYBEAR_MODULUS
+      non_residue_attr_3 = _createBabybearAttribute(non_residue_3)
+      ef3_type = field.ExtensionFieldType.get(3, pf, non_residue_attr_3)
+      self.assertEqual(
+          str(ef3_type),
+          "!field.ef<3x!field.pf<2013265921 : i32, true>, 2 : i32>",
+      )
+      self.assertEqual(ef3_type.degree, 3)
+      self.assertEqual(ef3_type.base_field, pf)
+      self.assertEqual(ef3_type.non_residue, non_residue_attr_3)
+      self.assertTrue(ef3_type.is_montgomery)
+
+      # Test degree 4 (11 is a valid quartic non-residue)
+      non_residue_4 = (11 * BABYBEAR_R) % BABYBEAR_MODULUS
+      non_residue_attr_4 = _createBabybearAttribute(non_residue_4)
+      ef4_type = field.ExtensionFieldType.get(4, pf, non_residue_attr_4)
+      self.assertEqual(
+          str(ef4_type),
+          "!field.ef<4x!field.pf<2013265921 : i32, true>, 11 : i32>",
+      )
+      self.assertEqual(ef4_type.degree, 4)
+      self.assertEqual(ef4_type.base_field, pf)
+      self.assertEqual(ef4_type.non_residue, non_residue_attr_4)
+      self.assertTrue(ef4_type.is_montgomery)
+
 
 if __name__ == "__main__":
   absltest.main()

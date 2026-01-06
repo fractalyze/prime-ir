@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "zkir/Dialect/Field/IR/FieldOperation.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "zkir/Utils/AssemblyFormatUtils.h"
@@ -276,6 +277,46 @@ llvm::SmallVector<Value> extractCoeffsFromStruct(ImplicitLocOpBuilder &builder,
   return extFieldStruct.getValues(builder, builder.getLoc());
 }
 
+// Compile-time dispatch helpers for ExtensionFieldType
+template <unsigned... Degrees>
+Value dispatchBuildStructFromCoeffs(
+    unsigned degree, ImplicitLocOpBuilder &builder, Type structType,
+    ArrayRef<Value> coeffs, std::integer_sequence<unsigned, Degrees...>) {
+  Value result;
+  (void)((Degrees == degree ? (result = buildStructFromCoeffs<Degrees>(
+                                   builder, structType, coeffs),
+                               true)
+                            : false) ||
+         ...);
+  assert(result && "unsupported extension field degree");
+  return result;
+}
+
+template <unsigned... Degrees>
+SmallVector<Value>
+dispatchExtractCoeffsFromStruct(unsigned degree, ImplicitLocOpBuilder &builder,
+                                Value structValue,
+                                std::integer_sequence<unsigned, Degrees...>) {
+  SmallVector<Value> result;
+  (void)((Degrees == degree ? (result = extractCoeffsFromStruct<Degrees>(
+                                   builder, structValue),
+                               true)
+                            : false) ||
+         ...);
+  assert(!result.empty() && "unsupported extension field degree");
+  return result;
+}
+
+// Generate sequence from kMinExtDegree to kMaxExtDegree (2, 3, 4)
+template <size_t Start, size_t... Is>
+constexpr auto makeExtDegreeSequence(std::index_sequence<Is...>) {
+  return std::integer_sequence<unsigned,
+                               static_cast<unsigned>(Start + Is)...>{};
+}
+
+constexpr auto kExtDegreeSequence = makeExtDegreeSequence<kMinExtDegree>(
+    std::make_index_sequence<kNumExtDegrees>{});
+
 } // namespace
 } // namespace ext_field_utils
 
@@ -383,5 +424,165 @@ uint64_t QuarticExtFieldType::getABIAlignment(
 }
 
 DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(QuarticExtFieldType, 4, 4);
+
+//===----------------------------------------------------------------------===//
+// ExtensionFieldType
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
+                           unsigned degree, PrimeFieldType baseField,
+                           IntegerAttr nonResidue) {
+  if (degree < 2 || degree > kMaxExtDegree) {
+    return emitError() << "extension field degree must be between 2 and "
+                       << kMaxExtDegree << ", got " << degree;
+  }
+
+  // Validate that nonResidue is actually a non-residue:
+  // nonResidue^((p - 1) / n) ≢ 1 (mod p)
+  // TODO(junbeomlee): Use order of baseField instead of modulus for towers.
+  auto nrOp = PrimeFieldOperation::fromUnchecked(nonResidue, baseField);
+  APInt p = baseField.getModulus().getValue();
+  APInt exp = (p - 1).udiv(APInt(p.getBitWidth(), degree));
+  if (nrOp.power(exp).isOne()) {
+    return emitError() << "nonResidue must satisfy nonResidue^((p - 1) / "
+                       << degree << ") != 1 (mod p)";
+  }
+
+  return success();
+}
+
+// static
+Type ExtensionFieldType::parse(AsmParser &parser) {
+  if (failed(parser.parseLess())) {
+    return nullptr;
+  }
+
+  // Parse "Nx" format (e.g., "2x", "3x", "4x")
+  unsigned degree;
+  if (failed(parser.parseInteger(degree))) {
+    return nullptr;
+  }
+
+  // Validate degree early
+  if (degree < 2 || degree > kMaxExtDegree) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "extension field degree must be between 2 and ")
+        << kMaxExtDegree;
+    return nullptr;
+  }
+
+  if (failed(parser.parseKeyword("x"))) {
+    return nullptr;
+  }
+
+  // Parse base field type
+  Type baseFieldType;
+  if (failed(parser.parseType(baseFieldType))) {
+    return nullptr;
+  }
+  if (!isa<PrimeFieldType>(baseFieldType)) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "base field must be a prime field");
+    return nullptr;
+  }
+  auto pfType = cast<PrimeFieldType>(baseFieldType);
+
+  // Parse non-residue
+  if (failed(parser.parseComma())) {
+    return nullptr;
+  }
+  IntegerAttr nonResidue;
+  if (failed(parser.parseAttribute(nonResidue))) {
+    return nullptr;
+  }
+  if (pfType.getIsMontgomery()) {
+    nonResidue =
+        mod_arith::getAttrAsMontgomeryForm(pfType.getModulus(), nonResidue);
+  }
+
+  if (failed(parser.parseGreater())) {
+    return nullptr;
+  }
+  return ExtensionFieldType::get(parser.getContext(), degree, pfType,
+                                 nonResidue);
+}
+
+void ExtensionFieldType::print(AsmPrinter &printer) const {
+  auto pfType = getBaseField();
+  auto nonResidue = getNonResidue();
+  if (pfType.getIsMontgomery()) {
+    nonResidue =
+        mod_arith::getAttrAsStandardForm(pfType.getModulus(), nonResidue);
+  }
+  printer << "<" << getDegree() << "x" << pfType << ", " << nonResidue << ">";
+}
+
+llvm::TypeSize ExtensionFieldType::getTypeSizeInBits(
+    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() *
+                                  getDegree());
+}
+
+uint64_t ExtensionFieldType::getABIAlignment(
+    DataLayout const &dataLayout,
+    llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
+}
+
+// ExtensionFieldTypeInterface methods
+bool ExtensionFieldType::isMontgomery() const {
+  return getBaseField().getIsMontgomery();
+}
+
+Value ExtensionFieldType::createZeroConstant(
+    ImplicitLocOpBuilder &builder) const {
+  return builder.create<ConstantOp>(*this, 0);
+}
+
+Value ExtensionFieldType::createOneConstant(
+    ImplicitLocOpBuilder &builder) const {
+  return isMontgomery()
+             ? builder
+                   .create<ToMontOp>(*this, builder.create<ConstantOp>(
+                                                getStandardFormType(*this), 1))
+                   .getResult()
+             : builder.create<ConstantOp>(*this, 1);
+}
+
+unsigned ExtensionFieldType::getDegreeOverPrime() const { return getDegree(); }
+
+unsigned ExtensionFieldType::getDegreeOverBase() const { return getDegree(); }
+
+Type ExtensionFieldType::getBaseFieldType() const { return getBaseField(); }
+
+Type ExtensionFieldType::cloneWith(Type baseField, Attribute element) const {
+  return ExtensionFieldType::get(getContext(), getDegree(),
+                                 cast<PrimeFieldType>(baseField),
+                                 cast<IntegerAttr>(element));
+}
+
+TypedAttr ExtensionFieldType::createConstantAttr(
+    llvm::ArrayRef<llvm::APInt> coeffs) const {
+  auto tensorType = RankedTensorType::get(
+      {static_cast<int64_t>(getDegree())},
+      IntegerType::get(getContext(), getBaseField().getStorageBitWidth()));
+  return DenseIntElementsAttr::get(tensorType, coeffs);
+}
+
+Value ExtensionFieldType::buildStructFromCoeffs(
+    ImplicitLocOpBuilder &builder, Type structType,
+    llvm::ArrayRef<Value> coeffs) const {
+  return ext_field_utils::dispatchBuildStructFromCoeffs(
+      getDegree(), builder, structType, coeffs,
+      ext_field_utils::kExtDegreeSequence);
+}
+
+llvm::SmallVector<Value>
+ExtensionFieldType::extractCoeffsFromStruct(ImplicitLocOpBuilder &builder,
+                                            Value structValue) const {
+  return ext_field_utils::dispatchExtractCoeffsFromStruct(
+      getDegree(), builder, structValue, ext_field_utils::kExtDegreeSequence);
+}
 
 } // namespace mlir::zkir::field

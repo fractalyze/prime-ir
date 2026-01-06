@@ -58,6 +58,18 @@ public:
   static void bindDerived(ClassTy &c);
 };
 
+class PyExtensionFieldType
+    : public mlir::python::PyConcreteType<PyExtensionFieldType> {
+public:
+  static constexpr IsAFunctionTy isaFunction = zkirTypeIsAnExtensionField;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      zkirExtensionFieldTypeGetTypeID;
+  static constexpr const char *pyClassName = "ExtensionFieldType";
+  using PyConcreteType::PyConcreteType;
+
+  static void bindDerived(ClassTy &c);
+};
+
 void populateIRTypes(nanobind::module_ &m);
 
 } // namespace mlir::zkir::field::python

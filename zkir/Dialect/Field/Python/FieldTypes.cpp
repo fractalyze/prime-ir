@@ -117,10 +117,51 @@ void PyCubicExtensionFieldType::bindDerived(ClassTy &c) {
       "Returns whether this is a montgomery form");
 }
 
+// static
+void PyExtensionFieldType::bindDerived(ClassTy &c) {
+  c.def_static(
+      "get",
+      [](unsigned degree, PyPrimeFieldType &baseField, PyAttribute &nonResidue,
+         DefaultingPyMlirContext context) -> PyExtensionFieldType {
+        MlirType t = zkirExtensionFieldTypeGet(context->get(), degree,
+                                               baseField, nonResidue);
+        return PyExtensionFieldType(context->getRef(), t);
+      },
+      nb::arg("degree"), nb::arg("base_field"), nb::arg("non_residue"),
+      nb::arg("context") = nb::none(), "Create an extension field type");
+  c.def_prop_ro(
+      "degree",
+      [](PyExtensionFieldType &self) -> unsigned {
+        return zkirExtensionFieldTypeGetDegree(self);
+      },
+      "Returns the degree of the extension field type");
+  c.def_prop_ro(
+      "base_field",
+      [](PyExtensionFieldType &self) -> PyPrimeFieldType {
+        return PyPrimeFieldType(self.getContext(),
+                                zkirExtensionFieldTypeGetBaseField(self));
+      },
+      "Returns the base field of the extension field type");
+  c.def_prop_ro(
+      "non_residue",
+      [](PyExtensionFieldType &self) -> PyAttribute {
+        return PyAttribute(self.getContext(),
+                           zkirExtensionFieldTypeGetNonResidue(self));
+      },
+      "Returns the non-residue of the extension field type");
+  c.def_prop_ro(
+      "is_montgomery",
+      [](PyExtensionFieldType &self) -> bool {
+        return zkirExtensionFieldTypeIsMontgomery(self);
+      },
+      "Returns whether this is a montgomery form");
+}
+
 void populateIRTypes(nb::module_ &m) {
   PyPrimeFieldType::bind(m);
   PyQuadraticExtensionFieldType::bind(m);
   PyCubicExtensionFieldType::bind(m);
+  PyExtensionFieldType::bind(m);
 }
 
 } // namespace mlir::zkir::field::python

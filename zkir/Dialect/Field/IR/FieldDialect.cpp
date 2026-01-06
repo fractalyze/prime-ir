@@ -40,6 +40,7 @@ limitations under the License.
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
 
 // Headers needed for FieldOps.cpp.inc
+#include "zkir/Dialect/Field/IR/FieldOperation.h"
 #include "zkir/Dialect/Field/IR/FieldOps.h"
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/OpUtils.h"

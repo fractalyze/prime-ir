@@ -71,6 +71,8 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
     OpBuilder<(ins "Type":$ty, "uint64_t":$value), [{
       if (auto pfType = dyn_cast<PrimeFieldType>(ty)) {
         return build($_builder, $_state, pfType, value);
+      } else if (auto efType = dyn_cast<ExtensionFieldType>(ty)) {
+        return build($_builder, $_state, efType, value);
       } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(ty)) {
         return build($_builder, $_state, f2Type, value);
       } else if (auto f3Type = dyn_cast<CubicExtFieldType>(ty)) {
@@ -119,6 +121,25 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
       APInt c3Int(bitWidth, c3);
       auto tensorType = RankedTensorType::get({4}, IntegerType::get(ty.getContext(), bitWidth));
       return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int, c3Int}));
+    }]>,
+    OpBuilder<(ins "ExtensionFieldType":$ty, "uint64_t":$c0), [{
+      auto baseField = ty.getBaseField();
+      unsigned degree = ty.getDegree();
+      unsigned bitWidth = baseField.getStorageBitWidth();
+      SmallVector<APInt> coeffs(degree, APInt(bitWidth, 0));
+      coeffs[0] = static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c0), baseField));
+      auto tensorType = RankedTensorType::get({static_cast<int64_t>(degree)}, baseField.getStorageType());
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, coeffs));
+    }]>,
+    OpBuilder<(ins "ExtensionFieldType":$ty, "llvm::ArrayRef<uint64_t>":$coeffs), [{
+      assert(coeffs.size() == ty.getDegree() && "coefficient count must match extension degree");
+      auto baseField = ty.getBaseField();
+      unsigned bitWidth = baseField.getStorageBitWidth();
+      SmallVector<APInt> coeffInts;
+      for (auto c : coeffs)
+        coeffInts.push_back(static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c), baseField)));
+      auto tensorType = RankedTensorType::get({static_cast<int64_t>(coeffs.size())}, baseField.getStorageType());
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, coeffInts));
     }]>,
   ];
   let extraClassDeclaration = [{
@@ -178,6 +199,28 @@ def Field_F4CreateOp : Op<Field_Dialect, "f4.create", [Pure, TypesMatchWith<
   let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1, Field_PrimeFieldType:$c2, Field_PrimeFieldType:$c3);
   let results = (outs Field_QuarticExtFieldType:$output);
   let assemblyFormat = "$c0 `,` $c1 `,` $c2 `,` $c3 attr-dict `:` type($output)";
+}
+
+def Field_CreateOp : Op<Field_Dialect, "create", [Pure]> {
+  let summary = "Create an extension field element from coefficients";
+  let description = [{
+    Constructs an extension field element from a list of prime field coefficients.
+    The number of coefficients must match the degree of the extension field.
+
+    Example:
+    ```
+    !PF = !field.pf<7:i32>
+    !EF2 = !field.ef<2x!PF, 6:i32>
+    !EF3 = !field.ef<3x!PF, 2:i32>
+
+    %qf = field.create [%c0, %c1] : !EF2
+    %cf = field.create [%c0, %c1, %c2] : !EF3
+    ```
+  }];
+  let arguments = (ins Variadic<Field_PrimeFieldType>:$coefficients);
+  let results = (outs Field_ExtensionFieldType:$output);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,

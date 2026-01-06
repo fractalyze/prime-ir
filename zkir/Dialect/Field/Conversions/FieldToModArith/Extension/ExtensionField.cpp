@@ -20,6 +20,7 @@ limitations under the License.
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/Extension/ExtensionFieldImpl.h"
 #include "zkir/Dialect/Field/IR/FieldAttributes.h"
+#include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
 
 namespace mlir::zkir::field {
@@ -29,8 +30,24 @@ std::unique_ptr<ExtensionField>
 ExtensionField::create(ImplicitLocOpBuilder &b,
                        ExtensionFieldTypeInterface type,
                        const TypeConverter *converter) {
+  static_assert(kMaxExtDegree == 4,
+                "Update switch cases below when changing kMaxExtDegree");
   std::unique_ptr<ExtensionField> ret;
-  if (isa<QuadraticExtFieldType>(type)) {
+  if (auto efType = dyn_cast<ExtensionFieldType>(type)) {
+    switch (efType.getDegree()) {
+    case 2:
+      ret.reset(new QuadraticExtensionField(b, type, converter));
+      break;
+    case 3:
+      ret.reset(new CubicExtensionField(b, type, converter));
+      break;
+    case 4:
+      ret.reset(new QuarticExtensionField(b, type, converter));
+      break;
+    default:
+      llvm_unreachable("Unsupported extension field degree");
+    }
+  } else if (isa<QuadraticExtFieldType>(type)) {
     ret.reset(new QuadraticExtensionField(b, type, converter));
   } else if (isa<CubicExtFieldType>(type)) {
     ret.reset(new CubicExtensionField(b, type, converter));

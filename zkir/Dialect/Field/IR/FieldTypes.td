@@ -218,13 +218,46 @@ def Field_QuarticExtFieldType : Field_Type<"QuarticExtField", "f4", [
   let hasCustomAssemblyFormat = 1;
 }
 
-def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-field-type">;
-def Field_AnyExtFieldType : AnyTypeOf<[Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-ext-field-type">;
+// Unified extension field type definition.
+// This type represents an element in an extension field of degree N (2, 3, or 4).
+def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
+  MemRefElementTypeInterface,
+  VectorElementTypeInterface,
+  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
+  ]> {
+  let summary = "Extension field element type";
+  let description = [{
+    Represents an element in an extension field of degree N (2, 3, or 4)
+    defined by the given prime field `baseField` and the non-residue `nonResidue`.
+
+    An element is represented as a₀ + a₁v + ... + aₙ₋₁vⁿ⁻¹ where vⁿ = nonResidue.
+
+    Example:
+    ```
+    !PF = !field.pf<7:i32>
+    !EF2 = !field.ef<2x!PF, 6:i32>  // quadratic extension
+    !EF3 = !field.ef<3x!PF, 2:i32>  // cubic extension
+    !EF4 = !field.ef<4x!PF, 2:i32>  // quartic extension
+    ```
+  }];
+  let parameters = (ins
+    "unsigned": $degree,
+    Field_PrimeFieldType: $baseField,
+    "IntegerAttr": $nonResidue
+  );
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+}
+
+def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_ExtensionFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-field-type">;
+def Field_AnyExtFieldType : AnyTypeOf<[Field_ExtensionFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-ext-field-type">;
 
 def PrimeFieldLike: TypeOrValueSemanticsContainer<Field_PrimeFieldType, "prime-field-like">;
+def ExtensionFieldLike: TypeOrValueSemanticsContainer<Field_ExtensionFieldType, "extension-field-like">;
 def QuadraticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuadraticExtFieldType, "quadratic-ext-field-like">;
 def CubicExtFieldLike: TypeOrValueSemanticsContainer<Field_CubicExtFieldType, "cubic-ext-field-like">;
 def QuarticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuarticExtFieldType, "quartic-ext-field-like">;
-def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, QuadraticExtFieldLike.predicate, CubicExtFieldLike.predicate, QuarticExtFieldLike.predicate]>, "field-like">;
+def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, ExtensionFieldLike.predicate, QuadraticExtFieldLike.predicate, CubicExtFieldLike.predicate, QuarticExtFieldLike.predicate]>, "field-like">;
 
 #endif  // ZKIR_DIALECT_FIELD_IR_FIELDTYPES_TD_

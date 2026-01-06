@@ -109,3 +109,39 @@ MlirAttribute zkirCubicExtensionFieldTypeGetNonResidue(MlirType type) {
 bool zkirCubicExtensionFieldTypeIsMontgomery(MlirType type) {
   return llvm::cast<CubicExtFieldType>(unwrap(type)).isMontgomery();
 }
+
+// ===----------------------------------------------------------------------===//
+// ExtensionField types.
+// ===----------------------------------------------------------------------===//
+
+MlirTypeID zkirExtensionFieldTypeGetTypeID() {
+  return wrap(ExtensionFieldType::getTypeID());
+}
+
+bool zkirTypeIsAnExtensionField(MlirType type) {
+  return llvm::isa<ExtensionFieldType>(unwrap(type));
+}
+
+MlirType zkirExtensionFieldTypeGet(MlirContext ctx, unsigned degree,
+                                   MlirType baseField,
+                                   MlirAttribute nonResidue) {
+  return wrap(ExtensionFieldType::get(
+      unwrap(ctx), degree, llvm::cast<PrimeFieldType>(unwrap(baseField)),
+      llvm::cast<IntegerAttr>(unwrap(nonResidue))));
+}
+
+unsigned zkirExtensionFieldTypeGetDegree(MlirType type) {
+  return llvm::cast<ExtensionFieldType>(unwrap(type)).getDegree();
+}
+
+MlirType zkirExtensionFieldTypeGetBaseField(MlirType type) {
+  return wrap(llvm::cast<ExtensionFieldType>(unwrap(type)).getBaseField());
+}
+
+MlirAttribute zkirExtensionFieldTypeGetNonResidue(MlirType type) {
+  return wrap(llvm::cast<ExtensionFieldType>(unwrap(type)).getNonResidue());
+}
+
+bool zkirExtensionFieldTypeIsMontgomery(MlirType type) {
+  return llvm::cast<ExtensionFieldType>(unwrap(type)).isMontgomery();
+}

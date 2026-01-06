@@ -97,6 +97,36 @@ zkirCubicExtensionFieldTypeGetNonResidue(MlirType type);
 // Checks whether the given type is a montgomery form.
 MLIR_CAPI_EXPORTED bool zkirCubicExtensionFieldTypeIsMontgomery(MlirType type);
 
+// ===----------------------------------------------------------------------===//
+// ExtensionField types.
+// ===----------------------------------------------------------------------===//
+
+// Returns the typeID of an extension field type.
+MLIR_CAPI_EXPORTED MlirTypeID zkirExtensionFieldTypeGetTypeID(void);
+
+// Checks whether the given type is an extension field type.
+MLIR_CAPI_EXPORTED bool zkirTypeIsAnExtensionField(MlirType type);
+
+// Creates an extension field type of the given degree, base field and
+// non-residue in the context. The type is owned by the context.
+MLIR_CAPI_EXPORTED MlirType zkirExtensionFieldTypeGet(MlirContext ctx,
+                                                      unsigned degree,
+                                                      MlirType baseField,
+                                                      MlirAttribute nonResidue);
+
+// Returns the degree of the given extension field type.
+MLIR_CAPI_EXPORTED unsigned zkirExtensionFieldTypeGetDegree(MlirType type);
+
+// Returns the base field of the given extension field type.
+MLIR_CAPI_EXPORTED MlirType zkirExtensionFieldTypeGetBaseField(MlirType type);
+
+// Returns the non-residue of the given extension field type.
+MLIR_CAPI_EXPORTED MlirAttribute
+zkirExtensionFieldTypeGetNonResidue(MlirType type);
+
+// Checks whether the given type is a montgomery form.
+MLIR_CAPI_EXPORTED bool zkirExtensionFieldTypeIsMontgomery(MlirType type);
+
 #ifdef __cplusplus
 }
 #endif
