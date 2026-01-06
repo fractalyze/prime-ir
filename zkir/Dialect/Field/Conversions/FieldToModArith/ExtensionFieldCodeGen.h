@@ -110,7 +110,7 @@ public:
   Type getType() const { return type; }
 
   ExtensionFieldCodeGen operator*(const PrimeFieldCodeGen &scalar) const {
-    std::array<PrimeFieldCodeGen, N> coeffs = ToBaseField();
+    std::array<PrimeFieldCodeGen, N> coeffs = ToBaseFields();
     for (size_t i = 0; i < N; ++i) {
       coeffs[i] = coeffs[i] * scalar;
     }
@@ -118,7 +118,7 @@ public:
   }
 
   // zk_dtypes ExtensionFieldOperation methods
-  std::array<PrimeFieldCodeGen, N> ToBaseField() const {
+  std::array<PrimeFieldCodeGen, N> ToBaseFields() const {
     Operation::result_range coeffs = toCoeffs(*b, value);
     std::array<PrimeFieldCodeGen, N> ret;
     for (size_t i = 0; i < N; ++i) {
