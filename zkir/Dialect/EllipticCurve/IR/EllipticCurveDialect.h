@@ -16,9 +16,6 @@ limitations under the License.
 #ifndef ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_H_
 #define ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_H_
 
-#include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/IR/Types.h"
-
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveDialect.h.inc
 #include "mlir/IR/Dialect.h"
@@ -26,15 +23,5 @@ limitations under the License.
 
 // Generated headers (block clang-format from messing up order)
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h.inc"
-
-namespace mlir::zkir::elliptic_curve {
-// Helper functions for the Elliptic Curve dialect
-class ShortWeierstrassAttr;
-
-size_t getNumCoordsFromPointLike(Type pointLike);
-ShortWeierstrassAttr getCurveFromPointLike(Type pointLike);
-// WARNING: Assumes Jacobian or XYZZ point types
-Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType);
-} // namespace mlir::zkir::elliptic_curve
 
 #endif // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_H_

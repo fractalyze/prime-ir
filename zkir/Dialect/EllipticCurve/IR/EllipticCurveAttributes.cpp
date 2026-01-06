@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 
+#include "mlir/IR/TypeUtilities.h"
+#include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "zkir/Dialect/Field/IR/FieldOperation.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 
@@ -100,6 +102,20 @@ ShortWeierstrassAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
   }
 
   return success();
+}
+
+ShortWeierstrassAttr getCurveFromPointLike(Type pointLike) {
+  Type pointType = getElementTypeOrSelf(pointLike);
+  if (auto affineType = dyn_cast<AffineType>(pointType)) {
+    return affineType.getCurve();
+  } else if (auto jacobianType = dyn_cast<JacobianType>(pointType)) {
+    return jacobianType.getCurve();
+  } else if (auto xyzzType = dyn_cast<XYZZType>(pointType)) {
+    return xyzzType.getCurve();
+  } else {
+    llvm_unreachable("Unsupported point-like type for curve extraction");
+    return ShortWeierstrassAttr();
+  }
 }
 
 } // namespace mlir::zkir::elliptic_curve

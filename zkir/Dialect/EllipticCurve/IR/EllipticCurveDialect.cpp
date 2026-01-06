@@ -18,7 +18,6 @@ limitations under the License.
 #include <cassert>
 
 #include "llvm/ADT/TypeSwitch.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/TypeUtilities.h"
@@ -26,7 +25,6 @@ limitations under the License.
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "zkir/Dialect/EllipticCurve/IR/KnownCurves.h"
-#include "zkir/Dialect/Field/IR/FieldOps.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveDialect.cpp.inc
@@ -48,51 +46,6 @@ limitations under the License.
 #include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zkir/Utils/OpUtils.h"
 // IWYU pragma: end_keep
-
-namespace mlir::zkir::elliptic_curve {
-
-size_t getNumCoordsFromPointLike(Type pointLike) {
-  Type pointType = getElementTypeOrSelf(pointLike);
-  if (isa<AffineType>(pointType)) {
-    return 2;
-  } else if (isa<JacobianType>(pointType)) {
-    return 3;
-  } else if (isa<XYZZType>(pointType)) {
-    return 4;
-  } else {
-    llvm_unreachable("Unsupported point-like type for curve extraction");
-    return 0;
-  }
-}
-
-ShortWeierstrassAttr getCurveFromPointLike(Type pointLike) {
-  Type pointType = getElementTypeOrSelf(pointLike);
-  if (auto affineType = dyn_cast<AffineType>(pointType)) {
-    return affineType.getCurve();
-  } else if (auto jacobianType = dyn_cast<JacobianType>(pointType)) {
-    return jacobianType.getCurve();
-  } else if (auto xyzzType = dyn_cast<XYZZType>(pointType)) {
-    return xyzzType.getCurve();
-  } else {
-    llvm_unreachable("Unsupported point-like type for curve extraction");
-    return ShortWeierstrassAttr();
-  }
-}
-
-// WARNING: Assumes Jacobian or XYZZ point types
-Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
-  auto baseFieldType = getCurveFromPointLike(pointType).getBaseField();
-  auto zeroBF =
-      cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
-  Value oneBF =
-      cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
-  return isa<XYZZType>(pointType)
-             ? b.create<PointOp>(pointType,
-                                 ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-             : b.create<PointOp>(pointType, ValueRange{oneBF, oneBF, zeroBF});
-}
-
-} // namespace mlir::zkir::elliptic_curve
 
 // Generated definitions
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveDialect.cpp.inc"

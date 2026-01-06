@@ -26,4 +26,10 @@ limitations under the License.
 #define GET_ATTRDEF_CLASSES
 #include "zkir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h.inc"
 
+namespace mlir::zkir::elliptic_curve {
+
+ShortWeierstrassAttr getCurveFromPointLike(Type pointLike);
+
+} // namespace mlir::zkir::elliptic_curve
+
 #endif // ZKIR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEATTRIBUTES_H_

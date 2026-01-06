@@ -93,7 +93,38 @@ LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
 }
 } // namespace
 
+// WARNING: Assumes Jacobian or XYZZ point types
+Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
+  auto baseFieldType = getCurveFromPointLike(pointType).getBaseField();
+  auto zeroBF =
+      cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
+  Value oneBF =
+      cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
+  return isa<XYZZType>(pointType)
+             ? b.create<PointOp>(pointType,
+                                 ValueRange{oneBF, oneBF, zeroBF, zeroBF})
+             : b.create<PointOp>(pointType, ValueRange{oneBF, oneBF, zeroBF});
+}
+
 /////////////// VERIFY OPS /////////////////
+
+namespace {
+
+size_t getNumCoordsFromPointLike(Type pointLike) {
+  Type pointType = getElementTypeOrSelf(pointLike);
+  if (isa<AffineType>(pointType)) {
+    return 2;
+  } else if (isa<JacobianType>(pointType)) {
+    return 3;
+  } else if (isa<XYZZType>(pointType)) {
+    return 4;
+  } else {
+    llvm_unreachable("Unsupported point-like type for curve extraction");
+    return 0;
+  }
+}
+
+} // namespace
 
 LogicalResult PointOp::verify() {
   Type outputType = getType();
