@@ -17,71 +17,79 @@ limitations under the License.
 
 #include "zkir/Dialect/ModArith/IR//ModArithOperation.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOps.h"
+#include "zkir/Utils/BuilderContext.h"
 
 namespace mlir::zkir::field {
 
 PrimeFieldCodeGen
 PrimeFieldCodeGen::operator+(const PrimeFieldCodeGen &other) const {
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   return PrimeFieldCodeGen(
-      b, b->create<mod_arith::AddOp>(value, other.value).getOutput());
+      b->create<mod_arith::AddOp>(value, other.value).getOutput());
 }
 
 PrimeFieldCodeGen &
 PrimeFieldCodeGen::operator+=(const PrimeFieldCodeGen &other) {
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   value = b->create<mod_arith::AddOp>(value, other.value).getOutput();
   return *this;
 }
 
 PrimeFieldCodeGen
 PrimeFieldCodeGen::operator-(const PrimeFieldCodeGen &other) const {
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   return PrimeFieldCodeGen(
-      b, b->create<mod_arith::SubOp>(value, other.value).getOutput());
+      b->create<mod_arith::SubOp>(value, other.value).getOutput());
 }
 
 PrimeFieldCodeGen &
 PrimeFieldCodeGen::operator-=(const PrimeFieldCodeGen &other) {
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   value = b->create<mod_arith::SubOp>(value, other.value).getOutput();
   return *this;
 }
 
 PrimeFieldCodeGen
 PrimeFieldCodeGen::operator*(const PrimeFieldCodeGen &other) const {
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   return PrimeFieldCodeGen(
-      b, b->create<mod_arith::MulOp>(value, other.value).getOutput());
+      b->create<mod_arith::MulOp>(value, other.value).getOutput());
 }
 
 PrimeFieldCodeGen &
 PrimeFieldCodeGen::operator*=(const PrimeFieldCodeGen &other) {
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   value = b->create<mod_arith::MulOp>(value, other.value).getOutput();
   return *this;
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::operator-() const {
-  return PrimeFieldCodeGen(b,
-                           b->create<mod_arith::NegateOp>(value).getOutput());
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
+  return PrimeFieldCodeGen(b->create<mod_arith::NegateOp>(value).getOutput());
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::Double() const {
-  return PrimeFieldCodeGen(b,
-                           b->create<mod_arith::DoubleOp>(value).getOutput());
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
+  return PrimeFieldCodeGen(b->create<mod_arith::DoubleOp>(value).getOutput());
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::Square() const {
-  return PrimeFieldCodeGen(b,
-                           b->create<mod_arith::SquareOp>(value).getOutput());
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
+  return PrimeFieldCodeGen(b->create<mod_arith::SquareOp>(value).getOutput());
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::Inverse() const {
-  return PrimeFieldCodeGen(b,
-                           b->create<mod_arith::InverseOp>(value).getOutput());
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
+  return PrimeFieldCodeGen(b->create<mod_arith::InverseOp>(value).getOutput());
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::CreateConst(int64_t constant) const {
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   mod_arith::ModArithOperation op(
       constant, cast<mod_arith::ModArithType>(value.getType()));
   return PrimeFieldCodeGen(
-      b, b->create<mod_arith::ConstantOp>(value.getType(), op.getIntegerAttr())
-             .getOutput());
+      b->create<mod_arith::ConstantOp>(value.getType(), op.getIntegerAttr())
+          .getOutput());
 }
 
 } // namespace mlir::zkir::field

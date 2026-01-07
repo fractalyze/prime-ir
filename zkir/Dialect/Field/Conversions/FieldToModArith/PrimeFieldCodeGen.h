@@ -16,7 +16,6 @@ limitations under the License.
 #ifndef ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_PRIMEFIELDCODEGEN_H_
 #define ZKIR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_PRIMEFIELDCODEGEN_H_
 
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Value.h"
 
 namespace zk_dtypes {
@@ -46,8 +45,7 @@ class FieldCodeGen;
 class PrimeFieldCodeGen {
 public:
   PrimeFieldCodeGen() = default;
-  PrimeFieldCodeGen(ImplicitLocOpBuilder *b, Value value)
-      : b(b), value(value) {}
+  explicit PrimeFieldCodeGen(Value value) : value(value) {}
   ~PrimeFieldCodeGen() = default;
 
   operator Value() const { return value; }
@@ -80,7 +78,6 @@ private:
   PrimeFieldCodeGen Inverse() const;
   PrimeFieldCodeGen CreateConst(int64_t constant) const;
 
-  ImplicitLocOpBuilder *b = nullptr; // not owned
   Value value;
 };
 

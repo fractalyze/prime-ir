@@ -46,6 +46,7 @@ cc_library(
         ":PrimeFieldCodeGen",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Utils:BuilderContext",
         "@llvm-project//mlir:IR",
         "@zk_dtypes//zk_dtypes:extension_field_operations",
     ],
@@ -59,6 +60,7 @@ cc_library(
         ":ExtensionFieldCodeGen",
         ":PrimeFieldCodeGen",
         "//zkir/Dialect/Field/IR:Field",
+        "//zkir/Utils:BuilderContext",
         "@llvm-project//mlir:TransformUtils",
     ],
 )
@@ -77,6 +79,7 @@ cc_library(
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Dialect/TensorExt/IR:TensorExt",
+        "//zkir/Utils:BuilderContext",
         "//zkir/Utils:ConversionUtils",
         "//zkir/Utils:ShapedTypeConverter",
         "@llvm-project//llvm:Support",
@@ -123,6 +126,7 @@ cc_library(
     hdrs = ["PrimeFieldCodeGen.h"],
     deps = [
         "//zkir/Dialect/ModArith/IR:ModArith",
+        "//zkir/Utils:BuilderContext",
         "@llvm-project//mlir:IR",
     ],
 )

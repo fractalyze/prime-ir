@@ -18,7 +18,6 @@ limitations under the License.
 
 #include <cstddef>
 
-#include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "zk_dtypes/include/field/cubic_extension_field_operation.h"
@@ -29,6 +28,7 @@ limitations under the License.
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/PrimeFieldCodeGen.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/VandermondeMatrix.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
+#include "zkir/Utils/BuilderContext.h"
 
 namespace mlir::zkir::field {
 
@@ -98,17 +98,13 @@ public:
       ExtensionFieldCodeGen<N>>::GetVandermondeInverseMatrix;
   using FrobeniusCoeffs<ExtensionFieldCodeGen<N>, N>::GetFrobeniusCoeffs;
 
-  ExtensionFieldCodeGen(ImplicitLocOpBuilder *b, Value value, Value nonResidue)
-      : b(b), value(value), nonResidue(nonResidue) {}
+  ExtensionFieldCodeGen(Value value, Value nonResidue)
+      : value(value), nonResidue(nonResidue) {}
   ~ExtensionFieldCodeGen() = default;
 
   operator Value() const { return value; }
 
   // Accessors for mixin classes
-  ImplicitLocOpBuilder &getBuilder() const {
-    assert(b);
-    return *b;
-  }
   Type getType() const { return value.getType(); }
 
   ExtensionFieldCodeGen operator*(const PrimeFieldCodeGen &scalar) const {
@@ -121,10 +117,11 @@ public:
 
   // zk_dtypes ExtensionFieldOperation methods
   std::array<PrimeFieldCodeGen, N> ToCoeffs() const {
+    ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
     Operation::result_range coeffs = toCoeffs(*b, value);
     std::array<PrimeFieldCodeGen, N> ret;
     for (size_t i = 0; i < N; ++i) {
-      ret[i] = PrimeFieldCodeGen(b, coeffs[i]);
+      ret[i] = PrimeFieldCodeGen(coeffs[i]);
     }
     return ret;
   }
@@ -134,11 +131,10 @@ public:
     for (size_t i = 0; i < N; ++i) {
       coeffs.push_back(values[i]);
     }
-    return {b, fromCoeffs(*b, value.getType(), coeffs), nonResidue};
+    ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
+    return {fromCoeffs(*b, value.getType(), coeffs), nonResidue};
   }
-  PrimeFieldCodeGen NonResidue() const {
-    return PrimeFieldCodeGen(b, nonResidue);
-  }
+  PrimeFieldCodeGen NonResidue() const { return PrimeFieldCodeGen(nonResidue); }
   zk_dtypes::ExtensionFieldMulAlgorithm GetMulAlgorithm() const {
     if constexpr (N == 4) {
       return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
@@ -156,13 +152,13 @@ public:
     }
   }
   PrimeFieldCodeGen CreateConstBaseField(int64_t x) const {
+    ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
     auto extField = cast<ExtensionFieldTypeInterface>(value.getType());
     auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
-    return PrimeFieldCodeGen(b, createConst(*b, baseField, x));
+    return PrimeFieldCodeGen(createConst(*b, baseField, x));
   }
 
 private:
-  ImplicitLocOpBuilder *b = nullptr; // not owned
   Value value;
   Value nonResidue;
 };

@@ -40,6 +40,15 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "BuilderContext",
+    hdrs = ["BuilderContext.h"],
+    deps = [
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
 td_library(
     name = "CommonTraits",
     srcs = ["CommonTraits.td"],

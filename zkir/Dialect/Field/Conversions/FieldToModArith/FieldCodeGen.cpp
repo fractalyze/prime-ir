@@ -16,26 +16,28 @@ limitations under the License.
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FieldCodeGen.h"
 
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
+#include "zkir/Utils/BuilderContext.h"
 
 namespace mlir::zkir::field {
 
-FieldCodeGen::FieldCodeGen(ImplicitLocOpBuilder *b, Type type, Value value,
+FieldCodeGen::FieldCodeGen(Type type, Value value,
                            const TypeConverter *converter) {
   if (isa<PrimeFieldType>(type)) {
-    codeGen = PrimeFieldCodeGen(b, value);
+    codeGen = PrimeFieldCodeGen(value);
     return;
   }
 
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   auto efType = cast<ExtensionFieldTypeInterface>(type);
   Value nonResidue = b->create<mod_arith::ConstantOp>(
       converter->convertType(efType.getBaseFieldType()),
       cast<IntegerAttr>(efType.getNonResidue()));
   if (isa<QuadraticExtFieldType>(type)) {
-    codeGen = QuadraticExtensionFieldCodeGen(b, value, nonResidue);
+    codeGen = QuadraticExtensionFieldCodeGen(value, nonResidue);
   } else if (isa<CubicExtFieldType>(type)) {
-    codeGen = CubicExtensionFieldCodeGen(b, value, nonResidue);
+    codeGen = CubicExtensionFieldCodeGen(value, nonResidue);
   } else if (isa<QuarticExtFieldType>(type)) {
-    codeGen = QuarticExtensionFieldCodeGen(b, value, nonResidue);
+    codeGen = QuarticExtensionFieldCodeGen(value, nonResidue);
   } else {
     llvm_unreachable("Unsupported extension field type");
   }

@@ -20,6 +20,7 @@ limitations under the License.
 
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/PrimeFieldCodeGen.h"
+#include "zkir/Utils/BuilderContext.h"
 
 namespace mlir::zkir::field {
 
@@ -36,15 +37,13 @@ public:
     const auto &self = static_cast<const Derived &>(*this);
     auto extField = cast<ExtensionFieldTypeInterface>(self.getType());
     auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+    ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
 
     auto C = [&](int64_t x) {
-      return PrimeFieldCodeGen(&self.getBuilder(),
-                               createConst(self.getBuilder(), baseField, x));
+      return PrimeFieldCodeGen(createConst(*b, baseField, x));
     };
     auto C2 = [&](int64_t x, int64_t y) {
-      return PrimeFieldCodeGen(
-          &self.getBuilder(),
-          createRationalConst(self.getBuilder(), baseField, x, y));
+      return PrimeFieldCodeGen(createRationalConst(*b, baseField, x, y));
     };
 
     // NOLINTBEGIN(whitespace/line_length)

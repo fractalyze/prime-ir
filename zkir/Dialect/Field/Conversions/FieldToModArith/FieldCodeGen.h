@@ -37,8 +37,7 @@ public:
                             std::is_constructible_v<CodeGenType, T>>>
   FieldCodeGen(T &&cg) // NOLINT(runtime/explicit)
       : codeGen(std::forward<T>(cg)) {}
-  FieldCodeGen(ImplicitLocOpBuilder *b, Type type, Value value,
-               const TypeConverter *converter);
+  FieldCodeGen(Type type, Value value, const TypeConverter *converter);
   ~FieldCodeGen() = default;
 
   operator Value() const;
