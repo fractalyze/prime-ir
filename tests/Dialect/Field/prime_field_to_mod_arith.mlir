@@ -145,13 +145,17 @@ func.func @test_lower_add_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
   return %res : !PFv
 }
 
+// Note: Use function arguments instead of constants to test lowering.
+// MLIR's dialect conversion calls legalizeWithFold() before applying patterns,
+// which would fold constant operations (e.g., field.double(4) -> field.constant(8))
+// before the conversion pattern runs.
+
 // CHECK-LABEL: @test_lower_double
-// CHECK-SAME: () -> [[T:.*]] {
-func.func @test_lower_double() -> !PF1 {
-  // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
-  %c0 = field.constant 4 : !PF1
-  // CHECK: %[[RES:.*]] = mod_arith.double %[[C0]] : [[T]]
-  %res = field.double %c0 : !PF1
+// CHECK-SAME: (%[[VAL:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_double(%val : !PF1) -> !PF1 {
+  // CHECK-NOT: field.double
+  // CHECK: %[[RES:.*]] = mod_arith.double %[[VAL]] : [[T]]
+  %res = field.double %val : !PF1
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PF1
 }
@@ -211,12 +215,11 @@ func.func @test_lower_mul_vec(%lhs : !PFv, %rhs : !PFv) -> !PFv {
 }
 
 // CHECK-LABEL: @test_lower_square
-// CHECK-SAME: () -> [[T:.*]] {
-func.func @test_lower_square() -> !PF1 {
-  // CHECK: %[[C0:.*]] = mod_arith.constant 4 : [[T]]
-  %c0 = field.constant 4 : !PF1
-  // CHECK: %[[RES:.*]] = mod_arith.square %[[C0]] : [[T]]
-  %res = field.square %c0 : !PF1
+// CHECK-SAME: (%[[VAL:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_square(%val : !PF1) -> !PF1 {
+  // CHECK-NOT: field.square
+  // CHECK: %[[RES:.*]] = mod_arith.square %[[VAL]] : [[T]]
+  %res = field.square %val : !PF1
   // CHECK: return %[[RES]] : [[T]]
   return %res : !PF1
 }

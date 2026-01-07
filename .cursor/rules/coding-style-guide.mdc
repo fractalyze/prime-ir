@@ -90,4 +90,25 @@ class Prover {
 };
 ```
 
+## Container Initialization
+
+- Use **range constructors** instead of loops when populating containers from iterators.
+
+  ```c++
+  // ✅ Good: Use range constructor
+  SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const {
+    auto values = attr.getValues<APInt>();
+    return {values.begin(), values.end()};
+  }
+
+  // ❌ Bad: Loop to populate
+  SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const {
+    SmallVector<APInt> result;
+    for (const APInt &v : attr.getValues<APInt>()) {
+      result.push_back(v);
+    }
+    return result;
+  }
+  ```
+
 [LLVM Coding Standard]: https://llvm.org/docs/CodingStandards.html
