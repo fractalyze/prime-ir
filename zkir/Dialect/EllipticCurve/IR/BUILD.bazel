@@ -79,6 +79,17 @@ cc_library(
     hdrs = ["PointKind.h"],
 )
 
+cc_library(
+    name = "PointKindConversion",
+    srcs = ["PointKindConversion.cpp"],
+    hdrs = ["PointKindConversion.h"],
+    deps = [
+        ":PointKind",
+        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
 td_library(
     name = "td_files",
     srcs = [
