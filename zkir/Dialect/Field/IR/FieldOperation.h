@@ -20,9 +20,7 @@
 #include <cassert>
 
 #include "llvm/Support/ErrorHandling.h"
-#include "zk_dtypes/include/field/cubic_extension_field_operation.h"
-#include "zk_dtypes/include/field/quadratic_extension_field_operation.h"
-#include "zk_dtypes/include/field/quartic_extension_field_operation.h"
+#include "zkir/Dialect/Field/IR/ExtensionFieldOperationSelector.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
 
@@ -197,28 +195,6 @@ private:
 inline raw_ostream &operator<<(raw_ostream &os, const PrimeFieldOperation &op) {
   return os << op.op;
 }
-
-// Selects the appropriate zk_dtypes extension field operation based on degree.
-template <size_t N>
-struct ExtensionFieldOperationSelector;
-
-template <>
-struct ExtensionFieldOperationSelector<2> {
-  template <typename Derived>
-  using Type = zk_dtypes::QuadraticExtensionFieldOperation<Derived>;
-};
-
-template <>
-struct ExtensionFieldOperationSelector<3> {
-  template <typename Derived>
-  using Type = zk_dtypes::CubicExtensionFieldOperation<Derived>;
-};
-
-template <>
-struct ExtensionFieldOperationSelector<4> {
-  template <typename Derived>
-  using Type = zk_dtypes::QuarticExtensionFieldOperation<Derived>;
-};
 
 // Extension field operation class for compile-time evaluation.
 // Inherits from zk_dtypes CRTP operations for Square/Inverse algorithms.

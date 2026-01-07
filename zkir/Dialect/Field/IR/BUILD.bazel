@@ -21,6 +21,12 @@ package(
 )
 
 cc_library(
+    name = "ExtensionFieldOperationSelector",
+    hdrs = ["ExtensionFieldOperationSelector.h"],
+    deps = ["@zk_dtypes//zk_dtypes:extension_field_operations"],
+)
+
+cc_library(
     name = "FieldHdrs",
     hdrs = [
         "FieldAttributes.h",
@@ -57,6 +63,7 @@ cc_library(
         "FieldTypes.h",
     ],
     deps = [
+        ":ExtensionFieldOperationSelector",
         ":attributes_inc_gen",
         ":canonicalization_inc_gen",
         ":dialect_inc_gen",
@@ -76,7 +83,6 @@ cc_library(
         "@llvm-project//mlir:InferTypeOpInterface",
         "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:Support",
-        "@zk_dtypes//zk_dtypes:extension_field_operations",
     ],
 )
 

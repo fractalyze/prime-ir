@@ -20,13 +20,11 @@ limitations under the License.
 
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
-#include "zk_dtypes/include/field/cubic_extension_field_operation.h"
-#include "zk_dtypes/include/field/quadratic_extension_field_operation.h"
-#include "zk_dtypes/include/field/quartic_extension_field_operation.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/FrobeniusCoeffs.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/PrimeFieldCodeGen.h"
 #include "zkir/Dialect/Field/Conversions/FieldToModArith/VandermondeMatrix.h"
+#include "zkir/Dialect/Field/IR/ExtensionFieldOperationSelector.h"
 #include "zkir/Dialect/Field/IR/FieldTypes.h"
 #include "zkir/Utils/BuilderContext.h"
 
@@ -52,28 +50,6 @@ public:
 } // namespace zk_dtypes
 
 namespace mlir::zkir::field {
-
-// Selects the appropriate extension field operation based on degree.
-template <size_t N>
-struct ExtensionFieldOperationSelector;
-
-template <>
-struct ExtensionFieldOperationSelector<2> {
-  template <typename Derived>
-  using Type = zk_dtypes::QuadraticExtensionFieldOperation<Derived>;
-};
-
-template <>
-struct ExtensionFieldOperationSelector<3> {
-  template <typename Derived>
-  using Type = zk_dtypes::CubicExtensionFieldOperation<Derived>;
-};
-
-template <>
-struct ExtensionFieldOperationSelector<4> {
-  template <typename Derived>
-  using Type = zk_dtypes::QuarticExtensionFieldOperation<Derived>;
-};
 
 // NOTE(chokobole): This class is not used directly. It is used to generate
 // MLIR operations that implement extension field arithmetic. User should use

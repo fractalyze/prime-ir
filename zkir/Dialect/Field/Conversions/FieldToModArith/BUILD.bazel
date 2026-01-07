@@ -44,11 +44,11 @@ cc_library(
     deps = [
         ":ConversionUtils",
         ":PrimeFieldCodeGen",
+        "//zkir/Dialect/Field/IR:ExtensionFieldOperationSelector",
         "//zkir/Dialect/Field/IR:Field",
         "//zkir/Dialect/ModArith/IR:ModArith",
         "//zkir/Utils:BuilderContext",
         "@llvm-project//mlir:IR",
-        "@zk_dtypes//zk_dtypes:extension_field_operations",
     ],
 )
 
