@@ -74,6 +74,11 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "PointKind",
+    hdrs = ["PointKind.h"],
+)
+
 td_library(
     name = "td_files",
     srcs = [
