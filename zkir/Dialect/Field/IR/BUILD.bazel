@@ -69,7 +69,6 @@ cc_library(
         "//zkir/Utils:KnownModulus",
         "//zkir/Utils:OpUtils",
         "//zkir/Utils:SimpleStructBuilder",
-        "@com_google_absl//absl/status:statusor",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:DataLayoutInterfaces",

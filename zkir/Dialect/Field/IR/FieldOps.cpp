@@ -451,11 +451,9 @@ public:
   std::optional<SmallVector<APInt>>
   operate(const SmallVector<APInt> &coeffs) const final {
     auto nr = cast<IntegerAttr>(extFieldType.getNonResidue()).getValue();
-    auto result =
-        ExtensionFieldOperation<N>(coeffs, nr, baseFieldType).Inverse();
-    if (!result.ok())
-      return std::nullopt;
-    return result->toAPInts();
+    return ExtensionFieldOperation<N>(coeffs, nr, baseFieldType)
+        .Inverse()
+        .toAPInts();
   }
 };
 

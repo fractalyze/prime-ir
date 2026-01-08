@@ -177,7 +177,7 @@ TYPED_TEST(ModArithOperationTest, Div) {
   using PrimeFieldType = TypeParam;
 
   this->runBinaryOperationTest(
-      [](const PrimeFieldType &a, const PrimeFieldType &b) { return *(a / b); },
+      [](const PrimeFieldType &a, const PrimeFieldType &b) { return a / b; },
       [](const ModArithOperation &a, const ModArithOperation &b) {
         return a / b;
       },
@@ -264,7 +264,7 @@ TYPED_TEST(ModArithOperationTest, Inverse) {
   using PrimeFieldType = TypeParam;
 
   this->runUnaryOperationTest(
-      [](const PrimeFieldType &a) { return *a.Inverse(); },
+      [](const PrimeFieldType &a) { return a.Inverse(); },
       [](const ModArithOperation &a) { return a.inverse(); },
       /*aMustBeNonZero=*/true);
 }

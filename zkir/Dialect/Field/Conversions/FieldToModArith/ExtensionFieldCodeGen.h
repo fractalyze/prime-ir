@@ -112,15 +112,15 @@ public:
   Type getType() const { return value.getType(); }
 
   ExtensionFieldCodeGen operator*(const PrimeFieldCodeGen &scalar) const {
-    std::array<PrimeFieldCodeGen, N> coeffs = ToBaseFields();
+    std::array<PrimeFieldCodeGen, N> coeffs = ToCoeffs();
     for (size_t i = 0; i < N; ++i) {
       coeffs[i] = coeffs[i] * scalar;
     }
-    return FromBaseFields(coeffs);
+    return FromCoeffs(coeffs);
   }
 
   // zk_dtypes ExtensionFieldOperation methods
-  std::array<PrimeFieldCodeGen, N> ToBaseFields() const {
+  std::array<PrimeFieldCodeGen, N> ToCoeffs() const {
     Operation::result_range coeffs = toCoeffs(*b, value);
     std::array<PrimeFieldCodeGen, N> ret;
     for (size_t i = 0; i < N; ++i) {
@@ -129,7 +129,7 @@ public:
     return ret;
   }
   ExtensionFieldCodeGen
-  FromBaseFields(const std::array<PrimeFieldCodeGen, N> &values) const {
+  FromCoeffs(const std::array<PrimeFieldCodeGen, N> &values) const {
     SmallVector<Value, N> coeffs;
     for (size_t i = 0; i < N; ++i) {
       coeffs.push_back(values[i]);
@@ -155,10 +155,10 @@ public:
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     }
   }
-  PrimeFieldCodeGen CreateZeroBaseField() const {
+  PrimeFieldCodeGen CreateConstBaseField(int64_t x) const {
     auto extField = cast<ExtensionFieldTypeInterface>(value.getType());
     auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
-    return PrimeFieldCodeGen(b, createConst(*b, baseField, 0));
+    return PrimeFieldCodeGen(b, createConst(*b, baseField, x));
   }
 
 private:

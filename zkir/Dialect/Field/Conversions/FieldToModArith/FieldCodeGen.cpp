@@ -98,7 +98,7 @@ FieldCodeGen FieldCodeGen::negate() const {
 }
 
 FieldCodeGen FieldCodeGen::inverse() const {
-  return applyUnaryOp(codeGen, [](const auto &v) { return *v.Inverse(); });
+  return applyUnaryOp(codeGen, [](const auto &v) { return v.Inverse(); });
 }
 
 } // namespace mlir::zkir::field

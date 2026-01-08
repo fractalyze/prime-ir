@@ -19,7 +19,6 @@
 #include <array>
 #include <cassert>
 
-#include "absl/status/statusor.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "zk_dtypes/include/field/cubic_extension_field_operation.h"
 #include "zk_dtypes/include/field/quadratic_extension_field_operation.h"
@@ -180,11 +179,8 @@ private:
 
   PrimeFieldOperation Double() const { return dbl(); }
   PrimeFieldOperation Square() const { return square(); }
-  absl::StatusOr<PrimeFieldOperation> Inverse() const {
-    if (op.isZero())
-      return absl::InvalidArgumentError("Cannot invert zero");
-    return inverse();
-  }
+  // Returns Zero() if not invertible.
+  PrimeFieldOperation Inverse() const { return inverse(); }
   // Prime field has extension degree 1 (used by Frobenius)
   static constexpr size_t ExtensionDegree() { return 1; }
 
@@ -227,12 +223,7 @@ template <size_t N>
 class ExtensionFieldOperation
     : public ExtensionFieldOperationSelector<N>::template Type<
           ExtensionFieldOperation<N>> {
-  using Base = typename ExtensionFieldOperationSelector<N>::template Type<
-      ExtensionFieldOperation<N>>;
-
 public:
-  using Base::operator*;
-
   // Construct from APInt coefficients (convenient one-liner usage)
   ExtensionFieldOperation(const SmallVector<APInt> &coeffs,
                           const APInt &nonResidue, PrimeFieldType baseFieldType)
@@ -261,16 +252,6 @@ public:
     return result;
   }
 
-  // TODO(junbeomlee): Add scalar multiplication (ExtensionField * BaseField)
-  // to zk_dtypes and reuse here.
-  ExtensionFieldOperation operator*(const PrimeFieldOperation &scalar) const {
-    std::array<PrimeFieldOperation, N> result;
-    for (size_t i = 0; i < N; ++i) {
-      result[i] = coeffs[i] * scalar;
-    }
-    return ExtensionFieldOperation(result, nonResidue, baseFieldType);
-  }
-
 private:
   // PascalCase methods (zk_dtypes compatible)
   template <typename>
@@ -287,33 +268,48 @@ private:
   friend class zk_dtypes::ExtensionFieldOperation;
   template <typename>
   friend class zk_dtypes::FrobeniusOperation;
+  template <typename, size_t>
+  friend class zk_dtypes::VandermondeMatrix;
 
-  const std::array<PrimeFieldOperation, N> &ToBaseFields() const {
-    return coeffs;
-  }
+  const std::array<PrimeFieldOperation, N> &ToCoeffs() const { return coeffs; }
 
   ExtensionFieldOperation
-  FromBaseFields(const std::array<PrimeFieldOperation, N> &c) const {
+  FromCoeffs(const std::array<PrimeFieldOperation, N> &c) const {
     return ExtensionFieldOperation(c, nonResidue, baseFieldType);
   }
 
   PrimeFieldOperation NonResidue() const { return nonResidue; }
 
-  // TODO(junbeomlee): Refactor zk_dtypes C() and C2() macros into reusable
-  // functions that accept CreateConstBaseField, then implement
-  // GetVandermondeInverseMatrix and apply algorithm selection logic based on
-  // limb count and non-residue value (similar to ExtensionFieldCodeGen).
+  // https://github.com/fractalyze/zk_dtypes/blob/8d5f43c/zk_dtypes/include/field/extension_field.h#L500
   zk_dtypes::ExtensionFieldMulAlgorithm GetSquareAlgorithm() const {
-    return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    if constexpr (N == 2) {
+      // Heuristic: custom squaring when n² > 2n + C
+      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      if (limbNums * N >= 2) {
+        return zk_dtypes::ExtensionFieldMulAlgorithm::kCustom2;
+      }
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    } else if constexpr (N == 3) {
+      // Heuristic: custom squaring when n² > 4n
+      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      if (limbNums * N >= 4) {
+        return zk_dtypes::ExtensionFieldMulAlgorithm::kCustom;
+      }
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    } else {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+    }
   }
 
   zk_dtypes::ExtensionFieldMulAlgorithm GetMulAlgorithm() const {
+    if constexpr (N == 4) {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+    }
     return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
   }
 
-  PrimeFieldOperation CreateZeroBaseField() const {
-    APInt zero(baseFieldType.getStorageBitWidth(), 0);
-    return PrimeFieldOperation(zero, baseFieldType);
+  PrimeFieldOperation CreateConstBaseField(int64_t x) const {
+    return PrimeFieldOperation(x, baseFieldType);
   }
 
   // Frobenius coefficients: coeffs[e-1][i-1] = ξ^(i * e * (p - 1) / n)
@@ -336,12 +332,6 @@ private:
       }
     }
     return result;
-  }
-
-  // Required by ToomCookOperation but never called (we use kKaratsuba).
-  std::array<std::array<PrimeFieldOperation, 7>, 7>
-  GetVandermondeInverseMatrix() const {
-    llvm_unreachable("GetVandermondeInverseMatrix should not be called");
   }
 
   std::array<PrimeFieldOperation, N> coeffs;
