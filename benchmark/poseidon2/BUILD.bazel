@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,31 +13,31 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import")
+load("//benchmark:benchmark.bzl", "prime_ir_benchmark", "prime_ir_mlir_cc_import")
 
-zkir_mlir_cc_import(
+prime_ir_mlir_cc_import(
     name = "poseidon2_ciface",
     mlir_src = "poseidon2.mlir",
-    zkir_opt_flags = [
+    prime_ir_opt_flags = [
         "-field-to-llvm",
     ],
 )
 
-zkir_mlir_cc_import(
+prime_ir_mlir_cc_import(
     name = "poseidon2_packed_ciface",
     llc_flags = [
         "-mcpu=native",
     ],
     mlir_src = "poseidon2_packed.mlir",
-    zkir_opt_flags = select({
-        "//:zkir_has_avx512": ["-field-to-llvm=specialize-avx"],
+    prime_ir_opt_flags = select({
+        "//:prime_ir_has_avx512": ["-field-to-llvm=specialize-avx"],
         "//conditions:default": ["-field-to-llvm"],
     }) + [
         "-convert-vector-to-llvm",
     ],
 )
 
-zkir_benchmark(
+prime_ir_benchmark(
     name = "poseidon2_benchmark",
     srcs = ["poseidon2_benchmark.cc"],
     deps = [

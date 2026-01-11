@@ -1,4 +1,4 @@
-// Copyright 2025 The ZKIR Authors.
+// Copyright 2025 The PrimeIR Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // ==============================================================================
 
 // RUN: cat %S/../../poseidon2.mlir %S/../../poseidon2_packed.mlir %s \
-// RUN:   | zkir-opt --field-to-llvm=bufferize-function-boundaries -convert-vector-to-llvm \
+// RUN:   | prime-ir-opt --field-to-llvm=bufferize-function-boundaries -convert-vector-to-llvm \
 // RUN:   | mlir-runner -e main -entry-point-result=void \
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s < %t

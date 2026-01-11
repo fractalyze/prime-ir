@@ -1,4 +1,4 @@
-// Copyright 2025 The ZKIR Authors.
+// Copyright 2025 The PrimeIR Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // ==============================================================================
 
 // RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %s \
-// RUN:   | zkir-opt -convert-to-llvm -split-input-file \
+// RUN:   | prime-ir-opt -convert-to-llvm -split-input-file \
 // RUN:   | FileCheck %s -enable-var-scope
 
 // CHECK-LABEL: @test_point

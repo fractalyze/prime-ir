@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,14 +20,14 @@ package(
 )
 
 cc_binary(
-    name = "zkir-lsp",
-    srcs = ["zkir-lsp.cpp"],
+    name = "prime-ir-lsp",
+    srcs = ["prime-ir-lsp.cpp"],
     deps = [
-        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "//zkir/Dialect/Field/IR:Field",
-        "//zkir/Dialect/ModArith/IR:ModArith",
-        "//zkir/Dialect/Poly/IR:Poly",
-        "//zkir/Dialect/TensorExt/IR:TensorExt",
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Dialect/Poly/IR:Poly",
+        "//prime_ir/Dialect/TensorExt/IR:TensorExt",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",
         "@llvm-project//mlir:MlirLspServerLib",
@@ -35,23 +35,23 @@ cc_binary(
 )
 
 cc_binary(
-    name = "zkir-opt",
-    srcs = ["zkir-opt.cpp"],
+    name = "prime-ir-opt",
+    srcs = ["prime-ir-opt.cpp"],
     deps = [
-        "//zkir/Dialect/ArithExt/Conversions/SpecializeArithToAVX",
-        "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToField",
-        "//zkir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM",
-        "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "//zkir/Dialect/Field/Conversions/ExtFieldToLLVM",
-        "//zkir/Dialect/Field/Conversions/FieldToModArith",
-        "//zkir/Dialect/Field/IR:Field",
-        "//zkir/Dialect/Field/Pipelines:Passes",
-        "//zkir/Dialect/ModArith/Conversions/ModArithToArith",
-        "//zkir/Dialect/ModArith/IR:ModArith",
-        "//zkir/Dialect/Poly/Conversions/PolyToField",
-        "//zkir/Dialect/Poly/IR:Poly",
-        "//zkir/Dialect/TensorExt/Conversions/TensorExtToTensor",
-        "//zkir/Dialect/TensorExt/IR:TensorExt",
+        "//prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX",
+        "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField",
+        "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM",
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM",
+        "//prime_ir/Dialect/Field/Conversions/FieldToModArith",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/Field/Pipelines:Passes",
+        "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Dialect/Poly/Conversions/PolyToField",
+        "//prime_ir/Dialect/Poly/IR:Poly",
+        "//prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor",
+        "//prime_ir/Dialect/TensorExt/IR:TensorExt",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",

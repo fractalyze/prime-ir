@@ -1,4 +1,4 @@
-// Copyright 2025 The ZKIR Authors.
+// Copyright 2025 The PrimeIR Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: zkir-opt %s -poly-to-field -field-to-mod-arith -mod-arith-to-arith -tensor-ext-to-tensor \
+// RUN: prime-ir-opt %s -poly-to-field -field-to-mod-arith -mod-arith-to-arith -tensor-ext-to-tensor \
 // RUN:    -one-shot-bufferize="bufferize-function-boundaries function-boundary-type-conversion=identity-layout-map" -canonicalize | FileCheck %s
 
 !PF = !field.pf<7681:i32>

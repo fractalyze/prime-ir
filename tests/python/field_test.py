@@ -1,7 +1,7 @@
 from absl.testing import absltest
 
-from zkir.mlir.ir import *
-from zkir.mlir.dialects import field
+from prime_ir.mlir.ir import *
+from prime_ir.mlir.dialects import field
 
 
 BABYBEAR_MODULUS = 2**31 - 2**27 + 1
@@ -29,7 +29,7 @@ class FieldTest(absltest.TestCase):
       i32 = IntegerType.get_signless(32)
       # TODO(chokobole): The direct comparison to a native Python 'int' fails here:
       # self.assertEqual(int(pf.modulus), BABYBEAR_MODULUS)
-      # See https://github.com/fractalyze/zkir/issues/110
+      # See https://github.com/fractalyze/prime-ir/issues/110
       self.assertEqual(pf.modulus, IntegerAttr.get(i32, BABYBEAR_MODULUS))
       self.assertTrue(pf.is_montgomery)
 

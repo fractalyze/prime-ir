@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,13 +18,13 @@ from pathlib import Path
 
 from lit.formats import ShTest
 
-config.name = "zkir"
+config.name = "prime_ir"
 config.test_format = ShTest()
 config.suffixes = [".mlir", ".v"]
 
 # lit executes relative to the directory
 #
-#   bazel-bin/tests/<test_target_name>.runfiles/zkir/
+#   bazel-bin/tests/<test_target_name>.runfiles/prime_ir/
 #
 # which contains tools/ and tests/ directories and the binary targets built
 # within them, brought in via the `data` attribute in the BUILD file. To
@@ -37,11 +37,11 @@ config.suffixes = [".mlir", ".v"]
 #   print(subprocess.run(["ls", "-l", os.environ["RUNFILES_DIR"]]).stdout)
 #   print(subprocess.run([ "env", ]).stdout)
 #
-# Hence, to get lit to see tools like `zkir-opt`, we need to add the tools/
+# Hence, to get lit to see tools like `prime-ir-opt`, we need to add the tools/
 # subdirectory to the PATH environment variable.
 #
-# Bazel defines RUNFILES_DIR which includes zkir/ and third party dependencies
-# as their own directory. Generally, it seems that $PWD == $RUNFILES_DIR/zkir/
+# Bazel defines RUNFILES_DIR which includes prime_ir/ and third party dependencies
+# as their own directory. Generally, it seems that $PWD == $RUNFILES_DIR/prime_ir/
 
 runfiles_dir = Path(os.environ["RUNFILES_DIR"])
 
@@ -50,7 +50,7 @@ mlir_tools_path = runfiles_dir.joinpath(Path(mlir_tools_relpath))
 
 tool_relpaths = [
     mlir_tools_relpath,
-    "zkir/tools",
+    "prime_ir/tools",
     "llvm-project/llvm",
 ]
 

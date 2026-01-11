@@ -6,9 +6,9 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  #include "mlir/Interfaces/ValueBoundsOpInterface.h"
  #include "mlir/Support/LLVM.h"
  #include "mlir/Transforms/InliningUtils.h"
-+#include "zkir/Dialect/Field/IR/FieldOps.h"
-+#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
-+#include "zkir/IR/Attributes.h"
++#include "prime_ir/Dialect/Field/IR/FieldOps.h"
++#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
++#include "prime_ir/IR/Attributes.h"
  #include "llvm/ADT/ArrayRef.h"
  #include "llvm/ADT/STLExtras.h"
  #include "llvm/ADT/SmallVector.h"
@@ -19,10 +19,10 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
 -    if (intAttr.getType() != expectedType)
 +    if (intAttr.getType() != expectedType) {
 +      if (auto fieldType =
-+              dyn_cast<zkir::field::PrimeFieldType>(expectedType)) {
++              dyn_cast<prime_ir::field::PrimeFieldType>(expectedType)) {
 +        return IntegerAttr::get(fieldType.getStorageType(), intAttr.getInt());
 +      } else if (auto modArithType =
-+                     dyn_cast<zkir::mod_arith::ModArithType>(expectedType)) {
++                     dyn_cast<prime_ir::mod_arith::ModArithType>(expectedType)) {
 +        return IntegerAttr::get(modArithType.getStorageType(),
 +                                intAttr.getInt());
 +      }
@@ -35,10 +35,10 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  Operation *VectorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
                                                Location loc) {
-+  if (auto op = zkir::field::ConstantOp::materialize(builder, value, type, loc))
++  if (auto op = prime_ir::field::ConstantOp::materialize(builder, value, type, loc))
 +    return op;
 +  if (auto op =
-+          zkir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
++          prime_ir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
 +    return op;
    if (isa<ub::PoisonAttrInterface>(value))
      return value.getDialect().materializeConstant(builder, value, type, loc);
@@ -50,7 +50,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
 -    if (auto vecDstType = dyn_cast<VectorType>(extractOp.getType()))
 +    if (auto vecDstType = dyn_cast<VectorType>(extractOp.getType())) {
 +      vecDstType =
-+          cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(vecDstType));
++          cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(vecDstType));
        newAttr = DenseElementsAttr::get(vecDstType, newAttr);
 +    }
      return newAttr;
@@ -60,7 +60,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
    if (auto resVecTy = dyn_cast<VectorType>(extractOp.getType())) {
      SmallVector<Attribute> elementValues(
          denseValuesBegin, denseValuesBegin + resVecTy.getNumElements());
-+    resVecTy = cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(resVecTy));
++    resVecTy = cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(resVecTy));
      newAttr = DenseElementsAttr::get(resVecTy, elementValues);
    } else {
      newAttr = *denseValuesBegin;
@@ -69,7 +69,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
    });
  
 +  destVecType =
-+      cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(destVecType));
++      cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(destVecType));
    return DenseElementsAttr::get(destVecType, convertedElements);
  }
  
@@ -88,7 +88,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
      return {};
 -  auto vectorType = getResultVectorType();
 +  VectorType vectorType = cast<VectorType>(
-+      zkir::maybeConvertZkirToBuiltinType(getResultVectorType()));
++      prime_ir::maybeConvertPrimeIRToBuiltinType(getResultVectorType()));
    if (auto attr = llvm::dyn_cast<IntegerAttr>(adaptor.getSource())) {
      if (vectorType.getElementType() != attr.getType())
        return {};
@@ -99,7 +99,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
 -
 -  return DenseElementsAttr::get(getResultVectorType(), results);
 +  VectorType resType = cast<VectorType>(
-+      zkir::maybeConvertZkirToBuiltinType(getResultVectorType()));
++      prime_ir::maybeConvertPrimeIRToBuiltinType(getResultVectorType()));
 +  return DenseElementsAttr::get(resType, results);
  }
  
@@ -110,7 +110,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  
 -  return DenseElementsAttr::get(getDestVectorType(), results);
 +  VectorType destType = cast<VectorType>(
-+      zkir::maybeConvertZkirToBuiltinType(getDestVectorType()));
++      prime_ir::maybeConvertPrimeIRToBuiltinType(getDestVectorType()));
 +  return DenseElementsAttr::get(destType, results);
  }
  
@@ -119,7 +119,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  
    auto allValues = llvm::to_vector(denseDst.getValues<Attribute>());
    copy(insertedValues, allValues.begin() + insertBeginPosition);
-+  destTy = cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(destTy));
++  destTy = cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(destTy));
    auto newAttr = DenseElementsAttr::get(destTy, allValues);
  
    return newAttr;
@@ -128,11 +128,11 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
          incSlicePosition(currSlicePosition, sliceShape, sliceOffsets)));
  
 +    if (auto modArithType =
-+            dyn_cast<zkir::mod_arith::ModArithType>(destTy.getElementType())) {
++            dyn_cast<prime_ir::mod_arith::ModArithType>(destTy.getElementType())) {
 +      VectorType converted =
-+          cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(destTy));
++          cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(destTy));
 +      auto newAttr = DenseElementsAttr::get(converted, newValues);
-+      rewriter.replaceOpWithNewOp<zkir::mod_arith::ConstantOp>(op, destTy,
++      rewriter.replaceOpWithNewOp<prime_ir::mod_arith::ConstantOp>(op, destTy,
 +                                                               newAttr);
 +      return success();
 +    }
@@ -144,7 +144,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
               sliceVecTy.getNumElements() &&
           "Invalid number of slice elements");
 +  sliceVecTy =
-+      cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(sliceVecTy));
++      cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(sliceVecTy));
    return DenseElementsAttr::get(sliceVecTy, sliceValues);
  }
  
@@ -156,7 +156,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
 -    DenseElementsAttr::get(getType(), splat.getSplatValue<Attribute>());
 +          llvm::dyn_cast_if_present<SplatElementsAttr>(adaptor.getVector())) {
 +    VectorType destTy =
-+        cast<VectorType>(zkir::maybeConvertZkirToBuiltinType(getType()));
++        cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(getType()));
 +    return DenseElementsAttr::get(destTy, splat.getSplatValue<Attribute>());
 +  }
  
@@ -168,7 +168,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
    // SplatElementsAttr::get treats single value for second arg as being a splat.
 -  return SplatElementsAttr::get(getType(), {constOperand});
 +  ShapedType destType =
-+      cast<ShapedType>(zkir::maybeConvertZkirToBuiltinType(getType()));
++      cast<ShapedType>(prime_ir::maybeConvertPrimeIRToBuiltinType(getType()));
 +  return SplatElementsAttr::get(destType, {constOperand});
  }
  
@@ -181,9 +181,9 @@ index e86158d51727..a18225d441de 100644
          ":VectorOpsIncGen",
          ":ViewLikeInterface",
          "//llvm:Support",
-+        "@zkir//zkir/Dialect/Field/IR:FieldHdrs",
-+        "@zkir//zkir/Dialect/ModArith/IR:ModArithHdrs",
-+        "@zkir//zkir/IR:Attributes",
++        "@prime_ir//prime_ir/Dialect/Field/IR:FieldHdrs",
++        "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArithHdrs",
++        "@prime_ir//prime_ir/IR:Attributes",
      ],
  )
  

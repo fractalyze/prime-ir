@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -53,7 +53,7 @@ config_setting(
 )
 
 config_setting(
-    name = "zkir_has_avx512",
+    name = "prime_ir_has_avx512",
     constraint_values = ["@platforms//cpu:x86_64"],
     flag_values = {":has_avx512": "true"},
 )

@@ -1,4 +1,4 @@
-/* Copyright 2025 The ZKIR Authors.
+/* Copyright 2025 The PrimeIR Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,19 +13,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "zkir/Dialect/ModArith/IR/ModArithOperation.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 
 #include "gtest/gtest.h"
 #include "llvm/ADT/bit.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "prime_ir/Utils/ZkDtypes.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/field/babybear/babybear.h"
 #include "zk_dtypes/include/field/goldilocks/goldilocks.h"
-#include "zkir/Dialect/ModArith/IR/ModArithDialect.h"
-#include "zkir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "zkir/Utils/ZkDtypes.h"
 
-namespace mlir::zkir::mod_arith {
+namespace mlir::prime_ir::mod_arith {
 
 template <typename F>
 class ModArithOperationTest : public testing::Test {
@@ -326,4 +326,4 @@ TYPED_TEST(ModArithOperationTest, IsZero) {
   EXPECT_FALSE(modRnd.isOne());
 }
 
-} // namespace mlir::zkir::mod_arith
+} // namespace mlir::prime_ir::mod_arith

@@ -9,7 +9,7 @@ on:
 
 jobs:
   main:
-    runs-on: [self-hosted, zkir]
+    runs-on: [self-hosted, prime_ir]
     name: Semantic Pull Request
     permissions:
       pull-requests: read

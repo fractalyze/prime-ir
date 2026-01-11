@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-"""A rule for running zkir-opt."""
+"""A rule for running prime-ir-opt."""
 
 def executable_attr(label):
     """A helper for declaring executable dependencies."""
@@ -26,9 +26,9 @@ def executable_attr(label):
         cfg = "target",
     )
 
-_ZKIR_OPT = "@zkir//tools:zkir-opt"
+_PRIME_IR_OPT = "@prime_ir//tools:prime-ir-opt"
 
-def _zkir_opt_impl(ctx):
+def _prime_ir_opt_impl(ctx):
     generated_file = ctx.outputs.generated_filename
     args = ctx.actions.args()
     args.add_all(ctx.attr.pass_flags)
@@ -39,18 +39,18 @@ def _zkir_opt_impl(ctx):
         inputs = ctx.attr.src.files,
         outputs = [generated_file],
         arguments = [args],
-        executable = ctx.executable._zkir_opt_binary,
+        executable = ctx.executable._prime_ir_opt_binary,
     )
     return [
         DefaultInfo(files = depset([generated_file, ctx.file.src])),
     ]
 
-zkir_opt = rule(
+prime_ir_opt = rule(
     doc = """
-      This rule takes MLIR input and runs zkir-opt on it to produce
+      This rule takes MLIR input and runs prime-ir-opt on it to produce
       a single output file after applying the given MLIR passes.
       """,
-    implementation = _zkir_opt_impl,
+    implementation = _prime_ir_opt_impl,
     attrs = {
         "src": attr.label(
             doc = "A single MLIR source file to opt.",
@@ -58,7 +58,7 @@ zkir_opt = rule(
         ),
         "pass_flags": attr.string_list(
             doc = """
-            The pass flags passed to zkir-opt, e.g., --canonicalize
+            The pass flags passed to prime-ir-opt, e.g., --canonicalize
             """,
         ),
         "generated_filename": attr.output(
@@ -68,6 +68,6 @@ zkir_opt = rule(
             """,
             mandatory = True,
         ),
-        "_zkir_opt_binary": executable_attr(_ZKIR_OPT),
+        "_prime_ir_opt_binary": executable_attr(_PRIME_IR_OPT),
     },
 )

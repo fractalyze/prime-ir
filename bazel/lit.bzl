@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,7 +40,7 @@ def lit_test(name = None, src = None, size = "small", timeout = "short", tags = 
 
     The adjacent :test_utilities target contains all the tools (like mlir-opt) and
     files (like lit.cfg.py) that are needed to run a lit test. lit.cfg.py further
-    specifies the lit configuration, including augmenting $PATH to include zkir-opt.
+    specifies the lit configuration, including augmenting $PATH to include prime-ir-opt.
 
     This macro simplifies the above definition by filling in the boilerplate.
 

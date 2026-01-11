@@ -1,4 +1,4 @@
-// Copyright 2025 The ZKIR Authors.
+// Copyright 2025 The PrimeIR Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: zkir-opt %s -canonicalize | FileCheck %s
+// RUN: prime-ir-opt %s -canonicalize | FileCheck %s
 
 !coeff_ty = !field.pf<7681:i32>
 #root_of_unity = #field.root_of_unity<3383:i32, 4:i32> : !coeff_ty

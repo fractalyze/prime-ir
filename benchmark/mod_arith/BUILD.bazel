@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,18 +13,18 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//benchmark:benchmark.bzl", "zkir_benchmark", "zkir_mlir_cc_import")
+load("//benchmark:benchmark.bzl", "prime_ir_benchmark", "prime_ir_mlir_cc_import")
 
-zkir_mlir_cc_import(
+prime_ir_mlir_cc_import(
     name = "mul_ciface",
     mlir_src = "mul_benchmark.mlir",
-    zkir_opt_flags = [
+    prime_ir_opt_flags = [
         "-poly-to-field",
         "-field-to-llvm",
     ],
 )
 
-zkir_benchmark(
+prime_ir_benchmark(
     name = "mul_benchmark_test",
     srcs = ["mul_benchmark_test.cc"],
     deps = [

@@ -1,4 +1,4 @@
-/* Copyright 2025 The ZKIR Authors.
+/* Copyright 2025 The PrimeIR Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ limitations under the License.
 #include "cuda_runtime_api.h" // NOLINT(build/include_subdir)
 #include "llvm/Support/raw_ostream.h"
 
-namespace zkir::utils {
+namespace prime_ir::utils {
 
 #define CHECK_CUDA_ERROR(call)                                                 \
   do {                                                                         \
@@ -92,6 +92,6 @@ CudaAsyncUniquePtr<T> makeCudaAsyncUnique(size_t count, cudaStream_t stream) {
   return CudaAsyncUniquePtr<T>(ptr, CudaAsyncDeleter{stream});
 }
 
-} // namespace zkir::utils
+} // namespace prime_ir::utils
 
 #endif // UTILS_CUDA_CUDAUTILS_H_

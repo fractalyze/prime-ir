@@ -1,4 +1,4 @@
-// Copyright 2025 The ZKIR Authors.
+// Copyright 2025 The PrimeIR Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: zkir-opt -inline %s | FileCheck %s
+// RUN: prime-ir-opt -inline %s | FileCheck %s
 
 !Zp = !mod_arith.int<37 : i32>
 

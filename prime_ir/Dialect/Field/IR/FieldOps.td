@@ -1,0 +1,486 @@
+/* Copyright 2025 The PrimeIR Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#ifndef PRIME_IR_DIALECT_FIELD_IR_FIELDOPS_TD_
+#define PRIME_IR_DIALECT_FIELD_IR_FIELDOPS_TD_
+
+include "prime_ir/Dialect/Field/IR/FieldAttributes.td"
+include "prime_ir/Dialect/Field/IR/FieldDialect.td"
+include "prime_ir/Dialect/Field/IR/FieldTypes.td"
+include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.td"
+include "prime_ir/Dialect/ModArith/IR/ModArithTypes.td"
+include "prime_ir/Utils/CommonTraits.td"
+include "mlir/Dialect/Arith/IR/ArithBase.td"
+include "mlir/Interfaces/CastInterfaces.td"
+include "mlir/IR/BuiltinAttributes.td"
+include "mlir/IR/CommonTypeConstraints.td"
+include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
+// Base class for field operations.
+class Field_Op<string mnemonic, list<Trait> traits = []> :
+  Op<Field_Dialect, mnemonic, traits #[Pure] # ElementwiseMappable.traits>;
+
+// Base class for field arithmetic ops. All ops have one result,
+// and the result type is the same as the operand type.
+class Field_ArithOp<string mnemonic, list<Trait> traits = []> :
+    Field_Op<mnemonic, traits # [SameOperandsAndResultType]>;
+
+// Base class for unary field arithmetic.
+class Field_UnaryOp<string mnemonic, list<Trait> traits = []> :
+    Field_ArithOp<mnemonic, traits>,
+  Arguments<(ins FieldLike:$input)>,
+  Results<(outs FieldLike:$output)> {
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
+// Base class for binary field arithmetic.
+class Field_BinaryOp<string mnemonic, list<Trait> traits = []> :
+  Field_ArithOp<mnemonic, traits>,
+  Arguments<(ins FieldLike:$lhs, FieldLike:$rhs)>,
+  Results<(outs FieldLike:$output)> {
+  let assemblyFormat = "operands attr-dict `:` type($output)";
+}
+
+def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
+  let summary = "Define a constant prime field element via an attribute";
+  let description = [{
+    Example:
+    ```
+    %0 = field.constant 123 : !field.pf<7>
+    ```
+  }];
+  let arguments = (ins TypedAttrInterface:$value);
+  let results = (outs FieldLike:$output);
+  let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
+  let builders = [
+    OpBuilder<(ins "Type":$ty, "uint64_t":$value), [{
+      if (auto pfType = dyn_cast<PrimeFieldType>(ty)) {
+        return build($_builder, $_state, pfType, value);
+      } else if (auto efType = dyn_cast<ExtensionFieldType>(ty)) {
+        return build($_builder, $_state, efType, value);
+      } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(ty)) {
+        return build($_builder, $_state, f2Type, value);
+      } else if (auto f3Type = dyn_cast<CubicExtFieldType>(ty)) {
+        return build($_builder, $_state, f3Type, value);
+      } else if (auto f4Type = dyn_cast<QuarticExtFieldType>(ty)) {
+        return build($_builder, $_state, f4Type, value);
+      } else {
+        llvm_unreachable("Unsupported field type for constant");
+      }
+    }]>,
+    OpBuilder<(ins "PrimeFieldType":$ty, "llvm::APInt":$value), [{
+      return build($_builder, $_state, ty, IntegerAttr::get(ty.getStorageType(), value));
+    }]>,
+    OpBuilder<(ins "PrimeFieldType":$ty, "uint64_t":$value), [{
+      return build($_builder, $_state, ty, IntegerAttr::get(ty.getStorageType(), value));
+    }]>,
+    OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$c0), [{
+      return build($_builder, $_state, ty, c0, 0);
+    }]>,
+    OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1), [{
+      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
+      APInt c0Int(bitWidth, c0);
+      APInt c1Int(bitWidth, c1);
+      auto tensorType = RankedTensorType::get({2}, IntegerType::get(ty.getContext(), bitWidth));
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int}));
+    }]>,
+    OpBuilder<(ins "CubicExtFieldType":$ty, "uint64_t":$c0), [{
+      return build($_builder, $_state, ty, c0, 0, 0);
+    }]>,
+    OpBuilder<(ins "CubicExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1, "uint64_t":$c2), [{
+      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
+      APInt c0Int(bitWidth, c0);
+      APInt c1Int(bitWidth, c1);
+      APInt c2Int(bitWidth, c2);
+      auto tensorType = RankedTensorType::get({3}, IntegerType::get(ty.getContext(), bitWidth));
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int}));
+    }]>,
+    OpBuilder<(ins "QuarticExtFieldType":$ty, "uint64_t":$c0), [{
+      return build($_builder, $_state, ty, c0, 0, 0, 0);
+    }]>,
+    OpBuilder<(ins "QuarticExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1, "uint64_t":$c2, "uint64_t":$c3), [{
+      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
+      APInt c0Int(bitWidth, c0);
+      APInt c1Int(bitWidth, c1);
+      APInt c2Int(bitWidth, c2);
+      APInt c3Int(bitWidth, c3);
+      auto tensorType = RankedTensorType::get({4}, IntegerType::get(ty.getContext(), bitWidth));
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int, c3Int}));
+    }]>,
+    OpBuilder<(ins "ExtensionFieldType":$ty, "uint64_t":$c0), [{
+      auto baseField = ty.getBaseField();
+      unsigned degree = ty.getDegree();
+      unsigned bitWidth = baseField.getStorageBitWidth();
+      SmallVector<APInt> coeffs(degree, APInt(bitWidth, 0));
+      coeffs[0] = static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c0), baseField));
+      auto tensorType = RankedTensorType::get({static_cast<int64_t>(degree)}, baseField.getStorageType());
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, coeffs));
+    }]>,
+    OpBuilder<(ins "ExtensionFieldType":$ty, "llvm::ArrayRef<uint64_t>":$coeffs), [{
+      assert(coeffs.size() == ty.getDegree() && "coefficient count must match extension degree");
+      auto baseField = ty.getBaseField();
+      unsigned bitWidth = baseField.getStorageBitWidth();
+      SmallVector<APInt> coeffInts;
+      for (auto c : coeffs)
+        coeffInts.push_back(static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c), baseField)));
+      auto tensorType = RankedTensorType::get({static_cast<int64_t>(coeffs.size())}, baseField.getStorageType());
+      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, coeffInts));
+    }]>,
+  ];
+  let extraClassDeclaration = [{
+    /// Build the constant op with `value` and `type` if possible, otherwise
+    /// returns null.
+    static ConstantOp materialize(OpBuilder &builder, Attribute value,
+                                  Type type, Location loc);
+  }];
+}
+
+def Field_F2CreateOp : Op<Field_Dialect, "f2.create", [Pure, TypesMatchWith<
+  "result type is the same as the operand type", "output", "c0", "cast<QuadraticExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c1", "cast<QuadraticExtFieldType>($_self).getBaseField()">]> {
+  let summary = "Define a constant quadratic extension field element";
+  let description = [{
+    Example:
+    ```
+    !QF = !field.f2<!PF, #beta>
+    %0 = field.f2.create %c0, %c1 : !QF
+    ```
+  }];
+  let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1);
+  let results = (outs Field_QuadraticExtFieldType:$output);
+  let assemblyFormat = "$c0 `,` $c1 attr-dict `:` type($output)";
+}
+
+def Field_F3CreateOp : Op<Field_Dialect, "f3.create", [Pure, TypesMatchWith<
+  "result type is the same as the operand type", "output", "c0", "cast<CubicExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c1", "cast<CubicExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c2", "cast<CubicExtFieldType>($_self).getBaseField()">]> {
+  let summary = "Define a constant cubic extension field element";
+  let description = [{
+    Example:
+    ```
+    !CF = !field.f3<!PF, #xi>
+    %0 = field.f3.create %c0, %c1, %c2 : !CF
+    ```
+  }];
+  let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1, Field_PrimeFieldType:$c2);
+  let results = (outs Field_CubicExtFieldType:$output);
+  let assemblyFormat = "$c0 `,` $c1 `,` $c2 attr-dict `:` type($output)";
+}
+
+def Field_F4CreateOp : Op<Field_Dialect, "f4.create", [Pure, TypesMatchWith<
+  "result type is the same as the operand type", "output", "c0", "cast<QuarticExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c1", "cast<QuarticExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c2", "cast<QuarticExtFieldType>($_self).getBaseField()">,
+  TypesMatchWith< "result type is the same as the operand type", "output", "c3", "cast<QuarticExtFieldType>($_self).getBaseField()">]> {
+  let summary = "Define a constant quartic extension field element";
+  let description = [{
+    Example:
+    ```
+    !QF = !field.f4<!PF, #xi>
+    %0 = field.f4.create %c0, %c1, %c2, %c3 : !QF
+    ```
+  }];
+  let arguments = (ins Field_PrimeFieldType:$c0, Field_PrimeFieldType:$c1, Field_PrimeFieldType:$c2, Field_PrimeFieldType:$c3);
+  let results = (outs Field_QuarticExtFieldType:$output);
+  let assemblyFormat = "$c0 `,` $c1 `,` $c2 `,` $c3 attr-dict `:` type($output)";
+}
+
+def Field_CreateOp : Op<Field_Dialect, "create", [Pure]> {
+  let summary = "Create an extension field element from coefficients";
+  let description = [{
+    Constructs an extension field element from a list of prime field coefficients.
+    The number of coefficients must match the degree of the extension field.
+
+    Example:
+    ```
+    !PF = !field.pf<7:i32>
+    !EF2 = !field.ef<2x!PF, 6:i32>
+    !EF3 = !field.ef<3x!PF, 2:i32>
+
+    %qf = field.create [%c0, %c1] : !EF2
+    %cf = field.create [%c0, %c1, %c2] : !EF3
+    ```
+  }];
+  let arguments = (ins Variadic<Field_PrimeFieldType>:$coefficients);
+  let results = (outs Field_ExtensionFieldType:$output);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
+ SameOperandsAndResultShape, AllSameTensorDims<["input", "output"]>,
+ DeclareOpInterfaceMethods<CastOpInterface>]> {
+  let summary = "Bitcast between prime field types and to/from integer types";
+  let description = [{
+    Bitcasts between prime field types and to/from integer types.
+
+    The storage bitwidth of the input type is required to be the same storage
+    bitwidth of the output type. Integer to integer bitcast is disallowed as it
+    should be handled by `arith.bitcast`.
+
+    Currently, this operation only supports prime field. In the future, when the
+    use case is clear, we could support bitcasting between other field types and
+    integer type.
+
+    Example:
+    ```
+    !PF = !field.pf<7 : i32>
+    %c0 = field.bitcast %f0 : !PF -> i32
+    %f1 = field.bitcast %c0 : i32 -> !PF
+    %f2 = field.bitcast %f0 : !PF -> !PF2
+    ```
+  }];
+  let arguments = (ins AnyTypeOf<[PrimeFieldLike, SignlessIntegerLike]>:$input);
+  let results = (outs AnyTypeOf<[PrimeFieldLike, SignlessIntegerLike]>:$output);
+  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+}
+
+def Field_CmpOp : Field_Op<"cmp", [SameTypeOperands, TypesMatchWith<
+  "result type has i1 element type and same shape as operands",
+  "lhs", "result", "getI1SameShape($_self)">]> {
+  let summary = "Prime field comparison operation";
+  let description = [{
+    **From description of `Arith_CmpIOp`**
+    Its first argument is an attribute that defines which type of comparison is
+    performed. The following comparisons are supported:
+
+    -   equal (mnemonic: `"eq"`; integer value: `0`)
+    -   not equal (mnemonic: `"ne"`; integer value: `1`)
+    -   unsigned less than (mnemonic: `"ult"`; integer value: `6`)
+    -   unsigned less than or equal (mnemonic: `"ule"`; integer value: `7`)
+    -   unsigned greater than (mnemonic: `"ugt"`; integer value: `8`)
+    -   unsigned greater than or equal (mnemonic: `"uge"`; integer value: `9`)
+
+    The result is `1` if the comparison is true and `0` otherwise. For vector or
+    tensor operands, the comparison is performed elementwise and the element of
+    the result indicates whether the comparison is true for the operand elements
+    with the same indices as those of the result.
+
+    Example:
+    ```
+    %res = field.cmp slt, %a, %b : !PF
+    ```
+  }];
+  let arguments = (ins Arith_CmpIPredicateAttr:$predicate,
+                       FieldLike:$lhs,
+                       FieldLike:$rhs);
+  let results = (outs BoolLike:$result);
+  let hasVerifier = 1;
+  let assemblyFormat = "$predicate `,` $lhs `,` $rhs attr-dict `:` type($lhs)";
+}
+
+def Field_ToMontOp : Field_Op<"to_mont", [TypesMatchWith<
+  "input type is standard form of output type", "output", "input",
+  "getStandardFormType($_self)">]> {
+  let summary = "Convert from standard form to montgomery representation";
+  let description = [{
+    Computes x * R, where `R` is the montgomery factor.
+
+    Example:
+    ```
+    %m0 = field.to_mont %c0 : !PF
+    ```
+  }];
+  let arguments = (ins FieldLike:$input);
+  let results = (outs FieldLike:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "$input attr-dict `:` type($output)";
+}
+
+def Field_FromMontOp : Field_Op<"from_mont", [TypesMatchWith<
+  "input type is montgomery form of output type", "output", "input",
+  "getMontgomeryFormType($_self)">]> {
+  let summary = "Convert from montgomery representation to standard form";
+  let description = [{
+    Computes x * R⁻¹, where `R` is the montgomery factor.
+
+    Example:
+    ```
+    %m0 = field.from_mont %c0 : !PF
+    ```
+  }];
+  let arguments = (ins FieldLike:$input);
+  let results = (outs FieldLike:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "$input attr-dict `:` type($output)";
+}
+
+// Field multiplicative inverse
+def Field_InverseOp : Field_UnaryOp<"inverse", [Involution]> {
+  let summary = "Field multiplicative inverse";
+  let description = [{
+    Computes the multiplicative inverse of a field element.
+
+    Example:
+    ```
+    %inv_a = field.inverse %a : !field.pf<primeModulus>
+    ```
+  }];
+  let hasFolder = 1;
+}
+
+// Field double.
+def Field_DoubleOp : Field_UnaryOp<"double"> {
+  let summary = "Field double";
+  let description = [{
+    Computes the double of a field element.
+
+    Example:
+    ```
+    %double = field.double %a : !field.pf<primeModulus>
+    ```
+  }];
+  let hasFolder = 1;
+}
+
+// Field square.
+def Field_SquareOp : Field_UnaryOp<"square"> {
+  let summary = "Field square";
+  let description = [{
+    Computes the square of a field element.
+
+    Example:
+    ```
+    %square = field.square %a : !field.pf<primeModulus>
+    ```
+  }];
+  let hasFolder = 1;
+}
+
+// Field negation
+def Field_NegateOp : Field_UnaryOp<"negate", [Involution]> {
+  let summary = "Field negation";
+  let description = [{
+    Computes the negation of a field element.
+
+    Example:
+    ```
+    %negation = field.negate %a : !field.pf<primeModulus>
+    ```
+  }];
+  let hasFolder = 1;
+}
+
+// Field addition.
+def Field_AddOp : Field_BinaryOp<"add", [Commutative]> {
+  let summary = "Field addition";
+  let description = [{
+    Computes the sum of two field elements.
+
+    Example:
+    ```
+    %r = field.add %a, %b : !field.pf<primeModulus>
+    ```
+  }];
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+}
+
+// Field subtraction.
+def Field_SubOp : Field_BinaryOp<"sub"> {
+  let summary = "Field subtraction";
+  let description = [{
+    Computes the difference between two field elements.
+
+    Example:
+    ```
+    %r = field.sub %a, %b : !field.pf<primeModulus>
+    ```
+  }];
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+}
+
+// Field multiplication.
+def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
+  let summary = "Field multiplication";
+  let description = [{
+    Computes the product of two field elements.
+
+    Example:
+    ```
+    %r = field.mul %a, %b : !field.pf<primeModulus>
+    ```
+  }];
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
+}
+
+// Field power.
+def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
+  "base and output must have same type", "base", "output", "$_self">]> {
+  let summary = "Field power with unsigned integer exponent";
+  let description = [{
+    Computes the field element a raised to the power of unsigned integer b.
+
+    Example:
+    ```
+    %power = field.powui %a, %b : !field.pf<primeModulus>, i32
+    ```
+  }];
+  let arguments = (ins FieldLike:$base, SignlessIntegerLike:$exp);
+  let results = (outs FieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($base) `,` type($exp)";
+}
+
+def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
+  let summary = "Get the coefficients of an extension field element";
+  let description = [{
+    Gets the coefficient representation of an extension field element.
+    This operation does NOT accept tensors since it cannot be applied elementwise.
+
+    Example:
+    ```
+    !QF = field.f2<!PF, #beta>
+    %c0, %c1 = field.ext_to_coeffs %qf : !QF -> !PF, !PF
+
+    !CF = field.f3<!PF, #xi>
+    %c0, %c1, %c2 = field.ext_to_coeffs %cf : !CF -> !PF, !PF, !PF
+    ```
+  }];
+  let arguments = (ins Field_AnyExtFieldType:$input);
+  let results = (outs Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$output);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasCanonicalizer = 1;
+  let hasVerifier = 1;
+}
+
+def Field_ExtFromCoeffsOp : Field_Op<"ext_from_coeffs", [Pure]> {
+  let summary = "Constructs extension field element from the coefficients";
+  let description = [{
+    Constructs extension field element from the coefficients.
+    This operation does NOT accept tensors since it cannot be applied elementwise.
+
+    Example:
+    ```
+    !QF = field.f2<!PF, #beta>
+    %qf = field.ext_from_coeffs %c0, %c1 : !PF, !PF -> !QF
+
+    !CF = field.f3<!PF, #xi>
+    %cf = field.ext_from_coeffs %c0, %c1, %c2 : !PF, !PF, !PF -> !CF
+    ```
+  }];
+  let arguments = (ins Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$input);
+  let results = (outs Field_AnyExtFieldType:$output);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasCanonicalizer = 1;
+  let hasVerifier = 1;
+}
+
+#endif  // PRIME_IR_DIALECT_FIELD_IR_FIELDOPS_TD_

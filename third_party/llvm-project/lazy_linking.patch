@@ -6,7 +6,7 @@ index c64660420c9c..5f2b4b904311 100644
          ":TranslateLib",
          "//llvm:Support",
          "//mlir/test:TestToLLVMIRTranslation",
-+        "@zkir//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
++        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
      ],
  )
  
@@ -14,8 +14,8 @@ index c64660420c9c..5f2b4b904311 100644
          "//llvm:Linker",
          "//llvm:Support",
          "//llvm:X86AsmParser",
-+        "@zkir//zkir/Dialect/Field/IR:Field",
-+        "@zkir//zkir/Dialect/ModArith/IR:ModArith",
++        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
++        "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArith",
      ],
  )
  

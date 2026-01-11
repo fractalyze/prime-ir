@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,8 +27,8 @@ cc_test(
     name = "ModArithOperationTest",
     srcs = ["ModArithOperationTest.cpp"],
     deps = [
-        "//zkir/Dialect/ModArith/IR:ModArith",
-        "//zkir/Utils:ZkDtypes",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Utils:ZkDtypes",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
         "@llvm-project//llvm:Support",

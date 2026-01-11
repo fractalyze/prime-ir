@@ -1,4 +1,4 @@
-// Copyright 2025 The ZKIR Authors.
+// Copyright 2025 The PrimeIR Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // ==============================================================================
 
 // RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
-// RUN:   | zkir-opt -convert-elementwise-to-linalg -sparsification-and-bufferization -elliptic-curve-to-field -field-to-llvm \
+// RUN:   | prime-ir-opt -convert-elementwise-to-linalg -sparsification-and-bufferization -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_bucket_acc_csr -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t > %t
 // RUN: FileCheck %s -check-prefix=CHECK_BUCKET_ACC_CSR < %t

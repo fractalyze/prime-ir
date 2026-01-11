@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,8 +17,8 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def repo():
-    ZK_DTYPES_COMMIT = "f57f73d4445fb65d3328ddf66a32ae7d5ef24973"
-    ZK_DTYPES_SHA256 = "9713e0510e7a6da60a20e1dd81992b067ebbedd23cf8e53fb95c75a0ed9c1cb3"
+    ZK_DTYPES_COMMIT = "3b9c17dee9e73f30002399a07f9cfb63732ecad9"
+    ZK_DTYPES_SHA256 = "d5f5160a4b384e5e3ac0b6794063c7c0ec524c8a7e18fece71f5054c7cff7a3a"
     http_archive(
         name = "zk_dtypes",
         sha256 = ZK_DTYPES_SHA256,

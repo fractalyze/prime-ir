@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ filegroup(
         "poseidon2_packed.mlir",
         ":libruntime_functions.so",
         ":lit.cfg.py",
-        "//tools:zkir-opt",
+        "//tools:prime-ir-opt",
         "@llvm-project//llvm:FileCheck",
         "@llvm-project//llvm:lit",
         "@llvm-project//llvm:not",

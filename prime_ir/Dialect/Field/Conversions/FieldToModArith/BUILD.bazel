@@ -1,0 +1,132 @@
+# Copyright 2025 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "ConversionUtils",
+    srcs = ["ConversionUtils.cpp"],
+    hdrs = ["ConversionUtils.h"],
+    deps = [
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TransformUtils",
+    ],
+)
+
+cc_library(
+    name = "ExtensionFieldCodeGen",
+    srcs = ["ExtensionFieldCodeGen.cpp"],
+    hdrs = [
+        "ExtensionFieldCodeGen.h",
+        "FrobeniusCoeffs.h",
+        "VandermondeMatrix.h",
+    ],
+    deps = [
+        ":ConversionUtils",
+        ":PrimeFieldCodeGen",
+        "//prime_ir/Dialect/Field/IR:ExtensionFieldOperationSelector",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Utils:BuilderContext",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
+cc_library(
+    name = "FieldCodeGen",
+    srcs = ["FieldCodeGen.cpp"],
+    hdrs = ["FieldCodeGen.h"],
+    deps = [
+        ":ExtensionFieldCodeGen",
+        ":PrimeFieldCodeGen",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:BuilderContext",
+        "@llvm-project//mlir:TransformUtils",
+    ],
+)
+
+cc_library(
+    name = "FieldToModArith",
+    srcs = ["FieldToModArith.cpp"],
+    hdrs = [
+        "FieldToModArith.h",
+    ],
+    deps = [
+        ":ConversionUtils",
+        ":FieldCodeGen",
+        ":pass_inc_gen",
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Dialect/TensorExt/IR:TensorExt",
+        "//prime_ir/Utils:BuilderContext",
+        "//prime_ir/Utils:ConversionUtils",
+        "//prime_ir/Utils:ShapedTypeConverter",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:AffineDialect",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:BufferizationDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LinalgDialect",
+        "@llvm-project//mlir:MemRefDialect",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:SparseTensorDialect",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
+        "@llvm-project//mlir:TransformUtils",
+        "@llvm-project//mlir:VectorDialect",
+    ],
+)
+
+gentbl_cc_library(
+    name = "pass_inc_gen",
+    tbl_outs = {
+        "FieldToModArith.h.inc": [
+            "-gen-pass-decls",
+            "-name=FieldToModArith",
+        ],
+        "FieldToModArith.cpp.inc": ["-gen-rewriters"],
+        "FieldToModArith.md": ["-gen-pass-doc"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "FieldToModArith.td",
+    deps = [
+        "//prime_ir/Dialect/Field/IR:ops_inc_gen",
+        "//prime_ir/Dialect/Field/IR:td_files",
+        "//prime_ir/Dialect/ModArith/IR:td_files",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
+
+cc_library(
+    name = "PrimeFieldCodeGen",
+    srcs = ["PrimeFieldCodeGen.cpp"],
+    hdrs = ["PrimeFieldCodeGen.h"],
+    deps = [
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Utils:BuilderContext",
+        "@llvm-project//mlir:IR",
+    ],
+)

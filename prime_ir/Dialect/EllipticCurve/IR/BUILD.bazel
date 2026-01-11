@@ -1,0 +1,191 @@
+# Copyright 2025 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "EllipticCurveHdrs",
+    hdrs = [
+        "EllipticCurveAttributes.h",
+        "EllipticCurveOps.h",
+        "EllipticCurveTypes.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":ops_inc_gen",
+        ":types_inc_gen",
+        "//prime_ir/Dialect/Field/IR:FieldHdrs",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+    ],
+)
+
+cc_library(
+    name = "EllipticCurve",
+    srcs = [
+        "EllipticCurveAttributes.cpp",
+        "EllipticCurveDialect.cpp",
+        "EllipticCurveOps.cpp",
+        "KnownCurves.cpp",
+    ],
+    hdrs = [
+        "EllipticCurveAttributes.h",
+        "EllipticCurveDialect.h",
+        "EllipticCurveOps.h",
+        "EllipticCurveTypes.h",
+        "KnownCurves.h",
+    ],
+    deps = [
+        ":attributes_inc_gen",
+        ":dialect_inc_gen",
+        ":ops_inc_gen",
+        ":types_inc_gen",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Dialect/Poly/IR:Poly",
+        "//prime_ir/Utils:KnownModulus",
+        "//prime_ir/Utils:OpUtils",
+        "//prime_ir/Utils:ZkDtypes",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:InferTypeOpInterface",
+        "@llvm-project//mlir:LLVMDialect",
+        "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:bn254_g1",
+        "@zk_dtypes//zk_dtypes:bn254_g2",
+    ],
+)
+
+cc_library(
+    name = "PointKind",
+    hdrs = ["PointKind.h"],
+)
+
+cc_library(
+    name = "PointKindConversion",
+    srcs = ["PointKindConversion.cpp"],
+    hdrs = ["PointKindConversion.h"],
+    deps = [
+        ":PointKind",
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
+cc_library(
+    name = "PointOperationSelector",
+    hdrs = ["PointOperationSelector.h"],
+    deps = [
+        ":PointKind",
+        "@zk_dtypes//zk_dtypes:sw_affine_point_operation",
+        "@zk_dtypes//zk_dtypes:sw_jacobian_point_operation",
+        "@zk_dtypes//zk_dtypes:sw_point_xyzz_operation",
+    ],
+)
+
+td_library(
+    name = "td_files",
+    srcs = [
+        "EllipticCurveAttributes.td",
+        "EllipticCurveDialect.td",
+        "EllipticCurveOps.td",
+        "EllipticCurveTypes.td",
+    ],
+    includes = ["../../../.."],
+    deps = [
+        "//prime_ir/Dialect/Field/IR:td_files",
+        "//prime_ir/Utils:CommonTraits",
+        "//prime_ir/Utils:CommonTypeConstraints",
+        "@llvm-project//mlir:ArithOpsTdFiles",
+        "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
+        "@llvm-project//mlir:LLVMOpsTdFiles",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:SideEffectInterfacesTdFiles",
+    ],
+)
+
+gentbl_cc_library(
+    name = "dialect_inc_gen",
+    tbl_outs = {
+        "EllipticCurveDialect.h.inc": ["-gen-dialect-decls"],
+        "EllipticCurveDialect.cpp.inc": ["-gen-dialect-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveDialect.td",
+    deps = [
+        ":td_files",
+        "//prime_ir/Dialect/Field/IR:td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "attributes_inc_gen",
+    tbl_outs = {
+        "EllipticCurveAttributes.h.inc": [
+            "-gen-attrdef-decls",
+            "--attrdefs-dialect=elliptic_curve",
+        ],
+        "EllipticCurveAttributes.cpp.inc": [
+            "-gen-attrdef-defs",
+            "--attrdefs-dialect=elliptic_curve",
+        ],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveAttributes.td",
+    deps = [
+        ":td_files",
+        "//prime_ir/Dialect/Field/IR:td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "types_inc_gen",
+    tbl_outs = {
+        "EllipticCurveTypes.h.inc": [
+            "-gen-typedef-decls",
+            "--typedefs-dialect=elliptic_curve",
+        ],
+        "EllipticCurveTypes.cpp.inc": [
+            "-gen-typedef-defs",
+            "--typedefs-dialect=elliptic_curve",
+        ],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveTypes.td",
+    deps = [
+        ":td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "ops_inc_gen",
+    tbl_outs = {
+        "EllipticCurveOps.h.inc": ["-gen-op-decls"],
+        "EllipticCurveOps.cpp.inc": ["-gen-op-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveOps.td",
+    deps = [
+        ":td_files",
+        "//prime_ir/Dialect/Field/IR:td_files",
+    ],
+)

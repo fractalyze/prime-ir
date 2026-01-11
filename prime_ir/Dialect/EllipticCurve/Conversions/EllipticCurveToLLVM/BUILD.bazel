@@ -1,0 +1,63 @@
+# Copyright 2025 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+cc_library(
+    name = "EllipticCurveToLLVM",
+    srcs = ["EllipticCurveToLLVM.cpp"],
+    hdrs = [
+        "EllipticCurveToLLVM.h",
+    ],
+    deps = [
+        ":pass_inc_gen",
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:SimpleStructBuilder",
+        "@llvm-project//mlir:ConvertToLLVMInterface",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LLVMCommonConversion",
+        "@llvm-project//mlir:LLVMDialect",
+        "@llvm-project//mlir:MemRefDialect",
+        "@llvm-project//mlir:MemRefToLLVM",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+gentbl_cc_library(
+    name = "pass_inc_gen",
+    tbl_outs = {
+        "EllipticCurveToLLVM.h.inc": [
+            "-gen-pass-decls",
+            "-name=EllipticCurveToLLVM",
+        ],
+        "EllipticCurveToLLVM.cpp.inc": ["-gen-rewriters"],
+        "EllipticCurveToLLVM.md": ["-gen-pass-doc"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveToLLVM.td",
+    deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:td_files",
+        "@llvm-project//mlir:OpBaseTdFiles",
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)

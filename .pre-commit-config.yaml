@@ -30,7 +30,7 @@ repos:
             -whitespace/indent,
             -whitespace/indent_namespace
 
-  # FIXME(ashjeong): clang-tidy currently fails on CI. See https://github.com/fractalyze/zkir/actions/runs/16904324348/job/47890440254 for more details.
+  # FIXME(ashjeong): clang-tidy currently fails on CI. See https://github.com/fractalyze/prime-ir/actions/runs/16904324348/job/47890440254 for more details.
   # This hook now relies on a local shell script.
   # - repo: local
   #   hooks:

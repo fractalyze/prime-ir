@@ -1,4 +1,4 @@
-// Copyright 2025 The ZKIR Authors.
+// Copyright 2025 The PrimeIR Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // ==============================================================================
 
 // RUN: cat %S/../default_print_utils.mlir %s \
-// RUN:   | zkir-opt -field-to-gpu=parallelize-affine \
+// RUN:   | prime-ir-opt -field-to-gpu=parallelize-affine \
 // RUN:   | mlir-runner -e testSortPairs -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../libruntime_functions%shlibext,%S/../../utils/cuda/cudaRuntimeUtils%shlibext,%mlir_lib_dir/libmlir_cuda_runtime%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_SORT_PAIRS < %t

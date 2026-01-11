@@ -6,9 +6,9 @@ index 22a25fd1a5af..1832036990e4 100644
  #include <optional>
  #include <vector>
  
-+#include "zkir/Dialect/Field/IR/FieldOps.h"
-+#include "zkir/Dialect/ModArith/IR/ModArithOps.h"
-+#include "zkir/IR/Attributes.h"
++#include "prime_ir/Dialect/Field/IR/FieldOps.h"
++#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
++#include "prime_ir/IR/Attributes.h"
 +
  using namespace mlir;
  using namespace mlir::tensor;
@@ -17,10 +17,10 @@ index 22a25fd1a5af..1832036990e4 100644
  Operation *TensorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
                                                Location loc) {
-+  if (auto op = zkir::field::ConstantOp::materialize(builder, value, type, loc))
++  if (auto op = prime_ir::field::ConstantOp::materialize(builder, value, type, loc))
 +    return op;
 +  if (auto op =
-+          zkir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
++          prime_ir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
 +    return op;
    if (auto op = arith::ConstantOp::materialize(builder, value, type, loc))
      return op;
@@ -32,7 +32,7 @@ index 22a25fd1a5af..1832036990e4 100644
 -  if (!llvm::is_contained(adaptor.getElements(), nullptr))
 -    return DenseElementsAttr::get(getType(), adaptor.getElements());
 +  if (!llvm::is_contained(adaptor.getElements(), nullptr)) {
-+    ShapedType type = zkir::maybeConvertZkirToBuiltinType(getType());
++    ShapedType type = prime_ir::maybeConvertPrimeIRToBuiltinType(getType());
 +    return DenseElementsAttr::get(type, adaptor.getElements());
 +  }
    return {};
@@ -44,7 +44,7 @@ index 22a25fd1a5af..1832036990e4 100644
    // splat.
 -  return SplatElementsAttr::get(getType(), {constOperand});
 +  ShapedType destType =
-+      cast<ShapedType>(zkir::maybeConvertZkirToBuiltinType(getType()));
++      cast<ShapedType>(prime_ir::maybeConvertPrimeIRToBuiltinType(getType()));
 +  return SplatElementsAttr::get(destType, {constOperand});
  }
  
@@ -57,9 +57,9 @@ index 7829b11da096..e86158d51727 100644
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",
-+        "@zkir//zkir/Dialect/Field/IR:FieldHdrs",
-+        "@zkir//zkir/Dialect/ModArith/IR:ModArithHdrs",
-+        "@zkir//zkir/IR:Attributes",
++        "@prime_ir//prime_ir/Dialect/Field/IR:FieldHdrs",
++        "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArithHdrs",
++        "@prime_ir//prime_ir/IR:Attributes",
      ],
  )
  

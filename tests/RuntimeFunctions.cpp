@@ -1,4 +1,4 @@
-/* Copyright 2025 The ZKIR Authors.
+/* Copyright 2025 The PrimeIR Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@ limitations under the License.
 
 #include "zk_dtypes/include/big_int.h"
 
-namespace mlir::zkir {
+namespace mlir::prime_ir {
 
 template <typename T>
 void printMemref(void *memref) {
@@ -49,38 +49,38 @@ void printMemref(void *memref) {
 
 #undef IF_SAME_TYPE
 
-} // namespace mlir::zkir
+} // namespace mlir::prime_ir
 
 extern "C" {
 #define DEFINE_PRINT_MEMREF_FUNCTION(ActualType, UpperCamelCaseName, ...)      \
   void _mlir_ciface_printMemref##UpperCamelCaseName(void *memref) {            \
-    mlir::zkir::printMemref<ActualType>(memref);                               \
+    mlir::prime_ir::printMemref<ActualType>(memref);                           \
   }                                                                            \
   void _mlir_ciface_printMemref1##D##UpperCamelCaseName(void *memref) {        \
-    mlir::zkir::printMemref<1, ActualType>(memref);                            \
+    mlir::prime_ir::printMemref<1, ActualType>(memref);                        \
   }                                                                            \
   void _mlir_ciface_printMemref2##D##UpperCamelCaseName(void *memref) {        \
-    mlir::zkir::printMemref<2, ActualType>(memref);                            \
+    mlir::prime_ir::printMemref<2, ActualType>(memref);                        \
   }                                                                            \
   void _mlir_ciface_printMemref3##D##UpperCamelCaseName(void *memref) {        \
-    mlir::zkir::printMemref<3, ActualType>(memref);                            \
+    mlir::prime_ir::printMemref<3, ActualType>(memref);                        \
   }
 ZK_DTYPES_ALL_TYPE_LIST(DEFINE_PRINT_MEMREF_FUNCTION)
 #undef DEFINE_PRINT_MEMREF_FUNCTION
 
 void _mlir_ciface_printMemrefI256(void *memref) {
-  mlir::zkir::printMemref<::zk_dtypes::BigInt<4>>(memref);
+  mlir::prime_ir::printMemref<::zk_dtypes::BigInt<4>>(memref);
 }
 
 void _mlir_ciface_printMemref1DI256(void *memref) {
-  mlir::zkir::printMemref<1, ::zk_dtypes::BigInt<4>>(memref);
+  mlir::prime_ir::printMemref<1, ::zk_dtypes::BigInt<4>>(memref);
 }
 
 void _mlir_ciface_printMemref2DI256(void *memref) {
-  mlir::zkir::printMemref<2, ::zk_dtypes::BigInt<4>>(memref);
+  mlir::prime_ir::printMemref<2, ::zk_dtypes::BigInt<4>>(memref);
 }
 
 void _mlir_ciface_printMemref3DI256(void *memref) {
-  mlir::zkir::printMemref<3, ::zk_dtypes::BigInt<4>>(memref);
+  mlir::prime_ir::printMemref<3, ::zk_dtypes::BigInt<4>>(memref);
 }
 }

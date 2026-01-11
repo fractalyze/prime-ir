@@ -2,4 +2,4 @@
 
 self-hosted-runner:
   labels:
-    - zkir
+    - prime_ir

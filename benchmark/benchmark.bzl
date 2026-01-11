@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,10 +13,10 @@
 # limitations under the License.
 # ==============================================================================
 
-"""A rule for running ZKIR benchmark"""
+"""A rule for running PrimeIR benchmark"""
 
+load("@prime_ir//tools:tools.bzl", "prime_ir_opt")
 load("@rules_cc//cc:defs.bzl", "cc_import", "cc_test")
-load("@zkir//tools:tools.bzl", "zkir_opt")
 
 def executable_attr(label):
     """A helper for declaring executable dependencies."""
@@ -104,42 +104,42 @@ mlir_translate = rule(
     },
 )
 
-def zkir_mlir_cc_import(name, mlir_src, zkir_opt_flags = [], llc_flags = [], tags = [], **kwargs):
+def prime_ir_mlir_cc_import(name, mlir_src, prime_ir_opt_flags = [], llc_flags = [], tags = [], **kwargs):
     """Compiles an MLIR file to an object file and exposes it via cc_import.
 
     This rule runs the following pipeline:
-      MLIR -> (zkir-opt) -> LLVM IR -> Object (.o) -> cc_import
+      MLIR -> (prime-ir-opt) -> LLVM IR -> Object (.o) -> cc_import
 
     Args:
       name: The name of the cc_import target.
       mlir_src: The source .mlir file to compile.
-      zkir_opt_flags: Optional list of flags to pass to zkir-opt.
+      prime_ir_opt_flags: Optional list of flags to pass to prime-ir-opt.
       llc_flags: Optional list of flags to pass to llc.
       tags: Optional Bazel tags to apply to each build step.
       **kwargs: Additional arguments to pass to each build step.
     """
-    zkir_opt_name = "%s_zkir_opt" % name
-    generated_zkir_opt_name = "%s_zkir_opt.mlir" % name
+    prime_ir_opt_name = "%s_prime_ir_opt" % name
+    generated_prime_ir_opt_name = "%s_prime_ir_opt.mlir" % name
     llvmir_target = "%s_mlir_translate" % name
     generated_llvmir_name = "%s_llvmir.ll" % name
     obj_name = "%s_object" % name
     generated_obj_name = "%s.o" % name
 
-    if zkir_opt_flags:
-        zkir_opt(
-            name = zkir_opt_name,
+    if prime_ir_opt_flags:
+        prime_ir_opt(
+            name = prime_ir_opt_name,
             src = mlir_src,
-            pass_flags = zkir_opt_flags,
+            pass_flags = prime_ir_opt_flags,
             tags = tags,
-            generated_filename = generated_zkir_opt_name,
+            generated_filename = generated_prime_ir_opt_name,
             **kwargs
         )
     else:
-        generated_zkir_opt_name = mlir_src
+        generated_prime_ir_opt_name = mlir_src
 
     mlir_translate(
         name = llvmir_target,
-        src = generated_zkir_opt_name,
+        src = generated_prime_ir_opt_name,
         pass_flags = ["--mlir-to-llvmir"],
         tags = tags,
         generated_filename = generated_llvmir_name,
@@ -162,7 +162,7 @@ def zkir_mlir_cc_import(name, mlir_src, zkir_opt_flags = [], llc_flags = [], tag
         **kwargs
     )
 
-def zkir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags = [], **kwargs):
+def prime_ir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags = [], **kwargs):
     """A rule for running a benchmark test."""
 
     cc_test(
@@ -172,9 +172,9 @@ def zkir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags 
             "@com_google_benchmark//:benchmark_main",
             "@com_google_googletest//:gtest",
             "@llvm-project//mlir:mlir_runner_utils",
-            "//zkir/Dialect/ModArith/IR:ModArith",
-            "//zkir/Dialect/Field/IR:Field",
-            "//zkir/Dialect/EllipticCurve/IR:EllipticCurve",
+            "//prime_ir/Dialect/ModArith/IR:ModArith",
+            "//prime_ir/Dialect/Field/IR:Field",
+            "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         ],
         tags = tags,
         copts = copts,

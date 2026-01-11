@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,19 +23,19 @@ LLVM_SHA256 = "95792e50d5f84847721545b645a6ca2c2b3b7610d02e3de07d65a6148e68508c"
 # please update the order in the tools/setup_llvm_clone.sh script.
 LLVM_PATCHES = [
     # TODO(chokobole): Remove once the issues are resolved upstream.
-    "@zkir//third_party/llvm-project:cuda_runtime.patch",
-    "@zkir//third_party/llvm-project:kernel_outlining.patch",
-    "@zkir//third_party/llvm-project:nvptx_lowering.patch",
+    "@prime_ir//third_party/llvm-project:cuda_runtime.patch",
+    "@prime_ir//third_party/llvm-project:kernel_outlining.patch",
+    "@prime_ir//third_party/llvm-project:nvptx_lowering.patch",
     # TODO(chokobole): Remove owning_memref_free.patch once we upgrade the version of LLVM.
     # See https://github.com/llvm/llvm-project/pull/153133
-    "@zkir//third_party/llvm-project:owning_memref_free.patch",
+    "@prime_ir//third_party/llvm-project:owning_memref_free.patch",
     # TODO(chokobole): Remove owning_memref_memset.patch once we upgrade the version of LLVM.
     # See https://github.com/llvm/llvm-project/pull/158200
-    "@zkir//third_party/llvm-project:owning_memref_memset.patch",
-    # NOTE(chokobole): Patches for supporting ZKIR Dialects.
-    "@zkir//third_party/llvm-project:linalg_type_support.patch",
-    "@zkir//third_party/llvm-project:tensor_type_support.patch",
-    "@zkir//third_party/llvm-project:vector_type_support.patch",
-    "@zkir//third_party/llvm-project:memref_folding.patch",
-    "@zkir//third_party/llvm-project:lazy_linking.patch",
+    "@prime_ir//third_party/llvm-project:owning_memref_memset.patch",
+    # NOTE(chokobole): Patches for supporting PrimeIR Dialects.
+    "@prime_ir//third_party/llvm-project:linalg_type_support.patch",
+    "@prime_ir//third_party/llvm-project:tensor_type_support.patch",
+    "@prime_ir//third_party/llvm-project:vector_type_support.patch",
+    "@prime_ir//third_party/llvm-project:memref_folding.patch",
+    "@prime_ir//third_party/llvm-project:lazy_linking.patch",
 ]

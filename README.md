@@ -1,22 +1,27 @@
-# ZKIR: Zero-Knowledge Intermediate Representation
+# PrimeIR
 
-[![CI](https://github.com/fractalyze/zkir/actions/workflows/ci.yml/badge.svg)](https://github.com/fractalyze/zkir/actions/workflows/ci.yml)
+[![CI](https://github.com/fractalyze/prime-ir/actions/workflows/ci.yml/badge.svg)](https://github.com/fractalyze/prime-ir/actions/workflows/ci.yml)
 
-**ZKIR** is an Intermediate Representation (IR) designed specifically for
-representing Zero-Knowledge (ZK) proving schemes, using
-[MLIR (Multi-Level Intermediate Representation)](https://mlir.llvm.org/). The
-core goal of ZKIR is to enable automatic domain-specific optimizations and
-efficiently support diverse, heterogeneous proving backends without any
-additional fine-tuning for targets.
+**PrimeIR** is an Intermediate Representation (IR) for cryptographic
+computations built on
+[MLIR (Multi-Level Intermediate Representation)](https://mlir.llvm.org/).
+Originally developed for Zero-Knowledge (ZK) proving systems, PrimeIR has
+evolved to support a broader range of cryptographic applications including
+homomorphic encryption, digital signatures, and other prime field-based
+protocols.
+
+The core goal of PrimeIR is to enable automatic domain-specific optimizations
+and efficiently support diverse, heterogeneous backends without any additional
+fine-tuning for targets.
 
 ## Motivation
 
-ZK proving systems often require domain-specific arithmetic operations, such as
-field multiplication or modular inversion. These operations are difficult to
+Cryptographic systems often require domain-specific arithmetic operations, such
+as field multiplication or modular inversion. These operations are difficult to
 express and optimize at the level of low-level IRs like LLVM IR.
 
-In contrast, a high-level, ZK-specific IR preserves algebraic structure and
-developer intent, providing the following advantages:
+In contrast, a high-level, cryptography-aware IR preserves algebraic structure
+and developer intent, providing the following advantages:
 
 - **Domain-specific optimization**: MLIR allows us to design a domain-specific
   language (DSL) that preserves mathematical semantics. This enables
@@ -29,8 +34,8 @@ developer intent, providing the following advantages:
   [AMDGPU](https://mlir.llvm.org/docs/Dialects/AMDGPU/). This allows for a clean
   separation between algorithmic logic and backend-specific code generation.
 
-  ZKIR builds on this advantage, allowing high-level computations and
-  ZK-specific operations to be expressed independently of their execution
+  PrimeIR builds on this advantage, allowing high-level computations and
+  cryptographic operations to be expressed independently of their execution
   environment. This enables:
 
   - **Retargeting the same IR** to multiple hardware backends (CPU, GPU, FPGA)
@@ -39,12 +44,12 @@ developer intent, providing the following advantages:
   - **Fine-grained control over lowering strategies**, such as using different
     pipelining and tiling strategies depending on the target hardware.
 
-  - **Future-proof integration** with ZK-dedicated accelerators or distributed
-    proving platforms.
+  - **Future-proof integration** with cryptographic accelerators or distributed
+    computing platforms.
 
-Instead of forcing ZK computation through a CPU-centric path, ZKIR makes it
-possible to define **hardware-aware but backend-agnostic IR** that retains both
-performance and correctness across a wide range of devices.
+Instead of forcing cryptographic computation through a CPU-centric path, PrimeIR
+makes it possible to define **hardware-aware but backend-agnostic IR** that
+retains both performance and correctness across a wide range of devices.
 
 ## Status
 
@@ -52,7 +57,7 @@ performance and correctness across a wide range of devices.
 - 🟡: In Progress
 - ⚪: Not Yet Started
 
-### [ModArith](/zkir/Dialect/ModArith/IR/ModArithOps.td)
+### [ModArith](/prime_ir/Dialect/ModArith/IR/ModArithOps.td)
 
 - ✅ Fast Montgomery Multiplication
 - ✅ Bernstein-Yang Batch Inverse
@@ -64,7 +69,7 @@ performance and correctness across a wide range of devices.
   - Range Analysis
   - Montgomery Conversion Analysis
 
-### [Field](/zkir/Dialect/Field/IR/FieldOps.td)
+### [Field](/prime_ir/Dialect/Field/IR/FieldOps.td)
 
 - ✅ Prime Field Operations(Add, Double, Sub, Negate, Mul, Inv, Pow, ...)
 - ⚪ Binary Field Operations
@@ -74,16 +79,16 @@ performance and correctness across a wide range of devices.
   - ✅ Quartic Extension Field Operations
   - 🟡 Quintic Extension Field Operations
 
-### [TensorExt](/zkir/Dialect/TensorExt/IR/TensorExtOps.td)
+### [TensorExt](/prime_ir/Dialect/TensorExt/IR/TensorExtOps.td)
 
 - ✅ Bit-reverse Canonicalization
 
-### [Elliptic Curve](/zkir/Dialect/EllipticCurve/IR/EllipticCurveOps.td)
+### [Elliptic Curve](/prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.td)
 
 - ✅ Group Operations(Add, Double, Sub, Negate, ScalarMul, ...)
 - ✅ MSM
 
-### [Poly](/zkir/Dialect/Poly/IR/PolyOps.td)
+### [Poly](/prime_ir/Dialect/Poly/IR/PolyOps.td)
 
 - ✅ NTT / INTT
 
@@ -107,13 +112,13 @@ performance and correctness across a wide range of devices.
 
 ## Build instructions
 
-1. Clone the ZKIR repo
+1. Clone the PrimeIR repo
 
    ```sh
-   git clone https://github.com/fractalyze/zkir
+   git clone https://github.com/fractalyze/prime-ir
    ```
 
-1. Build ZKIR
+1. Build PrimeIR
 
    ```sh
    bazel build //...
@@ -138,7 +143,7 @@ performance and correctness across a wide range of devices.
    Run the optimizer:
 
    ```sh
-   bazel run //tools:zkir-opt -- --canonicalize $(pwd)/negate.mlir
+   bazel run //tools:prime-ir-opt -- --canonicalize $(pwd)/negate.mlir
    ```
 
    Expected output:
@@ -154,13 +159,13 @@ performance and correctness across a wide range of devices.
 
 ## Community
 
-Building a substantial ZK compiler requires collaboration across the broader ZK
-ecosystem — and we’d love your help in shaping ZKIR. See
+Building a substantial cryptographic compiler requires collaboration across the
+broader ecosystem — and we'd love your help in shaping PrimeIR. See
 [fractalyze/CONTRIBUTING.md](https://github.com/fractalyze/.github/blob/main/CONTRIBUTING.md)
 for general guidelines, and refer to `CONTRIBUTING.md` in this repository if you
 plan to update our vendored LLVM patches or need pointers on working with an
 external LLVM checkout.
 
 We use GitHub Issues and Pull Requests to coordinate development, and
-longer-form discussions take place in the
-[zkir-discuss](https://github.com/fractalyze/zkir/discussions).
+longer-form discussions take place in
+[Discussions](https://github.com/fractalyze/prime-ir/discussions).

@@ -1,4 +1,4 @@
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,14 +30,14 @@ genrule(
     name = "link_headers",
     outs = HEADERS,
     cmd = select({
-        "@zkir//:macos_x86_64": """
+        "@prime_ir//:macos_x86_64": """
       mkdir -p $(@D)/
       for file in $(OUTS); do
         file=$${file##*/}
         ln -sf /usr/local/include/$$file $(@D)/$$file
       done
     """,
-        "@zkir//:macos_aarch64": """
+        "@prime_ir//:macos_aarch64": """
       mkdir -p $(@D)/
       for file in $(OUTS); do
         file=$${file##*/}
@@ -51,23 +51,23 @@ genrule(
 cc_library(
     name = "omp",
     hdrs = select({
-        "@zkir//:macos_x86_64": HEADERS,
-        "@zkir//:macos_aarch64": HEADERS,
+        "@prime_ir//:macos_x86_64": HEADERS,
+        "@prime_ir//:macos_aarch64": HEADERS,
         "//conditions:default": [],
     }),
     copts = select({
-        "@zkir//:macos_x86_64": ["-Xclang -fopenmp"],
-        "@zkir//:macos_aarch64": ["-Xclang -fopenmp"],
+        "@prime_ir//:macos_x86_64": ["-Xclang -fopenmp"],
+        "@prime_ir//:macos_aarch64": ["-Xclang -fopenmp"],
         "//conditions:default": [],
     }),
     include_prefix = "third_party/omp/include",
     includes = ["."],
     linkopts = select({
-        "@zkir//:macos_x86_64": [
+        "@prime_ir//:macos_x86_64": [
             "-L/usr/local/opt/libomp/lib",
             "-lomp",
         ],
-        "@zkir//:macos_aarch64": [
+        "@prime_ir//:macos_aarch64": [
             "-L/opt/homebrew/opt/libomp/lib",
             "-lomp",
         ],

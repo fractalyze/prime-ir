@@ -1,4 +1,4 @@
-// Copyright 2025 The ZKIR Authors.
+// Copyright 2025 The PrimeIR Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
 // ==============================================================================
 
 // RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_defs.mlir %s \
-// RUN:   | zkir-opt -elliptic-curve-to-field -field-to-mod-arith -canonicalize \
+// RUN:   | prime-ir-opt -elliptic-curve-to-field -field-to-mod-arith -canonicalize \
 // RUN:   | FileCheck %s -enable-var-scope
 
 // CHECK-LABEL: @test_affine_to_jacobian_double

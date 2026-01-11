@@ -1,5 +1,5 @@
 # Copyright 2023 The StableHLO Authors. All Rights Reserved.
-# Copyright 2025 The ZKIR Authors.
+# Copyright 2025 The PrimeIR Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-workspace(name = "zkir")
+workspace(name = "prime_ir")
 
 load("//third_party/zk_dtypes:workspace.bzl", zk_dtypes = "repo")
 
@@ -56,9 +56,9 @@ load("@rules_java//java:repositories.bzl", "rules_java_toolchains")
 
 rules_java_toolchains()
 
-load("//bazel:zkir_deps.bzl", "zkir_deps")
+load("//bazel:prime_ir_deps.bzl", "prime_ir_deps")
 
-zkir_deps()
+prime_ir_deps()
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//third_party/llvm-project:workspace.bzl", "LLVM_COMMIT", "LLVM_PATCHES", "LLVM_SHA256")
