@@ -39,6 +39,9 @@ public:
   PrimeFieldOperation(uint64_t value, PrimeFieldType type)
       : op(value, convertPrimeFieldType(type)), type(type) {}
 
+  static PrimeFieldOperation fromUnchecked(int64_t value, PrimeFieldType type) {
+    return fromUnchecked(APInt(type.getStorageBitWidth(), value), type);
+  }
   static PrimeFieldOperation fromUnchecked(APInt value, PrimeFieldType type) {
     return fromUnchecked(mod_arith::ModArithOperation::fromUnchecked(
                              value, convertPrimeFieldType(type)),
@@ -203,6 +206,8 @@ class ExtensionFieldOperation
     : public ExtensionFieldOperationSelector<N>::template Type<
           ExtensionFieldOperation<N>> {
 public:
+  ExtensionFieldOperation() = default;
+
   ExtensionFieldOperation(int64_t coeff, ExtensionFieldTypeInterface efType)
       : ExtensionFieldOperation(
             APInt(cast<PrimeFieldType>(efType.getBaseFieldType())
@@ -225,6 +230,29 @@ public:
                           ExtensionFieldTypeInterface efType)
       : coeffs(coeffs), efType(efType) {
     assert(coeffs.size() == N);
+  }
+
+  static ExtensionFieldOperation
+  fromUnchecked(const APInt &coeff, ExtensionFieldTypeInterface efType) {
+    SmallVector<APInt> coeffs(
+        N, APInt(cast<PrimeFieldType>(efType.getBaseFieldType())
+                     .getStorageBitWidth(),
+                 0));
+    coeffs[0] = coeff;
+    return fromUnchecked(coeffs, efType);
+  }
+
+  static ExtensionFieldOperation
+  fromUnchecked(const SmallVector<APInt> &coeffs,
+                ExtensionFieldTypeInterface efType) {
+    ExtensionFieldOperation ret;
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    for (size_t i = 0; i < N; ++i) {
+      ret.coeffs[i] =
+          PrimeFieldOperation::fromUnchecked(coeffs[i], baseFieldType);
+    }
+    ret.efType = efType;
+    return ret;
   }
 
   const std::array<PrimeFieldOperation, N> &getCoeffs() const { return coeffs; }
