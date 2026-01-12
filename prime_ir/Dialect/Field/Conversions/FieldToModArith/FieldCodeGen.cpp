@@ -87,16 +87,16 @@ FieldCodeGen FieldCodeGen::operator*(const FieldCodeGen &other) const {
                        [](const auto &a, const auto &b) { return a * b; });
 }
 
+FieldCodeGen FieldCodeGen::operator-() const {
+  return applyUnaryOp(codeGen, [](const auto &v) { return -v; });
+}
+
 FieldCodeGen FieldCodeGen::dbl() const {
   return applyUnaryOp(codeGen, [](const auto &v) { return v.Double(); });
 }
 
 FieldCodeGen FieldCodeGen::square() const {
   return applyUnaryOp(codeGen, [](const auto &v) { return v.Square(); });
-}
-
-FieldCodeGen FieldCodeGen::negate() const {
-  return applyUnaryOp(codeGen, [](const auto &v) { return -v; });
 }
 
 FieldCodeGen FieldCodeGen::inverse() const {

@@ -259,7 +259,7 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
-    rewriter.replaceOp(op, {codeGen.negate()});
+    rewriter.replaceOp(op, {-codeGen});
     return success();
   }
 };
