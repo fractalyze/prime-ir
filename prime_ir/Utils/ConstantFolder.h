@@ -16,10 +16,7 @@ limitations under the License.
 #ifndef PRIME_IR_UTILS_CONSTANTFOLDER_H_
 #define PRIME_IR_UTILS_CONSTANTFOLDER_H_
 
-#include <optional>
-
 #include "llvm/ADT/SmallVectorExtras.h"
-#include "mlir/IR/Attributes.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Support/LLVM.h"
 
@@ -47,17 +44,29 @@ public:
       return getScalarAttr(operate(getNativeInput(lhs)));
     }
     OpFoldResult foldTensor(TensorAttr lhs) const {
-      SmallVector<NativeOutputType> values;
-      if (lhs.isSplat()) {
-        values = {operate(lhs.template getSplatValue<NativeInputType>())};
+      if constexpr (std::is_same_v<ScalarAttr, TensorAttr>) {
+        // TODO(chokobole): Temporary workaround for complex types like
+        // Extension Fields. For these types, `lhs` is a `DenseIntElementsAttr`,
+        // which stores basis coefficients as a flattened integer array rather
+        // than native field elements. Calling `getValues<NativeInputType>()`
+        // would fail to reconstruct the field elements correctly.
+        //
+        // A robust solution for folding tensor constants of extension fields
+        // needs to be implemented.
+        return {};
       } else {
-        values = llvm::map_to_vector(
-            lhs.template getValues<NativeInputType>(),
-            [this](const NativeInputType &value) -> NativeOutputType {
-              return operate(value);
-            });
+        SmallVector<NativeOutputType> values;
+        if (lhs.isSplat()) {
+          values = {operate(lhs.template getSplatValue<NativeInputType>())};
+        } else {
+          values = llvm::map_to_vector(
+              lhs.template getValues<NativeInputType>(),
+              [this](const NativeInputType &value) -> NativeOutputType {
+                return operate(value);
+              });
+        }
+        return getTensorAttr(lhs.getType(), values);
       }
-      return getTensorAttr(lhs.getType(), values);
     }
   };
 
@@ -97,20 +106,32 @@ public:
     }
     virtual OpFoldResult foldScalar(ScalarAttr rhs) const { return {}; }
     OpFoldResult foldTensor(TensorAttr lhs, TensorAttr rhs) const {
-      SmallVector<NativeOutputType> values;
-      if (lhs.isSplat() && rhs.isSplat()) {
-        values = {operate(lhs.template getSplatValue<NativeInputType>(),
-                          rhs.template getSplatValue<NativeInputType>())};
+      if constexpr (std::is_same_v<ScalarAttr, TensorAttr>) {
+        // TODO(chokobole): Temporary workaround for complex types like
+        // Extension Fields. For these types, `lhs` is a `DenseIntElementsAttr`,
+        // which stores basis coefficients as a flattened integer array rather
+        // than native field elements. Calling `getValues<NativeInputType>()`
+        // would fail to reconstruct the field elements correctly.
+        //
+        // A robust solution for folding tensor constants of extension fields
+        // needs to be implemented.
+        return {};
       } else {
-        values = llvm::map_to_vector(
-            llvm::zip(lhs.template getValues<NativeInputType>(),
-                      rhs.template getValues<NativeInputType>()),
-            [this](const auto &values) -> NativeOutputType {
-              const auto &[lhs, rhs] = values;
-              return operate(lhs, rhs);
-            });
+        SmallVector<NativeOutputType> values;
+        if (lhs.isSplat() && rhs.isSplat()) {
+          values = {operate(lhs.template getSplatValue<NativeInputType>(),
+                            rhs.template getSplatValue<NativeInputType>())};
+        } else {
+          values = llvm::map_to_vector(
+              llvm::zip(lhs.template getValues<NativeInputType>(),
+                        rhs.template getValues<NativeInputType>()),
+              [this](const auto &values) -> NativeOutputType {
+                const auto &[lhs, rhs] = values;
+                return operate(lhs, rhs);
+              });
+        }
+        return getTensorAttr(lhs.getType(), values);
       }
-      return getTensorAttr(lhs.getType(), values);
     }
     virtual OpFoldResult foldTensor(TensorAttr rhs) const { return {}; }
   };
@@ -159,21 +180,33 @@ public:
   }
 
   OpFoldResult foldTensor(TensorAttr rhs) const override {
-    if (rhs.isSplat()) {
-      if (isZero(rhs.template getSplatValue<NativeInputType>())) {
-        // x ± 0 -> x
-        return getLhs();
-      }
+    if constexpr (std::is_same_v<ScalarAttr, TensorAttr>) {
+      // TODO(chokobole): Temporary workaround for complex types like
+      // Extension Fields. For these types, `lhs` is a `DenseIntElementsAttr`,
+      // which stores basis coefficients as a flattened integer array rather
+      // than native field elements. Calling `getValues<NativeInputType>()`
+      // would fail to reconstruct the field elements correctly.
+      //
+      // A robust solution for folding tensor constants of extension fields
+      // needs to be implemented.
+      return {};
     } else {
-      auto rhsValues = rhs.template getValues<NativeInputType>();
-      if (llvm::all_of(rhsValues, [this](const NativeInputType &value) {
-            return isZero(value);
-          })) {
-        // x ± 0 -> x
-        return getLhs();
+      if (rhs.isSplat()) {
+        if (isZero(rhs.template getSplatValue<NativeInputType>())) {
+          // x ± 0 -> x
+          return getLhs();
+        }
+      } else {
+        auto rhsValues = rhs.template getValues<NativeInputType>();
+        if (llvm::all_of(rhsValues, [this](const NativeInputType &value) {
+              return isZero(value);
+            })) {
+          // x ± 0 -> x
+          return getLhs();
+        }
       }
+      return {};
     }
-    return {};
   }
 };
 
@@ -206,102 +239,43 @@ public:
   }
 
   OpFoldResult foldTensor(TensorAttr rhs) const override {
-    if (rhs.isSplat()) {
-      auto rhsValue = rhs.template getSplatValue<NativeInputType>();
-      if (isZero(rhsValue)) {
-        // x * 0 -> 0
-        return rhs;
-      } else if (isOne(rhsValue)) {
-        // x * 1 -> x
-        return getLhs();
-      }
+    if constexpr (std::is_same_v<ScalarAttr, TensorAttr>) {
+      // TODO(chokobole): Temporary workaround for complex types like
+      // Extension Fields. For these types, `lhs` is a `DenseIntElementsAttr`,
+      // which stores basis coefficients as a flattened integer array rather
+      // than native field elements. Calling `getValues<NativeInputType>()`
+      // would fail to reconstruct the field elements correctly.
+      //
+      // A robust solution for folding tensor constants of extension fields
+      // needs to be implemented.
+      return {};
     } else {
-      auto rhsValues = rhs.template getValues<NativeInputType>();
-      if (llvm::all_of(rhsValues, [this](const NativeInputType &value) {
-            return isZero(value);
-          })) {
-        // x * 0 -> 0
-        return rhs;
-      } else if (llvm::all_of(rhsValues, [this](const NativeInputType &value) {
-                   return isOne(value);
-                 })) {
-        // x * 1 -> x
-        return getLhs();
+      if (rhs.isSplat()) {
+        auto rhsValue = rhs.template getSplatValue<NativeInputType>();
+        if (isZero(rhsValue)) {
+          // x * 0 -> 0
+          return rhs;
+        } else if (isOne(rhsValue)) {
+          // x * 1 -> x
+          return getLhs();
+        }
+      } else {
+        auto rhsValues = rhs.template getValues<NativeInputType>();
+        if (llvm::all_of(rhsValues, [this](const NativeInputType &value) {
+              return isZero(value);
+            })) {
+          // x * 0 -> 0
+          return rhs;
+        } else if (llvm::all_of(rhsValues,
+                                [this](const NativeInputType &value) {
+                                  return isOne(value);
+                                })) {
+          // x * 1 -> x
+          return getLhs();
+        }
       }
+      return {};
     }
-    return {};
-  }
-};
-
-// TODO(junbeomlee): Unify with UnaryConstantFolder and BinaryConstantFolder
-// after deciding how to handle Inverse(0).
-// See https://github.com/fractalyze/prime-ir/issues/177
-// Extension field constant folder for unary operations.
-template <typename Config>
-class ExtensionFieldUnaryConstantFolder {
-public:
-  using NativeInputType = typename Config::NativeInputType;
-  using NativeOutputType = typename Config::NativeOutputType;
-  using ScalarAttr = typename Config::ScalarAttr;
-
-  class Delegate {
-  public:
-    virtual ~Delegate() = default;
-
-    virtual NativeInputType getNativeInput(ScalarAttr attr) const = 0;
-    virtual std::optional<NativeOutputType>
-    operate(const NativeInputType &coeffs) const = 0;
-    virtual OpFoldResult
-    getScalarAttr(const NativeOutputType &coeffs) const = 0;
-
-    OpFoldResult foldScalar(ScalarAttr input) const {
-      auto result = operate(getNativeInput(input));
-      if (!result)
-        return {};
-      return getScalarAttr(*result);
-    }
-  };
-
-  template <typename FoldAdaptor, typename DelegateT>
-  static OpFoldResult fold(FoldAdaptor adaptor, DelegateT *delegate) {
-    if (auto inputAttr = dyn_cast_if_present<ScalarAttr>(adaptor.getInput())) {
-      return delegate->foldScalar(inputAttr);
-    }
-    return {};
-  }
-};
-
-// Extension field constant folder for binary operations.
-template <typename Config>
-class ExtensionFieldBinaryConstantFolder {
-public:
-  using NativeInputType = typename Config::NativeInputType;
-  using NativeOutputType = typename Config::NativeOutputType;
-  using ScalarAttr = typename Config::ScalarAttr;
-
-  class Delegate {
-  public:
-    virtual ~Delegate() = default;
-
-    virtual NativeInputType getNativeInput(ScalarAttr attr) const = 0;
-    virtual NativeOutputType operate(const NativeInputType &lhs,
-                                     const NativeInputType &rhs) const = 0;
-    virtual OpFoldResult
-    getScalarAttr(const NativeOutputType &coeffs) const = 0;
-
-    OpFoldResult foldScalar(ScalarAttr lhs, ScalarAttr rhs) const {
-      return getScalarAttr(operate(getNativeInput(lhs), getNativeInput(rhs)));
-    }
-  };
-
-  template <typename FoldAdaptor, typename DelegateT>
-  static OpFoldResult fold(FoldAdaptor adaptor, DelegateT *delegate) {
-    auto lhsAttr = dyn_cast_if_present<ScalarAttr>(adaptor.getLhs());
-    auto rhsAttr = dyn_cast_if_present<ScalarAttr>(adaptor.getRhs());
-    if (lhsAttr && rhsAttr) {
-      return delegate->foldScalar(lhsAttr, rhsAttr);
-    }
-    return {};
   }
 };
 

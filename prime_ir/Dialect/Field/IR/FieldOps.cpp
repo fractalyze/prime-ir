@@ -288,11 +288,11 @@ LogicalResult ExtFromCoeffsOp::verify() {
                        << outputType;
 }
 
-//===----------------------------------------------------------------------===//
-// Prime Field Constant Folding
-//===----------------------------------------------------------------------===//
-
 namespace {
+
+//===----------------------------------------------------------------------===//
+// Mixins & Configs
+//===----------------------------------------------------------------------===//
 
 struct PrimeFieldConstantFolderConfig {
   using NativeInputType = APInt;
@@ -301,86 +301,40 @@ struct PrimeFieldConstantFolderConfig {
   using TensorAttr = DenseIntElementsAttr;
 };
 
-class UnaryPrimeFieldConstantFolder
-    : public UnaryConstantFolder<PrimeFieldConstantFolderConfig>::Delegate {
-public:
-  explicit UnaryPrimeFieldConstantFolder(Type type)
-      : primeFieldType(cast<PrimeFieldType>(getElementTypeOrSelf(type))) {}
-
-  APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
-
-  OpFoldResult getScalarAttr(const APInt &value) const final {
-    return IntegerAttr::get(primeFieldType.getStorageType(), value);
-  }
-
-  OpFoldResult getTensorAttr(ShapedType type,
-                             ArrayRef<APInt> values) const final {
-    return DenseIntElementsAttr::get(
-        type.clone(primeFieldType.getStorageType()), values);
-  }
-
-protected:
-  PrimeFieldType primeFieldType;
-};
-
-class PrimeFieldNegateConstantFolder : public UnaryPrimeFieldConstantFolder {
-public:
-  using UnaryPrimeFieldConstantFolder::UnaryPrimeFieldConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return -PrimeFieldOperation::fromUnchecked(value, primeFieldType);
-  }
-};
-
-class PrimeFieldDoubleConstantFolder : public UnaryPrimeFieldConstantFolder {
-public:
-  using UnaryPrimeFieldConstantFolder::UnaryPrimeFieldConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return PrimeFieldOperation::fromUnchecked(value, primeFieldType).dbl();
-  }
-};
-
-class PrimeFieldSquareConstantFolder : public UnaryPrimeFieldConstantFolder {
-public:
-  using UnaryPrimeFieldConstantFolder::UnaryPrimeFieldConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return PrimeFieldOperation::fromUnchecked(value, primeFieldType).square();
-  }
-};
-
-class PrimeFieldInverseConstantFolder : public UnaryPrimeFieldConstantFolder {
-public:
-  using UnaryPrimeFieldConstantFolder::UnaryPrimeFieldConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return PrimeFieldOperation::fromUnchecked(value, primeFieldType).inverse();
-  }
-};
-
-} // namespace
-
-//===----------------------------------------------------------------------===//
-// Extension Field Constant Folding
-//===----------------------------------------------------------------------===//
-
-namespace {
-
-// Config for extension field constant folder.
 struct ExtensionFieldConstantFolderConfig {
   using NativeInputType = SmallVector<APInt>;
   using NativeOutputType = SmallVector<APInt>;
   using ScalarAttr = DenseIntElementsAttr;
+  using TensorAttr = DenseIntElementsAttr;
 };
 
-// Base delegate for extension field unary operations.
-class UnaryExtFieldConstantFolder
-    : public ExtensionFieldUnaryConstantFolder<
-          ExtensionFieldConstantFolderConfig>::Delegate {
+template <typename BaseDelegate>
+class PrimeFieldFolderMixin : public BaseDelegate {
 public:
-  explicit UnaryExtFieldConstantFolder(Type type)
-      : extFieldType(cast<ExtensionFieldTypeInterface>(type)) {}
+  explicit PrimeFieldFolderMixin(Type type)
+      : pfType(cast<PrimeFieldType>(getElementTypeOrSelf(type))) {}
+
+  APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
+
+  OpFoldResult getScalarAttr(const APInt &value) const final {
+    return IntegerAttr::get(pfType.getStorageType(), value);
+  }
+
+  OpFoldResult getTensorAttr(ShapedType type,
+                             ArrayRef<APInt> values) const final {
+    return DenseIntElementsAttr::get(type.clone(pfType.getStorageType()),
+                                     values);
+  }
+
+protected:
+  PrimeFieldType pfType;
+};
+
+template <typename BaseDelegate>
+class ExtensionFieldFolderMixin : public BaseDelegate {
+public:
+  explicit ExtensionFieldFolderMixin(Type type)
+      : efType(cast<ExtensionFieldTypeInterface>(getElementTypeOrSelf(type))) {}
 
   SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
     auto values = attr.getValues<APInt>();
@@ -389,220 +343,275 @@ public:
 
   OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
     PrimeFieldType baseFieldType =
-        cast<PrimeFieldType>(extFieldType.getBaseFieldType());
+        cast<PrimeFieldType>(efType.getBaseFieldType());
     auto tensorType = RankedTensorType::get(
         {static_cast<int64_t>(coeffs.size())}, baseFieldType.getStorageType());
     return DenseIntElementsAttr::get(tensorType, coeffs);
   }
 
-protected:
-  ExtensionFieldTypeInterface extFieldType;
-};
-
-// Negate: -[a₀, a₁, ...] = [-a₀, -a₁, ...]
-template <size_t N>
-class NegateConstantFolder : public UnaryExtFieldConstantFolder {
-public:
-  using UnaryExtFieldConstantFolder::UnaryExtFieldConstantFolder;
-
-  std::optional<SmallVector<APInt>>
-  operate(const SmallVector<APInt> &coeffs) const final {
-    return -ExtensionFieldOperation<N>(coeffs, extFieldType);
-  }
-};
-
-// Double: uses zk_dtypes for extension field doubling.
-template <size_t N>
-class DoubleConstantFolder : public UnaryExtFieldConstantFolder {
-public:
-  using UnaryExtFieldConstantFolder::UnaryExtFieldConstantFolder;
-
-  std::optional<SmallVector<APInt>>
-  operate(const SmallVector<APInt> &coeffs) const final {
-    return ExtensionFieldOperation<N>(coeffs, extFieldType).Double();
-  }
-};
-
-// Square: uses zk_dtypes for proper extension field squaring algorithm.
-template <size_t N>
-class SquareConstantFolder : public UnaryExtFieldConstantFolder {
-public:
-  using UnaryExtFieldConstantFolder::UnaryExtFieldConstantFolder;
-
-  std::optional<SmallVector<APInt>>
-  operate(const SmallVector<APInt> &coeffs) const final {
-    return ExtensionFieldOperation<N>(coeffs, extFieldType).Square();
-  }
-};
-
-// Inverse: uses zk_dtypes for Frobenius-based inversion.
-template <size_t N>
-class InverseConstantFolder : public UnaryExtFieldConstantFolder {
-public:
-  using UnaryExtFieldConstantFolder::UnaryExtFieldConstantFolder;
-
-  std::optional<SmallVector<APInt>>
-  operate(const SmallVector<APInt> &coeffs) const final {
-    return ExtensionFieldOperation<N>(coeffs, extFieldType).Inverse();
-  }
-};
-
-// Base delegate for extension field binary operations.
-class BinaryExtFieldConstantFolder
-    : public ExtensionFieldBinaryConstantFolder<
-          ExtensionFieldConstantFolderConfig>::Delegate {
-public:
-  explicit BinaryExtFieldConstantFolder(Type type)
-      : extFieldType(cast<ExtensionFieldTypeInterface>(type)),
-        baseFieldType(cast<PrimeFieldType>(extFieldType.getBaseFieldType())) {}
-
-  SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
-    auto values = attr.getValues<APInt>();
-    return {values.begin(), values.end()};
-  }
-
-  OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
-    auto tensorType = RankedTensorType::get(
-        {static_cast<int64_t>(coeffs.size())}, baseFieldType.getStorageType());
-    return DenseIntElementsAttr::get(tensorType, coeffs);
+  OpFoldResult getTensorAttr(ShapedType type,
+                             ArrayRef<SmallVector<APInt>> values) const final {
+    llvm_unreachable("not implemented");
   }
 
 protected:
-  ExtensionFieldTypeInterface extFieldType;
-  PrimeFieldType baseFieldType;
+  ExtensionFieldTypeInterface efType;
 };
 
-// Add: [a₀, a₁, ...] + [b₀, b₁, ...] = [a₀ + b₀, a₁ + b₁, ...]
-template <size_t N>
-class ExtFieldAddConstantFolder : public BinaryExtFieldConstantFolder {
+//===----------------------------------------------------------------------===//
+// Generic Folders (Prime & Extension Unified Logic)
+//===----------------------------------------------------------------------===//
+
+template <typename Func>
+class GenericUnaryPrimeFieldFolder
+    : public PrimeFieldFolderMixin<
+          UnaryConstantFolder<PrimeFieldConstantFolderConfig>::Delegate> {
 public:
-  using BinaryExtFieldConstantFolder::BinaryExtFieldConstantFolder;
+  GenericUnaryPrimeFieldFolder(Type type, Func fn)
+      : PrimeFieldFolderMixin(type), fn(fn) {}
 
-  SmallVector<APInt> operate(const SmallVector<APInt> &lhs,
-                             const SmallVector<APInt> &rhs) const final {
-    return ExtensionFieldOperation<N>(lhs, extFieldType) +
-           ExtensionFieldOperation<N>(rhs, extFieldType);
+  APInt operate(const APInt &value) const final {
+    return static_cast<APInt>(
+        fn(FieldOperation::fromUnchecked(value, this->pfType)));
   }
+
+private:
+  Func fn;
 };
 
-// Sub: [a₀, a₁, ...] - [b₀, b₁, ...] = [a₀ - b₀, a₁ - b₁, ...]
-template <size_t N>
-class ExtFieldSubConstantFolder : public BinaryExtFieldConstantFolder {
+template <typename Func>
+class GenericUnaryExtFieldFolder
+    : public ExtensionFieldFolderMixin<
+          UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::Delegate> {
 public:
-  using BinaryExtFieldConstantFolder::BinaryExtFieldConstantFolder;
+  GenericUnaryExtFieldFolder(Type type, Func fn)
+      : ExtensionFieldFolderMixin(type), fn(fn) {}
 
-  SmallVector<APInt> operate(const SmallVector<APInt> &lhs,
-                             const SmallVector<APInt> &rhs) const final {
-    return ExtensionFieldOperation<N>(lhs, extFieldType) -
-           ExtensionFieldOperation<N>(rhs, extFieldType);
+  SmallVector<APInt> operate(const SmallVector<APInt> &coeffs) const final {
+    return static_cast<SmallVector<APInt>>(
+        fn(FieldOperation::fromUnchecked(coeffs, this->efType)));
   }
+
+private:
+  Func fn;
 };
 
-// Mul: uses zk_dtypes for proper extension field multiplication algorithm.
-template <size_t N>
-class ExtFieldMulConstantFolder : public BinaryExtFieldConstantFolder {
+template <typename BaseDelegate, typename Op, typename Func>
+class GenericBinaryPrimeFieldConstantFolder
+    : public PrimeFieldFolderMixin<BaseDelegate> {
 public:
-  using BinaryExtFieldConstantFolder::BinaryExtFieldConstantFolder;
+  GenericBinaryPrimeFieldConstantFolder(Op *op, Func fn)
+      : PrimeFieldFolderMixin<BaseDelegate>(op->getType()), op(op), fn(fn) {}
 
-  SmallVector<APInt> operate(const SmallVector<APInt> &lhs,
-                             const SmallVector<APInt> &rhs) const final {
-    return ExtensionFieldOperation<N>(lhs, extFieldType) *
-           ExtensionFieldOperation<N>(rhs, extFieldType);
+  OpFoldResult getLhs() const final { return op->getLhs(); }
+
+  APInt operate(const APInt &a, const APInt &b) const final {
+    return static_cast<APInt>(
+        fn(FieldOperation::fromUnchecked(a, this->pfType),
+           FieldOperation::fromUnchecked(b, this->pfType)));
+  }
+
+protected:
+  Op *const op;
+  Func fn;
+};
+
+template <typename BaseDelegate, typename Op, typename Func>
+class GenericBinaryExtFieldConstantFolder
+    : public ExtensionFieldFolderMixin<BaseDelegate> {
+public:
+  GenericBinaryExtFieldConstantFolder(Op *op, Func fn)
+      : ExtensionFieldFolderMixin<BaseDelegate>(op->getType()), op(op), fn(fn) {
+  }
+
+  OpFoldResult getLhs() const final { return op->getLhs(); }
+
+  SmallVector<APInt> operate(const SmallVector<APInt> &a,
+                             const SmallVector<APInt> &b) const final {
+    return static_cast<SmallVector<APInt>>(
+        fn(FieldOperation::fromUnchecked(a, this->efType),
+           FieldOperation::fromUnchecked(b, this->efType)));
+  }
+
+protected:
+  Op *const op;
+  Func fn;
+};
+
+//===----------------------------------------------------------------------===//
+// Specific Implementations (Additive / Multiplicative)
+//===----------------------------------------------------------------------===//
+
+template <typename Op, typename Func>
+class PrimeAdditiveFolder
+    : public GenericBinaryPrimeFieldConstantFolder<
+          AdditiveConstantFolderDelegate<PrimeFieldConstantFolderConfig>, Op,
+          Func> {
+public:
+  using GenericBinaryPrimeFieldConstantFolder<
+      AdditiveConstantFolderDelegate<PrimeFieldConstantFolderConfig>, Op,
+      Func>::GenericBinaryPrimeFieldConstantFolder;
+
+  bool isZero(const APInt &value) const final { return value.isZero(); }
+};
+
+template <typename Op, typename Func>
+class PrimeMultiplicativeFolder
+    : public GenericBinaryPrimeFieldConstantFolder<
+          MultiplicativeConstantFolderDelegate<PrimeFieldConstantFolderConfig>,
+          Op, Func> {
+public:
+  PrimeMultiplicativeFolder(Op *op, Func fn)
+      : GenericBinaryPrimeFieldConstantFolder<
+            MultiplicativeConstantFolderDelegate<
+                PrimeFieldConstantFolderConfig>,
+            Op, Func>(op, fn) {
+    one = FieldOperation(uint64_t{1}, this->pfType);
+  }
+  bool isZero(const APInt &value) const final { return value.isZero(); }
+  bool isOne(const APInt &value) const final { return value == one; }
+
+private:
+  APInt one;
+};
+
+template <typename Op, typename Func>
+class ExtAdditiveFolder
+    : public GenericBinaryExtFieldConstantFolder<
+          AdditiveConstantFolderDelegate<ExtensionFieldConstantFolderConfig>,
+          Op, Func> {
+public:
+  using GenericBinaryExtFieldConstantFolder<
+      AdditiveConstantFolderDelegate<ExtensionFieldConstantFolderConfig>, Op,
+      Func>::GenericBinaryExtFieldConstantFolder;
+
+  bool isZero(const SmallVector<APInt> &value) const final {
+    return llvm::all_of(value, [](const APInt &v) { return v.isZero(); });
   }
 };
 
-// Helper to dispatch extension field folding by degree using fold expression.
-// Eliminates repetitive if-else chains for degree 2, 3, 4.
-template <template <typename> class ConstantFolderT,
-          template <size_t> class FolderT, size_t N, typename Adaptor>
-void tryFoldOne(Type type, size_t degree, Adaptor adaptor,
-                OpFoldResult &result) {
-  if (!result && degree == N) {
-    FolderT<N> folder(type);
-    result = ConstantFolderT<ExtensionFieldConstantFolderConfig>::fold(adaptor,
-                                                                       &folder);
+template <typename Op, typename Func>
+class ExtMultiplicativeFolder : public GenericBinaryExtFieldConstantFolder<
+                                    MultiplicativeConstantFolderDelegate<
+                                        ExtensionFieldConstantFolderConfig>,
+                                    Op, Func> {
+public:
+  ExtMultiplicativeFolder(Op *op, Func fn)
+      : GenericBinaryExtFieldConstantFolder<
+            MultiplicativeConstantFolderDelegate<
+                ExtensionFieldConstantFolderConfig>,
+            Op, Func>(op, fn) {
+    one = static_cast<SmallVector<APInt>>(
+        FieldOperation(uint64_t{1}, this->efType));
   }
+
+  bool isZero(const SmallVector<APInt> &value) const final {
+    return llvm::all_of(value, [](const APInt &v) { return v.isZero(); });
+  }
+  bool isOne(const SmallVector<APInt> &value) const final {
+    return value == one;
+  }
+
+private:
+  SmallVector<APInt> one;
+};
+
+//===----------------------------------------------------------------------===//
+// Helper Functions
+//===----------------------------------------------------------------------===//
+
+template <typename Op, typename Func>
+OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
+  Type type = op->getType();
+  Type elemType = getElementTypeOrSelf(type);
+
+  if (isa<PrimeFieldType>(elemType)) {
+    GenericUnaryPrimeFieldFolder<Func> folder(type, fn);
+    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
+                                                                     &folder);
+  }
+  if (isa<ExtensionFieldTypeInterface>(elemType)) {
+    GenericUnaryExtFieldFolder<Func> folder(type, fn);
+    return UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+        adaptor, &folder);
+  }
+  return {};
 }
 
-template <template <typename> class ConstantFolderT,
-          template <size_t> class FolderT, typename Adaptor, size_t... Ns>
-OpFoldResult foldExtFieldImpl(Type type, size_t degree, Adaptor adaptor,
-                              std::index_sequence<Ns...>) {
-  OpFoldResult result;
-  (tryFoldOne<ConstantFolderT, FolderT, Ns + kMinExtDegree>(type, degree,
-                                                            adaptor, result),
-   ...);
-  return result;
+template <typename Op, typename Func>
+OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
+                                  Func fn) {
+  Type elemType = getElementTypeOrSelf(op->getType());
+
+  if (isa<PrimeFieldType>(elemType)) {
+    PrimeAdditiveFolder<Op, Func> folder(op, fn);
+    return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
+                                                                      &folder);
+  }
+  if (isa<ExtensionFieldTypeInterface>(elemType)) {
+    ExtAdditiveFolder<Op, Func> folder(op, fn);
+    return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+        adaptor, &folder);
+  }
+  return {};
 }
 
-template <template <size_t> class FolderT, typename Adaptor>
-OpFoldResult foldExtField(Type type, Adaptor adaptor) {
-  auto extFieldType = dyn_cast<ExtensionFieldTypeInterface>(type);
-  if (!extFieldType)
-    return {};
-  return foldExtFieldImpl<ExtensionFieldUnaryConstantFolder, FolderT>(
-      type, extFieldType.getDegreeOverBase(), adaptor,
-      std::make_index_sequence<kNumExtDegrees>{});
-}
+template <typename Op, typename Func>
+OpFoldResult
+foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
+  Type elemType = getElementTypeOrSelf(op->getType());
 
-template <template <size_t> class FolderT, typename Adaptor>
-OpFoldResult foldExtFieldBinary(Type type, Adaptor adaptor) {
-  auto extFieldType = dyn_cast<ExtensionFieldTypeInterface>(type);
-  if (!extFieldType)
-    return {};
-  return foldExtFieldImpl<ExtensionFieldBinaryConstantFolder, FolderT>(
-      type, extFieldType.getDegreeOverBase(), adaptor,
-      std::make_index_sequence<kNumExtDegrees>{});
+  if (isa<PrimeFieldType>(elemType)) {
+    PrimeMultiplicativeFolder<Op, Func> folder(op, fn);
+    return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
+                                                                      &folder);
+  }
+  if (isa<ExtensionFieldTypeInterface>(elemType)) {
+    ExtMultiplicativeFolder<Op, Func> folder(op, fn);
+    return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+        adaptor, &folder);
+  }
+  return {};
 }
 
 } // namespace
 
 OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
-  if (isa<PrimeFieldType>(getElementTypeOrSelf(getType()))) {
-    PrimeFieldNegateConstantFolder folder(getType());
-    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                     &folder);
-  }
-  return foldExtField<NegateConstantFolder>(getType(), adaptor);
+  return foldUnaryOp(this, adaptor,
+                     [](const FieldOperation &op) { return -op; });
 }
 
 OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
-  if (isa<PrimeFieldType>(getElementTypeOrSelf(getType()))) {
-    PrimeFieldDoubleConstantFolder folder(getType());
-    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                     &folder);
-  }
-  return foldExtField<DoubleConstantFolder>(getType(), adaptor);
+  return foldUnaryOp(this, adaptor,
+                     [](const FieldOperation &op) { return op.dbl(); });
 }
 
 OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
-  if (isa<PrimeFieldType>(getElementTypeOrSelf(getType()))) {
-    PrimeFieldSquareConstantFolder folder(getType());
-    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                     &folder);
-  }
-  return foldExtField<SquareConstantFolder>(getType(), adaptor);
+  return foldUnaryOp(this, adaptor,
+                     [](const FieldOperation &op) { return op.square(); });
 }
 
 OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
-  if (isa<PrimeFieldType>(getElementTypeOrSelf(getType()))) {
-    PrimeFieldInverseConstantFolder folder(getType());
-    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                     &folder);
-  }
-  return foldExtField<InverseConstantFolder>(getType(), adaptor);
+  return foldUnaryOp(this, adaptor,
+                     [](const FieldOperation &op) { return op.inverse(); });
 }
 
 OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
-  return foldExtFieldBinary<ExtFieldAddConstantFolder>(getType(), adaptor);
+  return foldAdditiveBinaryOp(
+      this, adaptor,
+      [](const FieldOperation &a, const FieldOperation &b) { return a + b; });
 }
 
 OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
-  return foldExtFieldBinary<ExtFieldSubConstantFolder>(getType(), adaptor);
+  return foldAdditiveBinaryOp(
+      this, adaptor,
+      [](const FieldOperation &a, const FieldOperation &b) { return a - b; });
 }
 
 OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
-  return foldExtFieldBinary<ExtFieldMulConstantFolder>(getType(), adaptor);
+  return foldMultiplicativeBinaryOp(
+      this, adaptor,
+      [](const FieldOperation &a, const FieldOperation &b) { return a * b; });
 }
 
 //===----------------------------------------------------------------------===//
