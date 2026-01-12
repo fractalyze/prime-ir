@@ -38,12 +38,11 @@ struct ConstantFolderConfig {
   using TensorAttr = DenseIntElementsAttr;
 };
 
-class UnaryModArithConstantFolder
-    : public UnaryConstantFolder<ConstantFolderConfig>::Delegate {
+template <typename BaseDelegate>
+class ModArithFolderMixin : public BaseDelegate {
 public:
-  explicit UnaryModArithConstantFolder(Type type)
-      : modArithType(cast<ModArithType>(getElementTypeOrSelf(type))),
-        modulus(modArithType.getModulus().getValue()) {}
+  explicit ModArithFolderMixin(Type type)
+      : modArithType(cast<ModArithType>(getElementTypeOrSelf(type))) {}
 
   APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
 
@@ -57,67 +56,106 @@ public:
                                      values);
   }
 
+protected:
   ModArithType modArithType;
-  APInt modulus;
 };
 
-class AdditiveModArithConstantFolder
-    : public AdditiveConstantFolderDelegate<ConstantFolderConfig> {
+template <typename Func>
+class GenericUnaryModArithConstantFolder
+    : public ModArithFolderMixin<
+          UnaryConstantFolder<ConstantFolderConfig>::Delegate> {
 public:
-  explicit AdditiveModArithConstantFolder(Type type)
-      : modArithType(cast<ModArithType>(getElementTypeOrSelf(type))),
-        modulus(modArithType.getModulus().getValue()) {}
+  GenericUnaryModArithConstantFolder(Type outputType, Func fn,
+                                     Type inputType = nullptr)
+      : ModArithFolderMixin(outputType), fn(fn) {
+    if (inputType)
+      this->inputType = cast<ModArithType>(getElementTypeOrSelf(inputType));
+    else
+      this->inputType = this->modArithType;
+  }
+
+  APInt operate(const APInt &value) const final {
+    return static_cast<APInt>(
+        fn(ModArithOperation::fromUnchecked(value, inputType)));
+  }
+
+private:
+  Func fn;
+  ModArithType inputType;
+};
+
+template <typename Op, typename Func>
+OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn,
+                         Type inputType = nullptr) {
+  GenericUnaryModArithConstantFolder<Func> folder(op->getType(), fn, inputType);
+  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+}
+
+template <typename BaseDelegate, typename Op, typename Func>
+class GenericBinaryModArithConstantFolder
+    : public ModArithFolderMixin<BaseDelegate> {
+public:
+  GenericBinaryModArithConstantFolder(Op *op, Func fn)
+      : ModArithFolderMixin<BaseDelegate>(op->getType()), op(op), fn(fn) {}
+
+  OpFoldResult getLhs() const final { return op->getLhs(); }
+
+  APInt operate(const APInt &a, const APInt &b) const final {
+    return static_cast<APInt>(
+        fn(ModArithOperation::fromUnchecked(a, this->modArithType),
+           ModArithOperation::fromUnchecked(b, this->modArithType)));
+  }
+
+protected:
+  Op *const op;
+  Func fn;
+};
+
+template <typename Op, typename Func>
+class GenericAdditiveModArithConstantFolder
+    : public GenericBinaryModArithConstantFolder<
+          AdditiveConstantFolderDelegate<ConstantFolderConfig>, Op, Func> {
+public:
+  using GenericBinaryModArithConstantFolder<
+      AdditiveConstantFolderDelegate<ConstantFolderConfig>, Op,
+      Func>::GenericBinaryModArithConstantFolder;
 
   bool isZero(const APInt &value) const final { return value.isZero(); }
-
-  APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
-
-  OpFoldResult getScalarAttr(const APInt &value) const final {
-    return IntegerAttr::get(modArithType.getStorageType(), value);
-  }
-
-  OpFoldResult getTensorAttr(ShapedType type,
-                             ArrayRef<APInt> values) const final {
-    return DenseIntElementsAttr::get(type.clone(modArithType.getStorageType()),
-                                     values);
-  }
-
-  ModArithType modArithType;
-  APInt modulus;
 };
 
-class MultiplicativeModArithConstantFolder
-    : public MultiplicativeConstantFolderDelegate<ConstantFolderConfig> {
+template <typename Op, typename Func>
+class GenericMultiplicativeModArithConstantFolder
+    : public GenericBinaryModArithConstantFolder<
+          MultiplicativeConstantFolderDelegate<ConstantFolderConfig>, Op,
+          Func> {
 public:
-  explicit MultiplicativeModArithConstantFolder(Type type)
-      : modArithType(cast<ModArithType>(getElementTypeOrSelf(type))),
-        montAttr(modArithType.getMontgomeryAttr()),
-        modulus(modArithType.getModulus().getValue()) {
-    auto oneStd = APInt(modulus.getBitWidth(), 1);
-    auto oneMont = montAttr.getR().getValue();
-    one = modArithType.isMontgomery() ? oneMont : oneStd;
+  GenericMultiplicativeModArithConstantFolder(Op *op, Func fn)
+      : GenericBinaryModArithConstantFolder<
+            MultiplicativeConstantFolderDelegate<ConstantFolderConfig>, Op,
+            Func>(op, fn) {
+    one = ModArithOperation(uint64_t{1}, this->modArithType);
   }
 
   bool isZero(const APInt &value) const final { return value.isZero(); }
   bool isOne(const APInt &value) const final { return value == one; }
 
-  APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
-
-  OpFoldResult getScalarAttr(const APInt &value) const final {
-    return IntegerAttr::get(modArithType.getStorageType(), value);
-  }
-
-  OpFoldResult getTensorAttr(ShapedType type,
-                             ArrayRef<APInt> values) const final {
-    return DenseIntElementsAttr::get(type.clone(modArithType.getStorageType()),
-                                     values);
-  }
-
-  ModArithType modArithType;
-  MontgomeryAttr montAttr;
-  APInt modulus;
+private:
   APInt one;
 };
+
+template <typename Op, typename Func>
+OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
+                                  Func fn) {
+  GenericAdditiveModArithConstantFolder<Op, Func> folder(op, fn);
+  return BinaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+}
+
+template <typename Op, typename Func>
+OpFoldResult
+foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
+  GenericMultiplicativeModArithConstantFolder<Op, Func> folder(op, fn);
+  return BinaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+}
 
 Type convertFormType(Type type, bool toMontgomery) {
   Type elementType = getElementTypeOrSelf(type);
@@ -221,44 +259,18 @@ OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
   return {};
 }
 
-namespace {
-
-class ToMontConstantFolder : public UnaryModArithConstantFolder {
-public:
-  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    auto stdType = cast<ModArithType>(
-        getElementTypeOrSelf(getStandardFormType(modArithType)));
-    return ModArithOperation::fromUnchecked(value, stdType).toMont();
-  }
-};
-
-} // namespace
-
 OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
-  ToMontConstantFolder folder(getType());
-  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  auto stdType = getStandardFormType(getType());
+  return foldUnaryOp(
+      this, adaptor, [](const ModArithOperation &op) { return op.toMont(); },
+      stdType);
 }
 
-namespace {
-
-class FromMontConstantFolder : public UnaryModArithConstantFolder {
-public:
-  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    auto montType = cast<ModArithType>(
-        getElementTypeOrSelf(getMontgomeryFormType(modArithType)));
-    return ModArithOperation::fromUnchecked(value, montType).fromMont();
-  }
-};
-
-} // namespace
-
 OpFoldResult FromMontOp::fold(FoldAdaptor adaptor) {
-  FromMontConstantFolder folder(getType());
-  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  auto montType = getMontgomeryFormType(getType());
+  return foldUnaryOp(
+      this, adaptor, [](const ModArithOperation &op) { return op.fromMont(); },
+      montType);
 }
 
 namespace {
@@ -325,212 +337,54 @@ OpFoldResult CmpOp::fold(FoldAdaptor adaptor) {
   return BinaryConstantFolder<CmpConstantFolderConfig>::fold(adaptor, &folder);
 }
 
-namespace {
-
-class NegateConstantFolder : public UnaryModArithConstantFolder {
-public:
-  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return -ModArithOperation::fromUnchecked(value, modArithType);
-  }
-};
-
-} // namespace
-
 OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
-  NegateConstantFolder folder(getType());
-  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldUnaryOp(this, adaptor,
+                     [](const ModArithOperation &op) { return -op; });
 }
-
-namespace {
-
-class DoubleConstantFolder : public UnaryModArithConstantFolder {
-public:
-  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return ModArithOperation::fromUnchecked(value, modArithType).dbl();
-  }
-};
-
-} // namespace
 
 OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
-  DoubleConstantFolder folder(getType());
-  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldUnaryOp(this, adaptor,
+                     [](const ModArithOperation &op) { return op.dbl(); });
 }
-
-namespace {
-
-class SquareConstantFolder : public UnaryModArithConstantFolder {
-public:
-  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return ModArithOperation::fromUnchecked(value, modArithType).square();
-  }
-};
-
-} // namespace
 
 OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
-  SquareConstantFolder folder(getType());
-  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldUnaryOp(this, adaptor,
+                     [](const ModArithOperation &op) { return op.square(); });
 }
-
-namespace {
-
-class MontSquareConstantFolder : public UnaryModArithConstantFolder {
-public:
-  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return ModArithOperation::fromUnchecked(value, modArithType).square();
-  }
-};
-
-} // namespace
 
 OpFoldResult MontSquareOp::fold(FoldAdaptor adaptor) {
-  MontSquareConstantFolder folder(getType());
-  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldUnaryOp(this, adaptor,
+                     [](const ModArithOperation &op) { return op.square(); });
 }
-
-namespace {
-
-class InverseConstantFolder : public UnaryModArithConstantFolder {
-public:
-  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return ModArithOperation::fromUnchecked(value, modArithType).inverse();
-  }
-};
-
-} // namespace
 
 OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
-  InverseConstantFolder folder(getType());
-  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldUnaryOp(this, adaptor,
+                     [](const ModArithOperation &op) { return op.inverse(); });
 }
-
-namespace {
-
-class MontInverseConstantFolder : public UnaryModArithConstantFolder {
-public:
-  using UnaryModArithConstantFolder::UnaryModArithConstantFolder;
-
-  APInt operate(const APInt &value) const final {
-    return ModArithOperation::fromUnchecked(value, modArithType).inverse();
-  }
-};
-
-} // namespace
 
 OpFoldResult MontInverseOp::fold(FoldAdaptor adaptor) {
-  MontInverseConstantFolder folder(getType());
-  return UnaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldUnaryOp(this, adaptor,
+                     [](const ModArithOperation &op) { return op.inverse(); });
 }
-
-namespace {
-
-class AddConstantFolder : public AdditiveModArithConstantFolder {
-public:
-  explicit AddConstantFolder(AddOp *op)
-      : AdditiveModArithConstantFolder(op->getType()), op(op) {}
-
-  OpFoldResult getLhs() const final { return op->getLhs(); }
-
-  APInt operate(const APInt &a, const APInt &b) const final {
-    return ModArithOperation::fromUnchecked(a, modArithType) +
-           ModArithOperation::fromUnchecked(b, modArithType);
-  }
-
-private:
-  AddOp *const op;
-};
-
-} // namespace
 
 OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
-  AddConstantFolder folder(this);
-  return BinaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldAdditiveBinaryOp(this, adaptor,
+                              [](auto a, auto b) { return a + b; });
 }
-
-namespace {
-
-class SubConstantFolder : public AdditiveModArithConstantFolder {
-public:
-  explicit SubConstantFolder(SubOp *op)
-      : AdditiveModArithConstantFolder(op->getType()), op(op) {}
-
-  OpFoldResult getLhs() const final { return op->getLhs(); }
-
-  APInt operate(const APInt &a, const APInt &b) const final {
-    return ModArithOperation::fromUnchecked(a, modArithType) -
-           ModArithOperation::fromUnchecked(b, modArithType);
-  }
-
-private:
-  SubOp *const op;
-};
-
-} // namespace
 
 OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
-  SubConstantFolder folder(this);
-  return BinaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldAdditiveBinaryOp(this, adaptor,
+                              [](auto a, auto b) { return a - b; });
 }
-
-namespace {
-
-class MulConstantFolder : public MultiplicativeModArithConstantFolder {
-public:
-  explicit MulConstantFolder(MulOp *op)
-      : MultiplicativeModArithConstantFolder(op->getType()), op(op) {}
-
-  OpFoldResult getLhs() const final { return op->getLhs(); }
-
-  APInt operate(const APInt &a, const APInt &b) const final {
-    return ModArithOperation::fromUnchecked(a, modArithType) *
-           ModArithOperation::fromUnchecked(b, modArithType);
-  }
-
-private:
-  MulOp *const op;
-};
-
-} // namespace
 
 OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
-  MulConstantFolder folder(this);
-  return BinaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldMultiplicativeBinaryOp(this, adaptor,
+                                    [](auto a, auto b) { return a * b; });
 }
 
-namespace {
-
-class MontMulConstantFolder : public MultiplicativeModArithConstantFolder {
-public:
-  explicit MontMulConstantFolder(MontMulOp *op)
-      : MultiplicativeModArithConstantFolder(op->getType()), op(op) {}
-
-  OpFoldResult getLhs() const final { return op->getLhs(); }
-
-  APInt operate(const APInt &a, const APInt &b) const final {
-    return ModArithOperation::fromUnchecked(a, modArithType) *
-           ModArithOperation::fromUnchecked(b, modArithType);
-  }
-
-private:
-  MontMulOp *const op;
-};
-
-} // namespace
-
 OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
-  MontMulConstantFolder folder(this);
-  return BinaryConstantFolder<ConstantFolderConfig>::fold(adaptor, &folder);
+  return foldMultiplicativeBinaryOp(this, adaptor,
+                                    [](auto a, auto b) { return a * b; });
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
