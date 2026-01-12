@@ -207,6 +207,9 @@ public:
       : efType(efType) {
     auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
     coeffs[0] = PrimeFieldOperation(coeff, baseFieldType);
+    for (size_t i = 1; i < N; ++i) {
+      coeffs[i] = PrimeFieldOperation(uint64_t{0}, baseFieldType);
+    }
   }
 
   // Construct from APInt coefficients (convenient one-liner usage)
