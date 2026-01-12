@@ -352,4 +352,16 @@ public:
 
 } // namespace zk_dtypes
 
+namespace mlir::prime_ir::field {
+
+extern template class ExtensionFieldOperation<2>;
+extern template class ExtensionFieldOperation<3>;
+extern template class ExtensionFieldOperation<4>;
+
+using QuadraticExtensionFieldOperation = ExtensionFieldOperation<2>;
+using CubicExtensionFieldOperation = ExtensionFieldOperation<3>;
+using QuarticExtensionFieldOperation = ExtensionFieldOperation<4>;
+
+} // namespace mlir::prime_ir::field
+
 #endif // PRIME_IR_DIALECT_FIELD_IR_FIELDOPERATION_H_
