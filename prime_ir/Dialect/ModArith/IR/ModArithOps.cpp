@@ -62,7 +62,7 @@ public:
 };
 
 class AdditiveModArithConstantFolder
-    : public AdditiveConstantFolder<ConstantFolderConfig> {
+    : public AdditiveConstantFolderDelegate<ConstantFolderConfig> {
 public:
   explicit AdditiveModArithConstantFolder(Type type)
       : modArithType(cast<ModArithType>(getElementTypeOrSelf(type))),
@@ -87,7 +87,7 @@ public:
 };
 
 class MultiplicativeModArithConstantFolder
-    : public MultiplicativeConstantFolder<ConstantFolderConfig> {
+    : public MultiplicativeConstantFolderDelegate<ConstantFolderConfig> {
 public:
   explicit MultiplicativeModArithConstantFolder(Type type)
       : modArithType(cast<ModArithType>(getElementTypeOrSelf(type))),

@@ -136,7 +136,8 @@ public:
 };
 
 template <typename Config>
-class AdditiveConstantFolder : public BinaryConstantFolder<Config>::Delegate {
+class AdditiveConstantFolderDelegate
+    : public BinaryConstantFolder<Config>::Delegate {
 public:
   using NativeInputType = typename Config::NativeInputType;
   using NativeOutputType = typename Config::NativeOutputType;
@@ -177,7 +178,7 @@ public:
 };
 
 template <typename Config>
-class MultiplicativeConstantFolder
+class MultiplicativeConstantFolderDelegate
     : public BinaryConstantFolder<Config>::Delegate {
 public:
   using NativeInputType = typename Config::NativeInputType;
