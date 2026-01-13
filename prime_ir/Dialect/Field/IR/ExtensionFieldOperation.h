@@ -171,8 +171,8 @@ private:
 
   PrimeFieldOperation NonResidue() const {
     auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
-    return PrimeFieldOperation(cast<IntegerAttr>(efType.getNonResidue()),
-                               baseFieldType);
+    return PrimeFieldOperation::fromUnchecked(
+        cast<IntegerAttr>(efType.getNonResidue()), baseFieldType);
   }
 
   // https://github.com/fractalyze/zk_dtypes/blob/8d5f43c/zk_dtypes/include/field/extension_field.h#L500
