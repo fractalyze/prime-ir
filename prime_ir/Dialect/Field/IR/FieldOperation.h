@@ -204,13 +204,11 @@ class ExtensionFieldOperation
           ExtensionFieldOperation<N>> {
 public:
   ExtensionFieldOperation(int64_t coeff, ExtensionFieldTypeInterface efType)
-      : efType(efType) {
-    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
-    coeffs[0] = PrimeFieldOperation(coeff, baseFieldType);
-    for (size_t i = 1; i < N; ++i) {
-      coeffs[i] = PrimeFieldOperation(uint64_t{0}, baseFieldType);
-    }
-  }
+      : ExtensionFieldOperation(
+            APInt(cast<PrimeFieldType>(efType.getBaseFieldType())
+                      .getStorageBitWidth(),
+                  coeff),
+            efType) {}
 
   // Construct from APInt coefficients (convenient one-liner usage)
   ExtensionFieldOperation(const SmallVector<APInt> &coeffs,
