@@ -53,10 +53,6 @@ The following are project-specific deviations and clarifications from the [LLVM 
   }  // namespace
   ```
 
-## Abseil
-
-- Prefer **`std::string_view`** instead of `absl::string_view`.
-
 ## Header Inclusion
 
 - **Avoid redundant includes**: Do not repeat headers in `.cc` files that are already included in the corresponding `.h`.
