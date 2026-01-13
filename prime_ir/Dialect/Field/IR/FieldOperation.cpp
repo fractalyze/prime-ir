@@ -17,17 +17,6 @@
 
 namespace mlir::prime_ir::field {
 
-template class ExtensionFieldOperation<2>;
-template class ExtensionFieldOperation<3>;
-template class ExtensionFieldOperation<4>;
-
-template raw_ostream &operator<<(raw_ostream &os,
-                                 const ExtensionFieldOperation<2> &op);
-template raw_ostream &operator<<(raw_ostream &os,
-                                 const ExtensionFieldOperation<3> &op);
-template raw_ostream &operator<<(raw_ostream &os,
-                                 const ExtensionFieldOperation<4> &op);
-
 FieldOperation::operator APInt() const {
   if (auto pfOperation = std::get_if<PrimeFieldOperation>(&operation)) {
     return static_cast<APInt>(*pfOperation);

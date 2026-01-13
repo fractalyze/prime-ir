@@ -50,6 +50,7 @@ cc_library(
 cc_library(
     name = "Field",
     srcs = [
+        "ExtensionFieldOperation.cpp",
         "FieldAttributes.cpp",
         "FieldDialect.cpp",
         "FieldOperation.cpp",
@@ -57,11 +58,13 @@ cc_library(
         "FieldTypes.cpp",
     ],
     hdrs = [
+        "ExtensionFieldOperation.h",
         "FieldAttributes.h",
         "FieldDialect.h",
         "FieldOperation.h",
         "FieldOps.h",
         "FieldTypes.h",
+        "PrimeFieldOperation.h",
     ],
     deps = [
         ":ExtensionFieldOperationSelector",
