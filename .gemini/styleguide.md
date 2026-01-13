@@ -44,6 +44,14 @@ The following are project-specific deviations and clarifications from the
   for a union, or an indicator of a subclass. When an enum is used for something
   like this, it should have a Kind suffix (e.g. `ValueKind`).
 
+### MLIR Type Variable Naming
+
+| Type                          | Variable Name   |
+| ----------------------------- | --------------- |
+| `ExtensionFieldTypeInterface` | `efType`        |
+| `PrimeFieldType`              | `pfType`        |
+| Base field type (`Type`)      | `baseFieldType` |
+
 ### Static Methods
 
 - For **static methods** implemented in `.cpp` files, explicitly annotate with
