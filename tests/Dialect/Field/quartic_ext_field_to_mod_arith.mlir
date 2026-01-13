@@ -135,13 +135,6 @@ func.func @test_lower_inverse(%arg0: !QF) -> !QF {
     return %inv : !QF
 }
 
-// CHECK-LABEL: @test_lower_f4_create
-func.func @test_lower_f4_create(%arg0: !PF, %arg1: !PF, %arg2: !PF, %arg3: !PF) -> !QF {
-    // CHECK: field.ext_from_coeffs
-    %0 = field.f4.create %arg0, %arg1, %arg2, %arg3 : !QF
-    return %0 : !QF
-}
-
 // CHECK-LABEL: @test_lower_cmp_eq
 func.func @test_lower_cmp_eq(%arg0: !QF, %arg1: !QF) -> i1 {
     // CHECK-COUNT-2: field.ext_to_coeffs

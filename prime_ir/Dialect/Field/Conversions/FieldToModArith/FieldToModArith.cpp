@@ -581,76 +581,6 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   }
 };
 
-struct ConvertF2Create : public OpConversionPattern<F2CreateOp> {
-  explicit ConvertF2Create(MLIRContext *context)
-      : OpConversionPattern<F2CreateOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(F2CreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    rewriter.replaceOp(
-        op, fromCoeffs(b, op.getType(), {adaptor.getC0(), adaptor.getC1()}));
-    return success();
-  }
-};
-
-struct ConvertF3Create : public OpConversionPattern<F3CreateOp> {
-  explicit ConvertF3Create(MLIRContext *context)
-      : OpConversionPattern<F3CreateOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(F3CreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    rewriter.replaceOp(
-        op, fromCoeffs(b, op.getType(),
-                       {adaptor.getC0(), adaptor.getC1(), adaptor.getC2()}));
-    return success();
-  }
-};
-
-struct ConvertF4Create : public OpConversionPattern<F4CreateOp> {
-  explicit ConvertF4Create(MLIRContext *context)
-      : OpConversionPattern<F4CreateOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(F4CreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    rewriter.replaceOp(op, fromCoeffs(b, op.getType(),
-                                      {adaptor.getC0(), adaptor.getC1(),
-                                       adaptor.getC2(), adaptor.getC3()}));
-    return success();
-  }
-};
-
-struct ConvertCreate : public OpConversionPattern<CreateOp> {
-  explicit ConvertCreate(MLIRContext *context)
-      : OpConversionPattern<CreateOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(CreateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    rewriter.replaceOp(op,
-                       fromCoeffs(b, op.getType(), adaptor.getCoefficients()));
-    return success();
-  }
-};
-
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
@@ -680,10 +610,6 @@ void FieldToModArith::runOnOperation() {
       ConvertConstant,
       ConvertCmp,
       ConvertDouble,
-      ConvertCreate,
-      ConvertF2Create,
-      ConvertF3Create,
-      ConvertF4Create,
       ConvertFromMont,
       ConvertInverse,
       ConvertMul,
