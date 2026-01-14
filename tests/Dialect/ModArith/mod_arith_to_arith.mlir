@@ -18,6 +18,8 @@
 !Zp = !mod_arith.int<65537 : i32>
 !Zpv = tensor<4x!Zp>
 
+!M3 = !mod_arith.int<7 : i32>
+
 // CHECK-LABEL: @test_lower_constant
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_lower_constant() -> !Zp {
@@ -175,6 +177,14 @@ func.func @test_lower_mul_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   // CHECK-NOT: mod_arith.mul
   %res = mod_arith.mul %lhs, %rhs : !Zpv
   return %res : !Zpv
+}
+
+// CHECK-LABEL: @test_lower_mul_mersenne
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_lower_mul_mersenne(%lhs : !M3, %rhs : !M3) -> !M3 {
+  // CHECK-NOT: mod_arith.mul
+  %res = mod_arith.mul %lhs, %rhs : !M3
+  return %res : !M3
 }
 
 // CHECK-LABEL: @test_lower_cmp

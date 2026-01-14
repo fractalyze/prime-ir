@@ -611,14 +611,44 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
       return success();
     }
 
-    // Use standard multiplication and reduction
     auto cmodExt =
         b.create<arith::ConstantOp>(modulusAttr(op, /*extended=*/true));
-    auto lhs = b.create<arith::ExtUIOp>(modulusType(op, /*extended=*/true),
-                                        adaptor.getLhs());
-    auto rhs = b.create<arith::ExtUIOp>(modulusType(op, /*extended=*/true),
-                                        adaptor.getRhs());
-    auto mul = b.create<arith::MulIOp>(lhs, rhs);
+    Type wideType = modulusType(op, /*extended=*/true);
+    Value lhs = b.create<arith::ExtUIOp>(wideType, adaptor.getLhs());
+    Value rhs = b.create<arith::ExtUIOp>(wideType, adaptor.getRhs());
+    Value mul = b.create<arith::MulIOp>(lhs, rhs);
+
+    if (APInt modulusPlusOne = modulus + 1; modulusPlusOne.isPowerOf2()) {
+      unsigned k = modulusPlusOne.countTrailingZeros(); // e.g., 31
+
+      // === Mersenne Reduction Strategy ===
+      // Logic: A * B = H * 2ᵏ + L == H + L (mod 2ᵏ - 1)
+
+      // 1. Reduce
+      Value kConst =
+          b.create<arith::ConstantOp>(wideType, b.getIntegerAttr(wideType, k));
+
+      // hi = mul >> k
+      Value hi = b.create<arith::ShRUIOp>(mul, kConst);
+      // lo = mul & (2ᵏ - 1) (which is modulus)
+      Value lo = b.create<arith::AndIOp>(mul, cmodExt);
+
+      // sum = hi + lo
+      Value sum = b.create<arith::AddIOp>(hi, lo);
+
+      // 2. Final Correction: if (sum >= p) sum -= p
+      // Note: A single subtraction is sufficient because max(H+L) < 2*p
+      Value cmp =
+          b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, sum, cmodExt);
+      Value sub = b.create<arith::SubIOp>(sum, cmodExt);
+      Value reduced = b.create<arith::SelectOp>(cmp, sub, sum);
+
+      rewriter.replaceOp(op,
+                         b.create<arith::TruncIOp>(modulusType(op), reduced));
+      return success();
+    }
+
+    // Use standard multiplication and reduction
     auto remu = b.create<arith::RemUIOp>(mul, cmodExt);
     auto trunc = b.create<arith::TruncIOp>(modulusType(op), remu);
 
