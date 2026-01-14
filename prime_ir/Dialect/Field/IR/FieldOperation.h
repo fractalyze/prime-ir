@@ -19,12 +19,15 @@
 #include <array>
 #include <cassert>
 
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperationSelector.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 
 namespace mlir::prime_ir::field {
+
+class FieldOperation;
 
 // PrimeFieldOperation wraps ModArithOperation for prime field arithmetic.
 class PrimeFieldOperation {
@@ -39,6 +42,9 @@ public:
   PrimeFieldOperation(uint64_t value, PrimeFieldType type)
       : op(value, convertPrimeFieldType(type)), type(type) {}
 
+  static PrimeFieldOperation fromUnchecked(int64_t value, PrimeFieldType type) {
+    return fromUnchecked(APInt(type.getStorageBitWidth(), value), type);
+  }
   static PrimeFieldOperation fromUnchecked(APInt value, PrimeFieldType type) {
     return fromUnchecked(mod_arith::ModArithOperation::fromUnchecked(
                              value, convertPrimeFieldType(type)),
@@ -159,6 +165,7 @@ public:
   llvm::SmallString<40> toString() const { return op.toString(); }
 
 private:
+  friend class FieldOperation;
   // PascalCase methods (zk_dtypes compatible)
   template <size_t>
   friend class ExtensionFieldOperation;
@@ -203,10 +210,23 @@ class ExtensionFieldOperation
     : public ExtensionFieldOperationSelector<N>::template Type<
           ExtensionFieldOperation<N>> {
 public:
+  ExtensionFieldOperation() = default;
+
   ExtensionFieldOperation(int64_t coeff, ExtensionFieldTypeInterface efType)
+      : ExtensionFieldOperation(
+            APInt(cast<PrimeFieldType>(efType.getBaseFieldType())
+                      .getStorageBitWidth(),
+                  coeff),
+            efType) {}
+
+  ExtensionFieldOperation(const APInt &coeff,
+                          ExtensionFieldTypeInterface efType)
       : efType(efType) {
     auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
     coeffs[0] = PrimeFieldOperation(coeff, baseFieldType);
+    for (size_t i = 1; i < N; ++i) {
+      coeffs[i] = PrimeFieldOperation(uint64_t{0}, baseFieldType);
+    }
   }
 
   // Construct from APInt coefficients (convenient one-liner usage)
@@ -226,10 +246,33 @@ public:
     assert(coeffs.size() == N);
   }
 
+  static ExtensionFieldOperation
+  fromUnchecked(const APInt &coeff, ExtensionFieldTypeInterface efType) {
+    SmallVector<APInt> coeffs(
+        N, APInt(cast<PrimeFieldType>(efType.getBaseFieldType())
+                     .getStorageBitWidth(),
+                 0));
+    coeffs[0] = coeff;
+    return fromUnchecked(coeffs, efType);
+  }
+
+  static ExtensionFieldOperation
+  fromUnchecked(const SmallVector<APInt> &coeffs,
+                ExtensionFieldTypeInterface efType) {
+    ExtensionFieldOperation ret;
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    for (size_t i = 0; i < N; ++i) {
+      ret.coeffs[i] =
+          PrimeFieldOperation::fromUnchecked(coeffs[i], baseFieldType);
+    }
+    ret.efType = efType;
+    return ret;
+  }
+
   const std::array<PrimeFieldOperation, N> &getCoeffs() const { return coeffs; }
 
   // Convert coefficients to APInts (convenient for constant folding one-liners)
-  SmallVector<APInt> toAPInts() const {
+  operator SmallVector<APInt>() const {
     SmallVector<APInt> result;
     for (const auto &c : coeffs) {
       result.push_back(static_cast<APInt>(c));
@@ -242,10 +285,11 @@ public:
         RankedTensorType::get(
             {N},
             cast<PrimeFieldType>(efType.getBaseFieldType()).getStorageType()),
-        toAPInts());
+        static_cast<SmallVector<APInt>>(*this));
   }
 
 private:
+  friend class FieldOperation;
   // PascalCase methods (zk_dtypes compatible)
   template <typename>
   friend class zk_dtypes::QuadraticExtensionFieldOperation;
@@ -351,5 +395,121 @@ public:
 };
 
 } // namespace zk_dtypes
+
+namespace mlir::prime_ir::field {
+
+extern template class ExtensionFieldOperation<2>;
+extern template class ExtensionFieldOperation<3>;
+extern template class ExtensionFieldOperation<4>;
+
+using QuadraticExtensionFieldOperation = ExtensionFieldOperation<2>;
+using CubicExtensionFieldOperation = ExtensionFieldOperation<3>;
+using QuarticExtensionFieldOperation = ExtensionFieldOperation<4>;
+
+class FieldOperation {
+public:
+  using OperationType =
+      std::variant<PrimeFieldOperation, QuadraticExtensionFieldOperation,
+                   CubicExtensionFieldOperation,
+                   QuarticExtensionFieldOperation>;
+
+  FieldOperation() = default;
+
+  template <typename T, typename = std::enable_if_t<
+                            !std::is_same_v<std::decay_t<T>, FieldOperation> &&
+                            std::is_constructible_v<OperationType, T>>>
+  FieldOperation(T &&operation) // NOLINT(runtime/explicit)
+      : operation(std::forward<T>(operation)) {}
+
+  template <typename T>
+  FieldOperation(T &&value, Type type) {
+    if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
+      operation = PrimeFieldOperation(std::forward<T>(value), pfType);
+      return;
+    }
+    createExtFieldOp(std::forward<T>(value),
+                     cast<ExtensionFieldTypeInterface>(type));
+  }
+  FieldOperation(const SmallVector<APInt> &coeffs, Type type) {
+    createExtFieldOp(coeffs, cast<ExtensionFieldTypeInterface>(type));
+  }
+  ~FieldOperation() = default;
+
+  template <typename T>
+  static FieldOperation fromUnchecked(T &&value, Type type) {
+    FieldOperation ret;
+    if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
+      ret.operation =
+          PrimeFieldOperation::fromUnchecked(std::forward<T>(value), pfType);
+      return ret;
+    }
+    ret.createRawExtFieldOp(std::forward<T>(value),
+                            cast<ExtensionFieldTypeInterface>(type));
+    return ret;
+  }
+
+  static FieldOperation fromUnchecked(const SmallVector<APInt> &coeffs,
+                                      Type type) {
+    FieldOperation ret;
+    ret.createRawExtFieldOp(coeffs, cast<ExtensionFieldTypeInterface>(type));
+    return ret;
+  }
+
+  operator APInt() const;
+  operator SmallVector<APInt>() const;
+
+  const OperationType &getOperation() const { return operation; }
+
+  FieldOperation operator+(const FieldOperation &other) const;
+  FieldOperation operator-(const FieldOperation &other) const;
+  FieldOperation operator*(const FieldOperation &other) const;
+  FieldOperation operator-() const;
+  FieldOperation dbl() const;
+  FieldOperation square() const;
+  FieldOperation inverse() const;
+
+private:
+  template <typename T>
+  void createExtFieldOp(T &&value, ExtensionFieldTypeInterface efType) {
+    TypeSwitch<Type>(efType)
+        .template Case<QuadraticExtFieldType>([&](auto) {
+          operation =
+              QuadraticExtensionFieldOperation(std::forward<T>(value), efType);
+        })
+        .template Case<CubicExtFieldType>([&](auto) {
+          operation =
+              CubicExtensionFieldOperation(std::forward<T>(value), efType);
+        })
+        .template Case<QuarticExtFieldType>([&](auto) {
+          operation =
+              QuarticExtensionFieldOperation(std::forward<T>(value), efType);
+        })
+        .Default(
+            [](auto) { llvm_unreachable("Unsupported extension field type"); });
+  }
+
+  template <typename T>
+  void createRawExtFieldOp(T &&value, ExtensionFieldTypeInterface efType) {
+    TypeSwitch<Type>(efType)
+        .template Case<QuadraticExtFieldType>([&](auto) {
+          operation = QuadraticExtensionFieldOperation::fromUnchecked(
+              std::forward<T>(value), efType);
+        })
+        .template Case<CubicExtFieldType>([&](auto) {
+          operation = CubicExtensionFieldOperation::fromUnchecked(
+              std::forward<T>(value), efType);
+        })
+        .template Case<QuarticExtFieldType>([&](auto) {
+          operation = QuarticExtensionFieldOperation::fromUnchecked(
+              std::forward<T>(value), efType);
+        })
+        .Default(
+            [](auto) { llvm_unreachable("Unsupported extension field type"); });
+  }
+
+  OperationType operation;
+};
+
+} // namespace mlir::prime_ir::field
 
 #endif // PRIME_IR_DIALECT_FIELD_IR_FIELDOPERATION_H_

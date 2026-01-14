@@ -45,9 +45,9 @@ public:
   FieldCodeGen operator+(const FieldCodeGen &other) const;
   FieldCodeGen operator-(const FieldCodeGen &other) const;
   FieldCodeGen operator*(const FieldCodeGen &other) const;
+  FieldCodeGen operator-() const;
   FieldCodeGen dbl() const;
   FieldCodeGen square() const;
-  FieldCodeGen negate() const;
   FieldCodeGen inverse() const;
 
 private:

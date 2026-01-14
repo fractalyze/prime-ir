@@ -1,5 +1,5 @@
 diff --git a/mlir/lib/Dialect/Vector/IR/VectorOps.cpp b/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
-index 1fb8c7a928e0..bce5fd54a14d 100644
+index 1fb8c7a928e0..88a700db4216 100644
 --- a/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 +++ b/mlir/lib/Dialect/Vector/IR/VectorOps.cpp
 @@ -38,6 +38,9 @@
@@ -12,7 +12,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  #include "llvm/ADT/ArrayRef.h"
  #include "llvm/ADT/STLExtras.h"
  #include "llvm/ADT/SmallVector.h"
-@@ -404,8 +407,17 @@ std::optional<int64_t> vector::getConstantVscaleMultiplier(Value value) {
+@@ -404,8 +407,18 @@ std::optional<int64_t> vector::getConstantVscaleMultiplier(Value value) {
  /// has the correct type, returns it unchanged.
  static Attribute convertIntegerAttr(Attribute attr, Type expectedType) {
    if (auto intAttr = mlir::dyn_cast<IntegerAttr>(attr)) {
@@ -22,7 +22,8 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
 +              dyn_cast<prime_ir::field::PrimeFieldType>(expectedType)) {
 +        return IntegerAttr::get(fieldType.getStorageType(), intAttr.getInt());
 +      } else if (auto modArithType =
-+                     dyn_cast<prime_ir::mod_arith::ModArithType>(expectedType)) {
++                     dyn_cast<prime_ir::mod_arith::ModArithType>(
++                         expectedType)) {
 +        return IntegerAttr::get(modArithType.getStorageType(),
 +                                intAttr.getInt());
 +      }
@@ -31,40 +32,42 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
    }
    return attr;
  }
-@@ -481,6 +493,11 @@ void VectorDialect::initialize() {
+@@ -481,6 +494,12 @@ void VectorDialect::initialize() {
  Operation *VectorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
                                                Location loc) {
-+  if (auto op = prime_ir::field::ConstantOp::materialize(builder, value, type, loc))
-+    return op;
 +  if (auto op =
-+          prime_ir::mod_arith::ConstantOp::materialize(builder, value, type, loc))
++          prime_ir::field::ConstantOp::materialize(builder, value, type, loc))
++    return op;
++  if (auto op = prime_ir::mod_arith::ConstantOp::materialize(builder, value,
++                                                             type, loc))
 +    return op;
    if (isa<ub::PoisonAttrInterface>(value))
      return value.getDialect().materializeConstant(builder, value, type, loc);
  
-@@ -2116,8 +2133,11 @@ static Attribute foldDenseElementsAttrSrcExtractOp(ExtractOp extractOp,
+@@ -2116,8 +2135,11 @@ static Attribute foldDenseElementsAttrSrcExtractOp(ExtractOp extractOp,
  
    if (denseAttr.isSplat()) {
      Attribute newAttr = denseAttr.getSplatValue<Attribute>();
 -    if (auto vecDstType = dyn_cast<VectorType>(extractOp.getType()))
 +    if (auto vecDstType = dyn_cast<VectorType>(extractOp.getType())) {
-+      vecDstType =
-+          cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(vecDstType));
++      vecDstType = cast<VectorType>(
++          prime_ir::maybeConvertPrimeIRToBuiltinType(vecDstType));
        newAttr = DenseElementsAttr::get(vecDstType, newAttr);
 +    }
      return newAttr;
    }
  
-@@ -2149,6 +2169,7 @@ static Attribute foldDenseElementsAttrSrcExtractOp(ExtractOp extractOp,
+@@ -2149,6 +2171,8 @@ static Attribute foldDenseElementsAttrSrcExtractOp(ExtractOp extractOp,
    if (auto resVecTy = dyn_cast<VectorType>(extractOp.getType())) {
      SmallVector<Attribute> elementValues(
          denseValuesBegin, denseValuesBegin + resVecTy.getNumElements());
-+    resVecTy = cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(resVecTy));
++    resVecTy =
++        cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(resVecTy));
      newAttr = DenseElementsAttr::get(resVecTy, elementValues);
    } else {
      newAttr = *denseValuesBegin;
-@@ -2497,6 +2518,8 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
+@@ -2497,6 +2521,8 @@ static OpFoldResult foldFromElementsToConstant(FromElementsOp fromElementsOp,
      return convertIntegerAttr(attr, destEltType);
    });
  
@@ -73,7 +76,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
    return DenseElementsAttr::get(destVecType, convertedElements);
  }
  
-@@ -2800,7 +2823,7 @@ BroadcastableToResult mlir::vector::isBroadcastableTo(
+@@ -2800,7 +2826,7 @@ BroadcastableToResult mlir::vector::isBroadcastableTo(
      Type srcType, VectorType dstVectorType,
      std::pair<VectorDim, VectorDim> *mismatchingDims) {
    // Broadcast scalar to vector of the same element type.
@@ -82,7 +85,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
        getElementTypeOrSelf(srcType) == getElementTypeOrSelf(dstVectorType))
      return BroadcastableToResult::Success;
    // From now on, only vectors broadcast.
-@@ -2878,7 +2901,8 @@ OpFoldResult BroadcastOp::fold(FoldAdaptor adaptor) {
+@@ -2878,7 +2904,8 @@ OpFoldResult BroadcastOp::fold(FoldAdaptor adaptor) {
      return getSource();
    if (!adaptor.getSource())
      return {};
@@ -92,7 +95,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
    if (auto attr = llvm::dyn_cast<IntegerAttr>(adaptor.getSource())) {
      if (vectorType.getElementType() != attr.getType())
        return {};
-@@ -3058,8 +3082,9 @@ OpFoldResult vector::ShuffleOp::fold(FoldAdaptor adaptor) {
+@@ -3058,8 +3085,9 @@ OpFoldResult vector::ShuffleOp::fold(FoldAdaptor adaptor) {
  
      results.push_back(indexedElm);
    }
@@ -104,7 +107,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  }
  
  namespace {
-@@ -3207,7 +3232,9 @@ OpFoldResult vector::InsertElementOp::fold(FoldAdaptor adaptor) {
+@@ -3207,7 +3235,9 @@ OpFoldResult vector::InsertElementOp::fold(FoldAdaptor adaptor) {
      return {};
    results[posIdx] = src;
  
@@ -115,7 +118,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  }
  
  //===----------------------------------------------------------------------===//
-@@ -3382,6 +3409,7 @@ foldDenseElementsAttrDestInsertOp(InsertOp insertOp, Attribute srcAttr,
+@@ -3382,6 +3412,7 @@ foldDenseElementsAttrDestInsertOp(InsertOp insertOp, Attribute srcAttr,
  
    auto allValues = llvm::to_vector(denseDst.getValues<Attribute>());
    copy(insertedValues, allValues.begin() + insertBeginPosition);
@@ -123,23 +126,31 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
    auto newAttr = DenseElementsAttr::get(destTy, allValues);
  
    return newAttr;
-@@ -3711,6 +3739,15 @@ public:
+@@ -3711,6 +3742,23 @@ public:
      } while (succeeded(
          incSlicePosition(currSlicePosition, sliceShape, sliceOffsets)));
  
-+    if (auto modArithType =
-+            dyn_cast<prime_ir::mod_arith::ModArithType>(destTy.getElementType())) {
++    if (auto modArithType = dyn_cast<prime_ir::mod_arith::ModArithType>(
++            destTy.getElementType())) {
 +      VectorType converted =
 +          cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(destTy));
 +      auto newAttr = DenseElementsAttr::get(converted, newValues);
 +      rewriter.replaceOpWithNewOp<prime_ir::mod_arith::ConstantOp>(op, destTy,
++                                                                   newAttr);
++      return success();
++    } else if (auto pfType = dyn_cast<prime_ir::field::PrimeFieldType>(
++                   destTy.getElementType())) {
++      VectorType converted =
++          cast<VectorType>(prime_ir::maybeConvertPrimeIRToBuiltinType(destTy));
++      auto newAttr = DenseElementsAttr::get(converted, newValues);
++      rewriter.replaceOpWithNewOp<prime_ir::field::ConstantOp>(op, destTy,
 +                                                               newAttr);
 +      return success();
 +    }
      auto newAttr = DenseElementsAttr::get(destTy, newValues);
      rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, newAttr);
      return success();
-@@ -4057,6 +4094,8 @@ foldExtractStridedSliceNonSplatConstant(ExtractStridedSliceOp op,
+@@ -4057,6 +4105,8 @@ foldExtractStridedSliceNonSplatConstant(ExtractStridedSliceOp op,
    assert(static_cast<int64_t>(sliceValues.size()) ==
               sliceVecTy.getNumElements() &&
           "Invalid number of slice elements");
@@ -148,7 +159,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
    return DenseElementsAttr::get(sliceVecTy, sliceValues);
  }
  
-@@ -4068,8 +4107,11 @@ OpFoldResult ExtractStridedSliceOp::fold(FoldAdaptor adaptor) {
+@@ -4068,8 +4118,11 @@ OpFoldResult ExtractStridedSliceOp::fold(FoldAdaptor adaptor) {
  
    // ExtractStridedSliceOp(splat ConstantOp) -> ConstantOp.
    if (auto splat =
@@ -162,7 +173,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  
    // ExtractStridedSliceOp(non-splat ConstantOp) -> ConstantOp.
    return foldExtractStridedSliceNonSplatConstant(*this, adaptor.getVector());
-@@ -7080,7 +7122,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+@@ -7080,7 +7133,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
      return {};
  
    // SplatElementsAttr::get treats single value for second arg as being a splat.
@@ -174,7 +185,7 @@ index 1fb8c7a928e0..bce5fd54a14d 100644
  
  void SplatOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index e86158d51727..a18225d441de 100644
+index 21df1867a2f2..ce7c4695c8d6 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 @@ -4713,6 +4713,9 @@ cc_library(
