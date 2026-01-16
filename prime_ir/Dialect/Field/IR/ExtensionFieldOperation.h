@@ -114,7 +114,7 @@ public:
       newCoeffs[i] =
           PrimeFieldOperation::fromUnchecked(coeffs[i], baseFieldType);
     }
-    return ExtensionFieldOperation::fromUnchecked(newCoeffs, efType);
+    return fromUnchecked(newCoeffs, efType);
   }
 
   static ExtensionFieldOperation
@@ -127,7 +127,7 @@ public:
   }
 
   ExtensionFieldOperation getOne() const {
-    return ExtensionFieldOperation::fromUnchecked(coeffs[0].getOne(), efType);
+    return fromUnchecked(coeffs[0].getOne(), efType);
   }
 
   const std::array<PrimeFieldOperation, N> &getCoeffs() const { return coeffs; }
