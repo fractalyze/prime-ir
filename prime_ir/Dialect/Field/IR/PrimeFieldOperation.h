@@ -76,6 +76,9 @@ public:
     return ret;
   }
 
+  PrimeFieldOperation getZero() const {
+    return PrimeFieldOperation::fromUnchecked(op.getZero(), type);
+  }
   PrimeFieldOperation getOne() const {
     return PrimeFieldOperation::fromUnchecked(op.getOne(), type);
   }

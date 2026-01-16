@@ -127,6 +127,9 @@ public:
     return ret;
   }
 
+  ExtensionFieldOperation getZero() const {
+    return fromUnchecked(coeffs[0].getZero(), efType);
+  }
   ExtensionFieldOperation getOne() const {
     return fromUnchecked(coeffs[0].getOne(), efType);
   }
@@ -172,6 +175,20 @@ public:
   }
 
   ExtensionFieldOperation inverse() const { return this->Inverse(); }
+
+  bool isOne() const {
+    for (size_t i = 1; i < N; ++i) {
+      if (!coeffs[i].isZero()) {
+        return false;
+      }
+    }
+    return coeffs[0].isOne();
+  }
+
+  bool isZero() const {
+    return llvm::all_of(
+        coeffs, [](const PrimeFieldOperation &c) { return c.isZero(); });
+  }
 
   bool operator==(const ExtensionFieldOperation &other) const {
     assert(efType == other.efType);

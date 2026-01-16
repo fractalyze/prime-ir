@@ -54,6 +54,9 @@ public:
   }
   ~FieldOperation() = default;
 
+  FieldOperation getZero() const;
+  FieldOperation getOne() const;
+
   template <typename T>
   static FieldOperation fromUnchecked(T &&value, Type type) {
     FieldOperation ret;
@@ -99,6 +102,8 @@ public:
   FieldOperation power(const APInt &exponent) const;
   FieldOperation inverse() const;
 
+  bool isZero() const;
+  bool isOne() const;
   bool operator==(const FieldOperation &other) const;
   bool operator!=(const FieldOperation &other) const;
 

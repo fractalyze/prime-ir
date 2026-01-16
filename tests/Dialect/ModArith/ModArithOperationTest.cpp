@@ -301,7 +301,7 @@ TYPED_TEST(ModArithOperationTest, DISABLED_ToMont) {
   }
 }
 
-TYPED_TEST(ModArithOperationTest, IsZero) {
+TYPED_TEST(ModArithOperationTest, ZeroAndOne) {
   using PrimeFieldType = TypeParam;
 
   auto zero = PrimeFieldType::Zero();
@@ -309,12 +309,14 @@ TYPED_TEST(ModArithOperationTest, IsZero) {
                                                   this->modArithType);
   EXPECT_TRUE(modZero.isZero());
   EXPECT_FALSE(modZero.isOne());
+  EXPECT_EQ(modZero, modZero.getZero());
 
   auto one = PrimeFieldType::One();
   auto modOne = ModArithOperation::fromUnchecked(convertToAPInt(one.value()),
                                                  this->modArithType);
   EXPECT_FALSE(modOne.isZero());
   EXPECT_TRUE(modOne.isOne());
+  EXPECT_EQ(modOne, modOne.getOne());
 
   auto rnd = PrimeFieldType::Random();
   while (rnd.IsZero() || rnd.IsOne()) {

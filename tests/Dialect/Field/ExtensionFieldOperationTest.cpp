@@ -221,4 +221,33 @@ TYPED_TEST(ExtensionFieldOperationTest, Inverse) {
       /*aMustBeNonZero=*/true);
 }
 
+TYPED_TEST(ExtensionFieldOperationTest, ZeroAndOne) {
+  using ExtensionFieldType = TypeParam;
+  static constexpr uint32_t N =
+      ExtensionFieldType::Config::kDegreeOverBaseField;
+
+  auto zero = ExtensionFieldType::Zero();
+  auto efZero = ExtensionFieldOperation<N>::fromUnchecked(
+      convertToAPInts(zero.values()), this->efType);
+  EXPECT_TRUE(efZero.isZero());
+  EXPECT_FALSE(efZero.isOne());
+  EXPECT_EQ(efZero, efZero.getZero());
+
+  auto one = ExtensionFieldType::One();
+  auto efOne = ExtensionFieldOperation<N>::fromUnchecked(
+      convertToAPInts(one.values()), this->efType);
+  EXPECT_FALSE(efOne.isZero());
+  EXPECT_TRUE(efOne.isOne());
+  EXPECT_EQ(efOne, efOne.getOne());
+
+  auto rnd = ExtensionFieldType::Random();
+  while (rnd.IsZero() || rnd.IsOne()) {
+    rnd = ExtensionFieldType::Random();
+  }
+  auto efRnd = ExtensionFieldOperation<N>::fromUnchecked(
+      convertToAPInts(rnd.values()), this->efType);
+  EXPECT_FALSE(efRnd.isZero());
+  EXPECT_FALSE(efRnd.isOne());
+}
+
 } // namespace mlir::prime_ir::field

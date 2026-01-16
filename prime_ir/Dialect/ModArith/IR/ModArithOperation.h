@@ -59,6 +59,7 @@ public:
     return ret;
   }
 
+  ModArithOperation getZero() const;
   ModArithOperation getOne() const;
 
   operator APInt() const { return value; }

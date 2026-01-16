@@ -304,7 +304,7 @@ TYPED_TEST(PrimeFieldOperationTest, DISABLED_ToMont) {
   }
 }
 
-TYPED_TEST(PrimeFieldOperationTest, IsZero) {
+TYPED_TEST(PrimeFieldOperationTest, ZeroAndOne) {
   using PrimeFieldType = TypeParam;
 
   auto zero = PrimeFieldType::Zero();
@@ -312,12 +312,14 @@ TYPED_TEST(PrimeFieldOperationTest, IsZero) {
                                                    this->pfType);
   EXPECT_TRUE(pfZero.isZero());
   EXPECT_FALSE(pfZero.isOne());
+  EXPECT_EQ(pfZero, pfZero.getZero());
 
   auto one = PrimeFieldType::One();
   auto pfOne = PrimeFieldOperation::fromUnchecked(convertToAPInt(one.value()),
                                                   this->pfType);
   EXPECT_FALSE(pfOne.isZero());
   EXPECT_TRUE(pfOne.isOne());
+  EXPECT_EQ(pfOne, pfOne.getOne());
 
   auto rnd = PrimeFieldType::Random();
   while (rnd.IsZero() || rnd.IsOne()) {
