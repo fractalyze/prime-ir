@@ -108,6 +108,7 @@ public:
   static ExtensionFieldOperation
   fromUnchecked(const SmallVector<APInt> &coeffs,
                 ExtensionFieldTypeInterface efType) {
+    assert(coeffs.size() == N);
     std::array<PrimeFieldOperation, N> newCoeffs;
     auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
     for (size_t i = 0; i < N; ++i) {
