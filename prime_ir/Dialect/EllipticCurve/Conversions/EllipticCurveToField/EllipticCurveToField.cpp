@@ -695,8 +695,8 @@ void EllipticCurveToField::runOnOperation() {
 
   target.addLegalOp<
       // clang-format off
-      ExtractOp,
-      PointOp
+      ExtFromCoordOp,
+      ExtToCoordsOp
       // clang-format on
       >();
 

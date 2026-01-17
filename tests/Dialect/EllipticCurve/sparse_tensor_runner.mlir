@@ -87,7 +87,7 @@ func.func @test_bucket_acc_csr() {
   // Create zero point for jacobian accumulation
   %zeroPF = field.constant 0 : !PFm
   %onePF = field.constant 1 : !PFm
-  %zero_jacobian = elliptic_curve.point %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobian
+  %zero_jacobian = elliptic_curve.ext_from_coord %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobian
 
   // Fill tensor with zero points
   %bucket_results = tensor.empty() : tensor<8x!jacobian>

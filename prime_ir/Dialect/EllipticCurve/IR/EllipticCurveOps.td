@@ -53,16 +53,16 @@ class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
 
 ////////////// POINT INITIALIZATIONS //////////////
 
-def EllipticCurve_PointOp : EllipticCurve_Op<"point"> {
-  let summary = "An elliptic curve point";
+def EllipticCurve_ExtFromCoordOp : EllipticCurve_Op<"ext_from_coord"> {
+  let summary = "Constructs an elliptic curve point from coordinates";
   let description = [{
-    Defines an elliptic curve point in affine(x, y), jacobian(x, y, z), or xyzz(x, y, z², z³) form.
+    Constructs an elliptic curve point from coordinates in affine(x, y), jacobian(x, y, z), or xyzz(x, y, z², z³) form.
 
     Example:
     ```
-    %0 = elliptic_curve.point %x, %y : elliptic_curve.affine<#curve>
-    %1 = elliptic_curve.point %x, %y, %z : elliptic_curve.jacobian<#curve>
-    %2 = elliptic_curve.point %x, %y, %zz, %zzz : elliptic_curve.xyzz<#curve>
+    %0 = elliptic_curve.ext_from_coord %x, %y : elliptic_curve.affine<#curve>
+    %1 = elliptic_curve.ext_from_coord %x, %y, %z : elliptic_curve.jacobian<#curve>
+    %2 = elliptic_curve.ext_from_coord %x, %y, %zz, %zzz : elliptic_curve.xyzz<#curve>
     ```
   }];
   let arguments = (ins Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, LLVMStructType, AnySignlessInteger]>>:$coords);
@@ -93,14 +93,14 @@ def EllipticCurve_IsZeroOp : EllipticCurve_Op<"is_zero", [TypesMatchWith<
 
 /////////// POINT EXTRACTION //////////////
 
-def EllipticCurve_ExtractOp : EllipticCurve_Op<"extract"> {
+def EllipticCurve_ExtToCoordsOp : EllipticCurve_Op<"ext_to_coords"> {
   let summary = "Extracts coordinates of a point";
   let description = [{
-    Outputs coordinates of an elliptic curve point as integers.
+    Extracts coordinates of an elliptic curve point as integers.
 
     Example:
     ```
-    %coords = elliptic_curve.extract %point : elliptic_curve.affine<#curve> -> !PF
+    %coords = elliptic_curve.ext_to_coords %point : elliptic_curve.affine<#curve> -> !PF
     ```
   }];
 
