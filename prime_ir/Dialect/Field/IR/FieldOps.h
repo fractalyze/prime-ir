@@ -40,6 +40,10 @@ PrimeFieldType getResultPrimeFieldType(OpType op) {
 Type getStandardFormType(Type type);
 Type getMontgomeryFormType(Type type);
 
+FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
+                                                     Type type,
+                                                     ArrayRef<APInt> values);
+
 ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result);
 
 } // namespace mlir::prime_ir::field

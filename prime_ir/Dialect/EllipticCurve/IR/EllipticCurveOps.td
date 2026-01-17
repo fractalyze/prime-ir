@@ -53,6 +53,49 @@ class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
 
 ////////////// POINT INITIALIZATIONS //////////////
 
+def EllipticCurve_ConstantOp : EllipticCurve_Op<"constant", [ConstantLike]> {
+  let summary = "Define a constant elliptic curve point via coordinates";
+  let description = [{
+    Defines a constant elliptic curve point from integer coordinates. The number of
+    provided coordinates must match the point representation:
+    - 2 coordinates for Affine points
+    - 3 coordinates for Jacobian points
+    - 4 coordinates for XYZZ points
+
+    The resulting point must satisfy the specific curve equation (e.g., y² = x³ + ax + b).
+
+    Example:
+    ```mlir
+    // Affine point (x, y)
+    %0 = elliptic_curve.constant 1, 2 : !elliptic_curve.affine<#curve>
+    // Jacobian point (x, y, z)
+    %1 = elliptic_curve.constant 1, 2, 1 : !elliptic_curve.jacobian<#curve>
+    // XYZZ point (x, y, zz, zzz)
+    %2 = elliptic_curve.constant 1, 2, 1, 1 : !elliptic_curve.xyzz<#curve>
+    ```
+  }];
+  let arguments = (ins ArrayAttr:$coords);
+  let results = (outs PointLike:$output);
+  let hasCustomAssemblyFormat = 1;
+  let hasFolder = 1;
+  let extraClassDeclaration = [{
+    /// Build the constant op with `value` and `type` if possible, otherwise
+    /// returns null.
+    static ConstantOp materialize(OpBuilder &builder, Attribute value,
+                                  Type type, Location loc);
+  }];
+  // TODO(chokobole): The current verification DevEx is suboptimal due to
+  // Montgomery domain mismatches. If the elliptic curve is defined over a
+  // Montgomery base field, but the constant coordinates are provided in the
+  // standard (non-Montgomery) domain, the verifier will fail to validate the
+  // curve equation.
+  //
+  // We should enable the verifier once the field constant parser supports
+  // automatic domain conversion to ensure consistency between input literals
+  // and the target field representation.
+
+}
+
 def EllipticCurve_ExtFromCoordOp : EllipticCurve_Op<"ext_from_coord"> {
   let summary = "Constructs an elliptic curve point from coordinates";
   let description = [{
