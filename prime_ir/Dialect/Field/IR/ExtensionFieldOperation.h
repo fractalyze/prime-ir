@@ -172,6 +172,7 @@ public:
   }
 
   const std::array<PrimeFieldOperation, N> &getCoeffs() const { return coeffs; }
+  Type getType() const { return efType; }
 
   // Convert coefficients to APInts (convenient for constant folding one-liners)
   operator SmallVector<APInt>() const {

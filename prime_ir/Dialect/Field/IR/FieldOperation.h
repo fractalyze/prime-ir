@@ -20,8 +20,10 @@
 
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "prime_ir/Dialect/EllipticCurve/IR/PointOperationBaseForward.h"
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/PrimeFieldOperation.h"
+#include "zk_dtypes/include/geometry/point_declarations.h"
 
 namespace mlir::prime_ir::field {
 
@@ -102,6 +104,7 @@ public:
   operator SmallVector<APInt>() const;
 
   const OperationType &getOperation() const { return operation; }
+  Type getType() const;
 
   FieldOperation operator+(const FieldOperation &other) const;
   FieldOperation &operator+=(const FieldOperation &other) {
@@ -131,7 +134,23 @@ public:
   bool operator!=(const FieldOperation &other) const;
 
 private:
+  template <elliptic_curve::PointKind Kind>
+  friend class elliptic_curve::PointOperationBase;
+  template <typename, typename>
+  friend class zk_dtypes::AffinePointOperation;
+  template <typename, typename>
+  friend class zk_dtypes::JacobianPointOperation;
+  template <typename, typename>
+  friend class zk_dtypes::PointXyzzOperation;
   friend raw_ostream &operator<<(raw_ostream &os, const FieldOperation &op);
+
+  FieldOperation Double() const { return dbl(); }
+  FieldOperation Square() const { return square(); }
+  FieldOperation Inverse() const { return inverse(); }
+  bool IsZero() const { return isZero(); }
+  FieldOperation CreateConst(int64_t constant) const {
+    return FieldOperation(constant, getType());
+  }
 
   template <typename T>
   void createExtFieldOp(T &&value, ExtensionFieldTypeInterface efType) {

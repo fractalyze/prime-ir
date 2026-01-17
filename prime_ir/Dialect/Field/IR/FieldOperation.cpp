@@ -48,6 +48,11 @@ FieldOperation::operator SmallVector<APInt>() const {
       operation);
 }
 
+Type FieldOperation::getType() const {
+  return std::visit([](const auto &op) -> Type { return op.getType(); },
+                    operation);
+}
+
 namespace {
 
 template <typename F>

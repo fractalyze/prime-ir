@@ -46,6 +46,7 @@ cc_library(
         "EllipticCurveOps.cpp",
         "EllipticCurveTypes.cpp",
         "KnownCurves.cpp",
+        "PointOperation.cpp",
     ],
     hdrs = [
         "EllipticCurveAttributes.h",
@@ -53,9 +54,12 @@ cc_library(
         "EllipticCurveOps.h",
         "EllipticCurveTypes.h",
         "KnownCurves.h",
+        "PointOperation.h",
     ],
     deps = [
         ":PointKind",
+        ":PointOperationBaseForward",
+        ":PointOperationSelector",
         ":attributes_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
@@ -74,12 +78,20 @@ cc_library(
         "@llvm-project//mlir:Support",
         "@zk_dtypes//zk_dtypes:bn254_g1",
         "@zk_dtypes//zk_dtypes:bn254_g2",
+        "@zk_dtypes//zk_dtypes:control_flow_operation",
     ],
 )
 
 cc_library(
     name = "PointKind",
     hdrs = ["PointKind.h"],
+    deps = ["@zk_dtypes//zk_dtypes:point_declarations"],
+)
+
+cc_library(
+    name = "PointOperationBaseForward",
+    hdrs = ["PointOperationBaseForward.h"],
+    deps = [":PointKind"],
 )
 
 cc_library(

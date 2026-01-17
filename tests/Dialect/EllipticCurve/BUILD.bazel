@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+load("@rules_cc//cc:defs.bzl", "cc_test")
 load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
 load("//bazel:lit.bzl", "glob_lit_tests", "run_lit_tests")
 
@@ -46,4 +47,16 @@ run_lit_tests(
     timeout_override = {
         "bucket_reduce_runner.mlir": "moderate",
     },
+)
+
+cc_test(
+    name = "PointOperationTest",
+    srcs = ["PointOperationTest.cpp"],
+    deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@zk_dtypes//zk_dtypes:bn254_g1",
+        "@zk_dtypes//zk_dtypes:bn254_g2",
+    ],
 )

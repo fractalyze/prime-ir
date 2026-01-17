@@ -104,6 +104,7 @@ public:
   IntegerAttr getIntegerAttr() const {
     return IntegerAttr::get(type.getStorageType(), op);
   }
+  Type getType() const { return type; }
 
   PrimeFieldOperation operator+(const PrimeFieldOperation &other) const {
     assert(type == other.type);
