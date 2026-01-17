@@ -18,6 +18,8 @@
 
 #include <cassert>
 
+#include "llvm/ADT/bit.h"
+#include "mlir/IR/MLIRContext.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 
@@ -74,6 +76,21 @@ public:
     ret.op = op;
     ret.type = type;
     return ret;
+  }
+
+  template <typename F>
+  static PrimeFieldType getPrimeFieldType(MLIRContext *context) {
+    auto modulusBits = llvm::bit_ceil(F::Config::kModulusBits);
+    IntegerAttr modulus =
+        IntegerAttr::get(IntegerType::get(context, modulusBits),
+                         convertToAPInt(F::Config::kModulus, modulusBits));
+    return PrimeFieldType::get(context, modulus, F::kUseMontgomery);
+  }
+
+  template <typename F>
+  static PrimeFieldOperation fromZkDtype(MLIRContext *context, const F &pf) {
+    return fromUnchecked(mod_arith::ModArithOperation::fromZkDtype(context, pf),
+                         getPrimeFieldType<F>(context));
   }
 
   PrimeFieldOperation getZero() const {

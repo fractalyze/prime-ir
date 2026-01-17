@@ -88,6 +88,16 @@ public:
     return ret;
   }
 
+  template <typename F>
+  static FieldOperation fromZkDtype(MLIRContext *context, const F &f) {
+    if constexpr (F::ExtensionDegree() == 1) {
+      return PrimeFieldOperation::fromZkDtype(context, f);
+    } else {
+      constexpr size_t N = F::Config::kDegreeOverBaseField;
+      return ExtensionFieldOperation<N>::fromZkDtype(context, f);
+    }
+  }
+
   operator APInt() const;
   operator SmallVector<APInt>() const;
 

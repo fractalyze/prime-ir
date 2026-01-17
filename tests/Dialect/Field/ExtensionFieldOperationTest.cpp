@@ -16,10 +16,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR//ExtensionFieldOperation.h"
 
 #include "gtest/gtest.h"
-#include "llvm/ADT/bit.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
-#include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/ZkDtypes.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fq2.h"
 #include "zk_dtypes/include/field/babybear/babybear4.h"
@@ -33,24 +30,7 @@ public:
   static constexpr uint32_t N = ExtF::Config::kDegreeOverBaseField;
   using F = typename ExtF::Config::BaseField;
 
-  static void SetUpTestSuite() {
-    context.loadDialect<FieldDialect>();
-    auto modulusBits = llvm::bit_ceil(F::Config::kModulusBits);
-    IntegerAttr modulus =
-        IntegerAttr::get(IntegerType::get(&context, modulusBits),
-                         convertToAPInt(F::Config::kModulus, modulusBits));
-    PrimeFieldType pfType =
-        PrimeFieldType::get(&context, modulus, ExtF::kUseMontgomery);
-    IntegerAttr nonResidue =
-        convertToIntegerAttr(&context, ExtF::Config::kNonResidue.value());
-    if constexpr (N == 2) {
-      efType = QuadraticExtFieldType::get(&context, pfType, nonResidue);
-    } else if constexpr (N == 3) {
-      efType = CubicExtFieldType::get(&context, pfType, nonResidue);
-    } else if constexpr (N == 4) {
-      efType = QuarticExtFieldType::get(&context, pfType, nonResidue);
-    }
-  }
+  static void SetUpTestSuite() { context.loadDialect<FieldDialect>(); }
 
   void runBinaryOperationTest(
       std::function<ExtF(const ExtF &, const ExtF &)> f_operation,
@@ -76,13 +56,11 @@ public:
                                      const ExtensionFieldOperation<N> &)>
           ef_operation,
       const ExtF &a, const ExtF &b) {
-    SmallVector<APInt> coeffsA = convertToAPInts(a.values());
-    SmallVector<APInt> coeffsB = convertToAPInts(b.values());
-    auto efA = ExtensionFieldOperation<N>::fromUnchecked(coeffsA, efType);
-    auto efB = ExtensionFieldOperation<N>::fromUnchecked(coeffsB, efType);
-    auto c = f_operation(a, b);
-    SmallVector<APInt> coeffsC = convertToAPInts(c.values());
-    EXPECT_EQ(coeffsC, static_cast<SmallVector<APInt>>(ef_operation(efA, efB)));
+    auto efA = ExtensionFieldOperation<N>::fromZkDtype(&context, a);
+    auto efB = ExtensionFieldOperation<N>::fromZkDtype(&context, b);
+    EXPECT_EQ(
+        ExtensionFieldOperation<N>::fromZkDtype(&context, f_operation(a, b)),
+        ef_operation(efA, efB));
   }
 
   void runUnaryOperationTest(std::function<ExtF(const ExtF &)> f_operation,
@@ -104,22 +82,16 @@ public:
                                  const ExtensionFieldOperation<N> &)>
                                  ef_operation,
                              const ExtF &a) {
-    SmallVector<APInt> coeffsA = convertToAPInts(a.values());
-    auto efA = ExtensionFieldOperation<N>::fromUnchecked(coeffsA, efType);
-    auto c = f_operation(a);
-    SmallVector<APInt> coeffsC = convertToAPInts(c.values());
-    EXPECT_EQ(coeffsC, static_cast<SmallVector<APInt>>(ef_operation(efA)));
+    auto efA = ExtensionFieldOperation<N>::fromZkDtype(&context, a);
+    EXPECT_EQ(ExtensionFieldOperation<N>::fromZkDtype(&context, f_operation(a)),
+              ef_operation(efA));
   }
 
   static MLIRContext context;
-  static ExtensionFieldTypeInterface efType;
 };
 
 template <typename F>
 MLIRContext ExtensionFieldOperationTest<F>::context;
-
-template <typename F>
-ExtensionFieldTypeInterface ExtensionFieldOperationTest<F>::efType;
 
 using ExtensionFieldTypes = testing::Types<
     // modulus bits = 2³¹
@@ -227,15 +199,13 @@ TYPED_TEST(ExtensionFieldOperationTest, ZeroAndOne) {
       ExtensionFieldType::Config::kDegreeOverBaseField;
 
   auto zero = ExtensionFieldType::Zero();
-  auto efZero = ExtensionFieldOperation<N>::fromUnchecked(
-      convertToAPInts(zero.values()), this->efType);
+  auto efZero = ExtensionFieldOperation<N>::fromZkDtype(&this->context, zero);
   EXPECT_TRUE(efZero.isZero());
   EXPECT_FALSE(efZero.isOne());
   EXPECT_EQ(efZero, efZero.getZero());
 
   auto one = ExtensionFieldType::One();
-  auto efOne = ExtensionFieldOperation<N>::fromUnchecked(
-      convertToAPInts(one.values()), this->efType);
+  auto efOne = ExtensionFieldOperation<N>::fromZkDtype(&this->context, one);
   EXPECT_FALSE(efOne.isZero());
   EXPECT_TRUE(efOne.isOne());
   EXPECT_EQ(efOne, efOne.getOne());
@@ -244,8 +214,7 @@ TYPED_TEST(ExtensionFieldOperationTest, ZeroAndOne) {
   while (rnd.IsZero() || rnd.IsOne()) {
     rnd = ExtensionFieldType::Random();
   }
-  auto efRnd = ExtensionFieldOperation<N>::fromUnchecked(
-      convertToAPInts(rnd.values()), this->efType);
+  auto efRnd = ExtensionFieldOperation<N>::fromZkDtype(&this->context, rnd);
   EXPECT_FALSE(efRnd.isZero());
   EXPECT_FALSE(efRnd.isOne());
 }

@@ -17,9 +17,7 @@ limitations under the License.
 
 #include "gtest/gtest.h"
 #include "llvm/ADT/bit.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
-#include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/ZkDtypes.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/field/babybear/babybear.h"
@@ -30,14 +28,7 @@ namespace mlir::prime_ir::field {
 template <typename F>
 class PrimeFieldOperationTest : public testing::Test {
 public:
-  static void SetUpTestSuite() {
-    context.loadDialect<FieldDialect>();
-    auto modulusBits = llvm::bit_ceil(F::Config::kModulusBits);
-    IntegerAttr modulus =
-        IntegerAttr::get(IntegerType::get(&context, modulusBits),
-                         convertToAPInt(F::Config::kModulus, modulusBits));
-    pfType = PrimeFieldType::get(&context, modulus, F::kUseMontgomery);
-  }
+  static void SetUpTestSuite() { context.loadDialect<FieldDialect>(); }
 
   void runBinaryOperationTest(
       std::function<F(const F &, const F &)> f_operation,
@@ -61,13 +52,11 @@ public:
                                         const PrimeFieldOperation &)>
           p_operation,
       const F &a, const F &b) {
-    auto pfA =
-        PrimeFieldOperation::fromUnchecked(convertToAPInt(a.value()), pfType);
-    auto pfB =
-        PrimeFieldOperation::fromUnchecked(convertToAPInt(b.value()), pfType);
-    auto c = f_operation(a, b);
-    EXPECT_EQ(convertToAPInt(c.value()),
-              static_cast<APInt>(p_operation(pfA, pfB)));
+    auto pfA = PrimeFieldOperation::fromZkDtype(&this->context, a);
+    auto pfB = PrimeFieldOperation::fromZkDtype(&this->context, b);
+    EXPECT_EQ(
+        PrimeFieldOperation::fromZkDtype(&this->context, f_operation(a, b)),
+        p_operation(pfA, pfB));
   }
 
   void runUnaryOperationTest(
@@ -89,21 +78,16 @@ public:
       std::function<PrimeFieldOperation(const PrimeFieldOperation &)>
           p_operation,
       const F &a) {
-    auto pfA =
-        PrimeFieldOperation::fromUnchecked(convertToAPInt(a.value()), pfType);
-    auto c = f_operation(a);
-    EXPECT_EQ(convertToAPInt(c.value()), static_cast<APInt>(p_operation(pfA)));
+    auto pfA = PrimeFieldOperation::fromZkDtype(&this->context, a);
+    EXPECT_EQ(PrimeFieldOperation::fromZkDtype(&this->context, f_operation(a)),
+              p_operation(pfA));
   }
 
   static MLIRContext context;
-  static PrimeFieldType pfType;
 };
 
 template <typename F>
 MLIRContext PrimeFieldOperationTest<F>::context;
-
-template <typename F>
-PrimeFieldType PrimeFieldOperationTest<F>::pfType;
 
 using PrimeFieldTypes = testing::Types<
     // modulus bits = 2³¹
@@ -192,10 +176,8 @@ TYPED_TEST(PrimeFieldOperationTest, Cmp) {
 
   auto a = PrimeFieldType::Random();
   auto b = PrimeFieldType::Random();
-  auto pfA = PrimeFieldOperation::fromUnchecked(convertToAPInt(a.value()),
-                                                this->pfType);
-  auto pfB = PrimeFieldOperation::fromUnchecked(convertToAPInt(b.value()),
-                                                this->pfType);
+  auto pfA = PrimeFieldOperation::fromZkDtype(&this->context, a);
+  auto pfB = PrimeFieldOperation::fromZkDtype(&this->context, b);
 
   EXPECT_EQ(a < b, pfA < pfB);
   EXPECT_EQ(a <= b, pfA <= pfB);
@@ -278,11 +260,10 @@ TYPED_TEST(PrimeFieldOperationTest, FromMont) {
   if constexpr (!PrimeFieldType::kUseMontgomery) {
     GTEST_SKIP() << "Non-Montgomery field is not supported";
   } else {
-    this->runUnaryOperationTest(
-        [](const PrimeFieldType &a) {
-          return PrimeFieldType::FromUnchecked(a.MontReduce().value());
-        },
-        [](const PrimeFieldOperation &a) { return a.fromMont(); });
+    auto a = PrimeFieldType::Random();
+    auto pfA = PrimeFieldOperation::fromZkDtype(&this->context, a);
+    EXPECT_EQ(PrimeFieldOperation::fromZkDtype(&this->context, a.MontReduce()),
+              pfA.fromMont());
   }
 }
 
@@ -298,9 +279,11 @@ TYPED_TEST(PrimeFieldOperationTest, DISABLED_ToMont) {
   if constexpr (PrimeFieldType::kUseMontgomery) {
     GTEST_SKIP() << "Montgomery field is not supported";
   } else {
-    this->runUnaryOperationTest(
-        [](const PrimeFieldType &a) { return PrimeFieldType(a.value()); },
-        [](const PrimeFieldOperation &a) { return a.toMont(); });
+    auto a = PrimeFieldType::Random();
+    auto pfA = PrimeFieldOperation::fromZkDtype(&this->context, a);
+    EXPECT_EQ(PrimeFieldOperation::fromZkDtype(&this->context,
+                                               PrimeFieldType(a.value())),
+              pfA.toMont());
   }
 }
 
@@ -308,15 +291,13 @@ TYPED_TEST(PrimeFieldOperationTest, ZeroAndOne) {
   using PrimeFieldType = TypeParam;
 
   auto zero = PrimeFieldType::Zero();
-  auto pfZero = PrimeFieldOperation::fromUnchecked(convertToAPInt(zero.value()),
-                                                   this->pfType);
+  auto pfZero = PrimeFieldOperation::fromZkDtype(&this->context, zero);
   EXPECT_TRUE(pfZero.isZero());
   EXPECT_FALSE(pfZero.isOne());
   EXPECT_EQ(pfZero, pfZero.getZero());
 
   auto one = PrimeFieldType::One();
-  auto pfOne = PrimeFieldOperation::fromUnchecked(convertToAPInt(one.value()),
-                                                  this->pfType);
+  auto pfOne = PrimeFieldOperation::fromZkDtype(&this->context, one);
   EXPECT_FALSE(pfOne.isZero());
   EXPECT_TRUE(pfOne.isOne());
   EXPECT_EQ(pfOne, pfOne.getOne());
@@ -325,8 +306,7 @@ TYPED_TEST(PrimeFieldOperationTest, ZeroAndOne) {
   while (rnd.IsZero() || rnd.IsOne()) {
     rnd = PrimeFieldType::Random();
   }
-  auto pfRnd = PrimeFieldOperation::fromUnchecked(convertToAPInt(rnd.value()),
-                                                  this->pfType);
+  auto pfRnd = PrimeFieldOperation::fromZkDtype(&this->context, rnd);
   EXPECT_FALSE(pfRnd.isZero());
   EXPECT_FALSE(pfRnd.isOne());
 }

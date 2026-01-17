@@ -19,10 +19,13 @@
 #include <array>
 #include <cassert>
 
+#include "llvm/ADT/bit.h"
+#include "mlir/IR/MLIRContext.h"
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperationSelector.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/Field/IR/PrimeFieldOperation.h"
 #include "prime_ir/Utils/Power.h"
+#include "prime_ir/Utils/ZkDtypes.h"
 
 namespace mlir::prime_ir::field {
 
@@ -125,6 +128,40 @@ public:
     ret.coeffs = coeffs;
     ret.efType = efType;
     return ret;
+  }
+
+  template <typename ExtF>
+  static ExtensionFieldTypeInterface
+  getExtensionFieldType(MLIRContext *context) {
+    using F = typename ExtF::Config::BaseField;
+
+    auto modulusBits = llvm::bit_ceil(F::Config::kModulusBits);
+    IntegerAttr modulus =
+        IntegerAttr::get(IntegerType::get(context, modulusBits),
+                         convertToAPInt(F::Config::kModulus, modulusBits));
+    PrimeFieldType pfType =
+        PrimeFieldType::get(context, modulus, ExtF::kUseMontgomery);
+    IntegerAttr nonResidue =
+        convertToIntegerAttr(context, ExtF::Config::kNonResidue.value());
+    ExtensionFieldTypeInterface efType;
+    if constexpr (N == 2) {
+      efType = QuadraticExtFieldType::get(context, pfType, nonResidue);
+    } else if constexpr (N == 3) {
+      efType = CubicExtFieldType::get(context, pfType, nonResidue);
+    } else if constexpr (N == 4) {
+      efType = QuarticExtFieldType::get(context, pfType, nonResidue);
+    }
+    return efType;
+  }
+
+  template <typename ExtF>
+  static ExtensionFieldOperation fromZkDtype(MLIRContext *context,
+                                             const ExtF &ef) {
+    std::array<PrimeFieldOperation, N> coeffs;
+    for (size_t i = 0; i < N; ++i) {
+      coeffs[i] = PrimeFieldOperation::fromZkDtype(context, ef[i]);
+    }
+    return fromUnchecked(coeffs, getExtensionFieldType<ExtF>(context));
   }
 
   ExtensionFieldOperation getZero() const {
