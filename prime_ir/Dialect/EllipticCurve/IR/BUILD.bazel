@@ -28,6 +28,7 @@ cc_library(
         "EllipticCurveTypes.h",
     ],
     deps = [
+        ":PointKind",
         ":attributes_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
@@ -43,6 +44,7 @@ cc_library(
         "EllipticCurveAttributes.cpp",
         "EllipticCurveDialect.cpp",
         "EllipticCurveOps.cpp",
+        "EllipticCurveTypes.cpp",
         "KnownCurves.cpp",
     ],
     hdrs = [
@@ -53,6 +55,7 @@ cc_library(
         "KnownCurves.h",
     ],
     deps = [
+        ":PointKind",
         ":attributes_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
@@ -77,17 +80,6 @@ cc_library(
 cc_library(
     name = "PointKind",
     hdrs = ["PointKind.h"],
-)
-
-cc_library(
-    name = "PointKindConversion",
-    srcs = ["PointKindConversion.cpp"],
-    hdrs = ["PointKindConversion.h"],
-    deps = [
-        ":PointKind",
-        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "@llvm-project//mlir:IR",
-    ],
 )
 
 cc_library(
@@ -166,6 +158,14 @@ gentbl_cc_library(
         ],
         "EllipticCurveTypes.cpp.inc": [
             "-gen-typedef-defs",
+            "--typedefs-dialect=elliptic_curve",
+        ],
+        "EllipticCurveTypesInterfaces.h.inc": [
+            "-gen-type-interface-decls",
+            "--typedefs-dialect=elliptic_curve",
+        ],
+        "EllipticCurveTypesInterfaces.cpp.inc": [
+            "-gen-type-interface-defs",
             "--typedefs-dialect=elliptic_curve",
         ],
     },

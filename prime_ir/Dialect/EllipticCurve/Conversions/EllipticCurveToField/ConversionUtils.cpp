@@ -23,16 +23,9 @@ namespace mlir::prime_ir::elliptic_curve {
 namespace {
 
 SmallVector<Type> coordsTypeRange(Type type) {
-  if (auto affineType = dyn_cast<AffineType>(type)) {
-    return SmallVector<Type>(2, affineType.getCurve().getBaseField());
-  } else if (auto jacobianType = dyn_cast<JacobianType>(type)) {
-    return SmallVector<Type>(3, jacobianType.getCurve().getBaseField());
-  } else if (auto xyzzType = dyn_cast<XYZZType>(type)) {
-    return SmallVector<Type>(4, xyzzType.getCurve().getBaseField());
-  } else {
-    llvm_unreachable("Unsupported point-like type for coords type range");
-    return SmallVector<Type>();
-  }
+  PointTypeInterface pointType = cast<PointTypeInterface>(type);
+  return SmallVector<Type>(pointType.getNumCoords(),
+                           pointType.getBaseFieldType());
 }
 
 } // namespace

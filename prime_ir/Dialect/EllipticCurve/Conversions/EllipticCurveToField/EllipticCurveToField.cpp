@@ -27,7 +27,6 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/PointCodeGen.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
-#include "prime_ir/Dialect/EllipticCurve/IR/PointKindConversion.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 
@@ -49,7 +48,7 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
 
     Operation::result_range coords = toCoords(b, op.getInput());
     Type baseFieldType =
-        getCurveFromPointLike(op.getInput().getType()).getBaseField();
+        cast<PointTypeInterface>(op.getInput().getType()).getBaseFieldType();
     Value zeroBF =
         cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
 
@@ -84,8 +83,8 @@ struct ConvertConvertPointType
 
     Type inputType = op.getInput().getType();
     PointCodeGen inputCodeGen(inputType, adaptor.getInput());
-    Type outputType = op.getType();
-    PointKind outputKind = getPointKind(outputType);
+    Type outputType = getElementTypeOrSelf(op.getType());
+    PointKind outputKind = cast<PointTypeInterface>(outputType).getPointKind();
     rewriter.replaceOp(op, {inputCodeGen.convert(outputKind)});
     return success();
   }
@@ -110,7 +109,7 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
     Type rhsPointType = getElementTypeOrSelf(op->getOperandTypes()[1]);
     PointCodeGen rhsCodeGen(rhsPointType, adaptor.getRhs());
     Type outputType = getElementTypeOrSelf(op.getType());
-    PointKind outputKind = getPointKind(outputType);
+    PointKind outputKind = cast<PointTypeInterface>(outputType).getPointKind();
     rewriter.replaceOp(op, {lhsCodeGen.add(rhsCodeGen, outputKind)});
     return success();
   }
@@ -130,8 +129,8 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
 
     Type inputType = op.getInput().getType();
     PointCodeGen inputCodeGen(inputType, adaptor.getInput());
-    Type outputType = op.getType();
-    PointKind outputKind = getPointKind(outputType);
+    Type outputType = getElementTypeOrSelf(op.getType());
+    PointKind outputKind = cast<PointTypeInterface>(outputType).getPointKind();
     rewriter.replaceOp(op, {inputCodeGen.dbl(outputKind)});
     return success();
   }
