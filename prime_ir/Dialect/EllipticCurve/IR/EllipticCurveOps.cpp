@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LogicalResult.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
@@ -347,6 +348,44 @@ LogicalResult ConvertPointTypeOp::verify() {
   if (inputType == outputType)
     return emitError() << "Converting on same types";
   // TODO(ashjeong): check curves are the same
+  return success();
+}
+
+//////////////// FOLDERS ////////////////
+
+OpFoldResult ExtFromCoordOp::fold(FoldAdaptor adaptor) {
+  // Fold: elliptic_curve.ext_from_coord(elliptic_curve.ext_to_coords(arg))
+  // -> arg
+  if (getOperands().empty())
+    return {};
+
+  auto extToCoordsOp = getOperands().front().getDefiningOp<ExtToCoordsOp>();
+  if (!extToCoordsOp)
+    return {};
+
+  // The operands must be exactly the results of the ExtToCoordsOp, in order.
+  if (getOperands() != extToCoordsOp->getResults())
+    return {};
+
+  if (extToCoordsOp->getOperands().size() != 1)
+    return {};
+
+  return extToCoordsOp->getOperand(0);
+}
+
+LogicalResult ExtToCoordsOp::fold(FoldAdaptor adaptor,
+                                  SmallVectorImpl<OpFoldResult> &results) {
+  // Fold: elliptic_curve.ext_to_coords(elliptic_curve.ext_from_coord(arg...))
+  // -> arg...
+  auto extFromCoordOp = getOperand().getDefiningOp<ExtFromCoordOp>();
+  if (!extFromCoordOp)
+    return failure();
+
+  auto operands = extFromCoordOp->getOperands();
+  if (operands.empty())
+    return failure();
+
+  results.append(operands.begin(), operands.end());
   return success();
 }
 

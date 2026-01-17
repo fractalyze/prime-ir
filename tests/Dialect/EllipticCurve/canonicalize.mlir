@@ -123,3 +123,38 @@ func.func @test_xyzz_to_xyzz_double(%point: !xyzz) -> !xyzz {
   // CHECK: return %[[RESULT]] : [[XYZZ]]
   return %double : !xyzz
 }
+
+//===----------------------------------------------------------------------===//
+// ExtToCoordsOp and ExtFromCoordOp
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_ext_from_coord_of_ext_to_coords
+// CHECK-SAME: (%[[ARG0:.*]]: [[AFFINE:.*]]) -> [[AFFINE]] {
+func.func @test_ext_from_coord_of_ext_to_coords(%arg0: !affine) -> !affine {
+  %0:2 = elliptic_curve.ext_to_coords %arg0 : (!affine) -> (!PF, !PF)
+  %1 = elliptic_curve.ext_from_coord %0#0, %0#1 : (!PF, !PF) -> !affine
+  // CHECK-NOT: elliptic_curve.ext_from_coord
+  // CHECK: return %[[ARG0]] : [[AFFINE]]
+  return %1 : !affine
+}
+
+// CHECK-LABEL: @test_swapped_ext_from_coord_of_ext_to_coords
+// CHECK-SAME: (%[[ARG0:.*]]: [[AFFINE:.*]]) -> [[AFFINE]] {
+func.func @test_swapped_ext_from_coord_of_ext_to_coords(%arg0: !affine) -> !affine {
+  %0:2 = elliptic_curve.ext_to_coords %arg0 : (!affine) -> (!PF, !PF)
+  %1 = elliptic_curve.ext_from_coord %0#1, %0#0 : (!PF, !PF) -> !affine
+  // CHECK: %[[EXT_TO_COORDS:.*]]:2 = elliptic_curve.ext_to_coords %[[ARG0]] : ([[AFFINE]]) -> ([[T2:.*]], [[T2]])
+  // CHECK: %[[EXT_FROM_COORD:.*]] = elliptic_curve.ext_from_coord %[[EXT_TO_COORDS]]#1, %[[EXT_TO_COORDS]]#0 : ([[T2]], [[T2]]) -> [[AFFINE]]
+  // CHECK: return %[[EXT_FROM_COORD]] : [[AFFINE]]
+  return %1 : !affine
+}
+
+// CHECK-LABEL: @test_ext_to_coords_of_ext_from_coord
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> ([[T]], [[T]]) {
+func.func @test_ext_to_coords_of_ext_from_coord(%arg0: !PF, %arg1: !PF) -> (!PF, !PF) {
+  %0 = elliptic_curve.ext_from_coord %arg0, %arg1 : (!PF, !PF) -> !affine
+  %1:2 = elliptic_curve.ext_to_coords %0 : (!affine) -> (!PF, !PF)
+  // CHECK-NOT: elliptic_curve.ext_to_coords
+  // CHECK: return %[[ARG0]], %[[ARG1]] : [[T]], [[T]]
+  return %1#0, %1#1 : !PF, !PF
+}
