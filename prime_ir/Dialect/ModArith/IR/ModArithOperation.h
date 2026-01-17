@@ -20,10 +20,14 @@ limitations under the License.
 
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ADT/bit.h"
 #include "llvm/Support/raw_ostream.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/MLIRContext.h"
 #include "mlir/Support/LLVM.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "prime_ir/Utils/ZkDtypes.h"
 
 namespace mlir::prime_ir::mod_arith {
 
@@ -57,6 +61,21 @@ public:
     ret.value = value;
     ret.type = type;
     return ret;
+  }
+
+  template <typename F>
+  static ModArithType getModArithType(MLIRContext *context) {
+    auto modulusBits = llvm::bit_ceil(F::Config::kModulusBits);
+    IntegerAttr modulus =
+        IntegerAttr::get(IntegerType::get(context, modulusBits),
+                         convertToAPInt(F::Config::kModulus, modulusBits));
+    return ModArithType::get(context, modulus, F::kUseMontgomery);
+  }
+
+  template <typename F>
+  static ModArithOperation fromZkDtype(MLIRContext *context, const F &pf) {
+    return fromUnchecked(convertToAPInt(pf.value()),
+                         getModArithType<F>(context));
   }
 
   ModArithOperation getZero() const;
