@@ -32,13 +32,15 @@ def GetIntegerType : NativeCodeCall<"cast<ModArithType>($0.getType()).getStorage
 
 include "prime_ir/Utils/AdditiveCanonicalization.td"
 include "prime_ir/Utils/MultiplicativeCanonicalization.td"
+include "prime_ir/Utils/DistributivityCanonicalization.td"
 
 defm ModArith : AdditiveCanonicalizationPatterns<
-    ModArith_AddOp, ModArith_SubOp, ModArith_NegateOp,
-    ModArith_MulOp, ModArith_DoubleOp, ModArith_SquareOp>;
+    ModArith_AddOp, ModArith_SubOp, ModArith_NegateOp, ModArith_DoubleOp>;
 
 defm ModArith : MultiplicativeCanonicalizationPatterns<
-    ModArith_MulOp, ModArith_SquareOp, ModArith_DoubleOp, ModArith_NegateOp,
-    ModArith_AddOp, ModArith_SubOp>;
+    ModArith_MulOp, ModArith_SquareOp, ModArith_DoubleOp, ModArith_NegateOp>;
+
+defm ModArith : DistributivityCanonicalizationPatterns<
+    ModArith_AddOp, ModArith_SubOp, ModArith_MulOp, ModArith_SquareOp, ModArith_DoubleOp, ModArith_NegateOp>;
 
 #endif // PRIME_IR_MODARITH_IR_MODARITH_CANONICALIZATION_TD

@@ -16,13 +16,25 @@ limitations under the License.
 #ifndef PRIME_IR_UTILS_ADDITIVE_CANONICALIZATION_TD
 #define PRIME_IR_UTILS_ADDITIVE_CANONICALIZATION_TD
 
-// The including file must define `GetAsConstant`.
-// Assumptions for the patterns below:
-// - AddOp/SubOp are associative and commutative where noted.
-// - NegOp is the additive inverse (additive group structure).
-// - Distributivity between MulOp and AddOp/SubOp when factoring.
+//===----------------------------------------------------------------------===//
+// AdditiveCanonicalizationPatterns
+//===----------------------------------------------------------------------===//
+//
+// This multiclass provides common algebraic simplifications for types that
+// satisfy additive group properties (e.g., Elliptic Curve Point, PrimeField,
+// and ModArith Integer).
+//
+// Requirements for the including file:
+// 1. Define `GetAsConstant`: A helper to materialize a constant of the same
+//    type as a given value.
+//
+// Assumptions:
+// - AddOp is commutative and associative.
+// - NegOp is the additive inverse.
+// - DoubleOp(x) is equivalent to AddOp(x, x).
+//===----------------------------------------------------------------------===//
 multiclass AdditiveCanonicalizationPatterns<
-    Op AddOp, Op SubOp, Op NegOp, Op MulOp, Op DoubleOp, Op SquareOp> {
+    Op AddOp, Op SubOp, Op NegOp, Op DoubleOp> {
     //===--------------------------------------------------------------------===//
     // AddOp
     //===--------------------------------------------------------------------===//
@@ -79,12 +91,6 @@ multiclass AdditiveCanonicalizationPatterns<
     def AddAfterNegRhs :
         Pat<(AddOp $x, (NegOp $y)),
             (SubOp $x, $y)>;
-
-    // --- Distributivity ---
-    // xy + xz -> x(y + z)
-    def FactorMulAdd :
-        Pat<(AddOp (MulOp $x, $y), (MulOp $x, $z)),
-            (MulOp $x, (AddOp $y, $z))>;
 
     //===--------------------------------------------------------------------===//
     // SubOp
@@ -176,23 +182,6 @@ multiclass AdditiveCanonicalizationPatterns<
     def SubBothNegated :
         Pat<(SubOp (NegOp $x), (NegOp $y)),
             (SubOp $y, $x)>;
-
-    // --- Distributivity ---
-    // x² - y² -> (x - y)(x + y)
-    def SubAfterSquareBoth :
-        Pat<(SubOp (SquareOp $x), (SquareOp $y)),
-            (MulOp (SubOp $x, $y), (AddOp $x, $y))>;
-
-    // (x + y)² - x² - y² -> 2xy
-    def SubAfterSumSquare :
-        Pat<(SubOp (SubOp (SquareOp (AddOp $x, $y)), (SquareOp $x)),
-                    (SquareOp $y)),
-            (DoubleOp (MulOp $x, $y))>;
-
-    // xy - xz -> x(y - z)
-    def FactorMulSub :
-        Pat<(SubOp (MulOp $x, $y), (MulOp $x, $z)),
-            (MulOp $x, (SubOp $y, $z))>;
 }
 
 #endif // PRIME_IR_UTILS_ADDITIVE_CANONICALIZATION_TD

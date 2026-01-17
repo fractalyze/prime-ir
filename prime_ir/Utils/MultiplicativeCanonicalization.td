@@ -16,12 +16,27 @@ limitations under the License.
 #ifndef PRIME_IR_UTILS_MULTIPLICATIVE_CANONICALIZATION_TD
 #define PRIME_IR_UTILS_MULTIPLICATIVE_CANONICALIZATION_TD
 
-// The including file must define `GetAsConstant`.
-// Assumptions for the patterns below:
-// - MulOp is associative and commutative where noted.
-// - No multiplicative inverses are required.
+//===----------------------------------------------------------------------===//
+// MultiplicativeCanonicalizationPatterns
+//===----------------------------------------------------------------------===//
+//
+// This multiclass provides common algebraic simplifications for multiplicative
+// operations. It targets operations that satisfy associative and commutative
+// properties (e.g., PrimeField, ExtensionField, and ModArith Integer).
+//
+// Requirements for the including file:
+// 1. Define `GetAsConstant`: A helper to materialize a constant of the same
+//    type as a given value.
+// 2. Define Matchers: `IsTwo`, `IsNegativeOne`, `IsNegativeTwo`, and
+//    `IsNegativeFour` must be defined to check constant values.
+//
+// Assumptions:
+// - MulOp is commutative and associative.
+// - SquareOp(x) is a specialized version of x * x (Strength Reduction).
+// - DoubleOp(x) is a specialized version of x * 2.
+//===----------------------------------------------------------------------===//
 multiclass MultiplicativeCanonicalizationPatterns<Op MulOp, Op SquareOp, Op DoubleOp,
-                                                 Op NegateOp, Op AddOp, Op SubOp> {
+                                                  Op NegateOp> {
     //===--------------------------------------------------------------------===//
     // MulOp
     //===--------------------------------------------------------------------===//
@@ -68,32 +83,11 @@ multiclass MultiplicativeCanonicalizationPatterns<Op MulOp, Op SquareOp, Op Doub
             (NegateOp (DoubleOp $x)),
             [(IsNegativeTwo $c0, $x)]>;
 
-    // x * (-3) -> negate(x + double(x))
-    def MulNegativeThreeRhs :
-        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
-            (NegateOp (AddOp (DoubleOp $x), $x)),
-            [(IsNegativeThree $c0, $x)]>;
-
     // x * (-4) -> negate(double(double(x)))
     def MulNegativeFourRhs :
         Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
             (NegateOp (DoubleOp (DoubleOp $x))),
             [(IsNegativeFour $c0, $x)]>;
-
-    // (x + c0) * c1 -> x * c1 + c0 * c1
-    def MulAddDistributeConstant :
-        Pat<(MulOp (AddOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)), (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (AddOp (MulOp $x, (GetAsConstant $x, $c1)), (MulOp (GetAsConstant $x, $c0), (GetAsConstant $x, $c1)))>;
-
-    // (x - c0) * c1 -> x * c1 - c0 * c1
-    def MulSubDistributeConstantRhs :
-        Pat<(MulOp (SubOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)), (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (SubOp (MulOp $x, (GetAsConstant $x, $c1)), (MulOp (GetAsConstant $x, $c0), (GetAsConstant $x, $c1)))>;
-
-    // (c0 - x) * c1 -> c0 * c1 - x * c1
-    def MulSubDistributeConstantLhs :
-        Pat<(MulOp (SubOp (ConstantLikeMatcher TypedAttrInterface:$c0), $x), (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (SubOp (MulOp (GetAsConstant $x, $c0), (GetAsConstant $x, $c1)), (MulOp $x, (GetAsConstant $x, $c1)))>;
 
 }
 

@@ -491,21 +491,21 @@ namespace {
 void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_ADD_PATTERN(Name) patterns.add<ModArith##Name>(context);
-  PRIME_IR_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+  PRIME_IR_FIELD_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
 #undef PRIME_IR_ADD_PATTERN
 }
 
 void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_SUB_PATTERN(Name) patterns.add<ModArith##Name>(context);
-  PRIME_IR_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
+  PRIME_IR_FIELD_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
 #undef PRIME_IR_SUB_PATTERN
 }
 
 void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_MUL_PATTERN(Name) patterns.add<ModArith##Name>(context);
-  PRIME_IR_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
+  PRIME_IR_FIELD_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
 #undef PRIME_IR_MUL_PATTERN
 }
 
