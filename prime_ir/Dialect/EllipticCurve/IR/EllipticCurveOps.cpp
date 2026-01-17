@@ -101,14 +101,15 @@ Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   Value oneBF =
       cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
   return isa<XYZZType>(pointType)
-             ? b.create<PointOp>(pointType,
-                                 ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-             : b.create<PointOp>(pointType, ValueRange{oneBF, oneBF, zeroBF});
+             ? b.create<ExtFromCoordOp>(
+                   pointType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
+             : b.create<ExtFromCoordOp>(pointType,
+                                        ValueRange{oneBF, oneBF, zeroBF});
 }
 
 /////////////// VERIFY OPS /////////////////
 
-LogicalResult PointOp::verify() {
+LogicalResult ExtFromCoordOp::verify() {
   Type outputType = getType();
   unsigned numCoords = cast<PointTypeInterface>(outputType).getNumCoords();
   if (numCoords != getCoords().size()) {
@@ -118,7 +119,7 @@ LogicalResult PointOp::verify() {
   return verifyPointCoordTypes(*this, outputType, getCoords()[0].getType());
 }
 
-LogicalResult ExtractOp::verify() {
+LogicalResult ExtToCoordsOp::verify() {
   Type inputType = getInput().getType();
   unsigned numCoords =
       cast<PointTypeInterface>(getElementTypeOrSelf(inputType)).getNumCoords();
