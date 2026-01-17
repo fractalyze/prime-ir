@@ -50,6 +50,20 @@ func.func @test_initialization_and_conversion() {
   return
 }
 
+// CHECK-LABEL: @test_constant
+func.func @test_constant() {
+  // CHECK-NOT: elliptic_curve.constant
+  // G1 constants (prime field - single integers)
+  %affine1 = elliptic_curve.constant 1, 2 : !affine
+  %jacobian1 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %xyzz1 = elliptic_curve.constant 1, 2, 1, 1 : !xyzz
+  // G2 constants (extension field - integer arrays)
+  %g2_affine1 = elliptic_curve.constant [1, 1], [2, 3] : !g2affine
+  %g2_jacobian1 = elliptic_curve.constant [1, 1], [2, 3], [1, 0] : !g2jacobian
+  %g2_xyzz1 = elliptic_curve.constant [1, 1], [2, 3], [1, 0], [1, 0] : !g2xyzz
+  return
+}
+
 // CHECK-LABEL: @test_addition
 func.func @test_addition(%affine1: !affine, %affine2: !affine, %jacobian1: !jacobian, %jacobian2: !jacobian, %xyzz1: !xyzz, %xyzz2: !xyzz) {
   // CHECK-NOT: elliptic_curve.add
