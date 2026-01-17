@@ -32,14 +32,15 @@ def GetIntegerType : NativeCodeCall<"cast<PrimeFieldType>($0.getType()).getStora
 
 include "prime_ir/Utils/AdditiveCanonicalization.td"
 include "prime_ir/Utils/MultiplicativeCanonicalization.td"
+include "prime_ir/Utils/DistributivityCanonicalization.td"
 
 defm Field : AdditiveCanonicalizationPatterns<
-    Field_AddOp, Field_SubOp, Field_NegateOp,
-    Field_MulOp, Field_DoubleOp, Field_SquareOp>;
+    Field_AddOp, Field_SubOp, Field_NegateOp, Field_DoubleOp>;
 
 defm Field : MultiplicativeCanonicalizationPatterns<
-    Field_MulOp, Field_SquareOp, Field_DoubleOp, Field_NegateOp, Field_AddOp,
-    Field_SubOp>;
+    Field_MulOp, Field_SquareOp, Field_DoubleOp, Field_NegateOp>;
 
+defm Field : DistributivityCanonicalizationPatterns<
+    Field_AddOp, Field_SubOp, Field_MulOp, Field_SquareOp, Field_DoubleOp, Field_NegateOp>;
 
 #endif // PRIME_IR_FIELD_IR_FIELD_CANONICALIZATION_TD
