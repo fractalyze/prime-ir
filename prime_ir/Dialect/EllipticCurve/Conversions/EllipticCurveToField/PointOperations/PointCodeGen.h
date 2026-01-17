@@ -66,6 +66,20 @@ public:
   PointKind getKind() const { return Kind; }
   operator Value() const { return value; }
 
+  template <PointKind Kind2>
+  PointCodeGenBase<Kind2> convert() const {
+    if constexpr (Kind == Kind2) {
+      return *this;
+    } else if constexpr (Kind2 == PointKind::kAffine) {
+      return this->ToAffine();
+    } else if constexpr (Kind2 == PointKind::kJacobian) {
+      return this->ToJacobian();
+    } else {
+      static_assert(Kind2 == PointKind::kXYZZ, "Unsupported point kind");
+      return this->ToXyzz();
+    }
+  }
+
 protected:
   template <typename, typename>
   friend class zk_dtypes::AffinePointOperation;
