@@ -94,8 +94,21 @@ public:
   const OperationType &getOperation() const { return operation; }
 
   FieldOperation operator+(const FieldOperation &other) const;
+  FieldOperation &operator+=(const FieldOperation &other) {
+    return *this = *this + other;
+  }
   FieldOperation operator-(const FieldOperation &other) const;
+  FieldOperation &operator-=(const FieldOperation &other) {
+    return *this = *this - other;
+  }
   FieldOperation operator*(const FieldOperation &other) const;
+  FieldOperation &operator*=(const FieldOperation &other) {
+    return *this = *this * other;
+  }
+  FieldOperation operator/(const FieldOperation &other) const;
+  FieldOperation &operator/=(const FieldOperation &other) {
+    return *this = *this / other;
+  }
   FieldOperation operator-() const;
   FieldOperation dbl() const;
   FieldOperation square() const;

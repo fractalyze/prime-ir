@@ -91,6 +91,12 @@ FieldOperation FieldOperation::operator*(const FieldOperation &other) const {
       [](const auto &a, const auto &b) { return a * b; });
 }
 
+FieldOperation FieldOperation::operator/(const FieldOperation &other) const {
+  return applyBinaryOp<FieldOperation>(
+      operation, other.operation,
+      [](const auto &a, const auto &b) { return a / b; });
+}
+
 FieldOperation FieldOperation::operator-() const {
   return applyUnaryOp(operation, [](const auto &v) { return -v; });
 }
