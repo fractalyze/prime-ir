@@ -69,6 +69,7 @@ def EllipticCurve_ExtFromCoordOp : EllipticCurve_Op<"ext_from_coord"> {
   let results = (outs PointLike:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 ////////////// POINT CHECKS //////////////
@@ -108,6 +109,7 @@ def EllipticCurve_ExtToCoordsOp : EllipticCurve_Op<"ext_to_coords"> {
   let results = (outs Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, LLVMStructType, AnySignlessInteger]>>:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
+  let hasCanonicalizer = 1;
 }
 
 ////////////// POINT ARITHMETIC OPERATIONS //////////////
