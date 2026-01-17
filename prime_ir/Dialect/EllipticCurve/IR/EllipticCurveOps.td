@@ -106,7 +106,7 @@ def EllipticCurve_ExtToCoordsOp : EllipticCurve_Op<"ext_to_coords"> {
 
   let arguments = (ins PointLike:$input);
   let results = (outs Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, LLVMStructType, AnySignlessInteger]>>:$output);
-  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
 

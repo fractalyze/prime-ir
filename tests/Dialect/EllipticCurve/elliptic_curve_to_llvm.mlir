@@ -29,9 +29,9 @@ func.func @test_ext_from_coord(%var1: i256, %var2: i256, %var3: i256) {
 // CHECK-LABEL: @test_ext_to_coords
 func.func @test_ext_to_coords(%affine: !affine, %jacobian: !jacobian, %xyzz: !xyzz) {
   // CHECK-NOT: elliptic_curve.ext_to_coords
-  %affine_coords:2 = elliptic_curve.ext_to_coords %affine : !affine -> i256, i256
-  %jacobian_coords:3 = elliptic_curve.ext_to_coords %jacobian : !jacobian -> i256, i256, i256
-  %xyzz_coords:4 = elliptic_curve.ext_to_coords %xyzz : !xyzz -> i256, i256, i256, i256
+  %affine_coords:2 = elliptic_curve.ext_to_coords %affine : (!affine) -> (i256, i256)
+  %jacobian_coords:3 = elliptic_curve.ext_to_coords %jacobian : (!jacobian) -> (i256, i256, i256)
+  %xyzz_coords:4 = elliptic_curve.ext_to_coords %xyzz : (!xyzz) -> (i256, i256, i256, i256)
   return
 }
 
@@ -47,8 +47,8 @@ func.func @test_ext_from_coord_g2(%var1: !llvm.struct<(i256, i256)>, %var2: !llv
 // CHECK-LABEL: @test_ext_to_coords_g2
 func.func @test_ext_to_coords_g2(%affine: !g2affine, %jacobian: !g2jacobian, %xyzz: !g2xyzz) {
   // CHECK-NOT: elliptic_curve.ext_to_coords
-  %affine_coords:2 = elliptic_curve.ext_to_coords %affine : !g2affine -> !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>
-  %jacobian_coords:3 = elliptic_curve.ext_to_coords %jacobian : !g2jacobian -> !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>
-  %xyzz_coords:4 = elliptic_curve.ext_to_coords %xyzz : !g2xyzz -> !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>
+  %affine_coords:2 = elliptic_curve.ext_to_coords %affine : (!g2affine) -> (!llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>)
+  %jacobian_coords:3 = elliptic_curve.ext_to_coords %jacobian : (!g2jacobian) -> (!llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>)
+  %xyzz_coords:4 = elliptic_curve.ext_to_coords %xyzz : (!g2xyzz) -> (!llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>, !llvm.struct<(i256, i256)>)
   return
 }
