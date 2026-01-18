@@ -28,18 +28,23 @@ FieldCodeGen::FieldCodeGen(Type type, Value value,
   }
 
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  auto efType = cast<ExtensionFieldTypeInterface>(type);
+  auto efType = cast<ExtensionFieldType>(type);
   Value nonResidue = b->create<mod_arith::ConstantOp>(
       converter->convertType(efType.getBaseFieldType()),
       cast<IntegerAttr>(efType.getNonResidue()));
-  if (isa<QuadraticExtFieldType>(type)) {
-    codeGen = QuadraticExtensionFieldCodeGen(value, nonResidue);
-  } else if (isa<CubicExtFieldType>(type)) {
-    codeGen = CubicExtensionFieldCodeGen(value, nonResidue);
-  } else if (isa<QuarticExtFieldType>(type)) {
-    codeGen = QuarticExtensionFieldCodeGen(value, nonResidue);
-  } else {
-    llvm_unreachable("Unsupported extension field type");
+  unsigned degree = efType.getDegree();
+  switch (degree) {
+  case 2:
+    codeGen = ExtensionFieldCodeGen<2>(value, nonResidue);
+    break;
+  case 3:
+    codeGen = ExtensionFieldCodeGen<3>(value, nonResidue);
+    break;
+  case 4:
+    codeGen = ExtensionFieldCodeGen<4>(value, nonResidue);
+    break;
+  default:
+    llvm_unreachable("Unsupported extension field degree");
   }
 }
 

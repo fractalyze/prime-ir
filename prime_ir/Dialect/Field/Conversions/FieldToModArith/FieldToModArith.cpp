@@ -98,9 +98,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     //    Field type**.
     //
     // 2. **Lowering Ambiguity:** Allowing tensor constants for Extension Fields
-    //    (e.g., `field.constant dense<[[1, 2], [3, 4]]> : !field.f2<!bn254_bf,
-    //    #nr>`) creates an **ambiguity** during lowering to the `mod_arith`
-    //    dialect.
+    //    (e.g., `field.constant dense<[[1, 2], [3, 4]]> :
+    //    !field.ef<2x!bn254_bf, #nr>`) creates an **ambiguity** during lowering
+    //    to the `mod_arith` dialect.
     //
     //    The intended lower form,
     //    `mod_arith.constant dense<[[1, 2], [3, 4]]> :

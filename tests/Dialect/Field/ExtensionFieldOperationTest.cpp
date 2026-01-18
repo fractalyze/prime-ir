@@ -43,13 +43,7 @@ public:
         PrimeFieldType::get(&context, modulus, ExtF::kUseMontgomery);
     IntegerAttr nonResidue =
         convertToIntegerAttr(&context, ExtF::Config::kNonResidue.value());
-    if constexpr (N == 2) {
-      efType = QuadraticExtFieldType::get(&context, pfType, nonResidue);
-    } else if constexpr (N == 3) {
-      efType = CubicExtFieldType::get(&context, pfType, nonResidue);
-    } else if constexpr (N == 4) {
-      efType = QuarticExtFieldType::get(&context, pfType, nonResidue);
-    }
+    efType = ExtensionFieldType::get(&context, N, pfType, nonResidue);
   }
 
   void runBinaryOperationTest(

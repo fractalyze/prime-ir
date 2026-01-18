@@ -231,17 +231,6 @@ Type parseExtensionFieldType(AsmParser &parser) {
   return T::get(parser.getContext(), pfType, nonResidue);
 }
 
-void printExtensionFieldType(ExtensionFieldTypeInterface extField,
-                             AsmPrinter &printer) {
-  auto pfType = cast<PrimeFieldType>(extField.getBaseFieldType());
-  auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
-  if (pfType.getIsMontgomery()) {
-    nonResidue =
-        mod_arith::getAttrAsStandardForm(pfType.getModulus(), nonResidue);
-  }
-  printer << "<" << pfType << ", " << nonResidue << ">";
-}
-
 template <typename T>
 bool isMontgomery(T *extField) {
   return extField->getBaseField().getIsMontgomery();
@@ -319,111 +308,6 @@ constexpr auto kExtDegreeSequence = makeExtDegreeSequence<kMinExtDegree>(
 
 } // namespace
 } // namespace ext_field_utils
-
-#define DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(TYPE, DEGREE_OVER_PRIME,      \
-                                                 DEGREE_OVER_BASE)             \
-  DEFINE_FIELD_TYPE_INTERFACE_METHODS(TYPE)                                    \
-  unsigned TYPE::getDegreeOverPrime() const { return DEGREE_OVER_PRIME; }      \
-  unsigned TYPE::getDegreeOverBase() const { return DEGREE_OVER_BASE; }        \
-  Type TYPE::getBaseFieldType() const { return getBaseField(); }               \
-  Type TYPE::cloneWith(Type baseField, Attribute element) const {              \
-    return ext_field_utils::cloneWith<TYPE>(this, baseField, element);         \
-  }                                                                            \
-  TypedAttr TYPE::createConstantAttr(llvm::ArrayRef<llvm::APInt> coeffs)       \
-      const {                                                                  \
-    return ext_field_utils::createConstantAttr<TYPE, DEGREE_OVER_PRIME>(       \
-        this, coeffs);                                                         \
-  }                                                                            \
-  Value TYPE::buildStructFromCoeffs(ImplicitLocOpBuilder &builder,             \
-                                    Type structType,                           \
-                                    llvm::ArrayRef<Value> coeffs) const {      \
-    return ext_field_utils::buildStructFromCoeffs<DEGREE_OVER_BASE>(           \
-        builder, structType, coeffs);                                          \
-  }                                                                            \
-  llvm::SmallVector<Value> TYPE::extractCoeffsFromStruct(                      \
-      ImplicitLocOpBuilder &builder, Value structValue) const {                \
-    return ext_field_utils::extractCoeffsFromStruct<DEGREE_OVER_BASE>(         \
-        builder, structValue);                                                 \
-  }
-
-//===----------------------------------------------------------------------===//
-// QuadraticExtFieldType
-//===----------------------------------------------------------------------===//
-
-// static
-Type QuadraticExtFieldType::parse(AsmParser &parser) {
-  return ext_field_utils::parseExtensionFieldType<QuadraticExtFieldType>(
-      parser);
-}
-
-void QuadraticExtFieldType::print(AsmPrinter &printer) const {
-  ext_field_utils::printExtensionFieldType(*this, printer);
-}
-
-llvm::TypeSize QuadraticExtFieldType::getTypeSizeInBits(
-    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() * 2);
-}
-
-uint64_t QuadraticExtFieldType::getABIAlignment(
-    DataLayout const &dataLayout,
-    llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
-}
-
-DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(QuadraticExtFieldType, 2, 2);
-
-//===----------------------------------------------------------------------===//
-// CubicExtFieldType
-//===----------------------------------------------------------------------===//
-
-// static
-Type CubicExtFieldType::parse(AsmParser &parser) {
-  return ext_field_utils::parseExtensionFieldType<CubicExtFieldType>(parser);
-}
-
-void CubicExtFieldType::print(AsmPrinter &printer) const {
-  ext_field_utils::printExtensionFieldType(*this, printer);
-}
-
-llvm::TypeSize CubicExtFieldType::getTypeSizeInBits(
-    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() * 3);
-}
-
-uint64_t CubicExtFieldType::getABIAlignment(
-    DataLayout const &dataLayout,
-    llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
-}
-
-DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(CubicExtFieldType, 3, 3);
-
-//===----------------------------------------------------------------------===//
-// QuarticExtFieldType
-//===----------------------------------------------------------------------===//
-
-// static
-Type QuarticExtFieldType::parse(AsmParser &parser) {
-  return ext_field_utils::parseExtensionFieldType<QuarticExtFieldType>(parser);
-}
-
-void QuarticExtFieldType::print(AsmPrinter &printer) const {
-  ext_field_utils::printExtensionFieldType(*this, printer);
-}
-
-llvm::TypeSize QuarticExtFieldType::getTypeSizeInBits(
-    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() * 4);
-}
-
-uint64_t QuarticExtFieldType::getABIAlignment(
-    DataLayout const &dataLayout,
-    llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
-}
-
-DEFINE_EXTENSION_FIELD_INTERFACE_METHODS(QuarticExtFieldType, 4, 4);
 
 //===----------------------------------------------------------------------===//
 // ExtensionFieldType

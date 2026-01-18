@@ -16,7 +16,7 @@
 // RUN: prime-ir-opt -field-to-mod-arith -canonicalize %s | FileCheck %s -enable-var-scope
 
 !PF = !field.pf<7:i32>
-!QF = !field.f2<!PF, 6:i32>
+!QF = !field.ef<2x!PF, 6:i32>
 
 // CHECK-LABEL: @test_mul
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]]
