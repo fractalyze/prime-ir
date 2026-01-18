@@ -1,0 +1,35 @@
+---
+description: Collaboration Rules - Commits, Pull Requests, and Code Review
+alwaysApply: true
+---
+
+# Collaboration Rules
+
+## Commits (Angular Commit Convention)
+
+- Must follow the [Commit Message Guideline](https://github.com/fractalyze/.github/blob/main/COMMIT_MESSAGE_GUIDELINE.md).
+
+- Format:
+  ```
+  <type>(<scope>): <summary>
+  ```
+  where `type` ∈ {build, chore, ci, docs, feat, fix, perf, refactor, style, test}.
+
+- Commit body: explain **why** the change was made (minimum 20 characters).
+
+- Footer: record breaking changes, deprecations, and related issues/PRs.
+
+- Each commit must include only **minimal, logically related changes**. Avoid mixing style fixes with functional changes.
+
+## Pull Requests
+
+- Follow the [Pull Request Guideline](https://github.com/fractalyze/.github/blob/main/PULL_REQUEST_GUIDELINE.md).
+- Commits must be **atomic** and independently buildable/testable.
+- Provide context and links (short SHA for external references).
+
+## Tooling Requirements
+
+- **Formatter:** `clang-format` (LLVM preset with project overrides). Refer to the `.clang-format` file in the repo.
+- **Linter:** `clang-tidy`.
+- **Pre-commit hooks:** Recommended for enforcing format and lint locally.
+- **CI:** All PRs must pass lint, format, and tests before merge.

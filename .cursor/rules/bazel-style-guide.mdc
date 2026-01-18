@@ -7,3 +7,4 @@ alwaysApply: false
 # Bazel Style Rules
 
 - Every header included in a Bazel target must also be declared as a Bazel dependency.
+- When working with local LLVM clones for development, follow the process documented in `CONTRIBUTING.md` for updating patches.

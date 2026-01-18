@@ -1,0 +1,31 @@
+---
+description: General Coding Philosophy and Core Principles
+alwaysApply: true
+---
+
+# General Coding Philosophy
+
+## Core Principles
+
+- **Readability:** Both code and commits should be immediately understandable.
+- **Maintainability:** Code should be easy to refactor and extend.
+- **Consistency:** Apply the same conventions across files and modules, except where external code (e.g., XLA) is imported.
+- **Performance:** Prioritize clarity, but optimize carefully where latency and cost are critical.
+
+## Comment Style
+
+- Non-trivial code changes must be accompanied by comments.
+- Comments explain **why** a change or design decision was made or explain the code for better readability.
+- Use full sentences with proper punctuation.
+
+## File Formatting
+
+- Every file must end with a single newline.
+- No trailing whitespace.
+- No extra blank lines at EOF.
+
+## License
+
+- Every file (that could be exceptional case, such as empty BUILD.bazel) should have license notice at the top.
+- **New Files**: For any new files created from now on, the copyright year should be set to 2026.
+- **Refactored Files**: If a file is moved or renamed as part of a refactoring process, you may retain the original creation year from the source file.
