@@ -78,23 +78,27 @@ LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
                 "type if the base field is a prime field; but got "
              << coordType;
     }
-  } else if (auto f2Type =
-                 dyn_cast<field::QuadraticExtFieldType>(ptBaseField)) {
+  } else {
+    auto efType = cast<field::ExtensionFieldType>(ptBaseField);
     if (auto structType = dyn_cast<LLVM::LLVMStructType>(coordType)) {
-      if (structType.getBody().size() != 2)
-        return op.emitError() << "output struct must have two elements for "
-                                 "quadratic extension field";
+      unsigned degree = efType.getDegree();
+      if (structType.getBody().size() != degree)
+        return op.emitError()
+               << "output struct must have " << degree
+               << " elements for extension field of degree " << degree;
       // NOTE: In case of extension fields, the types are not lowered to modular
       // types since struct cannot contain modular types so we can ignore that
       // case.
-      if (structType.getBody()[0] != f2Type.getBaseField().getStorageType() ||
-          structType.getBody()[1] != f2Type.getBaseField().getStorageType())
-        return op.emitError() << "output struct element must have the same "
-                                 "bitwidth as the base field of input";
+      auto baseFieldStorageType = efType.getBaseField().getStorageType();
+      for (unsigned i = 0; i < degree; ++i) {
+        if (structType.getBody()[i] != baseFieldStorageType)
+          return op.emitError() << "output struct element must have the same "
+                                   "bitwidth as the base field of input";
+      }
     } else {
-      return op.emitError() << "output must be a struct type for quadratic "
-                               "extension field; but got "
-                            << coordType;
+      return op.emitError()
+             << "output must be a struct type for extension field; but got "
+             << coordType;
     }
   }
   return success();

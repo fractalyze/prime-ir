@@ -16,8 +16,8 @@
 // RUN: prime-ir-opt -field-to-mod-arith -split-input-file %s | FileCheck %s -enable-var-scope
 !PF = !field.pf<7:i32>
 !PFm = !field.pf<7:i32, true>
-!QF = !field.f2<!PF, 6:i32>
-!QFm = !field.f2<!PFm, 6:i32>
+!QF = !field.ef<2x!PF, 6:i32>
+!QFm = !field.ef<2x!PFm, 6:i32>
 
 // CHECK-LABEL: @test_lower_inverse
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {

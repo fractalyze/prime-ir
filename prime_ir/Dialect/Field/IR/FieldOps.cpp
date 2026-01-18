@@ -269,14 +269,14 @@ void ConstantOp::print(OpAsmPrinter &p) {
 template <typename OpType>
 static LogicalResult disallowShapedTypeOfExtField(OpType op) {
   // FIXME(batzor): In the prime field case, we rely on elementwise trait but in
-  // the quadratic extension case, `linalg.generic` introduced by the
+  // the extension field case, `linalg.generic` introduced by the
   // elementwise pass will be ill-formed due to the 1:N conversion.
   auto resultType = op.getType();
   if (isa<ShapedType>(resultType)) {
     auto elementType = cast<ShapedType>(resultType).getElementType();
-    if (isa<QuadraticExtFieldType>(elementType)) {
-      return op->emitOpError("shaped type is not supported for quadratic "
-                             "extension field type");
+    if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
+      return op->emitOpError("shaped type is not supported for extension "
+                             "field type");
     }
   }
   return success();
@@ -284,14 +284,14 @@ static LogicalResult disallowShapedTypeOfExtField(OpType op) {
 
 LogicalResult CmpOp::verify() {
   auto operandType = getElementTypeOrSelf(getLhs());
-  if (isa<QuadraticExtFieldType>(operandType)) {
+  if (isa<ExtensionFieldType>(operandType)) {
     arith::CmpIPredicate predicate = getPredicate();
     if (predicate == arith::CmpIPredicate::eq ||
         predicate == arith::CmpIPredicate::ne) {
       return success();
     } else {
       return emitOpError() << "only 'eq' and 'ne' comparisons are supported "
-                              "for quadratic extension field type";
+                              "for extension field type";
     }
   }
   return success();

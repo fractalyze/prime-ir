@@ -49,69 +49,6 @@ bool primeIRPrimeFieldTypeIsMontgomery(MlirType type) {
 }
 
 //===----------------------------------------------------------------------===//
-// QuadraticExtensionField types.
-//===----------------------------------------------------------------------===//
-
-MlirTypeID primeIRQuadraticExtensionFieldTypeGetTypeID() {
-  return wrap(QuadraticExtFieldType::getTypeID());
-}
-
-bool primeIRTypeIsAQuadraticExtensionField(MlirType type) {
-  return llvm::isa<QuadraticExtFieldType>(unwrap(type));
-}
-
-MlirType primeIRQuadraticExtensionFieldTypeGet(MlirContext ctx,
-                                               MlirType baseField,
-                                               MlirAttribute nonResidue) {
-  return wrap(QuadraticExtFieldType::get(
-      unwrap(ctx), llvm::cast<PrimeFieldType>(unwrap(baseField)),
-      llvm::cast<IntegerAttr>(unwrap(nonResidue))));
-}
-
-MlirType primeIRQuadraticExtensionFieldTypeGetBaseField(MlirType type) {
-  return wrap(llvm::cast<QuadraticExtFieldType>(unwrap(type)).getBaseField());
-}
-
-MlirAttribute primeIRQuadraticExtensionFieldTypeGetNonResidue(MlirType type) {
-  return wrap(llvm::cast<QuadraticExtFieldType>(unwrap(type)).getNonResidue());
-}
-
-bool primeIRQuadraticExtensionFieldTypeIsMontgomery(MlirType type) {
-  return llvm::cast<QuadraticExtFieldType>(unwrap(type)).isMontgomery();
-}
-
-// ===----------------------------------------------------------------------===//
-// CubicExtensionField types.
-// ===----------------------------------------------------------------------===//
-
-MlirTypeID primeIRCubicExtensionFieldTypeGetTypeID() {
-  return wrap(CubicExtFieldType::getTypeID());
-}
-
-bool primeIRTypeIsACubicExtensionField(MlirType type) {
-  return llvm::isa<CubicExtFieldType>(unwrap(type));
-}
-
-MlirType primeIRCubicExtensionFieldTypeGet(MlirContext ctx, MlirType baseField,
-                                           MlirAttribute nonResidue) {
-  return wrap(CubicExtFieldType::get(
-      unwrap(ctx), llvm::cast<PrimeFieldType>(unwrap(baseField)),
-      llvm::cast<IntegerAttr>(unwrap(nonResidue))));
-}
-
-MlirType primeIRCubicExtensionFieldTypeGetBaseField(MlirType type) {
-  return wrap(llvm::cast<CubicExtFieldType>(unwrap(type)).getBaseField());
-}
-
-MlirAttribute primeIRCubicExtensionFieldTypeGetNonResidue(MlirType type) {
-  return wrap(llvm::cast<CubicExtFieldType>(unwrap(type)).getNonResidue());
-}
-
-bool primeIRCubicExtensionFieldTypeIsMontgomery(MlirType type) {
-  return llvm::cast<CubicExtFieldType>(unwrap(type)).isMontgomery();
-}
-
-// ===----------------------------------------------------------------------===//
 // ExtensionField types.
 // ===----------------------------------------------------------------------===//
 

@@ -154,40 +154,43 @@ private:
 
   template <typename T>
   void createExtFieldOp(T &&value, ExtensionFieldTypeInterface efType) {
-    TypeSwitch<Type>(efType)
-        .template Case<QuadraticExtFieldType>([&](auto) {
-          operation =
-              QuadraticExtensionFieldOperation(std::forward<T>(value), efType);
-        })
-        .template Case<CubicExtFieldType>([&](auto) {
-          operation =
-              CubicExtensionFieldOperation(std::forward<T>(value), efType);
-        })
-        .template Case<QuarticExtFieldType>([&](auto) {
-          operation =
-              QuarticExtensionFieldOperation(std::forward<T>(value), efType);
-        })
-        .Default(
-            [](auto) { llvm_unreachable("Unsupported extension field type"); });
+    auto efTypeImpl = cast<ExtensionFieldType>(efType);
+    unsigned degree = efTypeImpl.getDegree();
+    switch (degree) {
+    case 2:
+      operation = ExtensionFieldOperation<2>(std::forward<T>(value), efType);
+      break;
+    case 3:
+      operation = ExtensionFieldOperation<3>(std::forward<T>(value), efType);
+      break;
+    case 4:
+      operation = ExtensionFieldOperation<4>(std::forward<T>(value), efType);
+      break;
+    default:
+      llvm_unreachable("Unsupported extension field degree");
+    }
   }
 
   template <typename T>
   void createRawExtFieldOp(T &&value, ExtensionFieldTypeInterface efType) {
-    TypeSwitch<Type>(efType)
-        .template Case<QuadraticExtFieldType>([&](auto) {
-          operation = QuadraticExtensionFieldOperation::fromUnchecked(
-              std::forward<T>(value), efType);
-        })
-        .template Case<CubicExtFieldType>([&](auto) {
-          operation = CubicExtensionFieldOperation::fromUnchecked(
-              std::forward<T>(value), efType);
-        })
-        .template Case<QuarticExtFieldType>([&](auto) {
-          operation = QuarticExtensionFieldOperation::fromUnchecked(
-              std::forward<T>(value), efType);
-        })
-        .Default(
-            [](auto) { llvm_unreachable("Unsupported extension field type"); });
+    auto efTypeImpl = cast<ExtensionFieldType>(efType);
+    unsigned degree = efTypeImpl.getDegree();
+    switch (degree) {
+    case 2:
+      operation = ExtensionFieldOperation<2>::fromUnchecked(
+          std::forward<T>(value), efType);
+      break;
+    case 3:
+      operation = ExtensionFieldOperation<3>::fromUnchecked(
+          std::forward<T>(value), efType);
+      break;
+    case 4:
+      operation = ExtensionFieldOperation<4>::fromUnchecked(
+          std::forward<T>(value), efType);
+      break;
+    default:
+      llvm_unreachable("Unsupported extension field degree");
+    }
   }
 
   OperationType operation;

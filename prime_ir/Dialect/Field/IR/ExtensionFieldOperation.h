@@ -145,11 +145,11 @@ public:
         convertToIntegerAttr(context, ExtF::Config::kNonResidue.value());
     ExtensionFieldTypeInterface efType;
     if constexpr (N == 2) {
-      efType = QuadraticExtFieldType::get(context, pfType, nonResidue);
+      efType = ExtensionFieldType::get(context, 2, pfType, nonResidue);
     } else if constexpr (N == 3) {
-      efType = CubicExtFieldType::get(context, pfType, nonResidue);
+      efType = ExtensionFieldType::get(context, 3, pfType, nonResidue);
     } else if constexpr (N == 4) {
-      efType = QuarticExtFieldType::get(context, pfType, nonResidue);
+      efType = ExtensionFieldType::get(context, 4, pfType, nonResidue);
     }
     return efType;
   }
