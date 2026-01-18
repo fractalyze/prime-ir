@@ -317,11 +317,11 @@ IntegerAttr::get(fieldType.getModulus().getType(), value);  // Wrong!
 
 ### MLIR Type Variable Naming
 
-| Type                          | Variable Name   |
-| ----------------------------- | --------------- |
-| `ExtensionFieldTypeInterface` | `efType`        |
-| `PrimeFieldType`              | `pfType`        |
-| Base field type (`Type`)      | `baseFieldType` |
+| Type                     | Variable Name   |
+| ------------------------ | --------------- |
+| `ExtensionFieldType`     | `efType`        |
+| `PrimeFieldType`         | `pfType`        |
+| Base field type (`Type`) | `baseFieldType` |
 
 ## License
 

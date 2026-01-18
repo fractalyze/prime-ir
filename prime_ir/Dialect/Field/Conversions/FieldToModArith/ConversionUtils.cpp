@@ -24,9 +24,9 @@ namespace mlir::prime_ir::field {
 namespace {
 
 SmallVector<Type> coeffsTypeRange(Type type) {
-  auto extField = cast<ExtensionFieldTypeInterface>(type);
-  auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
-  return SmallVector<Type>(extField.getDegreeOverBase(),
+  auto extField = cast<ExtensionFieldType>(type);
+  auto baseField = cast<PrimeFieldType>(extField.getBaseField());
+  return SmallVector<Type>(extField.getDegree(),
                            convertPrimeFieldType(baseField));
 }
 

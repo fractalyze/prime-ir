@@ -49,43 +49,6 @@ def FieldTypeInterface : TypeInterface<"FieldTypeInterface"> {
   ];
 }
 
-// Extension field type interface.
-// Provides a unified interface for extension field types (Fp2, Fp3, etc.)
-def ExtensionFieldTypeInterface : TypeInterface<"ExtensionFieldTypeInterface", [
-  DeclareTypeInterfaceMethods<FieldTypeInterface>
-  ]> {
-  let description = [{
-    Interface for extension field types that allows generic handling
-    of different extension degrees without explicit type checking.
-  }];
-
-  let methods = [
-    InterfaceMethod<"Get extension degree over prime field",
-      "unsigned", "getDegreeOverPrime">,
-    InterfaceMethod<"Get extension degree over base field",
-      "unsigned", "getDegreeOverBase">,
-    InterfaceMethod<"Get the base field type",
-      "Type", "getBaseFieldType">,
-    InterfaceMethod<"Get the non-residue element",
-      "Attribute", "getNonResidue">,
-    InterfaceMethod<"Create a new type with different base field type and attribute",
-      "Type", "cloneWith",
-      (ins "Type":$baseField, "Attribute":$element)>,
-    InterfaceMethod<"Create constant attribute from coefficient values",
-      "TypedAttr", "createConstantAttr",
-      (ins "ArrayRef<APInt>":$coeffs)>,
-    InterfaceMethod<"Build LLVM struct from coefficients",
-      "Value", "buildStructFromCoeffs",
-      (ins "ImplicitLocOpBuilder &":$builder,
-           "Type":$structType,
-           "ArrayRef<Value>":$coeffs)>,
-    InterfaceMethod<"Extract coefficients from LLVM struct",
-      "SmallVector<Value>", "extractCoeffsFromStruct",
-      (ins "ImplicitLocOpBuilder &":$builder,
-           "Value":$structValue)>,
-  ];
-}
-
 // Prime field type definition.
 // This type represents an element in a prime field parameterized by a prime modulus.
 def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
@@ -136,7 +99,7 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
 def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
-  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
+  DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
   ]> {
   let summary = "Extension field element type";
@@ -159,6 +122,16 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     Field_PrimeFieldType: $baseField,
     "IntegerAttr": $nonResidue
   );
+  let extraClassDeclaration = [{
+    unsigned getDegreeOverPrime() const;
+    Type cloneWith(Type baseField, Attribute element) const;
+    TypedAttr createConstantAttr(ArrayRef<APInt> coeffs) const;
+    Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder,
+                                Type structType,
+                                ArrayRef<Value> coeffs) const;
+    SmallVector<Value> extractCoeffsFromStruct(
+        ImplicitLocOpBuilder &builder, Value structValue) const;
+  }];
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
 }

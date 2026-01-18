@@ -36,10 +36,9 @@ Type getStandardFormType(Type type) {
       standardType =
           PrimeFieldType::get(type.getContext(), pfType.getModulus());
     }
-  } else if (auto extField =
-                 dyn_cast<ExtensionFieldTypeInterface>(standardType)) {
+  } else if (auto extField = dyn_cast<ExtensionFieldType>(standardType)) {
     if (extField.isMontgomery()) {
-      auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+      auto baseField = cast<PrimeFieldType>(extField.getBaseField());
       auto pfType =
           PrimeFieldType::get(type.getContext(), baseField.getModulus());
       auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
@@ -65,9 +64,9 @@ Type getMontgomeryFormType(Type type) {
       montType =
           PrimeFieldType::get(type.getContext(), pfType.getModulus(), true);
     }
-  } else if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(montType)) {
+  } else if (auto extField = dyn_cast<ExtensionFieldType>(montType)) {
     if (!extField.isMontgomery()) {
-      auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+      auto baseField = cast<PrimeFieldType>(extField.getBaseField());
       auto pfType =
           PrimeFieldType::get(type.getContext(), baseField.getModulus(), true);
       auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
@@ -109,7 +108,7 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
     }
 
     return IntegerAttr::get(pfType.getStorageType(), val);
-  } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(elementType)) {
+  } else if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
     unsigned degree = efType.getDegreeOverPrime();
     if (values.size() != degree) {
       return parser.emitError(parser.getCurrentLocation())
@@ -117,7 +116,7 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
              << " coefficients, but expected " << degree;
     }
 
-    auto pfType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    auto pfType = cast<PrimeFieldType>(efType.getBaseField());
     APInt modulus = pfType.getModulus().getValue();
 
     SmallVector<APInt> adjustedValues;
@@ -152,17 +151,14 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
       modulus = pfType.getModulus().getValue();
       return success();
-    } else if (auto extField =
-                   dyn_cast<ExtensionFieldTypeInterface>(elementType)) {
-      modulus = cast<PrimeFieldType>(extField.getBaseFieldType())
-                    .getModulus()
-                    .getValue();
+    } else if (auto extField = dyn_cast<ExtensionFieldType>(elementType)) {
+      modulus =
+          cast<PrimeFieldType>(extField.getBaseField()).getModulus().getValue();
       return success();
     }
 
-    return parser.emitError(
-        parser.getCurrentLocation(),
-        "expected PrimeFieldType or ExtensionFieldTypeInterface");
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected PrimeFieldType or ExtensionFieldType");
   };
 
   auto parseResult = parseOptionalModularOrExtendedModularInteger(
@@ -179,14 +175,13 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
       }
       result.addAttribute(
           "value", IntegerAttr::get(pfType.getStorageType(), parsedInts[0]));
-    } else if (auto efType =
-                   dyn_cast<ExtensionFieldTypeInterface>(parsedType)) {
+    } else if (auto efType = dyn_cast<ExtensionFieldType>(parsedType)) {
       if (parsedInts.size() != efType.getDegreeOverPrime()) {
         return parser.emitError(parser.getCurrentLocation())
                << "extension field constant has " << parsedInts.size()
                << " coefficients, but expected " << efType.getDegreeOverPrime();
       }
-      auto pfType = cast<PrimeFieldType>(efType.getBaseFieldType());
+      auto pfType = cast<PrimeFieldType>(efType.getBaseField());
       result.addAttribute(
           "value", DenseElementsAttr::get(
                        RankedTensorType::get({efType.getDegreeOverPrime()},
@@ -228,7 +223,7 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
                                    Type type, Location loc) {
   if (!isa<PrimeFieldType>(getElementTypeOrSelf(type)) &&
-      !isa<ExtensionFieldTypeInterface>(getElementTypeOrSelf(type))) {
+      !isa<ExtensionFieldType>(getElementTypeOrSelf(type))) {
     return nullptr;
   }
 
@@ -247,7 +242,7 @@ Operation *FieldDialect::materializeConstant(OpBuilder &builder,
     return builder.create<arith::ConstantOp>(loc, boolAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
     if (!isa<PrimeFieldType>(getElementTypeOrSelf(type)) &&
-        !isa<ExtensionFieldTypeInterface>(getElementTypeOrSelf(type))) {
+        !isa<ExtensionFieldType>(getElementTypeOrSelf(type))) {
       // This could be a folding result of CmpOp.
       return builder.create<arith::ConstantOp>(loc, denseElementsAttr);
     }
@@ -364,8 +359,7 @@ class ExtensionFieldCmpConstantFolder
 public:
   explicit ExtensionFieldCmpConstantFolder(CmpOp *op)
       : context(op->getType().getContext()), predicate(op->getPredicate()),
-        efType(cast<ExtensionFieldTypeInterface>(
-            getElementTypeOrSelf(op->getLhs()))) {}
+        efType(cast<ExtensionFieldType>(getElementTypeOrSelf(op->getLhs()))) {}
 
   SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
     auto values = attr.getValues<APInt>();
@@ -399,7 +393,7 @@ public:
 private:
   MLIRContext *const context;
   arith::CmpIPredicate predicate;
-  ExtensionFieldTypeInterface efType;
+  ExtensionFieldType efType;
 };
 
 } // namespace
@@ -411,7 +405,7 @@ OpFoldResult CmpOp::fold(FoldAdaptor adaptor) {
     return BinaryConstantFolder<CmpConstantFolderConfig>::fold(adaptor,
                                                                &folder);
   }
-  if (isa<ExtensionFieldTypeInterface>(elemType)) {
+  if (isa<ExtensionFieldType>(elemType)) {
     ExtensionFieldCmpConstantFolder folder(this);
     return BinaryConstantFolder<ExtFieldCmpConstantFolderConfig>::fold(adaptor,
                                                                        &folder);
@@ -448,8 +442,8 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 
 LogicalResult ExtToCoeffsOp::verify() {
   Type inputType = getInput().getType();
-  if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(inputType)) {
-    unsigned expected = extField.getDegreeOverBase();
+  if (auto extField = dyn_cast<ExtensionFieldType>(inputType)) {
+    unsigned expected = extField.getDegree();
     if (getOutput().size() == expected) {
       return success();
     }
@@ -463,13 +457,13 @@ LogicalResult ExtToCoeffsOp::verify() {
 
 LogicalResult ExtFromCoeffsOp::verify() {
   Type outputType = getType();
-  auto efType = dyn_cast<ExtensionFieldTypeInterface>(outputType);
+  auto efType = dyn_cast<ExtensionFieldType>(outputType);
   if (!efType) {
     return emitOpError() << "output type must be an extension field; got "
                          << outputType;
   }
 
-  unsigned expected = efType.getDegreeOverBase();
+  unsigned expected = efType.getDegree();
   if (getInput().size() != expected) {
     return emitOpError() << "expected " << expected
                          << " input types for extension field output, but got "
@@ -477,7 +471,7 @@ LogicalResult ExtFromCoeffsOp::verify() {
   }
 
   // Validate PrimeFieldType coefficients match base field
-  Type baseFieldType = efType.getBaseFieldType();
+  Type baseFieldType = efType.getBaseField();
   auto pfType = dyn_cast<PrimeFieldType>(baseFieldType);
   if (!pfType) {
     // TODO(junbeomlee): Add coefficient type validation for tower extensions
@@ -541,7 +535,7 @@ template <typename BaseDelegate>
 class ExtensionFieldFolderMixin : public BaseDelegate {
 public:
   explicit ExtensionFieldFolderMixin(Type type)
-      : efType(cast<ExtensionFieldTypeInterface>(getElementTypeOrSelf(type))) {}
+      : efType(cast<ExtensionFieldType>(getElementTypeOrSelf(type))) {}
 
   SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
     auto values = attr.getValues<APInt>();
@@ -549,8 +543,7 @@ public:
   }
 
   OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
-    PrimeFieldType baseFieldType =
-        cast<PrimeFieldType>(efType.getBaseFieldType());
+    PrimeFieldType baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
     auto tensorType = RankedTensorType::get(
         {static_cast<int64_t>(coeffs.size())}, baseFieldType.getStorageType());
     return DenseIntElementsAttr::get(tensorType, coeffs);
@@ -562,7 +555,7 @@ public:
   }
 
 protected:
-  ExtensionFieldTypeInterface efType;
+  ExtensionFieldType efType;
 };
 
 //===----------------------------------------------------------------------===//
@@ -737,7 +730,7 @@ OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
     return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
                                                                      &folder);
   }
-  if (isa<ExtensionFieldTypeInterface>(elemType)) {
+  if (isa<ExtensionFieldType>(elemType)) {
     GenericUnaryExtFieldFolder<Func> folder(type, fn);
     return UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
         adaptor, &folder);
@@ -755,7 +748,7 @@ OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
     return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
                                                                       &folder);
   }
-  if (isa<ExtensionFieldTypeInterface>(elemType)) {
+  if (isa<ExtensionFieldType>(elemType)) {
     ExtAdditiveFolder<Op, Func> folder(op, fn);
     return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
         adaptor, &folder);
@@ -773,7 +766,7 @@ foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
     return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
                                                                       &folder);
   }
-  if (isa<ExtensionFieldTypeInterface>(elemType)) {
+  if (isa<ExtensionFieldType>(elemType)) {
     ExtMultiplicativeFolder<Op, Func> folder(op, fn);
     return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
         adaptor, &folder);

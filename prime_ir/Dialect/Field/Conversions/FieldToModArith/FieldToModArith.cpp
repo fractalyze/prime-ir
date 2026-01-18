@@ -117,9 +117,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     }
 
     mod_arith::ModArithType modType;
-    if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(op.getType())) {
+    if (auto efType = dyn_cast<ExtensionFieldType>(op.getType())) {
       modType = cast<mod_arith::ModArithType>(
-          typeConverter->convertType(efType.getBaseFieldType()));
+          typeConverter->convertType(efType.getBaseField()));
     } else {
       op.emitOpError("unsupported output type");
       return failure();
@@ -173,8 +173,8 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
       rewriter.replaceOp(op, extracted);
       return success();
     }
-    if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto baseField = cast<PrimeFieldType>(efType.getBaseFieldType());
+    if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
+      auto baseField = cast<PrimeFieldType>(efType.getBaseField());
       Type baseModArithType = typeConverter->convertType(baseField);
       auto coeffs = toCoeffs(b, adaptor.getInput());
 
@@ -209,8 +209,8 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
       rewriter.replaceOp(op, extracted);
       return success();
     }
-    if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      auto baseField = cast<PrimeFieldType>(efType.getBaseFieldType());
+    if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
+      auto baseField = cast<PrimeFieldType>(efType.getBaseField());
       Type baseModArithType = typeConverter->convertType(baseField);
       auto coeffs = toCoeffs(b, adaptor.getInput());
 
@@ -393,11 +393,10 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       if (pfType.isMontgomery()) {
         init = b.create<ToMontOp>(montType, init);
       }
-    } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+    } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
       // TODO(chokobole): Support towers of extension field.
-      modulus = cast<PrimeFieldType>(efType.getBaseFieldType())
-                    .getModulus()
-                    .getValue();
+      modulus =
+          cast<PrimeFieldType>(efType.getBaseField()).getModulus().getValue();
       init = efType.createOneConstant(b);
     } else {
       op.emitOpError("unsupported output type");
@@ -444,8 +443,8 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
     if (isa<PrimeFieldType>(fieldType)) {
       exp = b.create<arith::RemUIOp>(
           exp, b.create<arith::ConstantIntOp>(intType, modulus - 1));
-    } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
-      unsigned degree = efType.getDegreeOverBase();
+    } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
+      unsigned degree = efType.getDegree();
       modulus = modulus.zext(modBitWidth * degree);
       APInt order = modulus;
       for (unsigned i = 1; i < degree; ++i) {
@@ -533,7 +532,7 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
                                                 adaptor.getLhs(),
                                                 adaptor.getRhs()));
       return success();
-    } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(fieldType)) {
+    } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
       // For extension fields, we compare each coefficient separately.
       auto lhsCoeffs = toCoeffs(b, adaptor.getLhs());
       auto rhsCoeffs = toCoeffs(b, adaptor.getRhs());

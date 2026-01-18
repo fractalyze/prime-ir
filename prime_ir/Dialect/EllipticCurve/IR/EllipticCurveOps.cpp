@@ -416,12 +416,11 @@ ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
   }
 
   // Determine if base field is an extension field
-  bool isExtensionField =
-      isa<field::ExtensionFieldTypeInterface>(baseFieldType);
+  bool isExtensionField = isa<field::ExtensionFieldType>(baseFieldType);
   unsigned extensionDegree = 1;
   if (isExtensionField) {
-    extensionDegree = cast<field::ExtensionFieldTypeInterface>(baseFieldType)
-                          .getDegreeOverPrime();
+    extensionDegree =
+        cast<field::ExtensionFieldType>(baseFieldType).getDegreeOverPrime();
   }
 
   // Validate and create field attributes

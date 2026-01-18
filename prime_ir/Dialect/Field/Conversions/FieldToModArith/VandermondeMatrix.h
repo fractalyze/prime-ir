@@ -35,8 +35,8 @@ public:
   std::array<std::array<PrimeFieldCodeGen, 7>, 7>
   GetVandermondeInverseMatrix() const {
     const auto &self = static_cast<const Derived &>(*this);
-    auto extField = cast<ExtensionFieldTypeInterface>(self.getType());
-    auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+    auto extField = cast<ExtensionFieldType>(self.getType());
+    auto baseField = cast<PrimeFieldType>(extField.getBaseField());
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
 
     auto C = [&](int64_t x) {
