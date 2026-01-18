@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LogicalResult.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
@@ -24,6 +25,11 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
+
+// IWYU pragma: begin_keep
+// Headers needed for EllipticCurveCanonicalization.cpp.inc
+#include "mlir/IR/Matchers.h"
+// IWYU pragma: end_keep
 
 namespace mlir::prime_ir::elliptic_curve {
 namespace {
@@ -347,6 +353,26 @@ LogicalResult ConvertPointTypeOp::verify() {
     return emitError() << "Converting on same types";
   // TODO(ashjeong): check curves are the same
   return success();
+}
+
+namespace {
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveCanonicalization.cpp.inc"
+} // namespace
+
+#include "prime_ir/Utils/CanonicalizationPatterns.inc"
+
+void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+#define PRIME_IR_ADD_PATTERN(Name) patterns.add<EllipticCurve##Name>(context);
+  PRIME_IR_GROUP_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+#undef PRIME_IR_ADD_PATTERN
+}
+
+void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+#define PRIME_IR_SUB_PATTERN(Name) patterns.add<EllipticCurve##Name>(context);
+  PRIME_IR_GROUP_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
+#undef PRIME_IR_SUB_PATTERN
 }
 
 } // namespace mlir::prime_ir::elliptic_curve
