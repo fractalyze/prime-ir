@@ -171,3 +171,19 @@ func.func @test_ext_to_coeffs_of_ext_from_coeffs(%arg0: !PF, %arg1: !PF) -> (!PF
   // CHECK: return %[[ARG0]], %[[ARG1]] : [[T]], [[T]]
   return %1#0, %1#1 : !PF, !PF
 }
+
+//===----------------------------------------------------------------------===//
+// CmpOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_cmp_fold
+// CHECK-SAME: () -> i1 {
+func.func @test_cmp_fold() -> i1 {
+  // CHECK: %[[C:.*]] = arith.constant true
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.constant [1, 2] : !QF
+  %2 = field.cmp eq, %0, %1 : !QF
+  // CHECK-NOT: field.cmp
+  // CHECK: return %[[C]]
+  return %2 : i1
+}
