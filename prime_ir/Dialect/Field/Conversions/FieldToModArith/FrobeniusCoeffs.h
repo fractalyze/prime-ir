@@ -44,8 +44,8 @@ public:
   std::array<std::array<PrimeFieldCodeGen, N - 1>, N - 1>
   GetFrobeniusCoeffs() const {
     const auto &self = static_cast<const Derived &>(*this);
-    auto extField = cast<ExtensionFieldTypeInterface>(self.getType());
-    auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+    auto extField = cast<ExtensionFieldType>(self.getType());
+    auto baseField = cast<PrimeFieldType>(extField.getBaseField());
     APInt modulus = baseField.getModulus().getValue();
     APInt xi = cast<IntegerAttr>(extField.getNonResidue()).getValue();
     auto convertedType = convertPrimeFieldType(baseField);

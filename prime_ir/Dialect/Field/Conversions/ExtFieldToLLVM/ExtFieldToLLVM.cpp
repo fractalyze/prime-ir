@@ -36,13 +36,13 @@ using namespace mlir::LLVM;
 namespace {
 template <typename T>
 Type convertExtFieldType(T type) {
-  if (auto extField = dyn_cast<ExtensionFieldTypeInterface>(type)) {
-    Type baseFieldType = extField.getBaseFieldType();
+  if (auto extField = dyn_cast<ExtensionFieldType>(type)) {
+    Type baseFieldType = extField.getBaseField();
     Type elementType;
 
     // Handle tower of extensions: if base is also an extension field,
     // recursively convert it to a nested struct
-    if (auto baseExt = dyn_cast<ExtensionFieldTypeInterface>(baseFieldType)) {
+    if (auto baseExt = dyn_cast<ExtensionFieldType>(baseFieldType)) {
       elementType = convertExtFieldType(baseExt);
     } else {
       // Base is a prime field, use its storage type
@@ -50,7 +50,7 @@ Type convertExtFieldType(T type) {
       elementType = pfType.getStorageType();
     }
 
-    unsigned n = extField.getDegreeOverBase();
+    unsigned n = extField.getDegree();
     SmallVector<Type> fields(n, elementType);
     return LLVM::LLVMStructType::getLiteral(type.getContext(), fields);
   }
@@ -66,7 +66,7 @@ struct ConvertExtFromCoeffs : public ConvertOpToLLVMPattern<ExtFromCoeffsOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     auto structType = typeConverter->convertType(op.getType());
 
-    auto extField = cast<ExtensionFieldTypeInterface>(op.getType());
+    auto extField = cast<ExtensionFieldType>(op.getType());
     SmallVector<Value> coeffs(adaptor.getInput().begin(),
                               adaptor.getInput().end());
     auto extFieldStruct = extField.buildStructFromCoeffs(b, structType, coeffs);
@@ -83,8 +83,7 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    if (auto extField =
-            dyn_cast<ExtensionFieldTypeInterface>(op.getInput().getType())) {
+    if (auto extField = dyn_cast<ExtensionFieldType>(op.getInput().getType())) {
       SmallVector<Value> coeffs =
           extField.extractCoeffsFromStruct(b, adaptor.getInput());
       rewriter.replaceOpWithMultiple(op, coeffs);
@@ -98,9 +97,8 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
 } // namespace
 
 void populateExtFieldToLLVMTypeConversion(LLVMTypeConverter &typeConverter) {
-  typeConverter.addConversion([](ExtensionFieldTypeInterface type) {
-    return convertExtFieldType(type);
-  });
+  typeConverter.addConversion(
+      [](ExtensionFieldType type) { return convertExtFieldType(type); });
 }
 
 void populateExtFieldToLLVMConversionPatterns(

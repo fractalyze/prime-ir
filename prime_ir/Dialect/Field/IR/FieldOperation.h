@@ -46,11 +46,10 @@ public:
       operation = PrimeFieldOperation(std::forward<T>(value), pfType);
       return;
     }
-    createExtFieldOp(std::forward<T>(value),
-                     cast<ExtensionFieldTypeInterface>(type));
+    createExtFieldOp(std::forward<T>(value), cast<ExtensionFieldType>(type));
   }
   FieldOperation(const SmallVector<APInt> &coeffs, Type type) {
-    createExtFieldOp(coeffs, cast<ExtensionFieldTypeInterface>(type));
+    createExtFieldOp(coeffs, cast<ExtensionFieldType>(type));
   }
   ~FieldOperation() = default;
 
@@ -63,7 +62,7 @@ public:
       return ret;
     }
     ret.createRawExtFieldOp(std::forward<T>(value),
-                            cast<ExtensionFieldTypeInterface>(type));
+                            cast<ExtensionFieldType>(type));
     return ret;
   }
   static FieldOperation fromUnchecked(TypedAttr attr, Type type) {
@@ -74,14 +73,14 @@ public:
       return ret;
     }
     ret.createRawExtFieldOp(cast<DenseIntElementsAttr>(attr),
-                            cast<ExtensionFieldTypeInterface>(type));
+                            cast<ExtensionFieldType>(type));
     return ret;
   }
 
   static FieldOperation fromUnchecked(const SmallVector<APInt> &coeffs,
                                       Type type) {
     FieldOperation ret;
-    ret.createRawExtFieldOp(coeffs, cast<ExtensionFieldTypeInterface>(type));
+    ret.createRawExtFieldOp(coeffs, cast<ExtensionFieldType>(type));
     return ret;
   }
 
@@ -106,9 +105,8 @@ private:
   friend raw_ostream &operator<<(raw_ostream &os, const FieldOperation &op);
 
   template <typename T>
-  void createExtFieldOp(T &&value, ExtensionFieldTypeInterface efType) {
-    auto efTypeImpl = cast<ExtensionFieldType>(efType);
-    unsigned degree = efTypeImpl.getDegree();
+  void createExtFieldOp(T &&value, ExtensionFieldType efType) {
+    unsigned degree = efType.getDegree();
     switch (degree) {
     case 2:
       operation = ExtensionFieldOperation<2>(std::forward<T>(value), efType);
@@ -125,9 +123,8 @@ private:
   }
 
   template <typename T>
-  void createRawExtFieldOp(T &&value, ExtensionFieldTypeInterface efType) {
-    auto efTypeImpl = cast<ExtensionFieldType>(efType);
-    unsigned degree = efTypeImpl.getDegree();
+  void createRawExtFieldOp(T &&value, ExtensionFieldType efType) {
+    unsigned degree = efType.getDegree();
     switch (degree) {
     case 2:
       operation = ExtensionFieldOperation<2>::fromUnchecked(

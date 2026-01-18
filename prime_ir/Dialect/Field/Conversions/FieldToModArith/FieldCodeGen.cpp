@@ -30,7 +30,7 @@ FieldCodeGen::FieldCodeGen(Type type, Value value,
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   auto efType = cast<ExtensionFieldType>(type);
   Value nonResidue = b->create<mod_arith::ConstantOp>(
-      converter->convertType(efType.getBaseFieldType()),
+      converter->convertType(efType.getBaseField()),
       cast<IntegerAttr>(efType.getNonResidue()));
   unsigned degree = efType.getDegree();
   switch (degree) {

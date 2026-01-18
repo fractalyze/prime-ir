@@ -54,7 +54,7 @@ ParseResult parseColonFieldType(AsmParser &parser, Type &type) {
 
   if (isa<PrimeFieldType>(type)) {
     return success();
-  } else if (isa<ExtensionFieldTypeInterface>(type)) {
+  } else if (isa<ExtensionFieldType>(type)) {
     return success();
   }
   return parser.emitError(parser.getCurrentLocation(),
@@ -89,11 +89,11 @@ Attribute maybeToMontgomery(Type type, Attribute attr) {
     }
   }
 
-  auto efType = cast<field::ExtensionFieldTypeInterface>(type);
+  auto efType = cast<field::ExtensionFieldType>(type);
   auto denseElementsAttr = cast<DenseElementsAttr>(attr);
   if (efType.isMontgomery()) {
     return mod_arith::getAttrAsMontgomeryForm(
-        cast<field::PrimeFieldType>(efType.getBaseFieldType()).getModulus(),
+        cast<field::PrimeFieldType>(efType.getBaseField()).getModulus(),
         denseElementsAttr);
   } else {
     return denseElementsAttr;
@@ -110,11 +110,11 @@ Attribute maybeToStandard(Type type, Attribute attr) {
     }
   }
 
-  auto efType = cast<field::ExtensionFieldTypeInterface>(type);
+  auto efType = cast<field::ExtensionFieldType>(type);
   auto denseElementsAttr = cast<DenseElementsAttr>(attr);
   if (efType.isMontgomery()) {
     return mod_arith::getAttrAsStandardForm(
-        cast<field::PrimeFieldType>(efType.getBaseFieldType()).getModulus(),
+        cast<field::PrimeFieldType>(efType.getBaseField()).getModulus(),
         denseElementsAttr);
   } else {
     return denseElementsAttr;
@@ -193,7 +193,7 @@ uint64_t PrimeFieldType::getABIAlignment(
 DEFINE_FIELD_TYPE_INTERFACE_METHODS(PrimeFieldType);
 
 //===----------------------------------------------------------------------===//
-// ExtensionFieldTypeInterface utilities
+// ExtensionFieldType utilities
 //===----------------------------------------------------------------------===//
 
 namespace ext_field_utils {
@@ -414,7 +414,6 @@ uint64_t ExtensionFieldType::getABIAlignment(
   return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
 }
 
-// ExtensionFieldTypeInterface methods
 bool ExtensionFieldType::isMontgomery() const {
   return getBaseField().getIsMontgomery();
 }
@@ -435,10 +434,6 @@ Value ExtensionFieldType::createOneConstant(
 }
 
 unsigned ExtensionFieldType::getDegreeOverPrime() const { return getDegree(); }
-
-unsigned ExtensionFieldType::getDegreeOverBase() const { return getDegree(); }
-
-Type ExtensionFieldType::getBaseFieldType() const { return getBaseField(); }
 
 Type ExtensionFieldType::cloneWith(Type baseField, Attribute element) const {
   return ExtensionFieldType::get(getContext(), getDegree(),

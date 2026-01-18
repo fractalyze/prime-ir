@@ -106,14 +106,14 @@ public:
   }
 
   static MLIRContext context;
-  static ExtensionFieldTypeInterface efType;
+  static ExtensionFieldType efType;
 };
 
 template <typename F>
 MLIRContext ExtensionFieldOperationTest<F>::context;
 
 template <typename F>
-ExtensionFieldTypeInterface ExtensionFieldOperationTest<F>::efType;
+ExtensionFieldType ExtensionFieldOperationTest<F>::efType;
 
 using ExtensionFieldTypes = testing::Types<
     // modulus bits = 2³¹

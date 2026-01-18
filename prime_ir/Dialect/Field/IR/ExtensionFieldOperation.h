@@ -54,17 +54,16 @@ class ExtensionFieldOperation
 public:
   ExtensionFieldOperation() = default;
 
-  ExtensionFieldOperation(int64_t coeff, ExtensionFieldTypeInterface efType)
+  ExtensionFieldOperation(int64_t coeff, ExtensionFieldType efType)
       : ExtensionFieldOperation(
-            APInt(cast<PrimeFieldType>(efType.getBaseFieldType())
+            APInt(cast<PrimeFieldType>(efType.getBaseField())
                       .getStorageBitWidth(),
                   coeff),
             efType) {}
 
-  ExtensionFieldOperation(const APInt &coeff,
-                          ExtensionFieldTypeInterface efType)
+  ExtensionFieldOperation(const APInt &coeff, ExtensionFieldType efType)
       : efType(efType) {
-    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
     coeffs[0] = PrimeFieldOperation(coeff, baseFieldType);
     for (size_t i = 1; i < N; ++i) {
       coeffs[i] = PrimeFieldOperation(uint64_t{0}, baseFieldType);
@@ -73,43 +72,42 @@ public:
 
   // Construct from APInt coefficients (convenient one-liner usage)
   ExtensionFieldOperation(const SmallVector<APInt> &coeffs,
-                          ExtensionFieldTypeInterface efType)
+                          ExtensionFieldType efType)
       : efType(efType) {
     assert(coeffs.size() == N);
-    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
     for (size_t i = 0; i < N; ++i) {
       this->coeffs[i] = PrimeFieldOperation(coeffs[i], baseFieldType);
     }
   }
 
   ExtensionFieldOperation(const std::array<PrimeFieldOperation, N> &coeffs,
-                          ExtensionFieldTypeInterface efType)
+                          ExtensionFieldType efType)
       : coeffs(coeffs), efType(efType) {
     assert(coeffs.size() == N);
   }
 
-  static ExtensionFieldOperation
-  fromUnchecked(DenseIntElementsAttr attr, ExtensionFieldTypeInterface efType) {
+  static ExtensionFieldOperation fromUnchecked(DenseIntElementsAttr attr,
+                                               ExtensionFieldType efType) {
     SmallVector<APInt> coeffs{attr.getValues<APInt>().begin(),
                               attr.getValues<APInt>().end()};
     return fromUnchecked(coeffs, efType);
   }
 
-  static ExtensionFieldOperation
-  fromUnchecked(const APInt &coeff, ExtensionFieldTypeInterface efType) {
+  static ExtensionFieldOperation fromUnchecked(const APInt &coeff,
+                                               ExtensionFieldType efType) {
     SmallVector<APInt> coeffs(
-        N, APInt(cast<PrimeFieldType>(efType.getBaseFieldType())
-                     .getStorageBitWidth(),
-                 0));
+        N,
+        APInt(cast<PrimeFieldType>(efType.getBaseField()).getStorageBitWidth(),
+              0));
     coeffs[0] = coeff;
     return fromUnchecked(coeffs, efType);
   }
 
-  static ExtensionFieldOperation
-  fromUnchecked(const SmallVector<APInt> &coeffs,
-                ExtensionFieldTypeInterface efType) {
+  static ExtensionFieldOperation fromUnchecked(const SmallVector<APInt> &coeffs,
+                                               ExtensionFieldType efType) {
     std::array<PrimeFieldOperation, N> newCoeffs;
-    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
     for (size_t i = 0; i < N; ++i) {
       newCoeffs[i] =
           PrimeFieldOperation::fromUnchecked(coeffs[i], baseFieldType);
@@ -119,7 +117,7 @@ public:
 
   static ExtensionFieldOperation
   fromUnchecked(const std::array<PrimeFieldOperation, N> &coeffs,
-                ExtensionFieldTypeInterface efType) {
+                ExtensionFieldType efType) {
     ExtensionFieldOperation ret;
     ret.coeffs = coeffs;
     ret.efType = efType;
@@ -144,8 +142,7 @@ public:
   DenseIntElementsAttr getDenseIntElementsAttr() const {
     return DenseIntElementsAttr::get(
         RankedTensorType::get(
-            {N},
-            cast<PrimeFieldType>(efType.getBaseFieldType()).getStorageType()),
+            {N}, cast<PrimeFieldType>(efType.getBaseField()).getStorageType()),
         static_cast<SmallVector<APInt>>(*this));
   }
 
@@ -213,7 +210,7 @@ private:
   }
 
   PrimeFieldOperation NonResidue() const {
-    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
     return PrimeFieldOperation::fromUnchecked(
         cast<IntegerAttr>(efType.getNonResidue()), baseFieldType);
   }
@@ -221,7 +218,7 @@ private:
   // https://github.com/fractalyze/zk_dtypes/blob/8d5f43c/zk_dtypes/include/field/extension_field.h#L500
   zk_dtypes::ExtensionFieldMulAlgorithm GetSquareAlgorithm() const {
     if constexpr (N == 2) {
-      auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+      auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
       // Heuristic: custom squaring when n² > 2n + C
       unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
       if (limbNums * N >= 2) {
@@ -229,7 +226,7 @@ private:
       }
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     } else if constexpr (N == 3) {
-      auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+      auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
       // Heuristic: custom squaring when n² > 4n
       unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
       if (limbNums * N >= 4) {
@@ -257,14 +254,14 @@ private:
   }
 
   PrimeFieldOperation CreateConstBaseField(int64_t x) const {
-    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
     return PrimeFieldOperation(x, baseFieldType);
   }
 
   // Frobenius coefficients: coeffs[e-1][i-1] = ξ^(i * e * (p - 1) / n)
   std::array<std::array<PrimeFieldOperation, N - 1>, N - 1>
   GetFrobeniusCoeffs() const {
-    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
     APInt p = baseFieldType.getModulus().getValue();
     APInt nr = cast<IntegerAttr>(efType.getNonResidue()).getValue();
     PrimeFieldOperation nrOp(nr, baseFieldType);
@@ -285,7 +282,7 @@ private:
   }
 
   std::array<PrimeFieldOperation, N> coeffs;
-  ExtensionFieldTypeInterface efType;
+  ExtensionFieldType efType;
 };
 
 template <size_t N>

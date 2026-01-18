@@ -87,10 +87,9 @@ std::optional<std::string> getKnownCurveAlias(ShortWeierstrassAttr attr) {
         }
       }
     }
-  } else if (auto efType = dyn_cast<field::ExtensionFieldTypeInterface>(
-                 attr.getBaseField())) {
-    if (auto pfType =
-            dyn_cast<field::PrimeFieldType>(efType.getBaseFieldType())) {
+  } else if (auto efType =
+                 dyn_cast<field::ExtensionFieldType>(attr.getBaseField())) {
+    if (auto pfType = dyn_cast<field::PrimeFieldType>(efType.getBaseField())) {
       auto modulus = pfType.getModulus().getValue();
       auto alias = getKnownModulusAlias(modulus);
       if (!alias.has_value())
