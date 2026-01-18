@@ -972,3 +972,43 @@ func.func @test_splat_extract_strided_slice_fold() -> vector<2x!PF17> {
   // CHECK: return %[[C]] : [[T]]
   return %slice : vector<2x!PF17>
 }
+
+//===----------------------------------------------------------------------===//
+// CmpOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_cmp_fold
+// CHECK-SAME: () -> i1 {
+func.func @test_cmp_fold() -> i1 {
+  // CHECK: %[[C:.*]] = arith.constant true
+  %0 = field.constant 2 : !PF17
+  %1 = field.constant 1 : !PF17
+  %2 = field.cmp ugt, %0, %1 : !PF17
+  // CHECK-NOT: field.cmp
+  // CHECK: return %[[C]]
+  return %2 : i1
+}
+
+// CHECK-LABEL: @test_cmp_tensor_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_cmp_tensor_fold() -> tensor<2xi1> {
+  // CHECK: %[[C:.*]] = arith.constant dense<[true, false]> : [[T]]
+  %0 = field.constant dense<[2, 2]> : tensor<2x!PF17>
+  %1 = field.constant dense<[1, 3]> : tensor<2x!PF17>
+  %2 = field.cmp ugt, %0, %1 : tensor<2x!PF17>
+  // CHECK-NOT: field.cmp
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : tensor<2xi1>
+}
+
+// CHECK-LABEL: @test_cmp_splat_tensor_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_cmp_splat_tensor_fold() -> tensor<2xi1> {
+  // CHECK: %[[C:.*]] = arith.constant dense<true> : [[T]]
+  %0 = field.constant dense<2> : tensor<2x!PF17>
+  %1 = field.constant dense<1> : tensor<2x!PF17>
+  %2 = field.cmp ugt, %0, %1 : tensor<2x!PF17>
+  // CHECK-NOT: field.cmp
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : tensor<2xi1>
+}
