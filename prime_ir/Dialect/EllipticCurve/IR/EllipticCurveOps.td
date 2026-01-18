@@ -175,6 +175,7 @@ def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
     %sum = elliptic_curve.add %a, %b : !affine, !jacobian -> !jacobian
     ```
   }];
+  let hasCanonicalizer = 1;
 }
 
 // Elliptic curve point subtraction.
@@ -195,6 +196,7 @@ def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
     %difference = elliptic_curve.sub %a, %b : !affine, !jacobian -> !jacobian
     ```
   }];
+  let hasCanonicalizer = 1;
 }
 
 // Elliptic curve point negation.

@@ -28,6 +28,11 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 
+// IWYU pragma: begin_keep
+// Headers needed for EllipticCurveCanonicalization.cpp.inc
+#include "mlir/IR/Matchers.h"
+// IWYU pragma: end_keep
+
 namespace mlir::prime_ir::elliptic_curve {
 namespace {
 template <typename OpType>
@@ -545,6 +550,26 @@ void ExtFromCoordOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 void ExtToCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                 MLIRContext *context) {
   patterns.add<ExtToCoordsOfExtFromCoord>(context);
+}
+
+namespace {
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveCanonicalization.cpp.inc"
+} // namespace
+
+#include "prime_ir/Utils/CanonicalizationPatterns.inc"
+
+void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+#define PRIME_IR_ADD_PATTERN(Name) patterns.add<EllipticCurve##Name>(context);
+  PRIME_IR_GROUP_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+#undef PRIME_IR_ADD_PATTERN
+}
+
+void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+#define PRIME_IR_SUB_PATTERN(Name) patterns.add<EllipticCurve##Name>(context);
+  PRIME_IR_GROUP_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
+#undef PRIME_IR_SUB_PATTERN
 }
 
 } // namespace mlir::prime_ir::elliptic_curve

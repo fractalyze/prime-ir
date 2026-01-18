@@ -30,6 +30,11 @@ def GetAsConstant : NativeCodeCall<"$_builder.create<ConstantOp>(odsLoc, $0.getT
 def GetZeroAttr : NativeCodeCall<"$_builder.getZeroAttr(cast<IntegerType>($0))">;
 def GetIntegerType : NativeCodeCall<"cast<PrimeFieldType>($0.getType()).getStorageType()">;
 
+// Helper functions to create AddOp/SubOp.
+// For field operations, result types are inferred from operands (SameOperandsAndResultType).
+def CreateAddOp : NativeCodeCall<"$_builder.create<AddOp>(odsLoc, $0, $1)">;
+def CreateSubOp : NativeCodeCall<"$_builder.create<SubOp>(odsLoc, $0, $1)">;
+
 include "prime_ir/Utils/AdditiveCanonicalization.td"
 include "prime_ir/Utils/MultiplicativeCanonicalization.td"
 include "prime_ir/Utils/DistributivityCanonicalization.td"
