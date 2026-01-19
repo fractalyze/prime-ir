@@ -700,64 +700,44 @@ void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 }
 
 void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
-                                        MLIRContext *context) {
+                                        MLIRContext *context){
 #define PRIME_IR_MUL_PATTERN(Name) patterns.add<Field##Name>(context);
-  PRIME_IR_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
+    PRIME_IR_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
 #undef PRIME_IR_MUL_PATTERN
 }
 
-namespace {
+OpFoldResult ExtFromCoeffsOp::fold(FoldAdaptor adaptor) {
+  // Fold: field.ext_from_coeffs(field.ext_to_coeffs(arg...)) -> arg
+  if (getOperands().empty())
+    return {};
 
-struct ExtFromCoeffsOfExtToCoeffs
-    : public mlir::OpRewritePattern<ExtFromCoeffsOp> {
-  using OpRewritePattern<ExtFromCoeffsOp>::OpRewritePattern;
+  auto extToCoeffsOp = getOperands().front().getDefiningOp<ExtToCoeffsOp>();
+  if (!extToCoeffsOp)
+    return {};
 
-  LogicalResult matchAndRewrite(ExtFromCoeffsOp op,
-                                PatternRewriter &rewriter) const override {
-    // Match: field.ext_from_coeffs(field.ext_to_coeffs(arg))
-    if (op.getOperands().empty())
-      return failure();
+  // The operands must be exactly the results of the ExtToCoeffsOp, in order.
+  if (getOperands() != extToCoeffsOp->getResults())
+    return {};
 
-    auto extToCoeffsOp =
-        op.getOperands().front().getDefiningOp<ExtToCoeffsOp>();
-    if (!extToCoeffsOp)
-      return failure();
+  if (extToCoeffsOp->getOperands().size() != 1)
+    return {};
 
-    // The operands must be exactly the results of the ExtToCoeffsOp, in order.
-    if (op.getOperands() != extToCoeffsOp->getResults())
-      return failure();
-
-    rewriter.replaceOp(op, extToCoeffsOp->getOperands());
-    return success();
-  }
-};
-
-struct ExtToCoeffsOfExtFromCoeffs
-    : public mlir::OpRewritePattern<ExtToCoeffsOp> {
-  using OpRewritePattern<ExtToCoeffsOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(ExtToCoeffsOp op,
-                                PatternRewriter &rewriter) const override {
-    // Match: field.ext_to_coeffs(field.ext_from_coeffs(arg...))
-    auto extFromCoeffsOp = op.getOperand().getDefiningOp<ExtFromCoeffsOp>();
-    if (!extFromCoeffsOp)
-      return failure();
-
-    rewriter.replaceOp(op, extFromCoeffsOp->getOperands());
-    return success();
-  }
-};
-
-} // namespace
-
-void ExtFromCoeffsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
-                                                  MLIRContext *context) {
-  patterns.add<ExtFromCoeffsOfExtToCoeffs>(context);
+  return extToCoeffsOp->getOperand(0);
 }
 
-void ExtToCoeffsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
-                                                MLIRContext *context) {
-  patterns.add<ExtToCoeffsOfExtFromCoeffs>(context);
+LogicalResult ExtToCoeffsOp::fold(FoldAdaptor adaptor,
+                                  SmallVectorImpl<OpFoldResult> &results) {
+  // Fold: field.ext_to_coeffs(field.ext_from_coeffs(arg...)) -> arg...
+  auto extFromCoeffsOp = getOperand().getDefiningOp<ExtFromCoeffsOp>();
+  if (!extFromCoeffsOp)
+    return failure();
+
+  auto operands = extFromCoeffsOp->getOperands();
+  if (operands.empty())
+    return failure();
+
+  results.append(operands.begin(), operands.end());
+  return success();
 }
 
 } // namespace mlir::prime_ir::field

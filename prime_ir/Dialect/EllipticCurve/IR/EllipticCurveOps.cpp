@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LogicalResult.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
@@ -101,9 +102,10 @@ Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   Value oneBF =
       cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
   return isa<XYZZType>(pointType)
-             ? b.create<PointOp>(pointType,
-                                 ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-             : b.create<PointOp>(pointType, ValueRange{oneBF, oneBF, zeroBF});
+             ? b.create<ExtFromCoordOp>(
+                   pointType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
+             : b.create<ExtFromCoordOp>(pointType,
+                                        ValueRange{oneBF, oneBF, zeroBF});
 }
 
 /////////////// VERIFY OPS /////////////////
@@ -126,7 +128,7 @@ size_t getNumCoordsFromPointLike(Type pointLike) {
 
 } // namespace
 
-LogicalResult PointOp::verify() {
+LogicalResult ExtFromCoordOp::verify() {
   Type outputType = getType();
   if (getNumCoordsFromPointLike(outputType) != getCoords().size()) {
     return emitError() << outputType << " should have "
@@ -136,7 +138,7 @@ LogicalResult PointOp::verify() {
   return verifyPointCoordTypes(*this, outputType, getCoords()[0].getType());
 }
 
-LogicalResult ExtractOp::verify() {
+LogicalResult ExtToCoordsOp::verify() {
   Type inputType = getInput().getType();
   if (getNumCoordsFromPointLike(inputType) != getOutput().size()) {
     return emitError() << inputType << " should have "
@@ -346,6 +348,44 @@ LogicalResult ConvertPointTypeOp::verify() {
   if (inputType == outputType)
     return emitError() << "Converting on same types";
   // TODO(ashjeong): check curves are the same
+  return success();
+}
+
+//////////////// FOLDERS ////////////////
+
+OpFoldResult ExtFromCoordOp::fold(FoldAdaptor adaptor) {
+  // Fold: elliptic_curve.ext_from_coord(elliptic_curve.ext_to_coords(arg))
+  // -> arg
+  if (getOperands().empty())
+    return {};
+
+  auto extToCoordsOp = getOperands().front().getDefiningOp<ExtToCoordsOp>();
+  if (!extToCoordsOp)
+    return {};
+
+  // The operands must be exactly the results of the ExtToCoordsOp, in order.
+  if (getOperands() != extToCoordsOp->getResults())
+    return {};
+
+  if (extToCoordsOp->getOperands().size() != 1)
+    return {};
+
+  return extToCoordsOp->getOperand(0);
+}
+
+LogicalResult ExtToCoordsOp::fold(FoldAdaptor adaptor,
+                                  SmallVectorImpl<OpFoldResult> &results) {
+  // Fold: elliptic_curve.ext_to_coords(elliptic_curve.ext_from_coord(arg...))
+  // -> arg...
+  auto extFromCoordOp = getOperand().getDefiningOp<ExtFromCoordOp>();
+  if (!extFromCoordOp)
+    return failure();
+
+  auto operands = extFromCoordOp->getOperands();
+  if (operands.empty())
+    return failure();
+
+  results.append(operands.begin(), operands.end());
   return success();
 }
 
