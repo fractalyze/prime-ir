@@ -112,7 +112,6 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
 }
 
 def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
- SameOperandsAndResultShape, AllSameTensorDims<["input", "output"]>,
  DeclareOpInterfaceMethods<CastOpInterface>]> {
   let summary = "Bitcast between prime field types and to/from integer types";
   let description = [{
@@ -122,9 +121,10 @@ def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
     bitwidth of the output type. Integer to integer bitcast is disallowed as it
     should be handled by `arith.bitcast`.
 
-    Currently, this operation only supports prime field. In the future, when the
-    use case is clear, we could support bitcasting between other field types and
-    integer type.
+    Supports bitcasting between:
+    - Prime field types and integer types
+    - Extension field types and tensors of prime field types (e.g.,
+      `field.ef<3x!field.pf, #nr>` <-> `tensor<3x!field.pf>`)
 
     Example:
     ```
@@ -132,11 +132,16 @@ def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
     %c0 = field.bitcast %f0 : !PF -> i32
     %f1 = field.bitcast %c0 : i32 -> !PF
     %f2 = field.bitcast %f0 : !PF -> !PF2
+
+    !EF = !field.ef<3x!PF, #nr>
+    %tensor = field.bitcast %ef : !EF -> tensor<3x!PF>
+    %ef2 = field.bitcast %tensor : tensor<3x!PF> -> !EF
     ```
   }];
-  let arguments = (ins AnyTypeOf<[PrimeFieldLike, SignlessIntegerLike]>:$input);
-  let results = (outs AnyTypeOf<[PrimeFieldLike, SignlessIntegerLike]>:$output);
+  let arguments = (ins AnyTypeOf<[PrimeFieldLike, ExtensionFieldLike, SignlessIntegerLike]>:$input);
+  let results = (outs AnyTypeOf<[PrimeFieldLike, ExtensionFieldLike, SignlessIntegerLike]>:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+  let hasVerifier = 1;
 }
 
 def Field_CmpOp : Field_Op<"cmp", [SameTypeOperands, TypesMatchWith<

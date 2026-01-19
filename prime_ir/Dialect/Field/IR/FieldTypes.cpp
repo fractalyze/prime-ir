@@ -34,12 +34,27 @@ bool isMontgomery(Type type) {
   return false;
 }
 
-unsigned getIntOrPrimeFieldBitWidth(Type type) {
-  assert(llvm::isa<PrimeFieldType>(type) || llvm::isa<IntegerType>(type));
-  if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
-    return pfType.getStorageBitWidth();
+unsigned getIntOrFieldBitWidth(Type type) {
+  auto getIntOrFieldBitWidthImpl = [](Type type) -> unsigned {
+    if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
+      return pfType.getStorageBitWidth();
+    } else if (auto efType = dyn_cast<ExtensionFieldType>(type)) {
+      return efType.getDegree() * efType.getBaseField().getStorageBitWidth();
+    } else if (auto intType = dyn_cast<IntegerType>(type)) {
+      return intType.getWidth();
+    }
+    llvm_unreachable("Unsupported type for bitwidth calculation");
+  };
+
+  if (auto shapedType = dyn_cast<ShapedType>(type)) {
+    auto elementType = shapedType.getElementType();
+    int64_t numElements = shapedType.getNumElements();
+    if (numElements == ShapedType::kDynamic) {
+      llvm_unreachable("Dynamic shapes not supported for bitwidth calculation");
+    }
+    return numElements * getIntOrFieldBitWidthImpl(elementType);
   }
-  return cast<IntegerType>(type).getWidth();
+  return getIntOrFieldBitWidthImpl(type);
 }
 
 mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type) {

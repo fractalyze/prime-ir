@@ -44,7 +44,7 @@ constexpr size_t kNumExtDegrees = kMaxExtDegree - kMinExtDegree + 1;
 class PrimeFieldType;
 
 bool isMontgomery(Type type);
-unsigned getIntOrPrimeFieldBitWidth(Type type);
+unsigned getIntOrFieldBitWidth(Type type);
 
 mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type);
 

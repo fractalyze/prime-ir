@@ -245,12 +245,135 @@ LogicalResult ToMontOp::verify() {
   return success();
 }
 
-bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
-  Type inputType = getElementTypeOrSelf(inputs.front());
-  Type outputType = getElementTypeOrSelf(outputs.front());
+namespace {
 
-  return getIntOrPrimeFieldBitWidth(inputType) ==
-         getIntOrPrimeFieldBitWidth(outputType);
+LogicalResult
+checkBitcastCompatibility(Type inputType, Type outputType,
+                          llvm::function_ref<InFlightDiagnostic()> emitError) {
+  // Helper macro to conditionally emit error and return failure
+  // Usage: RETURN_ERROR("message" << value);
+#define RETURN_ERROR(msg)                                                      \
+  do {                                                                         \
+    if (emitError)                                                             \
+      emitError() << msg;                                                      \
+    return failure();                                                          \
+  } while (0)
+
+  // 1. Disallow Integer <-> Integer
+  if (isa<IntegerType>(inputType) && isa<IntegerType>(outputType)) {
+    RETURN_ERROR("integer to integer bitcast is disallowed, use "
+                 "arith.bitcast instead");
+  }
+
+  // 2. Bitwidth check
+  if (getIntOrFieldBitWidth(inputType) != getIntOrFieldBitWidth(outputType)) {
+    RETURN_ERROR("bitwidth mismatch: input type has "
+                 << getIntOrFieldBitWidth(inputType)
+                 << " bits, output type has "
+                 << getIntOrFieldBitWidth(outputType) << " bits");
+  }
+
+  Type inElem = getElementTypeOrSelf(inputType);
+  Type outElem = getElementTypeOrSelf(outputType);
+
+  bool inIsPF = isa<PrimeFieldType>(inElem);
+  bool outIsEF = isa<ExtensionFieldType>(outElem);
+  bool inIsEF = isa<ExtensionFieldType>(inElem);
+  bool outIsPF = isa<PrimeFieldType>(outElem);
+
+  // 3. PF <-> EF Special Conversion
+  if ((inIsPF && outIsEF) || (inIsEF && outIsPF)) {
+    bool isExpanding = inIsEF; // EF -> PF
+
+    auto inTensor = dyn_cast<RankedTensorType>(inputType);
+    auto outTensor = dyn_cast<RankedTensorType>(outputType);
+
+    RankedTensorType expandedTensor = isExpanding ? outTensor : inTensor;
+    Type collapsedType = isExpanding ? inputType : outputType;
+    auto collapsedTensor = dyn_cast<RankedTensorType>(collapsedType);
+
+    auto efType = cast<ExtensionFieldType>(isExpanding ? inElem : outElem);
+    auto pfType = cast<PrimeFieldType>(isExpanding ? outElem : inElem);
+
+    // A. Base Field Check
+    auto baseFieldType = dyn_cast<PrimeFieldType>(efType.getBaseField());
+    if (!baseFieldType || pfType != baseFieldType) {
+      RETURN_ERROR("prime field type ("
+                   << pfType << ") must match extension field base type ("
+                   << baseFieldType << ")");
+    }
+
+    // B. Expanded side must be a tensor
+    if (!expandedTensor) {
+      RETURN_ERROR("the prime field side of an EF-PF conversion must be a "
+                   "ranked tensor");
+    }
+
+    // C. Rank Comparison
+    int64_t colRank = collapsedTensor ? collapsedTensor.getRank() : 0;
+    int64_t expRank = expandedTensor.getRank();
+
+    if (expRank != colRank + 1) {
+      RETURN_ERROR(
+          "rank mismatch: prime field tensor rank ("
+          << expRank
+          << ") must be exactly one greater than extension field rank ("
+          << colRank << ")");
+    }
+
+    // D. Degree Check (Last Dimension)
+    unsigned degree = efType.getDegree();
+    int64_t lastDimSize = expandedTensor.getDimSize(expRank - 1);
+    if (lastDimSize != static_cast<int64_t>(degree)) {
+      RETURN_ERROR("last dimension size ("
+                   << lastDimSize << ") must match extension field degree ("
+                   << degree << ")");
+    }
+
+    // E. Prefix Shape Check
+    if (collapsedTensor) {
+      auto expShape = expandedTensor.getShape();
+      auto colShape = collapsedTensor.getShape();
+      if (expShape.drop_back() != colShape) {
+        RETURN_ERROR("shape mismatch: expected "
+                     << colShape << " but got prefix " << expShape.drop_back());
+      }
+    }
+
+    return success();
+  }
+
+  // 4. General Case (Exact Shape Match)
+  auto inTensor = dyn_cast<RankedTensorType>(inputType);
+  auto outTensor = dyn_cast<RankedTensorType>(outputType);
+
+  if (inTensor && outTensor) {
+    if (inTensor.getShape() != outTensor.getShape()) {
+      RETURN_ERROR("shape mismatch: input shape "
+                   << inTensor.getShape() << " does not match output shape "
+                   << outTensor.getShape());
+    }
+  } else if (inTensor || outTensor) {
+    RETURN_ERROR("cannot bitcast between scalar and tensor (unless "
+                 "converting PF <-> EF)");
+  }
+
+  return success();
+#undef RETURN_ERROR
+}
+
+} // namespace
+
+LogicalResult BitcastOp::verify() {
+  // Pass a lambda that calls emitOpError()
+  return checkBitcastCompatibility(getInput().getType(), getType(),
+                                   [&]() { return emitOpError(); });
+}
+
+bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+  // Pass nullptr to suppress error messages (pure boolean check)
+  return succeeded(checkBitcastCompatibility(inputs.front(), outputs.front(),
+                                             /*emitError=*/nullptr));
 }
 
 LogicalResult ExtToCoeffsOp::verify() {
