@@ -49,6 +49,26 @@ SmallVector<APInt> convertToAPInts(const std::array<F, N> &coeffs) {
   return result;
 }
 
+template <size_t N>
+SmallVector<APInt> convertToAPInts(ArrayRef<zk_dtypes::BigInt<N>> values) {
+  SmallVector<APInt> ret;
+  ret.reserve(values.size());
+  for (const auto &value : values) {
+    ret.push_back(convertToAPInt(value));
+  }
+  return ret;
+}
+
+template <typename T, std::enable_if_t<std::is_integral_v<T>> * = nullptr>
+SmallVector<APInt> convertToAPInts(ArrayRef<T> values) {
+  SmallVector<APInt> ret;
+  ret.reserve(values.size());
+  for (T value : values) {
+    ret.push_back(convertToAPInt(value));
+  }
+  return ret;
+}
+
 template <typename T>
 IntegerAttr convertToIntegerAttr(MLIRContext *context, const T &value) {
   if constexpr (std::is_integral_v<T>) {
@@ -57,6 +77,21 @@ IntegerAttr convertToIntegerAttr(MLIRContext *context, const T &value) {
   } else {
     auto type = IntegerType::get(context, T::kBitWidth);
     return IntegerAttr::get(type, convertToAPInt(value));
+  }
+}
+
+template <typename T>
+DenseIntElementsAttr convertToDenseIntElementsAttr(MLIRContext *context,
+                                                   ArrayRef<T> values) {
+  int64_t size = static_cast<int64_t>(values.size());
+  if constexpr (std::is_integral_v<T>) {
+    return DenseIntElementsAttr::get(
+        RankedTensorType::get({size}, IntegerType::get(context, sizeof(T) * 8)),
+        convertToAPInts(values));
+  } else {
+    auto type = IntegerType::get(context, T::kBitWidth);
+    return DenseIntElementsAttr::get(RankedTensorType::get({size}, type),
+                                     convertToAPInts(values));
   }
 }
 

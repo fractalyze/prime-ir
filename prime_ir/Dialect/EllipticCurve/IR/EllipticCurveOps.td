@@ -411,7 +411,7 @@ def EllipticCurve_BucketReduceOp : EllipticCurve_Op<"bucket_reduce", [SameOperan
 // Elliptic curve MSM window reduction.
 def EllipticCurve_WindowReduceOp : EllipticCurve_Op<"window_reduce", [TypesMatchWith<
   "output type must be the same as the element type of the windows",
-  "windows", "output", "::mlir::getElementTypeOrSelf($_self)">,
+  "windows", "output", "getElementTypeOrSelf($_self)">,
   VarPositiveAndBounded<"getBitsPerWindow()", "getScalarType().getStorageBitWidth()">]> {
   let summary = "MSM Window Reduction";
   let description = [{

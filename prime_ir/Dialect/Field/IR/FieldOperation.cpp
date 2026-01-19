@@ -17,6 +17,16 @@
 
 namespace mlir::prime_ir::field {
 
+FieldOperation FieldOperation::getZero() const {
+  return std::visit(
+      [](const auto &op) -> FieldOperation { return op.getZero(); }, operation);
+}
+
+FieldOperation FieldOperation::getOne() const {
+  return std::visit(
+      [](const auto &op) -> FieldOperation { return op.getOne(); }, operation);
+}
+
 FieldOperation::operator APInt() const {
   if (auto pfOperation = std::get_if<PrimeFieldOperation>(&operation)) {
     return static_cast<APInt>(*pfOperation);
@@ -36,6 +46,11 @@ FieldOperation::operator SmallVector<APInt>() const {
         }
       },
       operation);
+}
+
+Type FieldOperation::getType() const {
+  return std::visit([](const auto &op) -> Type { return op.getType(); },
+                    operation);
 }
 
 namespace {
@@ -81,6 +96,12 @@ FieldOperation FieldOperation::operator*(const FieldOperation &other) const {
       [](const auto &a, const auto &b) { return a * b; });
 }
 
+FieldOperation FieldOperation::operator/(const FieldOperation &other) const {
+  return applyBinaryOp<FieldOperation>(
+      operation, other.operation,
+      [](const auto &a, const auto &b) { return a / b; });
+}
+
 FieldOperation FieldOperation::operator-() const {
   return applyUnaryOp(operation, [](const auto &v) { return -v; });
 }
@@ -100,6 +121,16 @@ FieldOperation FieldOperation::power(const APInt &exponent) const {
 
 FieldOperation FieldOperation::inverse() const {
   return applyUnaryOp(operation, [](const auto &v) { return v.inverse(); });
+}
+
+bool FieldOperation::isZero() const {
+  return std::visit([](const auto &op) -> bool { return op.isZero(); },
+                    operation);
+}
+
+bool FieldOperation::isOne() const {
+  return std::visit([](const auto &op) -> bool { return op.isOne(); },
+                    operation);
 }
 
 bool FieldOperation::operator==(const FieldOperation &other) const {

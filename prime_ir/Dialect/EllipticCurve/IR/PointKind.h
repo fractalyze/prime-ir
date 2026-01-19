@@ -16,6 +16,8 @@
 #ifndef PRIME_IR_DIALECT_ELLIPTICCURVE_IR_POINTKIND_H_
 #define PRIME_IR_DIALECT_ELLIPTICCURVE_IR_POINTKIND_H_
 
+#include "zk_dtypes/include/geometry/point_declarations.h"
+
 namespace mlir::prime_ir::elliptic_curve {
 
 enum class PointKind {
@@ -23,6 +25,18 @@ enum class PointKind {
   kJacobian,
   kXYZZ,
 };
+
+template <typename Point>
+constexpr PointKind getPointKind() {
+  if constexpr (zk_dtypes::IsAffinePoint<Point>) {
+    return PointKind::kAffine;
+  } else if constexpr (zk_dtypes::IsJacobianPoint<Point>) {
+    return PointKind::kJacobian;
+  } else {
+    static_assert(zk_dtypes::IsPointXyzz<Point>, "Point must be an xyzz point");
+    return PointKind::kXYZZ;
+  }
+}
 
 } // namespace mlir::prime_ir::elliptic_curve
 

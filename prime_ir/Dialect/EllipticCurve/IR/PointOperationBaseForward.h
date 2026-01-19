@@ -13,17 +13,17 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef PRIME_IR_DIALECT_ELLIPTICCURVE_IR_POINTKINDCONVERSION_H_
-#define PRIME_IR_DIALECT_ELLIPTICCURVE_IR_POINTKINDCONVERSION_H_
+#ifndef PRIME_IR_DIALECT_ELLIPTICCURVE_IR_POINTOPERATIONBASEFORWARD_H_
+#define PRIME_IR_DIALECT_ELLIPTICCURVE_IR_POINTOPERATIONBASEFORWARD_H_
 
-#include "mlir/IR/Types.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointKind.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
-PointKind getPointKind(Type type);
+template <PointKind Kind>
+class PointOperationBase;
 
 } // namespace mlir::prime_ir::elliptic_curve
 
 // NOLINTNEXTLINE(whitespace/line_length)
-#endif // PRIME_IR_DIALECT_ELLIPTICCURVE_IR_POINTKINDCONVERSION_H_
+#endif // PRIME_IR_DIALECT_ELLIPTICCURVE_IR_POINTOPERATIONBASEFORWARD_H_

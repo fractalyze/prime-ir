@@ -28,6 +28,7 @@ cc_library(
         "EllipticCurveTypes.h",
     ],
     deps = [
+        ":PointKind",
         ":attributes_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
@@ -43,7 +44,9 @@ cc_library(
         "EllipticCurveAttributes.cpp",
         "EllipticCurveDialect.cpp",
         "EllipticCurveOps.cpp",
+        "EllipticCurveTypes.cpp",
         "KnownCurves.cpp",
+        "PointOperation.cpp",
     ],
     hdrs = [
         "EllipticCurveAttributes.h",
@@ -51,8 +54,12 @@ cc_library(
         "EllipticCurveOps.h",
         "EllipticCurveTypes.h",
         "KnownCurves.h",
+        "PointOperation.h",
     ],
     deps = [
+        ":PointKind",
+        ":PointOperationBaseForward",
+        ":PointOperationSelector",
         ":attributes_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
@@ -71,23 +78,20 @@ cc_library(
         "@llvm-project//mlir:Support",
         "@zk_dtypes//zk_dtypes:bn254_g1",
         "@zk_dtypes//zk_dtypes:bn254_g2",
+        "@zk_dtypes//zk_dtypes:control_flow_operation",
     ],
 )
 
 cc_library(
     name = "PointKind",
     hdrs = ["PointKind.h"],
+    deps = ["@zk_dtypes//zk_dtypes:point_declarations"],
 )
 
 cc_library(
-    name = "PointKindConversion",
-    srcs = ["PointKindConversion.cpp"],
-    hdrs = ["PointKindConversion.h"],
-    deps = [
-        ":PointKind",
-        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "@llvm-project//mlir:IR",
-    ],
+    name = "PointOperationBaseForward",
+    hdrs = ["PointOperationBaseForward.h"],
+    deps = [":PointKind"],
 )
 
 cc_library(
@@ -166,6 +170,14 @@ gentbl_cc_library(
         ],
         "EllipticCurveTypes.cpp.inc": [
             "-gen-typedef-defs",
+            "--typedefs-dialect=elliptic_curve",
+        ],
+        "EllipticCurveTypesInterfaces.h.inc": [
+            "-gen-type-interface-decls",
+            "--typedefs-dialect=elliptic_curve",
+        ],
+        "EllipticCurveTypesInterfaces.cpp.inc": [
+            "-gen-type-interface-defs",
             "--typedefs-dialect=elliptic_curve",
         ],
     },

@@ -100,32 +100,25 @@ PointCodeGen PointCodeGen::dbl(PointKind outputKind) const {
   return applyUnaryOp(codeGen, [](const auto &v) { return v.Double(); });
 }
 
+namespace {
+
+template <PointKind Kind>
+PointCodeGen convertImpl(const PointCodeGen::CodeGenType &codeGen) {
+  return std::visit(
+      [](const auto &v) -> PointCodeGen { return v.template convert<Kind>(); },
+      codeGen);
+}
+
+} // namespace
+
 PointCodeGen PointCodeGen::convert(PointKind outputKind) const {
-  PointKind kind = getKind();
-  if (outputKind == PointKind::kAffine) {
-    if (kind == PointKind::kAffine) {
-      return *this;
-    } else if (kind == PointKind::kJacobian) {
-      return std::get<JacobianPointCodeGen>(codeGen).ToAffine();
-    } else if (kind == PointKind::kXYZZ) {
-      return std::get<XYZZPointCodeGen>(codeGen).ToAffine();
-    }
-  } else if (outputKind == PointKind::kJacobian) {
-    if (kind == PointKind::kAffine) {
-      return std::get<AffinePointCodeGen>(codeGen).ToJacobian();
-    } else if (kind == PointKind::kJacobian) {
-      return *this;
-    } else if (kind == PointKind::kXYZZ) {
-      return std::get<XYZZPointCodeGen>(codeGen).ToJacobian();
-    }
-  } else if (outputKind == PointKind::kXYZZ) {
-    if (kind == PointKind::kAffine) {
-      return std::get<AffinePointCodeGen>(codeGen).ToXyzz();
-    } else if (kind == PointKind::kJacobian) {
-      return std::get<JacobianPointCodeGen>(codeGen).ToXyzz();
-    } else if (kind == PointKind::kXYZZ) {
-      return *this;
-    }
+  switch (outputKind) {
+  case PointKind::kAffine:
+    return convertImpl<PointKind::kAffine>(codeGen);
+  case PointKind::kJacobian:
+    return convertImpl<PointKind::kJacobian>(codeGen);
+  case PointKind::kXYZZ:
+    return convertImpl<PointKind::kXYZZ>(codeGen);
   }
   llvm_unreachable("Unsupported point kind");
 }

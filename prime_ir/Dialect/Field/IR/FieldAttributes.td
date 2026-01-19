@@ -36,7 +36,7 @@ def Field_RootOfUnityAttr : Field_Attr<"RootOfUnity", "root_of_unity", [TypedAtt
 // TODO(chokobole): Refactor this with a proper attribute type. Currently it's used in
 // `EllipticCurveAttributes.td`, so it can't be used.
 def Field_AnyFieldAttr : AnyAttrOf<[APIntAttr, AnyIntElementsAttr]> {
-  string cppType = "mlir::TypedAttr";
+  string cppType = "TypedAttr";
 }
 
 #endif  // PRIME_IR_DIALECT_FIELD_IR_FIELDATTRS_TD_

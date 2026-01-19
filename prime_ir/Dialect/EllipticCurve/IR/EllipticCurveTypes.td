@@ -30,7 +30,29 @@ class EllipticCurve_Type<string name, string typeMnemonic, list<Trait> traits = 
   let mnemonic = typeMnemonic;
 }
 
-def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [MemRefElementTypeInterface]> {
+// Point type interface.
+// Provides a unified interface for all point types (affine, jacobian, xyzz, etc.)
+def EllipticCurve_PointTypeInterface : TypeInterface<"PointTypeInterface"> {
+  let description = [{
+    Interface for all point types that provides common operations.
+  }];
+
+  let methods = [
+    InterfaceMethod<"Get number of coordinates",
+      "unsigned", "getNumCoords">,
+    InterfaceMethod<"Get the base field type",
+      "Type", "getBaseFieldType">,
+    InterfaceMethod<"Get the curve attribute",
+      "Attribute", "getCurveAttr">,
+    InterfaceMethod<"Get the point kind",
+      "PointKind", "getPointKind">,
+  ];
+}
+
+def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [
+  MemRefElementTypeInterface,
+  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>
+  ]> {
   let summary = "An affine point within an elliptic curve";
   let description = [{
     An affine point within an elliptic curve. It must be instantiated with an elliptic curve attribute
@@ -46,7 +68,10 @@ def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [MemRefEle
   let assemblyFormat = "`<` $curve `>`";
 }
 
-def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [MemRefElementTypeInterface]> {
+def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [
+  MemRefElementTypeInterface,
+  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>
+  ]> {
   let summary = "A jacobian point within an elliptic curve";
   let description = [{
     A jacobian point within an elliptic curve. If the point in affine form is represented as (x,y),
@@ -63,7 +88,10 @@ def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [Mem
   let assemblyFormat = "`<` $curve `>`";
 }
 
-def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [MemRefElementTypeInterface, ]> {
+def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [
+  MemRefElementTypeInterface,
+  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>
+  ]> {
   let summary = "A xyzz point within an elliptic curve";
   let description = [{
     A xyzz point within an elliptic curve. The xyzz form is a different way of storing

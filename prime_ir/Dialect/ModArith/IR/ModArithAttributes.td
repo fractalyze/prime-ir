@@ -20,7 +20,7 @@ include "mlir/IR/BuiltinAttributeInterfaces.td"
 include "prime_ir/Dialect/ModArith/IR/ModArithDialect.td"
 
 class ModArith_Attr<string name, string attrMnemonic, list<Trait> traits = [],
-                    string baseCppClass = "::mlir::Attribute">
+                    string baseCppClass = "Attribute">
   : AttrDef<ModArith_Dialect, name, traits, baseCppClass> {
   let mnemonic = attrMnemonic;
 }
