@@ -86,6 +86,62 @@ Type getMontgomeryFormType(Type type) {
   }
 }
 
+// Helper to validate and create a field attribute using common utility logic.
+// This reuses validateModularInteger to ensure consistent range checking.
+FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
+                                                     Type type,
+                                                     ArrayRef<APInt> values) {
+  Type elementType = getElementTypeOrSelf(type);
+
+  if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
+    if (values.size() != 1) {
+      return parser.emitError(parser.getCurrentLocation())
+             << "prime field constant must have a single value, but got "
+             << values.size();
+    }
+
+    APInt val = values[0];
+    APInt modulus = pfType.getModulus().getValue();
+
+    // Delegate validation and bit-adjustment to the shared utility
+    if (failed(prime_ir::validateModularInteger(parser, modulus, val))) {
+      return failure();
+    }
+
+    return IntegerAttr::get(pfType.getStorageType(), val);
+  } else if (auto efType = dyn_cast<ExtensionFieldTypeInterface>(elementType)) {
+    unsigned degree = efType.getDegreeOverPrime();
+    if (values.size() != degree) {
+      return parser.emitError(parser.getCurrentLocation())
+             << "extension field constant has " << values.size()
+             << " coefficients, but expected " << degree;
+    }
+
+    auto pfType = cast<PrimeFieldType>(efType.getBaseFieldType());
+    APInt modulus = pfType.getModulus().getValue();
+
+    SmallVector<APInt> adjustedValues;
+    adjustedValues.reserve(degree);
+
+    for (const APInt &val : values) {
+      APInt adjusted = val;
+      // Delegate validation and bit-adjustment to the shared utility
+      if (failed(prime_ir::validateModularInteger(parser, modulus, adjusted))) {
+        return failure();
+      }
+      adjustedValues.push_back(adjusted);
+    }
+
+    return DenseElementsAttr::get(
+        RankedTensorType::get({degree}, pfType.getStorageType()),
+        adjustedValues);
+  }
+
+  return parser.emitError(parser.getCurrentLocation(),
+                          "unsupported type for constant creation: ")
+         << type;
+}
+
 ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
   // TODO(chokboole): support towers of extension fields
   SmallVector<APInt> parsedInts;

@@ -31,6 +31,7 @@ def EllipticCurve_Dialect : Dialect {
     "prime_ir::field::FieldDialect",
     "prime_ir::mod_arith::ModArithDialect",
   ];
+  let hasConstantMaterializer = 1;
 }
 
 #endif  // PRIME_IR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEDIALECT_TD_

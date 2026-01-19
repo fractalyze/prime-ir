@@ -17,6 +17,8 @@ limitations under the License.
 #define PRIME_IR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEOPS_H_
 
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/Types.h"
 
 // IWYU pragma: begin_keep
@@ -31,6 +33,9 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h.inc"
 
 namespace mlir::prime_ir::elliptic_curve {
+
+ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
+                                       OperationState &result);
 
 // WARNING: Assumes Jacobian or XYZZ point types
 Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType);
