@@ -16,13 +16,32 @@ limitations under the License.
 #ifndef PRIME_IR_UTILS_ADDITIVE_CANONICALIZATION_TD
 #define PRIME_IR_UTILS_ADDITIVE_CANONICALIZATION_TD
 
-// The including file must define `GetAsConstant`.
-// Assumptions for the patterns below:
-// - AddOp/SubOp are associative and commutative where noted.
-// - NegOp is the additive inverse (additive group structure).
-// - Distributivity between MulOp and AddOp/SubOp when factoring.
+//===----------------------------------------------------------------------===//
+// AdditiveCanonicalizationPatterns
+//===----------------------------------------------------------------------===//
+//
+// This multiclass provides common algebraic simplifications for types that
+// satisfy additive group properties (e.g., Elliptic Curve Point, PrimeField,
+// and ModArith Integer).
+//
+// Requirements for the including file:
+// 1. Define `GetAsConstant`: A helper to materialize a constant of the same
+//    type as a given value.
+// 2. Define `CreateAddOp` / `CreateSubOp`: NativeCodeCall helpers.
+//    - For operations with 'SameOperandsAndResultType', use:
+//      def CreateAddOp : NativeCodeCall<"$_builder.create<AddOp>(odsLoc, $0, $1)">;
+//    - For operations that require explicit result types, use the original
+//      operation's result type. The helper should accept an optional third
+//      parameter for the result type, or infer it from the operands.
+//      Example: def CreateAddOp : NativeCodeCall<"...">; (see implementations)
+//
+// Assumptions:
+// - AddOp is commutative and associative.
+// - NegOp is the additive inverse.
+// - DoubleOp(x) is equivalent to AddOp(x, x).
+//===----------------------------------------------------------------------===//
 multiclass AdditiveCanonicalizationPatterns<
-    Op AddOp, Op SubOp, Op NegOp, Op MulOp, Op DoubleOp, Op SquareOp> {
+    Op AddOp, Op SubOp, Op NegOp, Op DoubleOp> {
     //===--------------------------------------------------------------------===//
     // AddOp
     //===--------------------------------------------------------------------===//
@@ -34,14 +53,14 @@ multiclass AdditiveCanonicalizationPatterns<
     def AddConstantTwice :
         Pat<(AddOp (AddOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (AddOp $x, (AddOp (GetAsConstant $x, $c0),
+            (CreateAddOp $x, (CreateAddOp (GetAsConstant $x, $c0),
                                 (GetAsConstant $x, $c1)))>;
 
     // (c0 - x) + c1 -> (c0 + c1) - x
     def AddConstantToSubLhs :
         Pat<(AddOp (SubOp (ConstantLikeMatcher TypedAttrInterface:$c0), $x),
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (SubOp (AddOp (GetAsConstant $x, $c0),
+            (CreateSubOp (CreateAddOp (GetAsConstant $x, $c0),
                             (GetAsConstant $x, $c1)),
                     $x)>;
 
@@ -49,8 +68,8 @@ multiclass AdditiveCanonicalizationPatterns<
     def AddConstantToSubRhs :
         Pat<(AddOp (SubOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (AddOp $x,
-                    (SubOp (GetAsConstant $x, $c1),
+            (CreateAddOp $x,
+                    (CreateSubOp (GetAsConstant $x, $c1),
                             (GetAsConstant $x, $c0)))>;
 
     // --- Additive identity/duplication ---
@@ -63,7 +82,7 @@ multiclass AdditiveCanonicalizationPatterns<
     // (-x) + (-y) -> -(x + y)
     def AddBothNegated :
         Pat<(AddOp (NegOp $x), (NegOp $y)),
-            (NegOp (AddOp $x, $y))>;
+            (NegOp (CreateAddOp $x, $y))>;
 
     // x - y + y -> x
     def AddAfterSub :
@@ -73,18 +92,12 @@ multiclass AdditiveCanonicalizationPatterns<
     // (-x) + y -> y - x
     def AddAfterNegLhs :
         Pat<(AddOp (NegOp $x), $y),
-            (SubOp $y, $x)>;
+            (CreateSubOp $y, $x)>;
 
     // x + (-y) -> x - y
     def AddAfterNegRhs :
         Pat<(AddOp $x, (NegOp $y)),
-            (SubOp $x, $y)>;
-
-    // --- Distributivity ---
-    // xy + xz -> x(y + z)
-    def FactorMulAdd :
-        Pat<(AddOp (MulOp $x, $y), (MulOp $x, $z)),
-            (MulOp $x, (AddOp $y, $z))>;
+            (CreateSubOp $x, $y)>;
 
     //===--------------------------------------------------------------------===//
     // SubOp
@@ -96,15 +109,15 @@ multiclass AdditiveCanonicalizationPatterns<
     def SubConstantFromAdd :
         Pat<(SubOp (AddOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (AddOp $x,
-                    (SubOp (GetAsConstant $x, $c0),
+            (CreateAddOp $x,
+                    (CreateSubOp (GetAsConstant $x, $c0),
                             (GetAsConstant $x, $c1)))>;
 
     // (c0 - x) - c1 -> (c0 - c1) - x
     def SubConstantTwiceLhs :
         Pat<(SubOp (SubOp (ConstantLikeMatcher TypedAttrInterface:$c0), $x),
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (SubOp (SubOp (GetAsConstant $x, $c0),
+            (CreateSubOp (CreateSubOp (GetAsConstant $x, $c0),
                             (GetAsConstant $x, $c1)),
                     $x)>;
 
@@ -112,15 +125,15 @@ multiclass AdditiveCanonicalizationPatterns<
     def SubConstantTwiceRhs :
         Pat<(SubOp (SubOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
-            (SubOp $x,
-                    (AddOp (GetAsConstant $x, $c0),
+            (CreateSubOp $x,
+                    (CreateAddOp (GetAsConstant $x, $c0),
                             (GetAsConstant $x, $c1)))>;
 
     // c0 - (x + c1) -> (c0 - c1) - x
     def SubAddFromConstant :
         Pat<(SubOp (ConstantLikeMatcher TypedAttrInterface:$c0),
                     (AddOp $x, (ConstantLikeMatcher TypedAttrInterface:$c1))),
-            (SubOp (SubOp (GetAsConstant $x, $c0),
+            (CreateSubOp (CreateSubOp (GetAsConstant $x, $c0),
                             (GetAsConstant $x, $c1)),
                     $x)>;
 
@@ -128,15 +141,15 @@ multiclass AdditiveCanonicalizationPatterns<
     def SubSubFromConstantLhs :
         Pat<(SubOp (ConstantLikeMatcher TypedAttrInterface:$c0),
                     (SubOp (ConstantLikeMatcher TypedAttrInterface:$c1), $x)),
-            (AddOp $x,
-                    (SubOp (GetAsConstant $x, $c0),
+            (CreateAddOp $x,
+                    (CreateSubOp (GetAsConstant $x, $c0),
                             (GetAsConstant $x, $c1)))>;
 
     // c0 - (x - c1) -> (c0 + c1) - x
     def SubSubFromConstantRhs :
         Pat<(SubOp (ConstantLikeMatcher TypedAttrInterface:$c0),
                     (SubOp $x, (ConstantLikeMatcher TypedAttrInterface:$c1))),
-            (SubOp (AddOp (GetAsConstant $x, $c0),
+            (CreateSubOp (CreateAddOp (GetAsConstant $x, $c0),
                             (GetAsConstant $x, $c1)),
                     $x)>;
 
@@ -165,34 +178,17 @@ multiclass AdditiveCanonicalizationPatterns<
     // (-x) - y -> -(x + y)
     def SubAfterNegLhs :
         Pat<(SubOp (NegOp $x), $y),
-            (NegOp (AddOp $x, $y))>;
+            (NegOp (CreateAddOp $x, $y))>;
 
     // x - (-y) -> x + y
     def SubAfterNegRhs :
         Pat<(SubOp $x, (NegOp $y)),
-            (AddOp $x, $y)>;
+            (CreateAddOp $x, $y)>;
 
     // (-x) - (-y) -> y - x
     def SubBothNegated :
         Pat<(SubOp (NegOp $x), (NegOp $y)),
-            (SubOp $y, $x)>;
-
-    // --- Distributivity ---
-    // x² - y² -> (x - y)(x + y)
-    def SubAfterSquareBoth :
-        Pat<(SubOp (SquareOp $x), (SquareOp $y)),
-            (MulOp (SubOp $x, $y), (AddOp $x, $y))>;
-
-    // (x + y)² - x² - y² -> 2xy
-    def SubAfterSumSquare :
-        Pat<(SubOp (SubOp (SquareOp (AddOp $x, $y)), (SquareOp $x)),
-                    (SquareOp $y)),
-            (DoubleOp (MulOp $x, $y))>;
-
-    // xy - xz -> x(y - z)
-    def FactorMulSub :
-        Pat<(SubOp (MulOp $x, $y), (MulOp $x, $z)),
-            (MulOp $x, (SubOp $y, $z))>;
+            (CreateSubOp $y, $x)>;
 }
 
 #endif // PRIME_IR_UTILS_ADDITIVE_CANONICALIZATION_TD
