@@ -20,8 +20,8 @@
 
 !PF = !field.pf<7:i32>
 !PFm = !field.pf<7:i32, true>
-!CF = !field.f3<!PF, 2:i32>
-!CFm = !field.f3<!PFm, 2:i32>
+!CF = !field.ef<3x!PF, 2:i32>
+!CFm = !field.ef<3x!PFm, 2:i32>
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 

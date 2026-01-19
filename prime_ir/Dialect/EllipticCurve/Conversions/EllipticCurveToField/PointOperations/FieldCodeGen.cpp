@@ -89,7 +89,7 @@ template <size_t N>
 struct DegreeDispatcher {
   static std::optional<FieldCodeGen>
   dispatch(size_t degree, ImplicitLocOpBuilder *b, Type type, int64_t constant,
-           field::ExtensionFieldTypeInterface efType) {
+           field::ExtensionFieldType efType) {
     if (degree == N) {
       return FieldCodeGen(b->create<field::ConstantOp>(
           type, field::ExtensionFieldOperation<N>(constant, efType)
@@ -111,8 +111,8 @@ FieldCodeGen FieldCodeGen::CreateConst(int64_t constant) const {
     return FieldCodeGen(b->create<field::ConstantOp>(
         value.getType(),
         field::PrimeFieldOperation(constant, pfType).getIntegerAttr()));
-  } else if (auto efType = dyn_cast<field::ExtensionFieldTypeInterface>(
-                 value.getType())) {
+  } else if (auto efType =
+                 dyn_cast<field::ExtensionFieldType>(value.getType())) {
     size_t degree = efType.getDegreeOverPrime();
     auto result = DegreeDispatcher<field::kMaxExtDegree>::dispatch(
         degree, b, value.getType(), constant, efType);

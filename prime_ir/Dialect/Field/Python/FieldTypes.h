@@ -33,32 +33,6 @@ public:
   static void bindDerived(ClassTy &c);
 };
 
-class PyQuadraticExtensionFieldType
-    : public mlir::python::PyConcreteType<PyQuadraticExtensionFieldType> {
-public:
-  static constexpr IsAFunctionTy isaFunction =
-      primeIRTypeIsAQuadraticExtensionField;
-  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
-      primeIRQuadraticExtensionFieldTypeGetTypeID;
-  static constexpr const char *pyClassName = "QuadraticExtensionFieldType";
-  using PyConcreteType::PyConcreteType;
-
-  static void bindDerived(ClassTy &c);
-};
-
-class PyCubicExtensionFieldType
-    : public mlir::python::PyConcreteType<PyCubicExtensionFieldType> {
-public:
-  static constexpr IsAFunctionTy isaFunction =
-      primeIRTypeIsACubicExtensionField;
-  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
-      primeIRCubicExtensionFieldTypeGetTypeID;
-  static constexpr const char *pyClassName = "CubicExtensionFieldType";
-  using PyConcreteType::PyConcreteType;
-
-  static void bindDerived(ClassTy &c);
-};
-
 class PyExtensionFieldType
     : public mlir::python::PyConcreteType<PyExtensionFieldType> {
 public:

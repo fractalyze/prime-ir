@@ -129,8 +129,8 @@ public:
   }
   PrimeFieldCodeGen CreateConstBaseField(int64_t x) const {
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    auto extField = cast<ExtensionFieldTypeInterface>(value.getType());
-    auto baseField = cast<PrimeFieldType>(extField.getBaseFieldType());
+    auto extField = cast<ExtensionFieldType>(value.getType());
+    auto baseField = cast<PrimeFieldType>(extField.getBaseField());
     return PrimeFieldCodeGen(createConst(*b, baseField, x));
   }
 

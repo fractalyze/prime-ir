@@ -19,8 +19,8 @@
 // TODO(junbeomlee): Select multiplication algorithm based on modulus value.
 !PF = !field.pf<127:i32>
 !PFm = !field.pf<127:i32, true>
-!QF = !field.f4<!PF, 2:i32>
-!QFm = !field.f4<!PFm, 2:i32>
+!QF = !field.ef<4x!PF, 2:i32>
+!QFm = !field.ef<4x!PFm, 2:i32>
 
 // CHECK-LABEL: @test_lower_add
 func.func @test_lower_add(%arg0: !QF, %arg1: !QF) -> !QF {
