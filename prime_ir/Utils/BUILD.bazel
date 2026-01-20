@@ -67,6 +67,7 @@ td_library(
     name = "CanonicalizationTd",
     srcs = [
         "AdditiveCanonicalization.td",
+        "DistributivityCanonicalization.td",
         "MultiplicativeCanonicalization.td",
     ],
     includes = ["../.."],

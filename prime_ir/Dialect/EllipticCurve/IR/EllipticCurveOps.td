@@ -96,16 +96,16 @@ def EllipticCurve_ConstantOp : EllipticCurve_Op<"constant", [ConstantLike]> {
 
 }
 
-def EllipticCurve_ExtFromCoordOp : EllipticCurve_Op<"ext_from_coord"> {
+def EllipticCurve_ExtFromCoordsOp : EllipticCurve_Op<"ext_from_coords"> {
   let summary = "Constructs an elliptic curve point from coordinates";
   let description = [{
     Constructs an elliptic curve point from coordinates in affine(x, y), jacobian(x, y, z), or xyzz(x, y, z², z³) form.
 
     Example:
     ```
-    %0 = elliptic_curve.ext_from_coord %x, %y : elliptic_curve.affine<#curve>
-    %1 = elliptic_curve.ext_from_coord %x, %y, %z : elliptic_curve.jacobian<#curve>
-    %2 = elliptic_curve.ext_from_coord %x, %y, %zz, %zzz : elliptic_curve.xyzz<#curve>
+    %0 = elliptic_curve.ext_from_coords %x, %y : elliptic_curve.affine<#curve>
+    %1 = elliptic_curve.ext_from_coords %x, %y, %z : elliptic_curve.jacobian<#curve>
+    %2 = elliptic_curve.ext_from_coords %x, %y, %zz, %zzz : elliptic_curve.xyzz<#curve>
     ```
   }];
   let arguments = (ins Variadic<AnyTypeOf<[Field_AnyFieldType, ModArith_ModArithType, LLVMStructType, AnySignlessInteger]>>:$coords);
@@ -175,6 +175,7 @@ def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
     %sum = elliptic_curve.add %a, %b : !affine, !jacobian -> !jacobian
     ```
   }];
+  let hasCanonicalizer = 1;
 }
 
 // Elliptic curve point subtraction.
@@ -195,6 +196,7 @@ def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
     %difference = elliptic_curve.sub %a, %b : !affine, !jacobian -> !jacobian
     ```
   }];
+  let hasCanonicalizer = 1;
 }
 
 // Elliptic curve point negation.

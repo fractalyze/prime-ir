@@ -61,12 +61,14 @@ cc_library(
         ":PointOperationBaseForward",
         ":PointOperationSelector",
         ":attributes_inc_gen",
+        ":canonicalization_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Dialect/Poly/IR:Poly",
+        "//prime_ir/Utils:CanonicalizationPatterns",
         "//prime_ir/Utils:KnownModulus",
         "//prime_ir/Utils:OpUtils",
         "//prime_ir/Utils:ZkDtypes",
@@ -109,6 +111,7 @@ td_library(
     name = "td_files",
     srcs = [
         "EllipticCurveAttributes.td",
+        "EllipticCurveCanonicalization.td",
         "EllipticCurveDialect.td",
         "EllipticCurveOps.td",
         "EllipticCurveTypes.td",
@@ -116,6 +119,7 @@ td_library(
     includes = ["../../../.."],
     deps = [
         "//prime_ir/Dialect/Field/IR:td_files",
+        "//prime_ir/Utils:CanonicalizationTd",
         "//prime_ir/Utils:CommonTraits",
         "//prime_ir/Utils:CommonTypeConstraints",
         "@llvm-project//mlir:ArithOpsTdFiles",
@@ -199,5 +203,17 @@ gentbl_cc_library(
     deps = [
         ":td_files",
         "//prime_ir/Dialect/Field/IR:td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "canonicalization_inc_gen",
+    tbl_outs = {
+        "EllipticCurveCanonicalization.cpp.inc": ["-gen-rewriters"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveCanonicalization.td",
+    deps = [
+        ":td_files",
     ],
 )

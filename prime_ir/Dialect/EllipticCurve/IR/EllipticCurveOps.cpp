@@ -28,6 +28,11 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 
+// IWYU pragma: begin_keep
+// Headers needed for EllipticCurveCanonicalization.cpp.inc
+#include "mlir/IR/Matchers.h"
+// IWYU pragma: end_keep
+
 namespace mlir::prime_ir::elliptic_curve {
 namespace {
 template <typename OpType>
@@ -104,15 +109,15 @@ Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   Value oneBF =
       cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
   return isa<XYZZType>(pointType)
-             ? b.create<ExtFromCoordOp>(
+             ? b.create<ExtFromCoordsOp>(
                    pointType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-             : b.create<ExtFromCoordOp>(pointType,
-                                        ValueRange{oneBF, oneBF, zeroBF});
+             : b.create<ExtFromCoordsOp>(pointType,
+                                         ValueRange{oneBF, oneBF, zeroBF});
 }
 
 /////////////// VERIFY OPS /////////////////
 
-LogicalResult ExtFromCoordOp::verify() {
+LogicalResult ExtFromCoordsOp::verify() {
   Type outputType = getType();
   unsigned numCoords = cast<PointTypeInterface>(outputType).getNumCoords();
   if (numCoords != getCoords().size()) {
@@ -494,13 +499,13 @@ Operation *EllipticCurveDialect::materializeConstant(OpBuilder &builder,
 
 namespace {
 
-struct ExtFromCoordOfExtToCoords
-    : public mlir::OpRewritePattern<ExtFromCoordOp> {
-  using OpRewritePattern<ExtFromCoordOp>::OpRewritePattern;
+struct ExtFromCoordsOfExtToCoords
+    : public mlir::OpRewritePattern<ExtFromCoordsOp> {
+  using OpRewritePattern<ExtFromCoordsOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(ExtFromCoordOp op,
+  LogicalResult matchAndRewrite(ExtFromCoordsOp op,
                                 PatternRewriter &rewriter) const override {
-    // Match: elliptic_curve.ext_from_coord(elliptic_curve.ext_to_coords(arg))
+    // Match: elliptic_curve.ext_from_coords(elliptic_curve.ext_to_coords(arg))
     if (op.getOperands().empty())
       return failure();
 
@@ -518,15 +523,15 @@ struct ExtFromCoordOfExtToCoords
   }
 };
 
-struct ExtToCoordsOfExtFromCoord
+struct ExtToCoordsOfExtFromCoords
     : public mlir::OpRewritePattern<ExtToCoordsOp> {
   using OpRewritePattern<ExtToCoordsOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(ExtToCoordsOp op,
                                 PatternRewriter &rewriter) const override {
     // Match:
-    // elliptic_curve.ext_to_coords(elliptic_curve.ext_from_coord(arg...))
-    auto extFromCoordOp = op.getOperand().getDefiningOp<ExtFromCoordOp>();
+    // elliptic_curve.ext_to_coords(elliptic_curve.ext_from_coords(arg...))
+    auto extFromCoordOp = op.getOperand().getDefiningOp<ExtFromCoordsOp>();
     if (!extFromCoordOp)
       return failure();
 
@@ -537,14 +542,34 @@ struct ExtToCoordsOfExtFromCoord
 
 } // namespace
 
-void ExtFromCoordOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
-                                                 MLIRContext *context) {
-  patterns.add<ExtFromCoordOfExtToCoords>(context);
+void ExtFromCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                  MLIRContext *context) {
+  patterns.add<ExtFromCoordsOfExtToCoords>(context);
 }
 
 void ExtToCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                                 MLIRContext *context) {
-  patterns.add<ExtToCoordsOfExtFromCoord>(context);
+  patterns.add<ExtToCoordsOfExtFromCoords>(context);
+}
+
+namespace {
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveCanonicalization.cpp.inc"
+} // namespace
+
+#include "prime_ir/Utils/CanonicalizationPatterns.inc"
+
+void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+#define PRIME_IR_ADD_PATTERN(Name) patterns.add<EllipticCurve##Name>(context);
+  PRIME_IR_GROUP_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+#undef PRIME_IR_ADD_PATTERN
+}
+
+void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                        MLIRContext *context) {
+#define PRIME_IR_SUB_PATTERN(Name) patterns.add<EllipticCurve##Name>(context);
+  PRIME_IR_GROUP_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
+#undef PRIME_IR_SUB_PATTERN
 }
 
 } // namespace mlir::prime_ir::elliptic_curve

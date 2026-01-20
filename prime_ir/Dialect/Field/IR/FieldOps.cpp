@@ -243,6 +243,15 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
 Operation *FieldDialect::materializeConstant(OpBuilder &builder,
                                              Attribute value, Type type,
                                              Location loc) {
+  if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
+    return builder.create<arith::ConstantOp>(loc, boolAttr);
+  } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
+    if (!isa<PrimeFieldType>(getElementTypeOrSelf(type)) &&
+        !isa<ExtensionFieldTypeInterface>(getElementTypeOrSelf(type))) {
+      // This could be a folding result of CmpOp.
+      return builder.create<arith::ConstantOp>(loc, denseElementsAttr);
+    }
+  }
   return ConstantOp::materialize(builder, value, type, loc);
 }
 
@@ -287,6 +296,129 @@ LogicalResult CmpOp::verify() {
   }
   return success();
 }
+
+namespace {
+
+struct CmpConstantFolderConfig {
+  using NativeInputType = APInt;
+  using NativeOutputType = bool;
+  using ScalarAttr = IntegerAttr;
+  using TensorAttr = DenseIntElementsAttr;
+};
+
+class PrimeFieldCmpConstantFolder
+    : public BinaryConstantFolder<CmpConstantFolderConfig>::Delegate {
+public:
+  explicit PrimeFieldCmpConstantFolder(CmpOp *op)
+      : context(op->getType().getContext()), predicate(op->getPredicate()),
+        pfType(cast<PrimeFieldType>(getElementTypeOrSelf(op->getLhs()))) {}
+
+  APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
+
+  OpFoldResult getScalarAttr(const bool &value) const final {
+    return BoolAttr::get(context, value);
+  }
+
+  OpFoldResult getTensorAttr(ShapedType type,
+                             ArrayRef<bool> values) const final {
+    return DenseIntElementsAttr::get(type.clone(IntegerType::get(context, 1)),
+                                     values);
+  }
+
+  bool operate(const APInt &a, const APInt &b) const final {
+    PrimeFieldOperation aOp(a, pfType);
+    PrimeFieldOperation bOp(b, pfType);
+    switch (predicate) {
+    case arith::CmpIPredicate::eq:
+      return aOp == bOp;
+    case arith::CmpIPredicate::ne:
+      return aOp != bOp;
+    case arith::CmpIPredicate::ult:
+      return aOp < bOp;
+    case arith::CmpIPredicate::ule:
+      return aOp <= bOp;
+    case arith::CmpIPredicate::ugt:
+      return aOp > bOp;
+    case arith::CmpIPredicate::uge:
+      return aOp >= bOp;
+    default:
+      llvm_unreachable("Unsupported comparison predicate");
+    }
+  }
+
+private:
+  MLIRContext *const context;
+  arith::CmpIPredicate predicate;
+  PrimeFieldType pfType;
+};
+
+struct ExtFieldCmpConstantFolderConfig {
+  using NativeInputType = SmallVector<APInt>;
+  using NativeOutputType = bool;
+  using ScalarAttr = DenseIntElementsAttr;
+  using TensorAttr = DenseIntElementsAttr;
+};
+
+class ExtensionFieldCmpConstantFolder
+    : public BinaryConstantFolder<ExtFieldCmpConstantFolderConfig>::Delegate {
+public:
+  explicit ExtensionFieldCmpConstantFolder(CmpOp *op)
+      : context(op->getType().getContext()), predicate(op->getPredicate()),
+        efType(cast<ExtensionFieldTypeInterface>(
+            getElementTypeOrSelf(op->getLhs()))) {}
+
+  SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
+    auto values = attr.getValues<APInt>();
+    return {values.begin(), values.end()};
+  }
+
+  OpFoldResult getScalarAttr(const bool &value) const final {
+    return BoolAttr::get(context, value);
+  }
+
+  OpFoldResult getTensorAttr(ShapedType type,
+                             ArrayRef<bool> values) const final {
+    return DenseIntElementsAttr::get(type.clone(IntegerType::get(context, 1)),
+                                     values);
+  }
+
+  bool operate(const SmallVector<APInt> &a,
+               const SmallVector<APInt> &b) const final {
+    assert(a.size() == b.size());
+    FieldOperation aOp = FieldOperation::fromUnchecked(a, efType);
+    FieldOperation bOp = FieldOperation::fromUnchecked(b, efType);
+    // For extension fields, only eq and ne are supported
+    if (predicate == arith::CmpIPredicate::eq) {
+      return aOp == bOp;
+    } else if (predicate == arith::CmpIPredicate::ne) {
+      return aOp != bOp;
+    }
+    llvm_unreachable("Unsupported comparison predicate");
+  }
+
+private:
+  MLIRContext *const context;
+  arith::CmpIPredicate predicate;
+  ExtensionFieldTypeInterface efType;
+};
+
+} // namespace
+
+OpFoldResult CmpOp::fold(FoldAdaptor adaptor) {
+  Type elemType = getElementTypeOrSelf(getLhs());
+  if (isa<PrimeFieldType>(elemType)) {
+    PrimeFieldCmpConstantFolder folder(this);
+    return BinaryConstantFolder<CmpConstantFolderConfig>::fold(adaptor,
+                                                               &folder);
+  }
+  if (isa<ExtensionFieldTypeInterface>(elemType)) {
+    ExtensionFieldCmpConstantFolder folder(this);
+    return BinaryConstantFolder<ExtFieldCmpConstantFolderConfig>::fold(adaptor,
+                                                                       &folder);
+  }
+  return {};
+}
+
 LogicalResult FromMontOp::verify() {
   bool isMont = isMontgomery(getType());
   if (isMont) {
@@ -744,21 +876,21 @@ namespace {
 void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_ADD_PATTERN(Name) patterns.add<Field##Name>(context);
-  PRIME_IR_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+  PRIME_IR_FIELD_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
 #undef PRIME_IR_ADD_PATTERN
 }
 
 void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_SUB_PATTERN(Name) patterns.add<Field##Name>(context);
-  PRIME_IR_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
+  PRIME_IR_FIELD_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
 #undef PRIME_IR_SUB_PATTERN
 }
 
 void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_MUL_PATTERN(Name) patterns.add<Field##Name>(context);
-  PRIME_IR_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
+  PRIME_IR_FIELD_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
 #undef PRIME_IR_MUL_PATTERN
 }
 

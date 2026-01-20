@@ -286,7 +286,9 @@ class CmpConstantFolder
     : public BinaryConstantFolder<CmpConstantFolderConfig>::Delegate {
 public:
   explicit CmpConstantFolder(CmpOp *op)
-      : context(op->getType().getContext()), predicate(op->getPredicate()) {}
+      : context(op->getType().getContext()), predicate(op->getPredicate()),
+        modArithType(
+            cast<ModArithType>(getElementTypeOrSelf(op->getLhs().getType()))) {}
 
   APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
 
@@ -301,33 +303,30 @@ public:
   }
 
   bool operate(const APInt &a, const APInt &b) const final {
+    ModArithOperation aOp(a, modArithType);
+    ModArithOperation bOp(b, modArithType);
     switch (predicate) {
     case arith::CmpIPredicate::eq:
-      return a.eq(b);
+      return aOp == bOp;
     case arith::CmpIPredicate::ne:
-      return a.ne(b);
-    case arith::CmpIPredicate::slt:
-      return a.slt(b);
-    case arith::CmpIPredicate::sle:
-      return a.sle(b);
-    case arith::CmpIPredicate::sgt:
-      return a.sgt(b);
-    case arith::CmpIPredicate::sge:
-      return a.sge(b);
+      return aOp != bOp;
     case arith::CmpIPredicate::ult:
-      return a.ult(b);
+      return aOp < bOp;
     case arith::CmpIPredicate::ule:
-      return a.ule(b);
+      return aOp <= bOp;
     case arith::CmpIPredicate::ugt:
-      return a.ugt(b);
+      return aOp > bOp;
     case arith::CmpIPredicate::uge:
-      return a.uge(b);
+      return aOp >= bOp;
+    default:
+      llvm_unreachable("Unsupported comparison predicate");
     }
   }
 
 private:
   MLIRContext *const context;
   arith::CmpIPredicate predicate;
+  ModArithType modArithType;
 };
 
 } // namespace
@@ -491,21 +490,21 @@ namespace {
 void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_ADD_PATTERN(Name) patterns.add<ModArith##Name>(context);
-  PRIME_IR_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+  PRIME_IR_FIELD_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
 #undef PRIME_IR_ADD_PATTERN
 }
 
 void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_SUB_PATTERN(Name) patterns.add<ModArith##Name>(context);
-  PRIME_IR_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
+  PRIME_IR_FIELD_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
 #undef PRIME_IR_SUB_PATTERN
 }
 
 void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_MUL_PATTERN(Name) patterns.add<ModArith##Name>(context);
-  PRIME_IR_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
+  PRIME_IR_FIELD_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
 #undef PRIME_IR_MUL_PATTERN
 }
 
