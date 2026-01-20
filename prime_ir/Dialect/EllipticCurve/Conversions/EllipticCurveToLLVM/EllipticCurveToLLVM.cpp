@@ -61,11 +61,11 @@ Type convertPointType(T type, LLVMTypeConverter &typeConverter) {
   }
 }
 
-struct ConvertExtFromCoord : public ConvertOpToLLVMPattern<ExtFromCoordOp> {
+struct ConvertExtFromCoords : public ConvertOpToLLVMPattern<ExtFromCoordsOp> {
   using ConvertOpToLLVMPattern::ConvertOpToLLVMPattern;
 
   LogicalResult
-  matchAndRewrite(ExtFromCoordOp op, OpAdaptor adaptor,
+  matchAndRewrite(ExtFromCoordsOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto loc = op.getLoc();
     auto structType = typeConverter->convertType(op.getType());
@@ -127,7 +127,7 @@ void populateEllipticCurveToLLVMConversionPatterns(
     const LLVMTypeConverter &converter, RewritePatternSet &patterns) {
   patterns.add<
       // clang-format off
-      ConvertExtFromCoord,
+      ConvertExtFromCoords,
       ConvertExtToCoords
       // clang-format on
       >(converter);

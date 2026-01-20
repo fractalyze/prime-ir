@@ -37,7 +37,7 @@ func.func @test_bucket_reduce() {
 
   %pfm0 = field.constant 0 : !PFm
 
-  %affine0 = elliptic_curve.ext_from_coord %pfm0, %pfm0 : (!PFm, !PFm) -> !affine
+  %affine0 = elliptic_curve.ext_from_coords %pfm0, %pfm0 : (!PFm, !PFm) -> !affine
   %affine1 = func.call @getG1GeneratorMultiple(%k1) : (!SF) -> (!affine)
   %affine2 = func.call @getG1GeneratorMultiple(%k2) : (!SF) -> (!affine)
   %affine3 = func.call @getG1GeneratorMultiple(%k3) : (!SF) -> (!affine)

@@ -36,7 +36,7 @@ Operation::result_range toCoords(ImplicitLocOpBuilder &b, Value point) {
 }
 
 Value fromCoords(ImplicitLocOpBuilder &b, Type type, ValueRange coords) {
-  return b.create<ExtFromCoordOp>(type, coords);
+  return b.create<ExtFromCoordsOp>(type, coords);
 }
 
 } // namespace mlir::prime_ir::elliptic_curve

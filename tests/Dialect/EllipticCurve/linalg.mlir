@@ -30,7 +30,7 @@ func.func @test_affine_tensor_reduce_to_jacobian(%points: tensor<4x!affine>) -> 
   // Create zero point for jacobian accumulation
   %zeroPF = field.constant 0 : !PFm
   %onePF = field.constant 1 : !PFm
-  %zero_jacobian = elliptic_curve.ext_from_coord %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobian
+  %zero_jacobian = elliptic_curve.ext_from_coords %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobian
 
   // Initialize output tensor with zero point
   %init = tensor.from_elements %zero_jacobian : tensor<!jacobian>

@@ -19,7 +19,7 @@ limitations under the License.
 include "mlir/IR/PatternBase.td"
 include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.td"
 
-def GetAsConstant : NativeCodeCall<"$_builder.create<ExtFromCoordOp>(odsLoc, $0.getType(), ValueRange{})">;
+def GetAsConstant : NativeCodeCall<"$_builder.create<ExtFromCoordsOp>(odsLoc, $0.getType(), ValueRange{})">;
 def GetZeroAttr : NativeCodeCall<"IntegerAttr::get(IntegerType::get($_builder.getContext(), 1), 0)">;
 def GetIntegerType : NativeCodeCall<"IntegerType::get($_builder.getContext(), 1)">;
 
