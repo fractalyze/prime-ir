@@ -20,9 +20,11 @@ limitations under the License.
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LogicalResult.h"
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
+#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 
@@ -332,6 +334,160 @@ LogicalResult ConvertPointTypeOp::verify() {
     return emitError() << "Converting on same types";
   // TODO(ashjeong): check curves are the same
   return success();
+}
+
+//////////////// PARSE AND PRINT CONSTANT ////////////////
+
+ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
+                                       OperationState &result) {
+  // TODO(chokobole): Support nested towers of extension fields.
+  SmallVector<SmallVector<APInt>> parsedCoordArrays;
+
+  auto coordinateParser = [&]() -> ParseResult {
+    SmallVector<APInt> coordValues;
+
+    // Check if the coordinate is an extension field element [coeff0, coeff1,
+    // ...] or a single base field integer.
+    if (succeeded(parser.parseOptionalLSquare())) {
+      auto elementParser = [&]() -> ParseResult {
+        APInt val;
+        if (failed(parser.parseInteger(val)))
+          return failure();
+        coordValues.push_back(val);
+        return success();
+      };
+
+      if (failed(parser.parseCommaSeparatedList(elementParser)) ||
+          failed(parser.parseRSquare())) {
+        return failure();
+      }
+    } else {
+      // Parse as a single base field integer literal.
+      APInt val;
+      if (failed(parser.parseInteger(val)))
+        return failure();
+      coordValues.push_back(val);
+    }
+
+    parsedCoordArrays.push_back(std::move(coordValues));
+    return success();
+  };
+
+  if (failed(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::None,
+                                            coordinateParser))) {
+    return parser.emitError(parser.getNameLoc(),
+                            "expected comma-separated coordinates (e.g., x, y "
+                            "or [x0, x1], [y0, y1])");
+  }
+  // Parse type
+  Type parsedType;
+  if (failed(parser.parseColon()) || failed(parser.parseType(parsedType))) {
+    return failure();
+  }
+
+  Type pointType = getElementTypeOrSelf(parsedType);
+  auto pointTypeInterface = cast<PointTypeInterface>(pointType);
+  if (!pointTypeInterface) {
+    return parser.emitError(parser.getCurrentLocation(),
+                            "expected point type, but got ")
+           << parsedType;
+  }
+
+  // Get base field from curve
+  ShortWeierstrassAttr curveAttr =
+      cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr());
+  Type baseFieldType = curveAttr.getBaseField();
+
+  unsigned numCoords = pointTypeInterface.getNumCoords();
+
+  if (parsedCoordArrays.size() != numCoords) {
+    return parser.emitError(parser.getCurrentLocation())
+           << "expected " << numCoords << " coordinates for " << parsedType
+           << " but got " << parsedCoordArrays.size();
+  }
+
+  // Determine if base field is an extension field
+  bool isExtensionField =
+      isa<field::ExtensionFieldTypeInterface>(baseFieldType);
+  unsigned extensionDegree = 1;
+  if (isExtensionField) {
+    extensionDegree = cast<field::ExtensionFieldTypeInterface>(baseFieldType)
+                          .getDegreeOverPrime();
+  }
+
+  // Validate and create field attributes
+  SmallVector<Attribute> coordAttrs;
+  for (unsigned i = 0; i < numCoords; ++i) {
+    const auto &coordValues = parsedCoordArrays[i];
+
+    // Validate coordinate format matches base field type
+    if (isExtensionField) {
+      if (coordValues.size() != extensionDegree) {
+        return parser.emitError(parser.getCurrentLocation())
+               << "coordinate " << i << " must have " << extensionDegree
+               << " values for extension field, but got " << coordValues.size();
+      }
+    } else {
+      if (coordValues.size() != 1) {
+        return parser.emitError(parser.getCurrentLocation())
+               << "coordinate " << i
+               << " must be a single integer for prime field, but got "
+               << coordValues.size() << " values";
+      }
+    }
+
+    auto attrOrErr = field::validateAndCreateFieldAttribute(
+        parser, baseFieldType, coordValues);
+
+    if (failed(attrOrErr)) {
+      return failure();
+    }
+    coordAttrs.push_back(*attrOrErr);
+  }
+
+  result.addAttribute("coords",
+                      ArrayAttr::get(parser.getContext(), coordAttrs));
+  result.addTypes(parsedType);
+  return success();
+}
+
+ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseEllipticCurveConstant(parser, result);
+}
+
+void ConstantOp::print(OpAsmPrinter &p) {
+  p << " ";
+  auto coords = getCoords();
+  for (size_t i = 0; i < coords.size(); ++i) {
+    if (i > 0)
+      p << ", ";
+    p.printAttributeWithoutType(coords[i]);
+  }
+  p << " : ";
+  p.printType(getType());
+}
+
+OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
+  return adaptor.getCoords();
+}
+
+// static
+ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
+                                   Type type, Location loc) {
+  if (!isa<PointTypeInterface>(getElementTypeOrSelf(type))) {
+    return nullptr;
+  }
+
+  if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
+    return builder.create<ConstantOp>(loc, type, arrayAttr);
+  }
+  return nullptr;
+}
+
+Operation *EllipticCurveDialect::materializeConstant(OpBuilder &builder,
+                                                     Attribute value, Type type,
+                                                     Location loc) {
+  return ConstantOp::materialize(builder, value, type, loc);
 }
 
 //////////////// CANONICALIZATION PATTERNS ////////////////

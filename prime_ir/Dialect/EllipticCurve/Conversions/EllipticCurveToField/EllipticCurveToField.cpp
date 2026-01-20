@@ -35,6 +35,46 @@ namespace mlir::prime_ir::elliptic_curve {
 #define GEN_PASS_DEF_ELLIPTICCURVETOFIELD
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h.inc"
 
+struct ConvertConstant : public OpConversionPattern<ConstantOp> {
+  explicit ConvertConstant(MLIRContext *context)
+      : OpConversionPattern<ConstantOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    Type pointType = getElementTypeOrSelf(op.getType());
+    auto pointTypeInterface = cast<PointTypeInterface>(pointType);
+    Type baseFieldType =
+        cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr())
+            .getBaseField();
+
+    // Convert coordinate attributes to field constants
+    SmallVector<Value> coordValues;
+    for (auto coordAttr : op.getCoords()) {
+      Value coordValue;
+      if (auto intAttr = dyn_cast<IntegerAttr>(coordAttr)) {
+        // Prime field coordinate
+        coordValue = b.create<field::ConstantOp>(baseFieldType, intAttr);
+      } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(coordAttr)) {
+        // Extension field coordinate
+        coordValue = b.create<field::ConstantOp>(baseFieldType, denseAttr);
+      } else {
+        return op.emitError() << "unsupported coordinate attribute type";
+      }
+      coordValues.push_back(coordValue);
+    }
+
+    // Create point from coordinates
+    Value point = fromCoords(b, op.getType(), coordValues);
+    rewriter.replaceOp(op, point);
+    return success();
+  }
+};
+
 struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
   explicit ConvertIsZero(MLIRContext *context)
       : OpConversionPattern<IsZeroOp>(context) {}
@@ -666,6 +706,7 @@ void EllipticCurveToField::runOnOperation() {
       AddOp,
       BucketAccOp,
       BucketReduceOp,
+      ConstantOp,
       CmpOp,
       ConvertPointTypeOp,
       DoubleOp,
@@ -707,6 +748,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertAdd,
       ConvertBucketAcc,
       ConvertBucketReduce,
+      ConvertConstant,
       ConvertCmp,
       ConvertConvertPointType,
       ConvertDouble,
