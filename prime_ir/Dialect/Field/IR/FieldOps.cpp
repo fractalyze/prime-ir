@@ -261,22 +261,6 @@ void ConstantOp::print(OpAsmPrinter &p) {
   p.printType(getType());
 }
 
-template <typename OpType>
-static LogicalResult disallowShapedTypeOfExtField(OpType op) {
-  // FIXME(batzor): In the prime field case, we rely on elementwise trait but in
-  // the extension field case, `linalg.generic` introduced by the
-  // elementwise pass will be ill-formed due to the 1:N conversion.
-  auto resultType = op.getType();
-  if (isa<ShapedType>(resultType)) {
-    auto elementType = cast<ShapedType>(resultType).getElementType();
-    if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-      return op->emitOpError("shaped type is not supported for extension "
-                             "field type");
-    }
-  }
-  return success();
-}
-
 LogicalResult CmpOp::verify() {
   auto operandType = getElementTypeOrSelf(getLhs());
   if (isa<ExtensionFieldType>(operandType)) {
