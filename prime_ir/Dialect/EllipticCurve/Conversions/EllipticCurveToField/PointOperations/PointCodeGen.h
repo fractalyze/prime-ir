@@ -66,6 +66,20 @@ public:
   PointKind getKind() const { return Kind; }
   operator Value() const { return value; }
 
+  template <PointKind Kind2>
+  PointCodeGenBase<Kind2> convert() const {
+    if constexpr (Kind == Kind2) {
+      return *this;
+    } else if constexpr (Kind2 == PointKind::kAffine) {
+      return this->ToAffine();
+    } else if constexpr (Kind2 == PointKind::kJacobian) {
+      return this->ToJacobian();
+    } else {
+      static_assert(Kind2 == PointKind::kXYZZ, "Unsupported point kind");
+      return this->ToXyzz();
+    }
+  }
+
 protected:
   template <typename, typename>
   friend class zk_dtypes::AffinePointOperation;
@@ -123,7 +137,8 @@ protected:
   }
 
   Value IsAZero() const {
-    Type baseFieldType = getCurveFromPointLike(value.getType()).getBaseField();
+    Type baseFieldType =
+        cast<PointTypeInterface>(value.getType()).getBaseFieldType();
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
     Value zero =
         cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(*b);
@@ -132,7 +147,8 @@ protected:
 
   FieldCodeGen GetA() const {
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    ShortWeierstrassAttr swAttr = getCurveFromPointLike(value.getType());
+    auto swAttr = cast<ShortWeierstrassAttr>(
+        cast<PointTypeInterface>(value.getType()).getCurveAttr());
     return FieldCodeGen(
         b->create<field::ConstantOp>(swAttr.getBaseField(), swAttr.getA()));
   }
@@ -149,7 +165,8 @@ protected:
   template <PointKind Kind2>
   PointCodeGenBase<Kind2> createPoint(mlir::ValueRange coords) const {
     Type type;
-    auto curve = getCurveFromPointLike(value.getType());
+    auto curve = cast<ShortWeierstrassAttr>(
+        cast<PointTypeInterface>(value.getType()).getCurveAttr());
     if constexpr (Kind2 == PointKind::kAffine) {
       type = AffineType::get(value.getContext(), curve);
     } else if constexpr (Kind2 == PointKind::kJacobian) {

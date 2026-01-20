@@ -30,8 +30,8 @@ class VarPositiveAndBounded<string var, string upperBoundExpr>
 // tensor dimensions to be 'compatible' (e.g., dynamic dimensions being
 // compatible with static ones).
 class AllSameTensorDims<list<string> types> : AllMatchSameOperatorTrait<types,
-      "(::llvm::isa<::mlir::TensorType>($_self.getType()) ?"
-      " ::llvm::cast<::mlir::TensorType>($_self.getType()).getShape() :"
-      " ::llvm::ArrayRef<int64_t>{})", "matching static and dynamic dimensions">;
+      "(isa<TensorType>($_self.getType()) ?"
+      " cast<TensorType>($_self.getType()).getShape() :"
+      " ArrayRef<int64_t>{})", "matching static and dynamic dimensions">;
 
 #endif  // PRIME_IR_UTILS_COMMONTRAITS_TD_

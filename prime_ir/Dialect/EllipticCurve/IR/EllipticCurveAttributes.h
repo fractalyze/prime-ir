@@ -26,10 +26,4 @@ limitations under the License.
 #define GET_ATTRDEF_CLASSES
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h.inc"
 
-namespace mlir::prime_ir::elliptic_curve {
-
-ShortWeierstrassAttr getCurveFromPointLike(Type pointLike);
-
-} // namespace mlir::prime_ir::elliptic_curve
-
 #endif // PRIME_IR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEATTRIBUTES_H_

@@ -73,6 +73,7 @@ cc_library(
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
+        "//prime_ir/Dialect/EllipticCurve/IR:PointOperationBaseForward",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Utils:AssemblyFormatUtils",
         "//prime_ir/Utils:CanonicalizationPatterns",
@@ -81,6 +82,7 @@ cc_library(
         "//prime_ir/Utils:OpUtils",
         "//prime_ir/Utils:Power",
         "//prime_ir/Utils:SimpleStructBuilder",
+        "//prime_ir/Utils:ZkDtypes",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:DataLayoutInterfaces",
@@ -88,6 +90,7 @@ cc_library(
         "@llvm-project//mlir:InferTypeOpInterface",
         "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:point_declarations",
     ],
 )
 

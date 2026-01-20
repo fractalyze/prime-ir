@@ -132,6 +132,11 @@ APInt executeBinaryModOp(const APInt &a, const APInt &b,
 
 } // namespace
 
+ModArithOperation ModArithOperation::getZero() const {
+  APInt zero = APInt(value.getBitWidth(), 0);
+  return ModArithOperation::fromUnchecked(zero, type);
+}
+
 ModArithOperation ModArithOperation::getOne() const {
   APInt one;
   if (type.isMontgomery()) {

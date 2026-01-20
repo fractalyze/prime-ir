@@ -41,7 +41,7 @@ LogicalResult verifyMSMPointTypes(OpType op, Type inputType, Type outputType) {
 
 template <typename OpType>
 LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
-  Type ptBaseField = getCurveFromPointLike(pointType).getBaseField();
+  Type ptBaseField = cast<PointTypeInterface>(pointType).getBaseFieldType();
   if (isa<field::FieldDialect>(coordType.getDialect())) {
     if (ptBaseField != coordType) {
       return op.emitError() << "coord must be base field of point; but got "
@@ -95,7 +95,7 @@ LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
 
 // WARNING: Assumes Jacobian or XYZZ point types
 Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
-  auto baseFieldType = getCurveFromPointLike(pointType).getBaseField();
+  auto baseFieldType = cast<PointTypeInterface>(pointType).getBaseFieldType();
   auto zeroBF =
       cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
   Value oneBF =
@@ -108,29 +108,11 @@ Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
 
 /////////////// VERIFY OPS /////////////////
 
-namespace {
-
-size_t getNumCoordsFromPointLike(Type pointLike) {
-  Type pointType = getElementTypeOrSelf(pointLike);
-  if (isa<AffineType>(pointType)) {
-    return 2;
-  } else if (isa<JacobianType>(pointType)) {
-    return 3;
-  } else if (isa<XYZZType>(pointType)) {
-    return 4;
-  } else {
-    llvm_unreachable("Unsupported point-like type for curve extraction");
-    return 0;
-  }
-}
-
-} // namespace
-
 LogicalResult PointOp::verify() {
   Type outputType = getType();
-  if (getNumCoordsFromPointLike(outputType) != getCoords().size()) {
-    return emitError() << outputType << " should have "
-                       << getNumCoordsFromPointLike(outputType)
+  unsigned numCoords = cast<PointTypeInterface>(outputType).getNumCoords();
+  if (numCoords != getCoords().size()) {
+    return emitError() << outputType << " should have " << numCoords
                        << " coordinates";
   }
   return verifyPointCoordTypes(*this, outputType, getCoords()[0].getType());
@@ -138,9 +120,10 @@ LogicalResult PointOp::verify() {
 
 LogicalResult ExtractOp::verify() {
   Type inputType = getInput().getType();
-  if (getNumCoordsFromPointLike(inputType) != getOutput().size()) {
-    return emitError() << inputType << " should have "
-                       << getNumCoordsFromPointLike(inputType)
+  unsigned numCoords =
+      cast<PointTypeInterface>(getElementTypeOrSelf(inputType)).getNumCoords();
+  if (numCoords != getOutput().size()) {
+    return emitError() << inputType << " should have " << numCoords
                        << " coordinates";
   }
   return verifyPointCoordTypes(*this, inputType, getType(0));

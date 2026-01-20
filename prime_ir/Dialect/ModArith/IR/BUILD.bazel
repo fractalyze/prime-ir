@@ -68,6 +68,7 @@ cc_library(
         "//prime_ir/Utils:KnownModulus",
         "//prime_ir/Utils:OpUtils",
         "//prime_ir/Utils:Power",
+        "//prime_ir/Utils:ZkDtypes",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:DataLayoutInterfaces",

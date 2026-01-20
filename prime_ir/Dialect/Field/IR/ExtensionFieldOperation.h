@@ -19,10 +19,13 @@
 #include <array>
 #include <cassert>
 
+#include "llvm/ADT/bit.h"
+#include "mlir/IR/MLIRContext.h"
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperationSelector.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/Field/IR/PrimeFieldOperation.h"
 #include "prime_ir/Utils/Power.h"
+#include "prime_ir/Utils/ZkDtypes.h"
 
 namespace mlir::prime_ir::field {
 
@@ -108,13 +111,14 @@ public:
   static ExtensionFieldOperation
   fromUnchecked(const SmallVector<APInt> &coeffs,
                 ExtensionFieldTypeInterface efType) {
+    assert(coeffs.size() == N);
     std::array<PrimeFieldOperation, N> newCoeffs;
     auto baseFieldType = cast<PrimeFieldType>(efType.getBaseFieldType());
     for (size_t i = 0; i < N; ++i) {
       newCoeffs[i] =
           PrimeFieldOperation::fromUnchecked(coeffs[i], baseFieldType);
     }
-    return ExtensionFieldOperation::fromUnchecked(newCoeffs, efType);
+    return fromUnchecked(newCoeffs, efType);
   }
 
   static ExtensionFieldOperation
@@ -126,11 +130,49 @@ public:
     return ret;
   }
 
+  template <typename ExtF>
+  static ExtensionFieldTypeInterface
+  getExtensionFieldType(MLIRContext *context) {
+    using F = typename ExtF::Config::BaseField;
+
+    auto modulusBits = llvm::bit_ceil(F::Config::kModulusBits);
+    IntegerAttr modulus =
+        IntegerAttr::get(IntegerType::get(context, modulusBits),
+                         convertToAPInt(F::Config::kModulus, modulusBits));
+    PrimeFieldType pfType =
+        PrimeFieldType::get(context, modulus, ExtF::kUseMontgomery);
+    IntegerAttr nonResidue =
+        convertToIntegerAttr(context, ExtF::Config::kNonResidue.value());
+    ExtensionFieldTypeInterface efType;
+    if constexpr (N == 2) {
+      efType = QuadraticExtFieldType::get(context, pfType, nonResidue);
+    } else if constexpr (N == 3) {
+      efType = CubicExtFieldType::get(context, pfType, nonResidue);
+    } else if constexpr (N == 4) {
+      efType = QuarticExtFieldType::get(context, pfType, nonResidue);
+    }
+    return efType;
+  }
+
+  template <typename ExtF>
+  static ExtensionFieldOperation fromZkDtype(MLIRContext *context,
+                                             const ExtF &ef) {
+    std::array<PrimeFieldOperation, N> coeffs;
+    for (size_t i = 0; i < N; ++i) {
+      coeffs[i] = PrimeFieldOperation::fromZkDtype(context, ef[i]);
+    }
+    return fromUnchecked(coeffs, getExtensionFieldType<ExtF>(context));
+  }
+
+  ExtensionFieldOperation getZero() const {
+    return fromUnchecked(coeffs[0].getZero(), efType);
+  }
   ExtensionFieldOperation getOne() const {
-    return ExtensionFieldOperation::fromUnchecked(coeffs[0].getOne(), efType);
+    return fromUnchecked(coeffs[0].getOne(), efType);
   }
 
   const std::array<PrimeFieldOperation, N> &getCoeffs() const { return coeffs; }
+  Type getType() const { return efType; }
 
   // Convert coefficients to APInts (convenient for constant folding one-liners)
   operator SmallVector<APInt>() const {
@@ -171,6 +213,20 @@ public:
   }
 
   ExtensionFieldOperation inverse() const { return this->Inverse(); }
+
+  bool isOne() const {
+    for (size_t i = 1; i < N; ++i) {
+      if (!coeffs[i].isZero()) {
+        return false;
+      }
+    }
+    return coeffs[0].isOne();
+  }
+
+  bool isZero() const {
+    return llvm::all_of(
+        coeffs, [](const PrimeFieldOperation &c) { return c.isZero(); });
+  }
 
   bool operator==(const ExtensionFieldOperation &other) const {
     assert(efType == other.efType);

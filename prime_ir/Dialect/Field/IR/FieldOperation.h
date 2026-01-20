@@ -20,8 +20,10 @@
 
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/ErrorHandling.h"
+#include "prime_ir/Dialect/EllipticCurve/IR/PointOperationBaseForward.h"
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/PrimeFieldOperation.h"
+#include "zk_dtypes/include/geometry/point_declarations.h"
 
 namespace mlir::prime_ir::field {
 
@@ -54,6 +56,9 @@ public:
   }
   ~FieldOperation() = default;
 
+  FieldOperation getZero() const;
+  FieldOperation getOne() const;
+
   template <typename T>
   static FieldOperation fromUnchecked(T &&value, Type type) {
     FieldOperation ret;
@@ -85,25 +90,67 @@ public:
     return ret;
   }
 
+  template <typename F>
+  static FieldOperation fromZkDtype(MLIRContext *context, const F &f) {
+    if constexpr (F::ExtensionDegree() == 1) {
+      return PrimeFieldOperation::fromZkDtype(context, f);
+    } else {
+      constexpr size_t N = F::Config::kDegreeOverBaseField;
+      return ExtensionFieldOperation<N>::fromZkDtype(context, f);
+    }
+  }
+
   operator APInt() const;
   operator SmallVector<APInt>() const;
 
   const OperationType &getOperation() const { return operation; }
+  Type getType() const;
 
   FieldOperation operator+(const FieldOperation &other) const;
+  FieldOperation &operator+=(const FieldOperation &other) {
+    return *this = *this + other;
+  }
   FieldOperation operator-(const FieldOperation &other) const;
+  FieldOperation &operator-=(const FieldOperation &other) {
+    return *this = *this - other;
+  }
   FieldOperation operator*(const FieldOperation &other) const;
+  FieldOperation &operator*=(const FieldOperation &other) {
+    return *this = *this * other;
+  }
+  FieldOperation operator/(const FieldOperation &other) const;
+  FieldOperation &operator/=(const FieldOperation &other) {
+    return *this = *this / other;
+  }
   FieldOperation operator-() const;
   FieldOperation dbl() const;
   FieldOperation square() const;
   FieldOperation power(const APInt &exponent) const;
   FieldOperation inverse() const;
 
+  bool isZero() const;
+  bool isOne() const;
   bool operator==(const FieldOperation &other) const;
   bool operator!=(const FieldOperation &other) const;
 
 private:
+  template <elliptic_curve::PointKind Kind>
+  friend class elliptic_curve::PointOperationBase;
+  template <typename, typename>
+  friend class zk_dtypes::AffinePointOperation;
+  template <typename, typename>
+  friend class zk_dtypes::JacobianPointOperation;
+  template <typename, typename>
+  friend class zk_dtypes::PointXyzzOperation;
   friend raw_ostream &operator<<(raw_ostream &os, const FieldOperation &op);
+
+  FieldOperation Double() const { return dbl(); }
+  FieldOperation Square() const { return square(); }
+  FieldOperation Inverse() const { return inverse(); }
+  bool IsZero() const { return isZero(); }
+  FieldOperation CreateConst(int64_t constant) const {
+    return FieldOperation(constant, getType());
+  }
 
   template <typename T>
   void createExtFieldOp(T &&value, ExtensionFieldTypeInterface efType) {

@@ -17,10 +17,7 @@ limitations under the License.
 
 #include "gtest/gtest.h"
 #include "llvm/ADT/bit.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
-#include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "prime_ir/Utils/ZkDtypes.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/field/babybear/babybear.h"
 #include "zk_dtypes/include/field/goldilocks/goldilocks.h"
@@ -30,14 +27,7 @@ namespace mlir::prime_ir::mod_arith {
 template <typename F>
 class ModArithOperationTest : public testing::Test {
 public:
-  static void SetUpTestSuite() {
-    context.loadDialect<ModArithDialect>();
-    auto modulusBits = llvm::bit_ceil(F::Config::kModulusBits);
-    IntegerAttr modulus =
-        IntegerAttr::get(IntegerType::get(&context, modulusBits),
-                         convertToAPInt(F::Config::kModulus, modulusBits));
-    modArithType = ModArithType::get(&context, modulus, F::kUseMontgomery);
-  }
+  static void SetUpTestSuite() { context.loadDialect<ModArithDialect>(); }
 
   void runBinaryOperationTest(
       std::function<F(const F &, const F &)> f_operation,
@@ -61,12 +51,10 @@ public:
                                       const ModArithOperation &)>
           m_operation,
       const F &a, const F &b) {
-    auto modA = ModArithOperation::fromUnchecked(convertToAPInt(a.value()),
-                                                 modArithType);
-    auto modB = ModArithOperation::fromUnchecked(convertToAPInt(b.value()),
-                                                 modArithType);
-    auto c = f_operation(a, b);
-    EXPECT_EQ(convertToAPInt(c.value()), m_operation(modA, modB));
+    auto modA = ModArithOperation::fromZkDtype(&context, a);
+    auto modB = ModArithOperation::fromZkDtype(&context, b);
+    EXPECT_EQ(ModArithOperation::fromZkDtype(&context, f_operation(a, b)),
+              m_operation(modA, modB));
   }
 
   void runUnaryOperationTest(
@@ -86,21 +74,16 @@ public:
       std::function<F(const F &)> f_operation,
       std::function<ModArithOperation(const ModArithOperation &)> m_operation,
       const F &a) {
-    auto modA = ModArithOperation::fromUnchecked(convertToAPInt(a.value()),
-                                                 modArithType);
-    auto c = f_operation(a);
-    EXPECT_EQ(convertToAPInt(c.value()), m_operation(modA));
+    auto modA = ModArithOperation::fromZkDtype(&context, a);
+    EXPECT_EQ(ModArithOperation::fromZkDtype(&context, f_operation(a)),
+              m_operation(modA));
   }
 
   static MLIRContext context;
-  static ModArithType modArithType;
 };
 
 template <typename F>
 MLIRContext ModArithOperationTest<F>::context;
-
-template <typename F>
-ModArithType ModArithOperationTest<F>::modArithType;
 
 using PrimeFieldTypes = testing::Types<
     // modulus bits = 2³¹
@@ -189,10 +172,8 @@ TYPED_TEST(ModArithOperationTest, Cmp) {
 
   auto a = PrimeFieldType::Random();
   auto b = PrimeFieldType::Random();
-  auto modA = ModArithOperation::fromUnchecked(convertToAPInt(a.value()),
-                                               this->modArithType);
-  auto modB = ModArithOperation::fromUnchecked(convertToAPInt(b.value()),
-                                               this->modArithType);
+  auto modA = ModArithOperation::fromZkDtype(&this->context, a);
+  auto modB = ModArithOperation::fromZkDtype(&this->context, b);
 
   EXPECT_EQ(a < b, modA < modB);
   EXPECT_EQ(a <= b, modA <= modB);
@@ -275,11 +256,10 @@ TYPED_TEST(ModArithOperationTest, FromMont) {
   if constexpr (!PrimeFieldType::kUseMontgomery) {
     GTEST_SKIP() << "Non-Montgomery field is not supported";
   } else {
-    this->runUnaryOperationTest(
-        [](const PrimeFieldType &a) {
-          return PrimeFieldType::FromUnchecked(a.MontReduce().value());
-        },
-        [](const ModArithOperation &a) { return a.fromMont(); });
+    auto a = PrimeFieldType::Random();
+    auto modA = ModArithOperation::fromZkDtype(&this->context, a);
+    EXPECT_EQ(ModArithOperation::fromZkDtype(&this->context, a.MontReduce()),
+              modA.fromMont());
   }
 }
 
@@ -295,33 +275,34 @@ TYPED_TEST(ModArithOperationTest, DISABLED_ToMont) {
   if constexpr (PrimeFieldType::kUseMontgomery) {
     GTEST_SKIP() << "Montgomery field is not supported";
   } else {
-    this->runUnaryOperationTest(
-        [](const PrimeFieldType &a) { return PrimeFieldType(a.value()); },
-        [](const ModArithOperation &a) { return a.toMont(); });
+    auto a = PrimeFieldType::Random();
+    auto modA = ModArithOperation::fromZkDtype(&this->context, a);
+    EXPECT_EQ(ModArithOperation::fromZkDtype(&this->context,
+                                             PrimeFieldType(a.value())),
+              modA.toMont());
   }
 }
 
-TYPED_TEST(ModArithOperationTest, IsZero) {
+TYPED_TEST(ModArithOperationTest, ZeroAndOne) {
   using PrimeFieldType = TypeParam;
 
   auto zero = PrimeFieldType::Zero();
-  auto modZero = ModArithOperation::fromUnchecked(convertToAPInt(zero.value()),
-                                                  this->modArithType);
+  auto modZero = ModArithOperation::fromZkDtype(&this->context, zero);
   EXPECT_TRUE(modZero.isZero());
   EXPECT_FALSE(modZero.isOne());
+  EXPECT_EQ(modZero, modZero.getZero());
 
   auto one = PrimeFieldType::One();
-  auto modOne = ModArithOperation::fromUnchecked(convertToAPInt(one.value()),
-                                                 this->modArithType);
+  auto modOne = ModArithOperation::fromZkDtype(&this->context, one);
   EXPECT_FALSE(modOne.isZero());
   EXPECT_TRUE(modOne.isOne());
+  EXPECT_EQ(modOne, modOne.getOne());
 
   auto rnd = PrimeFieldType::Random();
   while (rnd.IsZero() || rnd.IsOne()) {
     rnd = PrimeFieldType::Random();
   }
-  auto modRnd = ModArithOperation::fromUnchecked(convertToAPInt(rnd.value()),
-                                                 this->modArithType);
+  auto modRnd = ModArithOperation::fromZkDtype(&this->context, rnd);
   EXPECT_FALSE(modRnd.isZero());
   EXPECT_FALSE(modRnd.isOne());
 }
