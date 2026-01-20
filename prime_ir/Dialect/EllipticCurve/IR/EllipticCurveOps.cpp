@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LogicalResult.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
@@ -101,14 +102,15 @@ Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   Value oneBF =
       cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
   return isa<XYZZType>(pointType)
-             ? b.create<PointOp>(pointType,
-                                 ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-             : b.create<PointOp>(pointType, ValueRange{oneBF, oneBF, zeroBF});
+             ? b.create<ExtFromCoordOp>(
+                   pointType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
+             : b.create<ExtFromCoordOp>(pointType,
+                                        ValueRange{oneBF, oneBF, zeroBF});
 }
 
 /////////////// VERIFY OPS /////////////////
 
-LogicalResult PointOp::verify() {
+LogicalResult ExtFromCoordOp::verify() {
   Type outputType = getType();
   unsigned numCoords = cast<PointTypeInterface>(outputType).getNumCoords();
   if (numCoords != getCoords().size()) {
@@ -118,7 +120,7 @@ LogicalResult PointOp::verify() {
   return verifyPointCoordTypes(*this, outputType, getCoords()[0].getType());
 }
 
-LogicalResult ExtractOp::verify() {
+LogicalResult ExtToCoordsOp::verify() {
   Type inputType = getInput().getType();
   unsigned numCoords =
       cast<PointTypeInterface>(getElementTypeOrSelf(inputType)).getNumCoords();
@@ -330,6 +332,63 @@ LogicalResult ConvertPointTypeOp::verify() {
     return emitError() << "Converting on same types";
   // TODO(ashjeong): check curves are the same
   return success();
+}
+
+//////////////// CANONICALIZATION PATTERNS ////////////////
+
+namespace {
+
+struct ExtFromCoordOfExtToCoords
+    : public mlir::OpRewritePattern<ExtFromCoordOp> {
+  using OpRewritePattern<ExtFromCoordOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtFromCoordOp op,
+                                PatternRewriter &rewriter) const override {
+    // Match: elliptic_curve.ext_from_coord(elliptic_curve.ext_to_coords(arg))
+    if (op.getOperands().empty())
+      return failure();
+
+    auto extToCoordsOp =
+        op.getOperands().front().getDefiningOp<ExtToCoordsOp>();
+    if (!extToCoordsOp)
+      return failure();
+
+    // The operands must be exactly the results of the ExtToCoordsOp, in order.
+    if (op.getOperands() != extToCoordsOp->getResults())
+      return failure();
+
+    rewriter.replaceOp(op, extToCoordsOp->getOperands());
+    return success();
+  }
+};
+
+struct ExtToCoordsOfExtFromCoord
+    : public mlir::OpRewritePattern<ExtToCoordsOp> {
+  using OpRewritePattern<ExtToCoordsOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ExtToCoordsOp op,
+                                PatternRewriter &rewriter) const override {
+    // Match:
+    // elliptic_curve.ext_to_coords(elliptic_curve.ext_from_coord(arg...))
+    auto extFromCoordOp = op.getOperand().getDefiningOp<ExtFromCoordOp>();
+    if (!extFromCoordOp)
+      return failure();
+
+    rewriter.replaceOp(op, extFromCoordOp->getOperands());
+    return success();
+  }
+};
+
+} // namespace
+
+void ExtFromCoordOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                 MLIRContext *context) {
+  patterns.add<ExtFromCoordOfExtToCoords>(context);
+}
+
+void ExtToCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                                MLIRContext *context) {
+  patterns.add<ExtToCoordsOfExtFromCoord>(context);
 }
 
 } // namespace mlir::prime_ir::elliptic_curve
