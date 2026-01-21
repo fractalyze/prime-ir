@@ -20,7 +20,7 @@
 // CHECK-LABEL: @test_affine_to_jacobian_double
 // CHECK-SAME: (%[[ARG0:.*]]: [[AFFINE:.*]]) -> [[JACOBIAN:.*]] {
 func.func @test_affine_to_jacobian_double(%point: !affine) -> !jacobian {
-  // CHECK: %[[COORDS:.*]]:2 = elliptic_curve.ext_to_coords %[[ARG0]] : ([[AFFINE]]) -> ([[MOD_INT:.*]], [[MOD_INT]])
+  // CHECK: %[[COORDS:.*]]:2 = elliptic_curve.to_coords %[[ARG0]] : ([[AFFINE]]) -> ([[MOD_INT:.*]], [[MOD_INT]])
   // CHECK: %[[A0:.*]] = field.square %[[COORDS]]#0 : [[MOD_INT]]
   // CHECK: %[[A1:.*]] = field.square %[[COORDS]]#1 : [[MOD_INT]]
   // CHECK: %[[A2:.*]] = field.square %[[A1]] : [[MOD_INT]]
@@ -39,7 +39,7 @@ func.func @test_affine_to_jacobian_double(%point: !affine) -> !jacobian {
   // CHECK: %[[A15:.*]] = field.double %[[A14]] : [[MOD_INT]]
   // CHECK: %[[A16:.*]] = field.sub %[[A12]], %[[A15]] : [[MOD_INT]]
   // CHECK: %[[A17:.*]] = field.double %[[COORDS]]#1 : [[MOD_INT]]
-  // CHECK: %[[RESULT:.*]] = elliptic_curve.ext_from_coords %[[A10]], %[[A16]], %[[A17]] : ([[MOD_INT]], [[MOD_INT]], [[MOD_INT]]) -> [[JACOBIAN]]
+  // CHECK: %[[RESULT:.*]] = elliptic_curve.from_coords %[[A10]], %[[A16]], %[[A17]] : ([[MOD_INT]], [[MOD_INT]], [[MOD_INT]]) -> [[JACOBIAN]]
   %double = elliptic_curve.double %point : !affine -> !jacobian
   // CHECK: return %[[RESULT]] : [[JACOBIAN]]
   return %double : !jacobian
@@ -48,7 +48,7 @@ func.func @test_affine_to_jacobian_double(%point: !affine) -> !jacobian {
 // CHECK-LABEL: @test_jacobian_to_jacobian_double
 // CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
 func.func @test_jacobian_to_jacobian_double(%point: !jacobian) -> !jacobian {
-  // CHECK: %[[COORDS:.*]]:3 = elliptic_curve.ext_to_coords %[[ARG0]] : ([[JACOBIAN]]) -> ([[MOD_INT:.*]], [[MOD_INT]], [[MOD_INT]])
+  // CHECK: %[[COORDS:.*]]:3 = elliptic_curve.to_coords %[[ARG0]] : ([[JACOBIAN]]) -> ([[MOD_INT:.*]], [[MOD_INT]], [[MOD_INT]])
   // CHECK: %[[J0:.*]] = field.square %[[COORDS]]#0 : [[MOD_INT]]
   // CHECK: %[[J1:.*]] = field.square %[[COORDS]]#1 : [[MOD_INT]]
   // CHECK: %[[J2:.*]] = field.square %[[J1]] : [[MOD_INT]]
@@ -68,7 +68,7 @@ func.func @test_jacobian_to_jacobian_double(%point: !jacobian) -> !jacobian {
   // CHECK: %[[J16:.*]] = field.sub %[[J12]], %[[J15]] : [[MOD_INT]]
   // CHECK: %[[J17:.*]] = field.mul %[[COORDS]]#1, %[[COORDS]]#2 : [[MOD_INT]]
   // CHECK: %[[J18:.*]] = field.double %[[J17]] : [[MOD_INT]]
-  // CHECK: %[[RESULT:.*]] = elliptic_curve.ext_from_coords %[[J10]], %[[J16]], %[[J18]] : ([[MOD_INT]], [[MOD_INT]], [[MOD_INT]]) -> [[JACOBIAN]]
+  // CHECK: %[[RESULT:.*]] = elliptic_curve.from_coords %[[J10]], %[[J16]], %[[J18]] : ([[MOD_INT]], [[MOD_INT]], [[MOD_INT]]) -> [[JACOBIAN]]
   %double = elliptic_curve.double %point : !jacobian -> !jacobian
   // CHECK: return %[[RESULT]] : [[JACOBIAN]]
   return %double : !jacobian
@@ -77,7 +77,7 @@ func.func @test_jacobian_to_jacobian_double(%point: !jacobian) -> !jacobian {
 // CHECK-LABEL: @test_affine_to_xyzz_double
 // CHECK-SAME: (%[[ARG0:.*]]: [[AFFINE:.*]]) -> [[XYZZ:.*]] {
 func.func @test_affine_to_xyzz_double(%point: !affine) -> !xyzz {
-  // CHECK: %[[COORDS:.*]]:2 = elliptic_curve.ext_to_coords %[[ARG0]] : ([[AFFINE]]) -> ([[MOD_INT:.*]], [[MOD_INT]])
+  // CHECK: %[[COORDS:.*]]:2 = elliptic_curve.to_coords %[[ARG0]] : ([[AFFINE]]) -> ([[MOD_INT:.*]], [[MOD_INT]])
   // CHECK: %[[X0:.*]] = field.double %[[COORDS]]#1 : [[MOD_INT]]
   // CHECK: %[[X1:.*]] = field.square %[[X0]] : [[MOD_INT]]
   // CHECK: %[[X2:.*]] = field.mul %[[X0]], %[[X1]] : [[MOD_INT]]
@@ -92,7 +92,7 @@ func.func @test_affine_to_xyzz_double(%point: !affine) -> !xyzz {
   // CHECK: %[[X11:.*]] = field.mul %[[X6]], %[[X10]] : [[MOD_INT]]
   // CHECK: %[[X12:.*]] = field.mul %[[X2]], %[[COORDS]]#1 : [[MOD_INT]]
   // CHECK: %[[X13:.*]] = field.sub %[[X11]], %[[X12]] : [[MOD_INT]]
-  // CHECK: %[[RESULT:.*]] = elliptic_curve.ext_from_coords %[[X9]], %[[X13]], %[[X1]], %[[X2]] : ([[MOD_INT]], [[MOD_INT]], [[MOD_INT]], [[MOD_INT]]) -> [[XYZZ]]
+  // CHECK: %[[RESULT:.*]] = elliptic_curve.from_coords %[[X9]], %[[X13]], %[[X1]], %[[X2]] : ([[MOD_INT]], [[MOD_INT]], [[MOD_INT]], [[MOD_INT]]) -> [[XYZZ]]
   %double = elliptic_curve.double %point : !affine -> !xyzz
   // CHECK: return %[[RESULT]] : [[XYZZ]]
   return %double : !xyzz
@@ -101,7 +101,7 @@ func.func @test_affine_to_xyzz_double(%point: !affine) -> !xyzz {
 // CHECK-LABEL: @test_xyzz_to_xyzz_double
 // CHECK-SAME: (%[[ARG0:.*]]: [[XYZZ:.*]]) -> [[XYZZ:.*]] {
 func.func @test_xyzz_to_xyzz_double(%point: !xyzz) -> !xyzz {
-  // CHECK: %[[COORDS:.*]]:4 = elliptic_curve.ext_to_coords %[[ARG0]] : ([[XYZZ]]) -> ([[MOD_INT:.*]], [[MOD_INT]], [[MOD_INT]], [[MOD_INT]])
+  // CHECK: %[[COORDS:.*]]:4 = elliptic_curve.to_coords %[[ARG0]] : ([[XYZZ]]) -> ([[MOD_INT:.*]], [[MOD_INT]], [[MOD_INT]], [[MOD_INT]])
   // CHECK: %[[X0:.*]] = field.double %[[COORDS]]#1 : [[MOD_INT]]
   // CHECK: %[[X1:.*]] = field.square %[[X0]] : [[MOD_INT]]
   // CHECK: %[[X2:.*]] = field.mul %[[X0]], %[[X1]] : [[MOD_INT]]
@@ -118,7 +118,7 @@ func.func @test_xyzz_to_xyzz_double(%point: !xyzz) -> !xyzz {
   // CHECK: %[[X13:.*]] = field.sub %[[X11]], %[[X12]] : [[MOD_INT]]
   // CHECK: %[[X14:.*]] = field.mul %[[X1]], %[[COORDS]]#2 : [[MOD_INT]]
   // CHECK: %[[X15:.*]] = field.mul %[[X2]], %[[COORDS]]#3 : [[MOD_INT]]
-  // CHECK: %[[RESULT:.*]] = elliptic_curve.ext_from_coords %[[X9]], %[[X13]], %[[X14]], %[[X15]] : ([[MOD_INT]], [[MOD_INT]], [[MOD_INT]], [[MOD_INT]]) -> [[XYZZ]]
+  // CHECK: %[[RESULT:.*]] = elliptic_curve.from_coords %[[X9]], %[[X13]], %[[X14]], %[[X15]] : ([[MOD_INT]], [[MOD_INT]], [[MOD_INT]], [[MOD_INT]]) -> [[XYZZ]]
   %double = elliptic_curve.double %point : !xyzz -> !xyzz
   // CHECK: return %[[RESULT]] : [[XYZZ]]
   return %double : !xyzz

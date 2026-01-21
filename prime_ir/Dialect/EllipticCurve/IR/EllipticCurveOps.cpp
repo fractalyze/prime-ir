@@ -113,15 +113,15 @@ Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   Value oneBF =
       cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
   return isa<XYZZType>(pointType)
-             ? b.create<ExtFromCoordsOp>(
-                   pointType, ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-             : b.create<ExtFromCoordsOp>(pointType,
-                                         ValueRange{oneBF, oneBF, zeroBF});
+             ? b.create<FromCoordsOp>(pointType,
+                                      ValueRange{oneBF, oneBF, zeroBF, zeroBF})
+             : b.create<FromCoordsOp>(pointType,
+                                      ValueRange{oneBF, oneBF, zeroBF});
 }
 
 /////////////// VERIFY OPS /////////////////
 
-LogicalResult ExtFromCoordsOp::verify() {
+LogicalResult FromCoordsOp::verify() {
   Type outputType = getType();
   unsigned numCoords = cast<PointTypeInterface>(outputType).getNumCoords();
   if (numCoords != getCoords().size()) {
@@ -131,7 +131,7 @@ LogicalResult ExtFromCoordsOp::verify() {
   return verifyPointCoordTypes(*this, outputType, getCoords()[0].getType());
 }
 
-LogicalResult ExtToCoordsOp::verify() {
+LogicalResult ToCoordsOp::verify() {
   Type inputType = getInput().getType();
   unsigned numCoords =
       cast<PointTypeInterface>(getElementTypeOrSelf(inputType)).getNumCoords();
@@ -502,22 +502,20 @@ Operation *EllipticCurveDialect::materializeConstant(OpBuilder &builder,
 
 namespace {
 
-struct ExtFromCoordsOfExtToCoords
-    : public mlir::OpRewritePattern<ExtFromCoordsOp> {
-  using OpRewritePattern<ExtFromCoordsOp>::OpRewritePattern;
+struct FromCoordsOfToCoords : public mlir::OpRewritePattern<FromCoordsOp> {
+  using OpRewritePattern<FromCoordsOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(ExtFromCoordsOp op,
+  LogicalResult matchAndRewrite(FromCoordsOp op,
                                 PatternRewriter &rewriter) const override {
-    // Match: elliptic_curve.ext_from_coords(elliptic_curve.ext_to_coords(arg))
+    // Match: elliptic_curve.from_coords(elliptic_curve.to_coords(arg))
     if (op.getOperands().empty())
       return failure();
 
-    auto extToCoordsOp =
-        op.getOperands().front().getDefiningOp<ExtToCoordsOp>();
+    auto extToCoordsOp = op.getOperands().front().getDefiningOp<ToCoordsOp>();
     if (!extToCoordsOp)
       return failure();
 
-    // The operands must be exactly the results of the ExtToCoordsOp, in order.
+    // The operands must be exactly the results of the ToCoordsOp, in order.
     if (op.getOperands() != extToCoordsOp->getResults())
       return failure();
 
@@ -526,15 +524,14 @@ struct ExtFromCoordsOfExtToCoords
   }
 };
 
-struct ExtToCoordsOfExtFromCoords
-    : public mlir::OpRewritePattern<ExtToCoordsOp> {
-  using OpRewritePattern<ExtToCoordsOp>::OpRewritePattern;
+struct ToCoordsOfFromCoords : public mlir::OpRewritePattern<ToCoordsOp> {
+  using OpRewritePattern<ToCoordsOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(ExtToCoordsOp op,
+  LogicalResult matchAndRewrite(ToCoordsOp op,
                                 PatternRewriter &rewriter) const override {
     // Match:
-    // elliptic_curve.ext_to_coords(elliptic_curve.ext_from_coords(arg...))
-    auto extFromCoordOp = op.getOperand().getDefiningOp<ExtFromCoordsOp>();
+    // elliptic_curve.to_coords(elliptic_curve.from_coords(arg...))
+    auto extFromCoordOp = op.getOperand().getDefiningOp<FromCoordsOp>();
     if (!extFromCoordOp)
       return failure();
 
@@ -545,14 +542,14 @@ struct ExtToCoordsOfExtFromCoords
 
 } // namespace
 
-void ExtFromCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
-                                                  MLIRContext *context) {
-  patterns.add<ExtFromCoordsOfExtToCoords>(context);
+void FromCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                               MLIRContext *context) {
+  patterns.add<FromCoordsOfToCoords>(context);
 }
 
-void ExtToCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
-                                                MLIRContext *context) {
-  patterns.add<ExtToCoordsOfExtFromCoords>(context);
+void ToCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                             MLIRContext *context) {
+  patterns.add<ToCoordsOfFromCoords>(context);
 }
 
 namespace {

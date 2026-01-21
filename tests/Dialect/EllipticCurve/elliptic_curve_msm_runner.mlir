@@ -34,7 +34,7 @@ func.func @test_msm() {
   %scalar5 = field.to_mont %c5 : !SFm
   %scalar7 = field.to_mont %c7 : !SFm
 
-  %jacobian1 = elliptic_curve.ext_from_coords %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobian
+  %jacobian1 = elliptic_curve.from_coords %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobian
   %jacobian2 = elliptic_curve.double %jacobian1 : !jacobian -> !jacobian
   %jacobian3 = elliptic_curve.double %jacobian2 : !jacobian -> !jacobian
   %jacobian4 = elliptic_curve.double %jacobian3 : !jacobian -> !jacobian
