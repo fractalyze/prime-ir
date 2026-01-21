@@ -1,5 +1,5 @@
 diff --git a/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp b/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
-index ca7f31dd6b51..5b0e32f98e8e 100644
+index ca7f31dd6b51..714fe65fde46 100644
 --- a/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
 +++ b/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
 @@ -25,12 +25,18 @@
@@ -32,7 +32,7 @@ index ca7f31dd6b51..5b0e32f98e8e 100644
          arith::MulIOp, arith::AddIOp,
          complex::MulOp, complex::AddOp,
 diff --git a/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp b/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
-index 8075df730ccc..5989b699fcfa 100644
+index 8075df730ccc..7931924b8144 100644
 --- a/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
 +++ b/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
 @@ -51,6 +51,14 @@
@@ -59,7 +59,7 @@ index 8075df730ccc..5989b699fcfa 100644
  public:
 +  using ModArithType = mod_arith::ModArithType;
 +  using PrimeFieldType = field::PrimeFieldType;
-+  using QuadraticExtFieldType = field::QuadraticExtFieldType;
++  using ExtensionFieldType = field::ExtensionFieldType;
 +  using AffineType = elliptic_curve::AffineType;
 +  using JacobianType = elliptic_curve::JacobianType;
 +  using XYZZType = elliptic_curve::XYZZType;
@@ -264,7 +264,7 @@ index 8075df730ccc..5989b699fcfa 100644
 +  }
 +  bool isField(Value value) {
 +    return llvm::isa<PrimeFieldType>(value.getType()) ||
-+           llvm::isa<QuadraticExtFieldType>(value.getType());
++           llvm::isa<ExtensionFieldType>(value.getType());
 +  }
 +  bool isECPoint(Value value) {
 +    return llvm::isa<AffineType>(value.getType()) ||
@@ -275,7 +275,7 @@ index 8075df730ccc..5989b699fcfa 100644
    OpBuilder &builder;
    Block &block;
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 7543739b3a44..632ead246b84 100644
+index 7543739b3a44..35bf41aa5f3a 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 @@ -10544,6 +10544,9 @@ cc_library(

@@ -73,12 +73,6 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
         return build($_builder, $_state, pfType, value);
       } else if (auto efType = dyn_cast<ExtensionFieldType>(ty)) {
         return build($_builder, $_state, efType, value);
-      } else if (auto f2Type = dyn_cast<QuadraticExtFieldType>(ty)) {
-        return build($_builder, $_state, f2Type, value);
-      } else if (auto f3Type = dyn_cast<CubicExtFieldType>(ty)) {
-        return build($_builder, $_state, f3Type, value);
-      } else if (auto f4Type = dyn_cast<QuarticExtFieldType>(ty)) {
-        return build($_builder, $_state, f4Type, value);
       } else {
         llvm_unreachable("Unsupported field type for constant");
       }
@@ -88,39 +82,6 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
     }]>,
     OpBuilder<(ins "PrimeFieldType":$ty, "uint64_t":$value), [{
       return build($_builder, $_state, ty, IntegerAttr::get(ty.getStorageType(), value));
-    }]>,
-    OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$c0), [{
-      return build($_builder, $_state, ty, c0, 0);
-    }]>,
-    OpBuilder<(ins "QuadraticExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1), [{
-      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
-      APInt c0Int(bitWidth, c0);
-      APInt c1Int(bitWidth, c1);
-      auto tensorType = RankedTensorType::get({2}, IntegerType::get(ty.getContext(), bitWidth));
-      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int}));
-    }]>,
-    OpBuilder<(ins "CubicExtFieldType":$ty, "uint64_t":$c0), [{
-      return build($_builder, $_state, ty, c0, 0, 0);
-    }]>,
-    OpBuilder<(ins "CubicExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1, "uint64_t":$c2), [{
-      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
-      APInt c0Int(bitWidth, c0);
-      APInt c1Int(bitWidth, c1);
-      APInt c2Int(bitWidth, c2);
-      auto tensorType = RankedTensorType::get({3}, IntegerType::get(ty.getContext(), bitWidth));
-      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int}));
-    }]>,
-    OpBuilder<(ins "QuarticExtFieldType":$ty, "uint64_t":$c0), [{
-      return build($_builder, $_state, ty, c0, 0, 0, 0);
-    }]>,
-    OpBuilder<(ins "QuarticExtFieldType":$ty, "uint64_t":$c0, "uint64_t":$c1, "uint64_t":$c2, "uint64_t":$c3), [{
-      unsigned bitWidth = ty.getBaseField().getStorageBitWidth();
-      APInt c0Int(bitWidth, c0);
-      APInt c1Int(bitWidth, c1);
-      APInt c2Int(bitWidth, c2);
-      APInt c3Int(bitWidth, c3);
-      auto tensorType = RankedTensorType::get({4}, IntegerType::get(ty.getContext(), bitWidth));
-      return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, {c0Int, c1Int, c2Int, c3Int}));
     }]>,
     OpBuilder<(ins "ExtensionFieldType":$ty, "uint64_t":$c0), [{
       auto baseField = ty.getBaseField();
@@ -375,14 +336,14 @@ def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
 
     Example:
     ```
-    !QF = field.f2<!PF, #beta>
-    %c0, %c1 = field.ext_to_coeffs %qf : !QF -> !PF, !PF
+    !EF2 = field.ef<2x!PF, #beta>
+    %c0, %c1 = field.ext_to_coeffs %ef2 : !EF2 -> !PF, !PF
 
-    !CF = field.f3<!PF, #xi>
-    %c0, %c1, %c2 = field.ext_to_coeffs %cf : !CF -> !PF, !PF, !PF
+    !EF3 = field.ef<3x!PF, #xi>
+    %c0, %c1, %c2 = field.ext_to_coeffs %ef3 : !EF3 -> !PF, !PF, !PF
     ```
   }];
-  let arguments = (ins Field_AnyExtFieldType:$input);
+  let arguments = (ins Field_ExtensionFieldType:$input);
   let results = (outs Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasCanonicalizer = 1;
@@ -397,15 +358,15 @@ def Field_ExtFromCoeffsOp : Field_Op<"ext_from_coeffs", [Pure]> {
 
     Example:
     ```
-    !QF = field.f2<!PF, #beta>
-    %qf = field.ext_from_coeffs %c0, %c1 : !PF, !PF -> !QF
+    !EF2 = field.ef<2x!PF, #beta>
+    %ef2 = field.ext_from_coeffs %c0, %c1 : !PF, !PF -> !EF2
 
-    !CF = field.f3<!PF, #xi>
-    %cf = field.ext_from_coeffs %c0, %c1, %c2 : !PF, !PF, !PF -> !CF
+    !EF3 = field.ef<3x!PF, #xi>
+    %ef3 = field.ext_from_coeffs %c0, %c1, %c2 : !PF, !PF, !PF -> !EF3
     ```
   }];
   let arguments = (ins Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$input);
-  let results = (outs Field_AnyExtFieldType:$output);
+  let results = (outs Field_ExtensionFieldType:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasCanonicalizer = 1;
   let hasVerifier = 1;

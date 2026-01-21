@@ -52,7 +52,7 @@ func.func private @printMemrefG1Xyzz(%xyzz: memref<*x!xyzz>) {
 func.func @getG1GeneratorMultiple(%k: !SF) -> !affine {
   %one = field.constant 1 : !PF
   %two = field.constant 2 : !PF
-  %g = elliptic_curve.ext_from_coords %one, %two : (!PF, !PF) -> !affine
+  %g = elliptic_curve.from_coords %one, %two : (!PF, !PF) -> !affine
   %g_multiple = elliptic_curve.scalar_mul %k, %g : !SF, !affine -> !jacobian
   %g_multiple_affine = elliptic_curve.convert_point_type %g_multiple : !jacobian -> !affine
   return %g_multiple_affine : !affine

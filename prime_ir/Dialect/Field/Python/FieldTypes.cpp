@@ -48,78 +48,6 @@ void PyPrimeFieldType::bindDerived(ClassTy &c) {
 }
 
 // static
-void PyQuadraticExtensionFieldType::bindDerived(ClassTy &c) {
-  c.def_static(
-      "get",
-      [](PyPrimeFieldType &baseField, PyAttribute &nonResidue,
-         DefaultingPyMlirContext context) -> PyQuadraticExtensionFieldType {
-        MlirType t = primeIRQuadraticExtensionFieldTypeGet(
-            context->get(), baseField, nonResidue);
-        return PyQuadraticExtensionFieldType(context->getRef(), t);
-      },
-      nb::arg("base_field"), nb::arg("non_residue"),
-      nb::arg("context") = nb::none(),
-      "Create a quadratic extension field type");
-  c.def_prop_ro(
-      "base_field",
-      [](PyQuadraticExtensionFieldType &self) -> PyPrimeFieldType {
-        return PyPrimeFieldType(
-            self.getContext(),
-            primeIRQuadraticExtensionFieldTypeGetBaseField(self));
-      },
-      "Returns the base field of the quadratic extension field type");
-  c.def_prop_ro(
-      "non_residue",
-      [](PyQuadraticExtensionFieldType &self) -> PyAttribute {
-        return PyAttribute(
-            self.getContext(),
-            primeIRQuadraticExtensionFieldTypeGetNonResidue(self));
-      },
-      "Returns the non-residue of the quadratic extension field type");
-  c.def_prop_ro(
-      "is_montgomery",
-      [](PyQuadraticExtensionFieldType &self) -> bool {
-        return primeIRQuadraticExtensionFieldTypeIsMontgomery(self);
-      },
-      "Returns whether this is a montgomery form");
-}
-
-// static
-void PyCubicExtensionFieldType::bindDerived(ClassTy &c) {
-  c.def_static(
-      "get",
-      [](PyPrimeFieldType &baseField, PyAttribute &nonResidue,
-         DefaultingPyMlirContext context) -> PyCubicExtensionFieldType {
-        MlirType t = primeIRCubicExtensionFieldTypeGet(context->get(),
-                                                       baseField, nonResidue);
-        return PyCubicExtensionFieldType(context->getRef(), t);
-      },
-      nb::arg("base_field"), nb::arg("non_residue"),
-      nb::arg("context") = nb::none(), "Create a cubic extension field type");
-  c.def_prop_ro(
-      "base_field",
-      [](PyCubicExtensionFieldType &self) -> PyPrimeFieldType {
-        return PyPrimeFieldType(
-            self.getContext(),
-            primeIRCubicExtensionFieldTypeGetBaseField(self));
-      },
-      "Returns the base field of the cubic extension field type");
-  c.def_prop_ro(
-      "non_residue",
-      [](PyCubicExtensionFieldType &self) -> PyAttribute {
-        return PyAttribute(self.getContext(),
-                           primeIRCubicExtensionFieldTypeGetNonResidue(self));
-      },
-      "Returns the non-residue of the cubic extension field type");
-  c.def_prop_ro(
-      "is_montgomery",
-      [](PyCubicExtensionFieldType &self) -> bool {
-        return primeIRCubicExtensionFieldTypeIsMontgomery(self);
-      },
-      "Returns whether this is a montgomery form");
-}
-
-// static
 void PyExtensionFieldType::bindDerived(ClassTy &c) {
   c.def_static(
       "get",
@@ -161,8 +89,6 @@ void PyExtensionFieldType::bindDerived(ClassTy &c) {
 
 void populateIRTypes(nb::module_ &m) {
   PyPrimeFieldType::bind(m);
-  PyQuadraticExtensionFieldType::bind(m);
-  PyCubicExtensionFieldType::bind(m);
   PyExtensionFieldType::bind(m);
 }
 

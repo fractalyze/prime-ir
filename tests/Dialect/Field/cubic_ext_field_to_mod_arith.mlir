@@ -17,8 +17,8 @@
 
 !PF = !field.pf<7:i32>
 !PFm = !field.pf<7:i32, true>
-!CF = !field.f3<!PF, 2:i32>
-!CFm = !field.f3<!PFm, 2:i32>
+!CF = !field.ef<3x!PF, 2:i32>
+!CFm = !field.ef<3x!PFm, 2:i32>
 
 // CHECK-LABEL: @test_lower_add
 func.func @test_lower_add(%arg0: !CF, %arg1: !CF) -> !CF {

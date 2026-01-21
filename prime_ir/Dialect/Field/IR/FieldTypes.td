@@ -49,43 +49,6 @@ def FieldTypeInterface : TypeInterface<"FieldTypeInterface"> {
   ];
 }
 
-// Extension field type interface.
-// Provides a unified interface for extension field types (Fp2, Fp3, etc.)
-def ExtensionFieldTypeInterface : TypeInterface<"ExtensionFieldTypeInterface", [
-  DeclareTypeInterfaceMethods<FieldTypeInterface>
-  ]> {
-  let description = [{
-    Interface for extension field types that allows generic handling
-    of different extension degrees without explicit type checking.
-  }];
-
-  let methods = [
-    InterfaceMethod<"Get extension degree over prime field",
-      "unsigned", "getDegreeOverPrime">,
-    InterfaceMethod<"Get extension degree over base field",
-      "unsigned", "getDegreeOverBase">,
-    InterfaceMethod<"Get the base field type",
-      "Type", "getBaseFieldType">,
-    InterfaceMethod<"Get the non-residue element",
-      "Attribute", "getNonResidue">,
-    InterfaceMethod<"Create a new type with different base field type and attribute",
-      "Type", "cloneWith",
-      (ins "Type":$baseField, "Attribute":$element)>,
-    InterfaceMethod<"Create constant attribute from coefficient values",
-      "TypedAttr", "createConstantAttr",
-      (ins "ArrayRef<APInt>":$coeffs)>,
-    InterfaceMethod<"Build LLVM struct from coefficients",
-      "Value", "buildStructFromCoeffs",
-      (ins "ImplicitLocOpBuilder &":$builder,
-           "Type":$structType,
-           "ArrayRef<Value>":$coeffs)>,
-    InterfaceMethod<"Extract coefficients from LLVM struct",
-      "SmallVector<Value>", "extractCoeffsFromStruct",
-      (ins "ImplicitLocOpBuilder &":$builder,
-           "Value":$structValue)>,
-  ];
-}
-
 // Prime field type definition.
 // This type represents an element in a prime field parameterized by a prime modulus.
 def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
@@ -131,99 +94,12 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   let hasCustomAssemblyFormat = 1;
 }
 
-// Quadratic extension field type definition.
-// This type represents an element in a quadratic extension field parameterized by the underlying field.
-// Currently, it is only defined for prime fields.
-def Field_QuadraticExtFieldType : Field_Type<"QuadraticExtField", "f2", [
-  MemRefElementTypeInterface,
-  VectorElementTypeInterface,
-  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
-  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
-  ]> {
-  let summary = "Quadratic extension field element type";
-  let description = [{
-    Represents an element in a quadratic extension field defined by the given
-    prime field `baseField` and the non-residue `nonResidue`.
-
-    An element is represented as a₀ + a₁v where v² = nonResidue.
-
-    Example:
-    ```
-    !PF = !field.pf<7:i32>
-    !QF = !field.f2<!PF, 6:i32>
-    ```
-  }];
-  let parameters = (ins
-   Field_PrimeFieldType: $baseField,
-   "IntegerAttr": $nonResidue
-  );
-  let hasCustomAssemblyFormat = 1;
-}
-
-// Cubic extension field type definition.
-// This type represents an element in a cubic extension field parameterized by the underlying field.
-// Currently, it is only defined for prime fields.
-def Field_CubicExtFieldType : Field_Type<"CubicExtField", "f3", [
-  MemRefElementTypeInterface,
-  VectorElementTypeInterface,
-  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
-  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
-  ]> {
-  let summary = "Cubic extension field element type";
-  let description = [{
-    Represents an element in a cubic extension field defined by the given
-    prime field `baseField` and the non-residue `nonResidue`.
-
-    An element is represented as a₀ + a₁v + a₂v² where v³ = nonResidue.
-
-    Example:
-    ```
-    !PF = !field.pf<7:i32>
-    !CF = !field.f3<!PF, 6:i32>
-    ```
-  }];
-  let parameters = (ins
-   Field_PrimeFieldType: $baseField,
-   "IntegerAttr": $nonResidue
-  );
-  let hasCustomAssemblyFormat = 1;
-}
-
-// Quartic extension field type definition.
-// This type represents an element in a quartic extension field parameterized by the underlying field.
-// Currently, it is only defined for prime fields.
-def Field_QuarticExtFieldType : Field_Type<"QuarticExtField", "f4", [
-  MemRefElementTypeInterface,
-  VectorElementTypeInterface,
-  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
-  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
-  ]> {
-  let summary = "Quartic extension field element type";
-  let description = [{
-    Represents an element in a quartic extension field defined by the given
-    prime field `baseField` and the non-residue `nonResidue`.
-
-    An element is represented as a₀ + a₁v + a₂v² + a₃v³ where v⁴ = nonResidue.
-
-    Example:
-    ```
-    !PF = !field.pf<7:i32>
-    !QF = !field.f4<!PF, 6:i32>
-    ```
-  }];
-  let parameters = (ins
-   Field_PrimeFieldType: $baseField,
-   "IntegerAttr": $nonResidue
-  );
-  let hasCustomAssemblyFormat = 1;
-}
-
 // Unified extension field type definition.
 // This type represents an element in an extension field of degree N (2, 3, or 4).
 def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
-  DeclareTypeInterfaceMethods<ExtensionFieldTypeInterface>,
+  DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
   ]> {
   let summary = "Extension field element type";
@@ -246,18 +122,24 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     Field_PrimeFieldType: $baseField,
     "IntegerAttr": $nonResidue
   );
+  let extraClassDeclaration = [{
+    unsigned getDegreeOverPrime() const;
+    Type cloneWith(Type baseField, Attribute element) const;
+    TypedAttr createConstantAttr(ArrayRef<APInt> coeffs) const;
+    Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder,
+                                Type structType,
+                                ArrayRef<Value> coeffs) const;
+    SmallVector<Value> extractCoeffsFromStruct(
+        ImplicitLocOpBuilder &builder, Value structValue) const;
+  }];
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
 }
 
-def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_ExtensionFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-field-type">;
-def Field_AnyExtFieldType : AnyTypeOf<[Field_ExtensionFieldType, Field_QuadraticExtFieldType, Field_CubicExtFieldType, Field_QuarticExtFieldType], "any-ext-field-type">;
+def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_ExtensionFieldType], "any-field-type">;
 
 def PrimeFieldLike: TypeOrValueSemanticsContainer<Field_PrimeFieldType, "prime-field-like">;
 def ExtensionFieldLike: TypeOrValueSemanticsContainer<Field_ExtensionFieldType, "extension-field-like">;
-def QuadraticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuadraticExtFieldType, "quadratic-ext-field-like">;
-def CubicExtFieldLike: TypeOrValueSemanticsContainer<Field_CubicExtFieldType, "cubic-ext-field-like">;
-def QuarticExtFieldLike: TypeOrValueSemanticsContainer<Field_QuarticExtFieldType, "quartic-ext-field-like">;
-def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, ExtensionFieldLike.predicate, QuadraticExtFieldLike.predicate, CubicExtFieldLike.predicate, QuarticExtFieldLike.predicate]>, "field-like">;
+def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, ExtensionFieldLike.predicate]>, "field-like">;
 
 #endif  // PRIME_IR_DIALECT_FIELD_IR_FIELDTYPES_TD_

@@ -45,60 +45,6 @@ MLIR_CAPI_EXPORTED MlirAttribute primeIRPrimeFieldTypeGetModulus(MlirType type);
 MLIR_CAPI_EXPORTED bool primeIRPrimeFieldTypeIsMontgomery(MlirType type);
 
 //===----------------------------------------------------------------------===//
-// QuadraticExtensionField types.
-//===----------------------------------------------------------------------===//
-
-// Returns the typeID of a quadratic extension field type.
-MLIR_CAPI_EXPORTED MlirTypeID primeIRQuadraticExtensionFieldTypeGetTypeID(void);
-
-// Checks whether the given type is a quadratic extension field type.
-MLIR_CAPI_EXPORTED bool primeIRTypeIsAQuadraticExtensionField(MlirType type);
-
-// Creates a quadratic extension field type of the given base field and
-// non-residue form in the context. The type is owned by the context.
-MLIR_CAPI_EXPORTED MlirType primeIRQuadraticExtensionFieldTypeGet(
-    MlirContext ctx, MlirType baseField, MlirAttribute nonResidue);
-
-// Returns the base field of the given quadratic extension field type.
-MLIR_CAPI_EXPORTED MlirType
-primeIRQuadraticExtensionFieldTypeGetBaseField(MlirType type);
-
-// Returns the non-residue of the given quadratic extension field type.
-MLIR_CAPI_EXPORTED MlirAttribute
-primeIRQuadraticExtensionFieldTypeGetNonResidue(MlirType type);
-
-// Checks whether the given type is a montgomery form.
-MLIR_CAPI_EXPORTED bool
-primeIRQuadraticExtensionFieldTypeIsMontgomery(MlirType type);
-
-// ===----------------------------------------------------------------------===//
-// CubicExtensionField types.
-// ===----------------------------------------------------------------------===//
-
-// Returns the typeID of a cubic extension field type.
-MLIR_CAPI_EXPORTED MlirTypeID primeIRCubicExtensionFieldTypeGetTypeID(void);
-
-// Checks whether the given type is a cubic extension field type.
-MLIR_CAPI_EXPORTED bool primeIRTypeIsACubicExtensionField(MlirType type);
-
-// Creates a cubic extension field type of the given base field and
-// non-residue form in the context. The type is owned by the context.
-MLIR_CAPI_EXPORTED MlirType primeIRCubicExtensionFieldTypeGet(
-    MlirContext ctx, MlirType baseField, MlirAttribute nonResidue);
-
-// Returns the base field of the given cubic extension field type.
-MLIR_CAPI_EXPORTED MlirType
-primeIRCubicExtensionFieldTypeGetBaseField(MlirType type);
-
-// Returns the non-residue of the given cubic extension field type.
-MLIR_CAPI_EXPORTED MlirAttribute
-primeIRCubicExtensionFieldTypeGetNonResidue(MlirType type);
-
-// Checks whether the given type is a montgomery form.
-MLIR_CAPI_EXPORTED bool
-primeIRCubicExtensionFieldTypeIsMontgomery(MlirType type);
-
-// ===----------------------------------------------------------------------===//
 // ExtensionField types.
 // ===----------------------------------------------------------------------===//
 

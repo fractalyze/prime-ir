@@ -23,8 +23,8 @@
 // p ≡ 5 mod 8 ensures proper Frobenius-based inverse computation.
 !PF = !field.pf<149:i32>
 !PFm = !field.pf<149:i32, true>
-!QF = !field.f4<!PF, 2:i32>
-!QFm = !field.f4<!PFm, 2:i32>
+!QF = !field.ef<4x!PF, 2:i32>
+!QFm = !field.ef<4x!PFm, 2:i32>
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
