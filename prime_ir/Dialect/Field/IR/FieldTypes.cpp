@@ -199,59 +199,6 @@ DEFINE_FIELD_TYPE_INTERFACE_METHODS(PrimeFieldType);
 namespace ext_field_utils {
 namespace {
 
-template <typename T>
-Type parseExtensionFieldType(AsmParser &parser) {
-  if (failed(parser.parseLess())) {
-    return nullptr;
-  }
-  Type baseField;
-  if (failed(parser.parseType(baseField))) {
-    return nullptr;
-  }
-  if (!isa<PrimeFieldType>(baseField)) {
-    parser.emitError(parser.getCurrentLocation(),
-                     "base field must be a prime field");
-    return nullptr;
-  }
-  auto pfType = cast<PrimeFieldType>(baseField);
-  if (failed(parser.parseComma())) {
-    return nullptr;
-  }
-  IntegerAttr nonResidue;
-  if (failed(parser.parseAttribute(nonResidue))) {
-    return nullptr;
-  }
-  if (pfType.getIsMontgomery()) {
-    nonResidue =
-        mod_arith::getAttrAsMontgomeryForm(pfType.getModulus(), nonResidue);
-  }
-  if (failed(parser.parseGreater())) {
-    return nullptr;
-  }
-  return T::get(parser.getContext(), pfType, nonResidue);
-}
-
-template <typename T>
-bool isMontgomery(T *extField) {
-  return extField->getBaseField().getIsMontgomery();
-}
-
-template <typename T>
-Type cloneWith(const T *extField, Type baseField, Attribute element) {
-  return T::get(extField->getContext(), cast<PrimeFieldType>(baseField),
-                cast<IntegerAttr>(element));
-}
-
-template <typename T, unsigned kDegreeOverPrime>
-TypedAttr createConstantAttr(const T *extField,
-                             llvm::ArrayRef<llvm::APInt> coeffs) {
-  auto tensorType = RankedTensorType::get(
-      {kDegreeOverPrime},
-      IntegerType::get(extField->getContext(),
-                       extField->getBaseField().getStorageBitWidth()));
-  return DenseIntElementsAttr::get(tensorType, coeffs);
-}
-
 template <unsigned kDegreeOverPrime>
 Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder, Type structType,
                             llvm::ArrayRef<Value> coeffs) {
