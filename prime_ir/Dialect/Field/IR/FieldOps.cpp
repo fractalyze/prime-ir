@@ -20,6 +20,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
 
@@ -418,20 +419,35 @@ LogicalResult ToMontOp::verify() {
 
 namespace {
 
-// Helper function to get the base prime field type from either a PrimeFieldType
-// or an ExtensionFieldType.
-PrimeFieldType getBasePrimeFieldType(Type elementType) {
+// Helper function to check if a type is a field-like type (PrimeFieldType,
+// ExtensionFieldType, ModArithType which represents a converted prime field,
+// or IntegerType which represents a fully lowered prime field element).
+bool isFieldLikeType(Type type) {
+  return isa<PrimeFieldType, ExtensionFieldType, mod_arith::ModArithType,
+             IntegerType>(type);
+}
+
+// Helper function to get the modulus from a field-like type.
+// Returns the modulus APInt for PrimeFieldType, ExtensionFieldType (base
+// field), or ModArithType. Returns std::nullopt for IntegerType (which doesn't
+// carry modulus information after mod-arith-to-arith lowering).
+std::optional<APInt> getFieldModulus(Type elementType) {
   if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
-    return pfType;
+    return pfType.getModulus().getValue();
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    return efType.getBaseField();
+    return efType.getBaseField().getModulus().getValue();
   }
-  return nullptr;
+  if (auto maType = dyn_cast<mod_arith::ModArithType>(elementType)) {
+    return maType.getModulus().getValue();
+  }
+  // IntegerType (and other types) don't carry modulus information
+  return std::nullopt;
 }
 
 // Helper function to compute the total number of prime field elements
-// represented by a shaped type.
+// represented by a shaped type. IntegerType is treated as a single element
+// (after mod-arith-to-arith lowering).
 std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
   if (!shapedType.hasStaticShape()) {
     return std::nullopt;
@@ -440,7 +456,7 @@ std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
   Type elementType = shapedType.getElementType();
   int64_t numElements = shapedType.getNumElements();
 
-  if (isa<PrimeFieldType>(elementType)) {
+  if (isa<PrimeFieldType, mod_arith::ModArithType, IntegerType>(elementType)) {
     return numElements;
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
@@ -450,7 +466,8 @@ std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
 }
 
 // Check if the bitcast is a tensor reinterpret bitcast between extension field
-// and prime field tensors.
+// and prime field tensors. Also accepts mod_arith::ModArithType as equivalent
+// to PrimeFieldType (for use after type conversion in FieldToModArith).
 bool isTensorReinterpretBitcast(Type inputType, Type outputType) {
   auto inputShaped = dyn_cast<ShapedType>(inputType);
   auto outputShaped = dyn_cast<ShapedType>(outputType);
@@ -462,9 +479,10 @@ bool isTensorReinterpretBitcast(Type inputType, Type outputType) {
   Type inputElementType = inputShaped.getElementType();
   Type outputElementType = outputShaped.getElementType();
 
-  // Both element types must be field types (prime or extension)
-  if (!isa<PrimeFieldType, ExtensionFieldType>(inputElementType) ||
-      !isa<PrimeFieldType, ExtensionFieldType>(outputElementType)) {
+  // Both element types must be field-like types (prime, extension, or
+  // mod_arith)
+  if (!isFieldLikeType(inputElementType) ||
+      !isFieldLikeType(outputElementType)) {
     return false;
   }
 
@@ -479,7 +497,8 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   Type inputType = inputs.front();
   Type outputType = outputs.front();
 
-  // Case 1: Tensor reinterpret bitcast (extension field <-> prime field)
+  // Case 1: Tensor reinterpret bitcast (extension field <->
+  // prime/mod_arith/integer field)
   if (isTensorReinterpretBitcast(inputType, outputType)) {
     auto inputShaped = cast<ShapedType>(inputType);
     auto outputShaped = cast<ShapedType>(outputType);
@@ -487,10 +506,13 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     Type inputElementType = inputShaped.getElementType();
     Type outputElementType = outputShaped.getElementType();
 
-    // The base prime field type must match
-    PrimeFieldType inputBasePF = getBasePrimeFieldType(inputElementType);
-    PrimeFieldType outputBasePF = getBasePrimeFieldType(outputElementType);
-    if (inputBasePF != outputBasePF) {
+    // The base field modulus must match (works with PrimeFieldType,
+    // ExtensionFieldType, and ModArithType). IntegerType doesn't carry modulus
+    // info (returns std::nullopt), so we skip the check if one side is integer.
+    auto inputModulus = getFieldModulus(inputElementType);
+    auto outputModulus = getFieldModulus(outputElementType);
+    // If both sides have modulus info, they must match
+    if (inputModulus && outputModulus && *inputModulus != *outputModulus) {
       return false;
     }
 
@@ -544,11 +566,14 @@ LogicalResult BitcastOp::verify() {
     Type inputElementType = inputShaped.getElementType();
     Type outputElementType = outputShaped.getElementType();
 
-    PrimeFieldType inputBasePF = getBasePrimeFieldType(inputElementType);
-    PrimeFieldType outputBasePF = getBasePrimeFieldType(outputElementType);
-    if (inputBasePF != outputBasePF) {
-      return emitOpError() << "base prime field types must match; input has "
-                           << inputBasePF << " but output has " << outputBasePF;
+    auto inputModulus = getFieldModulus(inputElementType);
+    auto outputModulus = getFieldModulus(outputElementType);
+    // Only report modulus mismatch if both sides have modulus info
+    if (inputModulus && outputModulus && *inputModulus != *outputModulus) {
+      return emitOpError()
+             << "base field moduli must match; input element type "
+             << inputElementType << " and output element type "
+             << outputElementType << " have different moduli";
     }
 
     auto inputTotal = getTotalPrimeFieldElements(inputShaped);
