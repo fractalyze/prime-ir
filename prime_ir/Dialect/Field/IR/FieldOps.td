@@ -112,31 +112,43 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
 }
 
 def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
- SameOperandsAndResultShape, AllSameTensorDims<["input", "output"]>,
  DeclareOpInterfaceMethods<CastOpInterface>]> {
-  let summary = "Bitcast between prime field types and to/from integer types";
+  let summary = "Bitcast between field types and integer types";
   let description = [{
-    Bitcasts between prime field types and to/from integer types.
+    Bitcasts between field types (prime or extension) and integer types.
 
-    The storage bitwidth of the input type is required to be the same storage
-    bitwidth of the output type. Integer to integer bitcast is disallowed as it
-    should be handled by `arith.bitcast`.
+    There are two modes of operation:
 
-    Currently, this operation only supports prime field. In the future, when the
-    use case is clear, we could support bitcasting between other field types and
-    integer type.
+    1. **Scalar/element-wise bitcast**: Between prime field types and integer types
+       with the same storage bitwidth. The shapes must match.
+
+    2. **Tensor reinterpret bitcast**: Between extension field tensors and prime
+       field tensors where the total storage matches. For an extension field of
+       degree N over a prime field PF:
+       - `tensor<K x !EF>` can be cast to `tensor<K*N x !PF>` and vice versa
+       - The underlying memory layout is reinterpreted without data movement
+
+    Integer to integer bitcast is disallowed as it should be handled by
+    `arith.bitcast`.
 
     Example:
     ```
     !PF = !field.pf<7 : i32>
+    !EF3 = !field.ef<3x!PF, 2:i32>
+
+    // Scalar bitcasts (same shape)
     %c0 = field.bitcast %f0 : !PF -> i32
     %f1 = field.bitcast %c0 : i32 -> !PF
-    %f2 = field.bitcast %f0 : !PF -> !PF2
+
+    // Tensor reinterpret bitcasts (extension field <-> prime field)
+    %pf_tensor = field.bitcast %ef_tensor : tensor<2x!EF3> -> tensor<6x!PF>
+    %ef_tensor = field.bitcast %pf_tensor : tensor<6x!PF> -> tensor<2x!EF3>
     ```
   }];
-  let arguments = (ins AnyTypeOf<[PrimeFieldLike, SignlessIntegerLike]>:$input);
-  let results = (outs AnyTypeOf<[PrimeFieldLike, SignlessIntegerLike]>:$output);
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+  let hasVerifier = 1;
 }
 
 def Field_CmpOp : Field_Op<"cmp", [SameTypeOperands, TypesMatchWith<

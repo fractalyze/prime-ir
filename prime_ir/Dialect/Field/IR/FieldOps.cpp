@@ -416,12 +416,164 @@ LogicalResult ToMontOp::verify() {
   return success();
 }
 
-bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
-  Type inputType = getElementTypeOrSelf(inputs.front());
-  Type outputType = getElementTypeOrSelf(outputs.front());
+namespace {
 
-  return getIntOrPrimeFieldBitWidth(inputType) ==
-         getIntOrPrimeFieldBitWidth(outputType);
+// Helper function to get the base prime field type from either a PrimeFieldType
+// or an ExtensionFieldType.
+PrimeFieldType getBasePrimeFieldType(Type elementType) {
+  if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
+    return pfType;
+  }
+  if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
+    return efType.getBaseField();
+  }
+  return nullptr;
+}
+
+// Helper function to compute the total number of prime field elements
+// represented by a shaped type.
+std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
+  if (!shapedType.hasStaticShape()) {
+    return std::nullopt;
+  }
+
+  Type elementType = shapedType.getElementType();
+  int64_t numElements = shapedType.getNumElements();
+
+  if (isa<PrimeFieldType>(elementType)) {
+    return numElements;
+  }
+  if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
+    return numElements * efType.getDegree();
+  }
+  return std::nullopt;
+}
+
+// Check if the bitcast is a tensor reinterpret bitcast between extension field
+// and prime field tensors.
+bool isTensorReinterpretBitcast(Type inputType, Type outputType) {
+  auto inputShaped = dyn_cast<ShapedType>(inputType);
+  auto outputShaped = dyn_cast<ShapedType>(outputType);
+
+  if (!inputShaped || !outputShaped) {
+    return false;
+  }
+
+  Type inputElementType = inputShaped.getElementType();
+  Type outputElementType = outputShaped.getElementType();
+
+  // Both element types must be field types (prime or extension)
+  if (!isa<PrimeFieldType, ExtensionFieldType>(inputElementType) ||
+      !isa<PrimeFieldType, ExtensionFieldType>(outputElementType)) {
+    return false;
+  }
+
+  // At least one side must be an extension field for tensor reinterpret
+  return isa<ExtensionFieldType>(inputElementType) ||
+         isa<ExtensionFieldType>(outputElementType);
+}
+
+} // namespace
+
+bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+  Type inputType = inputs.front();
+  Type outputType = outputs.front();
+
+  // Case 1: Tensor reinterpret bitcast (extension field <-> prime field)
+  if (isTensorReinterpretBitcast(inputType, outputType)) {
+    auto inputShaped = cast<ShapedType>(inputType);
+    auto outputShaped = cast<ShapedType>(outputType);
+
+    Type inputElementType = inputShaped.getElementType();
+    Type outputElementType = outputShaped.getElementType();
+
+    // The base prime field type must match
+    PrimeFieldType inputBasePF = getBasePrimeFieldType(inputElementType);
+    PrimeFieldType outputBasePF = getBasePrimeFieldType(outputElementType);
+    if (inputBasePF != outputBasePF) {
+      return false;
+    }
+
+    // The total number of prime field elements must match
+    auto inputTotal = getTotalPrimeFieldElements(inputShaped);
+    auto outputTotal = getTotalPrimeFieldElements(outputShaped);
+    return inputTotal && outputTotal && *inputTotal == *outputTotal;
+  }
+
+  // Case 2: Original scalar/element-wise bitcast (prime field <-> integer)
+  Type inputElementType = getElementTypeOrSelf(inputType);
+  Type outputElementType = getElementTypeOrSelf(outputType);
+
+  // Must be prime field or integer types
+  if (!isa<PrimeFieldType, IntegerType>(inputElementType) ||
+      !isa<PrimeFieldType, IntegerType>(outputElementType)) {
+    return false;
+  }
+
+  // Integer to integer is not allowed (use arith.bitcast)
+  if (isa<IntegerType>(inputElementType) &&
+      isa<IntegerType>(outputElementType)) {
+    return false;
+  }
+
+  // Prime field to prime field is not allowed (no conversion happening)
+  // Use tensor reinterpret bitcast with extension fields instead
+  if (isa<PrimeFieldType>(inputElementType) &&
+      isa<PrimeFieldType>(outputElementType)) {
+    return false;
+  }
+
+  // Check bitwidth compatibility
+  return getIntOrPrimeFieldBitWidth(inputElementType) ==
+         getIntOrPrimeFieldBitWidth(outputElementType);
+}
+
+LogicalResult BitcastOp::verify() {
+  Type inputType = getInput().getType();
+  Type outputType = getOutput().getType();
+
+  if (areCastCompatible(inputType, outputType)) {
+    return success();
+  }
+
+  // Provide detailed error messages
+  if (isTensorReinterpretBitcast(inputType, outputType)) {
+    auto inputShaped = cast<ShapedType>(inputType);
+    auto outputShaped = cast<ShapedType>(outputType);
+
+    Type inputElementType = inputShaped.getElementType();
+    Type outputElementType = outputShaped.getElementType();
+
+    PrimeFieldType inputBasePF = getBasePrimeFieldType(inputElementType);
+    PrimeFieldType outputBasePF = getBasePrimeFieldType(outputElementType);
+    if (inputBasePF != outputBasePF) {
+      return emitOpError() << "base prime field types must match; input has "
+                           << inputBasePF << " but output has " << outputBasePF;
+    }
+
+    auto inputTotal = getTotalPrimeFieldElements(inputShaped);
+    auto outputTotal = getTotalPrimeFieldElements(outputShaped);
+    if (!inputTotal || !outputTotal) {
+      return emitOpError() << "tensor shapes must be static";
+    }
+    if (*inputTotal != *outputTotal) {
+      return emitOpError()
+             << "total prime field element count must match; input has "
+             << *inputTotal << " elements but output has " << *outputTotal;
+    }
+  }
+
+  Type inputElementType = getElementTypeOrSelf(inputType);
+  Type outputElementType = getElementTypeOrSelf(outputType);
+
+  if (isa<IntegerType>(inputElementType) &&
+      isa<IntegerType>(outputElementType)) {
+    return emitOpError()
+           << "integer to integer bitcast should use arith.bitcast";
+  }
+
+  return emitOpError() << "input type '" << inputType << "' and output type '"
+                       << outputType << "' are not compatible for bitcast";
 }
 
 LogicalResult ExtToCoeffsOp::verify() {
