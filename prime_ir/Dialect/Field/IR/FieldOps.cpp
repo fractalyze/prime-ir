@@ -197,8 +197,44 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     return success();
   }
 
+  // Shape validation callback for extension field tensors.
+  // For tensor<Nx!EF{d}>, the parsed shape should be [N, d] (tensor dims +
+  // coefficient dim).
+  auto shapeValidationCallback =
+      [&](ArrayRef<int64_t> typeShape,
+          ArrayRef<int64_t> parsedShape) -> ParseResult {
+    auto elementType = getElementTypeOrSelf(parsedType);
+    if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
+      unsigned degree = efType.getDegreeOverPrime();
+      SmallVector<int64_t> expectedShape(typeShape);
+      expectedShape.push_back(static_cast<int64_t>(degree));
+      if (expectedShape.size() != parsedShape.size() ||
+          !std::equal(expectedShape.begin(), expectedShape.end(),
+                      parsedShape.begin())) {
+        return parser.emitError(parser.getCurrentLocation(),
+                                "extension field tensor constant shape [")
+               << llvm::make_range(parsedShape.begin(), parsedShape.end())
+               << "] does not match expected shape [tensor dims: "
+               << llvm::make_range(typeShape.begin(), typeShape.end())
+               << ", degree: " << degree << "]";
+      }
+      return success();
+    }
+    // For prime fields, exact shape match.
+    if (typeShape.size() != parsedShape.size() ||
+        !std::equal(typeShape.begin(), typeShape.end(), parsedShape.begin())) {
+      return parser.emitError(parser.getCurrentLocation(),
+                              "tensor constant shape [")
+             << llvm::make_range(parsedShape.begin(), parsedShape.end())
+             << "] does not match type shape ["
+             << llvm::make_range(typeShape.begin(), typeShape.end()) << "]";
+    }
+    return success();
+  };
+
   if (failed(parseModularIntegerList(parser, parsedInts, parsedType,
-                                     getModulusCallback))) {
+                                     getModulusCallback,
+                                     shapeValidationCallback))) {
     return failure();
   }
 
@@ -211,9 +247,19 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     result.addTypes(parsedType);
     return success();
   }
+  if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
+    auto pfType = cast<PrimeFieldType>(efType.getBaseField());
+    // For tensor<Nx!EF{d}>, the attribute shape is [N, d].
+    SmallVector<int64_t> attrShape(shapedType.getShape());
+    attrShape.push_back(static_cast<int64_t>(efType.getDegreeOverPrime()));
+    auto attrType = RankedTensorType::get(attrShape, pfType.getStorageType());
+    auto denseElementsAttr = DenseIntElementsAttr::get(attrType, parsedInts);
+    result.addAttribute("value", denseElementsAttr);
+    result.addTypes(parsedType);
+    return success();
+  }
   return parser.emitError(parser.getCurrentLocation(),
-                          "dense attribute is only supported for shaped types "
-                          "with a prime field element type");
+                          "unsupported element type for dense constant");
 }
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
@@ -384,13 +430,19 @@ private:
 } // namespace
 
 OpFoldResult CmpOp::fold(FoldAdaptor adaptor) {
-  Type elemType = getElementTypeOrSelf(getLhs());
+  Type type = getLhs().getType();
+  Type elemType = getElementTypeOrSelf(type);
   if (isa<PrimeFieldType>(elemType)) {
     PrimeFieldCmpConstantFolder folder(this);
     return BinaryConstantFolder<CmpConstantFolderConfig>::fold(adaptor,
                                                                &folder);
   }
   if (isa<ExtensionFieldType>(elemType)) {
+    // TODO(chokobole): Tensor of extension field constant folding is not yet
+    // supported.
+    if (isa<ShapedType>(type)) {
+      return {};
+    }
     ExtensionFieldCmpConstantFolder folder(this);
     return BinaryConstantFolder<ExtFieldCmpConstantFolderConfig>::fold(adaptor,
                                                                        &folder);
@@ -667,6 +719,42 @@ LogicalResult BitcastOp::verify() {
                        << outputType << "' are not compatible for bitcast";
 }
 
+OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
+  // Fold bitcast with same input and output types.
+  if (getInput().getType() == getOutput().getType()) {
+    return getInput();
+  }
+
+  // Fold bitcast(bitcast(x)) -> x when final type matches original type.
+  if (auto inputBitcast = getInput().getDefiningOp<BitcastOp>()) {
+    if (inputBitcast.getInput().getType() == getOutput().getType()) {
+      return inputBitcast.getInput();
+    }
+  }
+
+  return {};
+}
+
+LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
+  // Fold bitcast(bitcast(x)) -> bitcast(x) when there's a transitive cast.
+  auto inputBitcast = op.getInput().getDefiningOp<BitcastOp>();
+  if (!inputBitcast) {
+    return failure();
+  }
+
+  // If the types are compatible for direct cast, replace with single bitcast.
+  Type srcType = inputBitcast.getInput().getType();
+  Type dstType = op.getOutput().getType();
+
+  if (BitcastOp::areCastCompatible(srcType, dstType)) {
+    rewriter.replaceOpWithNewOp<BitcastOp>(op, dstType,
+                                           inputBitcast.getInput());
+    return success();
+  }
+
+  return failure();
+}
+
 LogicalResult ExtToCoeffsOp::verify() {
   Type inputType = getInput().getType();
   if (auto extField = dyn_cast<ExtensionFieldType>(inputType)) {
@@ -762,7 +850,8 @@ template <typename BaseDelegate>
 class ExtensionFieldFolderMixin : public BaseDelegate {
 public:
   explicit ExtensionFieldFolderMixin(Type type)
-      : efType(cast<ExtensionFieldType>(getElementTypeOrSelf(type))) {}
+      : type(type),
+        efType(cast<ExtensionFieldType>(getElementTypeOrSelf(type))) {}
 
   SmallVector<APInt> getNativeInput(DenseIntElementsAttr attr) const final {
     auto values = attr.getValues<APInt>();
@@ -778,10 +867,23 @@ public:
 
   OpFoldResult getTensorAttr(ShapedType type,
                              ArrayRef<SmallVector<APInt>> values) const final {
-    llvm_unreachable("not implemented");
+    // Flatten all coefficient vectors into a single vector
+    SmallVector<APInt> flattenedValues;
+    for (const auto &coeffs : values) {
+      flattenedValues.append(coeffs.begin(), coeffs.end());
+    }
+    // Create result attribute with shape [tensor_dims..., degree]
+    PrimeFieldType baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+    unsigned degree = efType.getDegreeOverPrime();
+    SmallVector<int64_t> attrShape(type.getShape());
+    attrShape.push_back(static_cast<int64_t>(degree));
+    auto attrType =
+        RankedTensorType::get(attrShape, baseFieldType.getStorageType());
+    return DenseIntElementsAttr::get(attrType, flattenedValues);
   }
 
 protected:
+  Type type;
   ExtensionFieldType efType;
 };
 
@@ -817,6 +919,43 @@ public:
   SmallVector<APInt> operate(const SmallVector<APInt> &coeffs) const final {
     return static_cast<SmallVector<APInt>>(
         fn(FieldOperation::fromUnchecked(coeffs, this->efType)));
+  }
+
+  // Override foldScalar to dispatch to foldTensor when dealing with tensors.
+  // This is needed because for extension fields, ScalarAttr == TensorAttr ==
+  // DenseIntElementsAttr, so the generic fold() always calls foldScalar.
+  OpFoldResult foldScalar(DenseIntElementsAttr attr) const override {
+    if (isa<ShapedType>(this->type)) {
+      return foldTensor(attr);
+    }
+    // Actual scalar folding: use default implementation
+    return this->getScalarAttr(operate(this->getNativeInput(attr)));
+  }
+
+  // Override foldTensor to handle extension field tensor constants properly.
+  OpFoldResult foldTensor(DenseIntElementsAttr attr) const override {
+    unsigned degree = this->efType.getDegreeOverPrime();
+    auto inputValues = attr.getValues<APInt>();
+    size_t numElements = inputValues.size();
+
+    if (numElements % degree != 0) {
+      return {};
+    }
+
+    SmallVector<SmallVector<APInt>> results;
+    results.reserve(numElements / degree);
+
+    for (size_t i = 0; i < numElements; i += degree) {
+      SmallVector<APInt> coeffs(inputValues.begin() + i,
+                                inputValues.begin() + i + degree);
+      results.push_back(operate(coeffs));
+    }
+
+    auto shapedType = dyn_cast<ShapedType>(this->type);
+    if (!shapedType) {
+      return {};
+    }
+    return this->getTensorAttr(shapedType, results);
   }
 
 private:
@@ -858,6 +997,65 @@ public:
     return static_cast<SmallVector<APInt>>(
         fn(FieldOperation::fromUnchecked(a, this->efType),
            FieldOperation::fromUnchecked(b, this->efType)));
+  }
+
+  // Override foldScalar to dispatch to foldTensor when dealing with tensors.
+  // This is needed because for extension fields, ScalarAttr == TensorAttr ==
+  // DenseIntElementsAttr, so the generic fold() always calls foldScalar.
+  OpFoldResult foldScalar(DenseIntElementsAttr lhs,
+                          DenseIntElementsAttr rhs) const override {
+    if (isa<ShapedType>(this->type)) {
+      return foldTensor(lhs, rhs);
+    }
+    // Actual scalar folding: use default implementation
+    return this->getScalarAttr(
+        operate(this->getNativeInput(lhs), this->getNativeInput(rhs)));
+  }
+
+  // Override single-arg foldScalar to dispatch to foldTensor when dealing with
+  // tensors. This handles special case optimizations (x+0, x*1, etc.)
+  OpFoldResult foldScalar(DenseIntElementsAttr rhs) const override {
+    if (isa<ShapedType>(this->type)) {
+      return foldTensor(rhs);
+    }
+    // Actual scalar folding: delegate to base class
+    return BaseDelegate::foldScalar(rhs);
+  }
+
+  // Override foldTensor to handle extension field tensor constants properly.
+  OpFoldResult foldTensor(DenseIntElementsAttr lhsAttr,
+                          DenseIntElementsAttr rhsAttr) const override {
+    unsigned degree = this->efType.getDegreeOverPrime();
+    auto lhsValues = lhsAttr.getValues<APInt>();
+    auto rhsValues = rhsAttr.getValues<APInt>();
+    size_t numElements = lhsValues.size();
+
+    if (numElements != rhsValues.size() || numElements % degree != 0) {
+      return {};
+    }
+
+    SmallVector<SmallVector<APInt>> results;
+    results.reserve(numElements / degree);
+
+    for (size_t i = 0; i < numElements; i += degree) {
+      SmallVector<APInt> lhsCoeffs(lhsValues.begin() + i,
+                                   lhsValues.begin() + i + degree);
+      SmallVector<APInt> rhsCoeffs(rhsValues.begin() + i,
+                                   rhsValues.begin() + i + degree);
+      results.push_back(operate(lhsCoeffs, rhsCoeffs));
+    }
+
+    auto shapedType = dyn_cast<ShapedType>(this->type);
+    if (!shapedType) {
+      return {};
+    }
+    return this->getTensorAttr(shapedType, results);
+  }
+
+  // Override single-arg foldTensor for special case optimizations.
+  // Subclasses (Additive/Multiplicative) will override with specific logic.
+  OpFoldResult foldTensor(DenseIntElementsAttr rhs) const override {
+    return {};
   }
 
 protected:
@@ -968,7 +1166,8 @@ OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
 template <typename Op, typename Func>
 OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
                                   Func fn) {
-  Type elemType = getElementTypeOrSelf(op->getType());
+  Type type = op->getType();
+  Type elemType = getElementTypeOrSelf(type);
 
   if (isa<PrimeFieldType>(elemType)) {
     PrimeAdditiveFolder<Op, Func> folder(op, fn);
@@ -986,7 +1185,8 @@ OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
 template <typename Op, typename Func>
 OpFoldResult
 foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
-  Type elemType = getElementTypeOrSelf(op->getType());
+  Type type = op->getType();
+  Type elemType = getElementTypeOrSelf(type);
 
   if (isa<PrimeFieldType>(elemType)) {
     PrimeMultiplicativeFolder<Op, Func> folder(op, fn);

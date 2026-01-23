@@ -24,6 +24,7 @@ limitations under the License.
 // IWYU pragma: begin_keep
 // Headers needed for FieldOps.h.inc
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 // IWYU pragma: end_keep
 
