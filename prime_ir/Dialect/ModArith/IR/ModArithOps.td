@@ -96,6 +96,7 @@ def ModArith_BitcastOp : Op<ModArith_Dialect, "bitcast", [Pure,
   let results = (outs AnyTypeOf<[ModArithLike, SignlessIntegerLike]>:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [SameTypeOperands]> {

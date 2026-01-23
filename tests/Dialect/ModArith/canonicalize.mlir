@@ -1334,3 +1334,58 @@ func.func @test_splat_extract_strided_slice_fold() -> vector<2x!Zp> {
   // CHECK: return %[[C]] : [[T]]
   return %slice : vector<2x!Zp>
 }
+
+//===----------------------------------------------------------------------===//
+// BitcastOp
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_bitcast_same_type
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_bitcast_same_type(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.bitcast %arg0 : !Zp -> !Zp
+  // CHECK-NOT: mod_arith.bitcast
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %0 : !Zp
+}
+
+// CHECK-LABEL: @test_bitcast_roundtrip_mod_arith_to_int
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_bitcast_roundtrip_mod_arith_to_int(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.bitcast %arg0 : !Zp -> i32
+  %1 = mod_arith.bitcast %0 : i32 -> !Zp
+  // CHECK-NOT: mod_arith.bitcast
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_bitcast_roundtrip_int_to_mod_arith
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_bitcast_roundtrip_int_to_mod_arith(%arg0: i32) -> i32 {
+  %0 = mod_arith.bitcast %arg0 : i32 -> !Zp
+  %1 = mod_arith.bitcast %0 : !Zp -> i32
+  // CHECK-NOT: mod_arith.bitcast
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %1 : i32
+}
+
+// CHECK-LABEL: @test_bitcast_roundtrip_tensor
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_bitcast_roundtrip_tensor(%arg0: tensor<2x!Zp>) -> tensor<2x!Zp> {
+  %0 = mod_arith.bitcast %arg0 : tensor<2x!Zp> -> tensor<2xi32>
+  %1 = mod_arith.bitcast %0 : tensor<2xi32> -> tensor<2x!Zp>
+  // CHECK-NOT: mod_arith.bitcast
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %1 : tensor<2x!Zp>
+}
+
+!Zq = !mod_arith.int<65537 : i32>
+
+// CHECK-LABEL: @test_bitcast_transitive
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[Tq:.*]] {
+func.func @test_bitcast_transitive(%arg0: !Zp) -> !Zq {
+  %0 = mod_arith.bitcast %arg0 : !Zp -> i32
+  %1 = mod_arith.bitcast %0 : i32 -> !Zq
+  // CHECK: %[[RES:.*]] = mod_arith.bitcast %[[ARG0]] : [[T]] -> [[Tq]]
+  // CHECK: return %[[RES]] : [[Tq]]
+  return %1 : !Zq
+}
