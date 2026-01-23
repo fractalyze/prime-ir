@@ -32,6 +32,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/Transforms/BufferizableOpInterfaceImpl.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "prime_ir/Dialect/ModArith/Transforms/BufferizableOpInterfaceImpl.h"
 #include "prime_ir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
 #include "prime_ir/Dialect/Poly/IR/PolyDialect.h"
 #include "prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
@@ -48,6 +49,8 @@ int main(int argc, char **argv) {
       registry);
   mlir::prime_ir::field::registerConvertExtFieldToLLVMInterface(registry);
   mlir::prime_ir::field::registerBufferizableOpInterfaceExternalModels(
+      registry);
+  mlir::prime_ir::mod_arith::registerBufferizableOpInterfaceExternalModels(
       registry);
   mlir::prime_ir::arith_ext::registerSpecializeArithToAVXPasses();
   mlir::registerAllDialects(registry);

@@ -49,6 +49,7 @@ cc_binary(
         "//prime_ir/Dialect/Field/Transforms:BufferizableOpInterfaceImpl",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Dialect/ModArith/Transforms:BufferizableOpInterfaceImpl",
         "//prime_ir/Dialect/Poly/Conversions/PolyToField",
         "//prime_ir/Dialect/Poly/IR:Poly",
         "//prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor",

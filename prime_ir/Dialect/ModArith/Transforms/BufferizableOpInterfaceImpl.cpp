@@ -13,21 +13,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "prime_ir/Dialect/Field/Transforms/BufferizableOpInterfaceImpl.h"
+#include "prime_ir/Dialect/ModArith/Transforms/BufferizableOpInterfaceImpl.h"
 
-#include "prime_ir/Dialect/Field/IR/FieldDialect.h"
-#include "prime_ir/Dialect/Field/IR/FieldOps.h"
-#include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Utils/BufferizationUtils.h"
 
-namespace mlir::prime_ir::field {
+namespace mlir::prime_ir::mod_arith {
 
 void registerBufferizableOpInterfaceExternalModels(DialectRegistry &registry) {
-  registry.addExtension(+[](MLIRContext *ctx, FieldDialect *dialect) {
+  registry.addExtension(+[](MLIRContext *ctx, ModArithDialect *dialect) {
     BitcastOp::attachInterface<BitcastOpBufferizableInterface<BitcastOp>>(*ctx);
     ConstantOp::attachInterface<ConstantOpBufferizableInterface<
-        ConstantOp, BitcastOp, PrimeFieldType, kFieldConstantPrefix>>(*ctx);
+        ConstantOp, BitcastOp, ModArithType, kModArithConstantPrefix>>(*ctx);
   });
 }
 
-} // namespace mlir::prime_ir::field
+} // namespace mlir::prime_ir::mod_arith
