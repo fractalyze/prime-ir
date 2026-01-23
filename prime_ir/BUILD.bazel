@@ -26,6 +26,7 @@ exports_files([
 pywrap_library(
     name = "prime_ir",
     deps = [
+        "//prime_ir/mlir/_mlir_libs:_elliptic_curve",
         "//prime_ir/mlir/_mlir_libs:_field",
         "//prime_ir/mlir/_mlir_libs:_mlir",
     ],

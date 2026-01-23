@@ -24,3 +24,14 @@ py_test(
         "@pypi//absl_py",
     ],
 )
+
+py_test(
+    name = "elliptic_curve_test",
+    srcs = ["elliptic_curve_test.py"],
+    deps = [
+        "//prime_ir",
+        "//prime_ir/mlir:elliptic_curve",
+        "//prime_ir/mlir:field",
+        "@pypi//absl_py",
+    ],
+)
