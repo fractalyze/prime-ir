@@ -99,4 +99,16 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
 
 def ModArithLike: TypeOrValueSemanticsContainer<ModArith_ModArithType, "mod_arith-like">;
 
+// Memref with ModArith element type.
+def ModArithMemRef : MemRefOf<[ModArith_ModArithType]>;
+
+// Memref with signless integer element type.
+def SignlessIntegerMemRef : MemRefOf<[AnySignlessInteger]>;
+
+// Combined type constraint for ModArith with memref support.
+def ModArithOrMemRef : AnyTypeOf<[ModArithLike, ModArithMemRef]>;
+
+// Combined type constraint for signless integer with memref support.
+def SignlessIntegerOrMemRef : AnyTypeOf<[SignlessIntegerLike, SignlessIntegerMemRef]>;
+
 #endif  // PRIME_IR_DIALECT_MODARITH_IR_MODARITHTYPES_TD_
