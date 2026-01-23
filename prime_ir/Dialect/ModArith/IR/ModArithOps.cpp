@@ -252,11 +252,44 @@ Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
+  // Fold bitcast with same input and output types.
+  if (getInput().getType() == getOutput().getType()) {
+    return getInput();
+  }
+
+  // Fold bitcast(bitcast(x)) -> x when final type matches original type.
+  if (auto inputBitcast = getInput().getDefiningOp<BitcastOp>()) {
+    if (inputBitcast.getInput().getType() == getOutput().getType()) {
+      return inputBitcast.getInput();
+    }
+  }
+
+  // Fold constant bitcast.
   if (isa_and_present<IntegerAttr>(adaptor.getInput()) ||
       isa_and_present<DenseIntElementsAttr>(adaptor.getInput())) {
     return adaptor.getInput();
   }
   return {};
+}
+
+LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
+  // Fold bitcast(bitcast(x)) -> bitcast(x) when there's a transitive cast.
+  auto inputBitcast = op.getInput().getDefiningOp<BitcastOp>();
+  if (!inputBitcast) {
+    return failure();
+  }
+
+  // If the types are compatible for direct cast, replace with single bitcast.
+  Type srcType = inputBitcast.getInput().getType();
+  Type dstType = op.getOutput().getType();
+
+  if (BitcastOp::areCastCompatible(srcType, dstType)) {
+    rewriter.replaceOpWithNewOp<BitcastOp>(op, dstType,
+                                           inputBitcast.getInput());
+    return success();
+  }
+
+  return failure();
 }
 
 OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
