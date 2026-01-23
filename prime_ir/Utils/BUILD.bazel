@@ -66,9 +66,8 @@ td_library(
 td_library(
     name = "CanonicalizationTd",
     srcs = [
-        "AdditiveCanonicalization.td",
-        "DistributivityCanonicalization.td",
-        "MultiplicativeCanonicalization.td",
+        "AdditiveGroupCanonicalization.td",
+        "FieldCanonicalization.td",
     ],
     includes = ["../.."],
     deps = ["@llvm-project//mlir:OpBaseTdFiles"],

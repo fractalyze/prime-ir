@@ -1,77 +1,156 @@
-// Pattern suffix list for canonicalization patterns.
+//===----------------------------------------------------------------------===//
+// Pattern Suffix List for Canonicalization
+//===----------------------------------------------------------------------===//
 //
-// If the target type is a field type, use the FIELD patterns.
+// This file defines macros that simplify the registration of canonicalization
+// patterns. Patterns are organized by their algebraic structure:
+//
+// 1. ADDITIVE_GROUP: Patterns for structures supporting Add, Sub, Neg,
+//    Double, and ScalarMul. Ideal for Elliptic Curve (EC) points.
+//
+// 2. FIELD: Patterns for Field/Ring structures supporting full arithmetic,
+//    including Multiplicative and Distributive identities.
 //
 // Usage:
 //   #include "prime_ir/Utils/CanonicalizationPatterns.inc"
+//
+//   // Define a helper to instantiate the pattern class
 //   #define PRIME_IR_ADD_PATTERN(Name) patterns.add<Prefix##Name>(context);
-//   PRIME_IR_FIELD_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+//
+//   // Register all additive group patterns for a specific dialect/op
+//   PRIME_IR_ADDITIVE_GROUP_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+//
 //   #undef PRIME_IR_ADD_PATTERN
-//
-// On the other hand, if the target type is a group type, use the GROUP patterns.
-//
-// Usage:
-//   #include "prime_ir/Utils/CanonicalizationPatterns.inc"
-//   #define PRIME_IR_ADD_PATTERN(Name) patterns.add<Prefix##Name>(context);
-//   PRIME_IR_GROUP_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
-//   #undef PRIME_IR_ADD_PATTERN
-//
-// GROUP patterns: Only require additive or multiplicative operations (no distributivity)
-// FIELD patterns: Require both additive and multiplicative operations (distributivity)
+//===----------------------------------------------------------------------===//
 
-// AddOp patterns - Group (no MulOp dependency)
-#define PRIME_IR_GROUP_ADD_PATTERN_LIST(X) \
-  X(AddConstantTwice)                      \
-  X(AddConstantToSubLhs)                   \
-  X(AddConstantToSubRhs)                   \
-  X(AddSelfIsDouble)                       \
-  X(AddBothNegated)                        \
-  X(AddAfterSub)                           \
-  X(AddAfterNegLhs)                        \
+//===----------------------------------------------------------------------===//
+// 1. Additive Group Patterns (for Elliptic Curve points)
+//===----------------------------------------------------------------------===//
+
+// AddOp patterns
+#define PRIME_IR_ADDITIVE_GROUP_ADD_CORE_PATTERN_LIST(X) \
+  X(AddSelfIsDouble)                                     \
+  X(AddBothNegated)                                      \
+  X(AddAfterSub)                                         \
+  X(AddAfterNegLhs)                                      \
   X(AddAfterNegRhs)
 
-// AddOp patterns - Field (requires MulOp for distributivity)
-#define PRIME_IR_FIELD_ADD_PATTERN_LIST(X) \
-  PRIME_IR_GROUP_ADD_PATTERN_LIST(X)       \
-  X(FactorMulAdd)
+#define PRIME_IR_ADDITIVE_GROUP_ADD_DISTRIBUTIVITY_PATTERN_LIST(X) \
+  X(FactorScalarMulAdd)
 
-// SubOp patterns - Group (no MulOp dependency)
-#define PRIME_IR_GROUP_SUB_PATTERN_LIST(X) \
-  X(SubConstantFromAdd)                    \
-  X(SubConstantTwiceLhs)                   \
-  X(SubConstantTwiceRhs)                   \
-  X(SubAddFromConstant)                    \
-  X(SubSubFromConstantLhs)                 \
-  X(SubSubFromConstantRhs)                 \
-  X(SubSelfIsZero)                         \
-  X(SubLhsAfterAdd)                        \
-  X(SubRhsAfterAdd)                        \
-  X(SubLhsAfterSub)                        \
-  X(SubAfterNegLhs)                        \
-  X(SubAfterNegRhs)                        \
+#define PRIME_IR_ADDITIVE_GROUP_ADD_PATTERN_LIST(X)      \
+  PRIME_IR_ADDITIVE_GROUP_ADD_CORE_PATTERN_LIST(X)       \
+  PRIME_IR_ADDITIVE_GROUP_ADD_DISTRIBUTIVITY_PATTERN_LIST(X)
+
+// SubOp patterns
+#define PRIME_IR_ADDITIVE_GROUP_SUB_CORE_PATTERN_LIST(X) \
+  X(SubLhsAfterAdd)                                      \
+  X(SubRhsAfterAdd)                                      \
+  X(SubLhsAfterSub)                                      \
+  X(SubAfterNegLhs)                                      \
+  X(SubAfterNegRhs)                                      \
   X(SubBothNegated)
 
-// SubOp patterns - Field (requires MulOp/SquareOp for distributivity)
-#define PRIME_IR_FIELD_SUB_PATTERN_LIST(X) \
-  PRIME_IR_GROUP_SUB_PATTERN_LIST(X)       \
-  X(FactorMulSub)                          \
-  X(SubAfterSquareBoth)                    \
+#define PRIME_IR_ADDITIVE_GROUP_SUB_DISTRIBUTIVITY_PATTERN_LIST(X) \
+  X(FactorScalarMulSub)
+
+#define PRIME_IR_ADDITIVE_GROUP_SUB_PATTERN_LIST(X)      \
+  PRIME_IR_ADDITIVE_GROUP_SUB_CORE_PATTERN_LIST(X)       \
+  PRIME_IR_ADDITIVE_GROUP_SUB_DISTRIBUTIVITY_PATTERN_LIST(X)
+
+// ScalarMulOp patterns
+#define PRIME_IR_SCALARMUL_STRENGTH_REDUCTION_PATTERN_LIST(X) \
+  X(ScalarMulByOne)                                           \
+  X(ScalarMulByZero)                                          \
+  X(ScalarMulByTwo)                                           \
+  X(ScalarMulByNegOne)
+
+#define PRIME_IR_SCALARMUL_DISTRIBUTIVITY_PATTERN_LIST(X) \
+  X(FactorScalarMulAdd)                                   \
+  X(FactorScalarMulSub)
+
+#define PRIME_IR_SCALARMUL_ASSOCIATIVITY_PATTERN_LIST(X) \
+  X(ScalarMulAssocLeft)
+
+#define PRIME_IR_ADDITIVE_GROUP_SCALARMUL_PATTERN_LIST(X) \
+  PRIME_IR_SCALARMUL_STRENGTH_REDUCTION_PATTERN_LIST(X)   \
+  PRIME_IR_SCALARMUL_ASSOCIATIVITY_PATTERN_LIST(X)
+
+//===----------------------------------------------------------------------===//
+// 2. Field Patterns (for Field/ModArith)
+//===----------------------------------------------------------------------===//
+
+// AddOp patterns
+#define PRIME_IR_FIELD_ADD_CORE_PATTERN_LIST(X) \
+  X(AddSelfIsDouble)                            \
+  X(AddBothNegated)                             \
+  X(AddAfterSub)                                \
+  X(AddAfterNegLhs)                             \
+  X(AddAfterNegRhs)
+
+#define PRIME_IR_FIELD_ADD_CONSTANT_PATTERN_LIST(X) \
+  X(AddConstantTwice)                               \
+  X(AddConstantToSubLhs)                            \
+  X(AddConstantToSubRhs)
+
+#define PRIME_IR_FIELD_ADD_DISTRIBUTIVITY_PATTERN_LIST(X) \
+  X(FactorMulAdd)
+
+#define PRIME_IR_FIELD_ADD_PATTERN_LIST(X)        \
+  PRIME_IR_FIELD_ADD_CORE_PATTERN_LIST(X)         \
+  PRIME_IR_FIELD_ADD_CONSTANT_PATTERN_LIST(X)     \
+  PRIME_IR_FIELD_ADD_DISTRIBUTIVITY_PATTERN_LIST(X)
+
+// SubOp patterns
+#define PRIME_IR_FIELD_SUB_CORE_PATTERN_LIST(X) \
+  X(SubLhsAfterAdd)                             \
+  X(SubRhsAfterAdd)                             \
+  X(SubLhsAfterSub)                             \
+  X(SubAfterNegLhs)                             \
+  X(SubAfterNegRhs)                             \
+  X(SubBothNegated)
+
+#define PRIME_IR_FIELD_SUB_CONSTANT_PATTERN_LIST(X) \
+  X(SubConstantFromAdd)                             \
+  X(SubConstantTwiceLhs)                            \
+  X(SubConstantTwiceRhs)                            \
+  X(SubAddFromConstant)                             \
+  X(SubSubFromConstantLhs)                          \
+  X(SubSubFromConstantRhs)                          \
+  X(SubSelfIsZero)
+
+#define PRIME_IR_FIELD_SUB_DISTRIBUTIVITY_PATTERN_LIST(X) \
+  X(FactorMulSub)                                         \
+  X(SubAfterSquareBoth)                                   \
   X(SubAfterSumSquare)
 
-// MulOp patterns - Group (no AddOp dependency)
-#define PRIME_IR_GROUP_MUL_PATTERN_LIST(X) \
-  X(MulByTwoIsDouble)                      \
-  X(MulSelfIsSquare)                       \
-  X(MulNegativeOneRhs)                     \
-  X(MulNegativeTwoRhs)                     \
-  X(MulNegativeFourRhs)                    \
-  X(MulConstantTwice)                      \
+#define PRIME_IR_FIELD_SUB_PATTERN_LIST(X)         \
+  PRIME_IR_FIELD_SUB_CORE_PATTERN_LIST(X)          \
+  PRIME_IR_FIELD_SUB_CONSTANT_PATTERN_LIST(X)      \
+  PRIME_IR_FIELD_SUB_DISTRIBUTIVITY_PATTERN_LIST(X)
+
+// MulOp patterns
+#define PRIME_IR_FIELD_MUL_CORE_PATTERN_LIST(X) \
+  X(MulSelfIsSquare)
+
+#define PRIME_IR_FIELD_MUL_CONSTANT_PATTERN_LIST(X) \
+  X(MulConstantTwice)                               \
   X(MulOfMulByConstant)
 
-// MulOp patterns - Field (requires AddOp/SubOp for distributivity)
-#define PRIME_IR_FIELD_MUL_PATTERN_LIST(X) \
-  PRIME_IR_GROUP_MUL_PATTERN_LIST(X)       \
-  X(MulNegativeThreeRhs)                   \
-  X(MulAddDistributeConstant)              \
-  X(MulSubDistributeConstantRhs)           \
+#define PRIME_IR_FIELD_MUL_STRENGTH_REDUCTION_PATTERN_LIST(X) \
+  X(MulByTwoIsDouble)                                         \
+  X(MulNegativeOneRhs)                                        \
+  X(MulNegativeTwoRhs)                                        \
+  X(MulNegativeThreeRhs)                                      \
+  X(MulNegativeFourRhs)
+
+#define PRIME_IR_FIELD_MUL_DISTRIBUTIVITY_PATTERN_LIST(X) \
+  X(MulAddDistributeConstant)                             \
+  X(MulSubDistributeConstantRhs)                          \
   X(MulSubDistributeConstantLhs)
+
+#define PRIME_IR_FIELD_MUL_PATTERN_LIST(X)              \
+  PRIME_IR_FIELD_MUL_CORE_PATTERN_LIST(X)               \
+  PRIME_IR_FIELD_MUL_CONSTANT_PATTERN_LIST(X)           \
+  PRIME_IR_FIELD_MUL_STRENGTH_REDUCTION_PATTERN_LIST(X) \
+  PRIME_IR_FIELD_MUL_DISTRIBUTIVITY_PATTERN_LIST(X)

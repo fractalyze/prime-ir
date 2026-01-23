@@ -30,10 +30,12 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveCanonicalization.cpp.inc
+#include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/Matchers.h"
 // IWYU pragma: end_keep
 
 namespace mlir::prime_ir::elliptic_curve {
+
 namespace {
 template <typename OpType>
 LogicalResult verifyMSMPointTypes(OpType op, Type inputType, Type outputType) {
@@ -551,6 +553,26 @@ void ToCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 }
 
 namespace {
+
+//===----------------------------------------------------------------------===//
+// Helper functions for scalar constant matching (used by canonicalization)
+//===----------------------------------------------------------------------===//
+
+// Check if a scalar field constant attribute equals the given value.
+bool isScalarEqualTo(Attribute attr, uint64_t value) {
+  // TODO(chokobole): Implement scalar check once the Scalar Field
+  // modulus is accessible via the Curve Attribute.
+  return false;
+}
+
+// Check if a scalar field constant attribute equals the negation of the given
+// value (i.e., modulus - value).
+bool isScalarNegativeOf(Attribute attr, uint64_t value) {
+  // TODO(chokobole): Implement scalar negation check once the Scalar Field
+  // modulus is accessible via the Curve Attribute.
+  return false;
+}
+
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveCanonicalization.cpp.inc"
 } // namespace
 
@@ -559,15 +581,23 @@ namespace {
 void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_ADD_PATTERN(Name) patterns.add<EllipticCurve##Name>(context);
-  PRIME_IR_GROUP_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
+  PRIME_IR_ADDITIVE_GROUP_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
 #undef PRIME_IR_ADD_PATTERN
 }
 
 void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_SUB_PATTERN(Name) patterns.add<EllipticCurve##Name>(context);
-  PRIME_IR_GROUP_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
+  PRIME_IR_ADDITIVE_GROUP_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
 #undef PRIME_IR_SUB_PATTERN
+}
+
+void ScalarMulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                              MLIRContext *context) {
+#define PRIME_IR_SCALARMUL_PATTERN(Name)                                       \
+  patterns.add<EllipticCurve##Name>(context);
+  PRIME_IR_ADDITIVE_GROUP_SCALARMUL_PATTERN_LIST(PRIME_IR_SCALARMUL_PATTERN)
+#undef PRIME_IR_SCALARMUL_PATTERN
 }
 
 } // namespace mlir::prime_ir::elliptic_curve
