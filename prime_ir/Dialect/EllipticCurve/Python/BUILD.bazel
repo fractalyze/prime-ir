@@ -1,0 +1,69 @@
+# Copyright 2026 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@llvm-project//mlir:tblgen.bzl", "gentbl_filegroup", "td_library")
+load("@rules_cc//cc:defs.bzl", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+filegroup(
+    name = "EllipticCurvePyFiles",
+    srcs = [
+        "dialects/elliptic_curve.py",
+        ":EllipticCurvePyGen",
+    ],
+)
+
+filegroup(
+    name = "EllipticCurvePyApiFiles",
+    srcs = ["EllipticCurveModule.cpp"],
+)
+
+td_library(
+    name = "EllipticCurvePyTdFiles",
+    deps = ["//prime_ir/Dialect/EllipticCurve/IR:td_files"],
+)
+
+gentbl_filegroup(
+    name = "EllipticCurvePyGen",
+    tbl_outs = {"_elliptic_curve_ops_gen.py": [
+        "-gen-python-op-bindings",
+        "-bind-dialect=elliptic_curve",
+    ]},
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "EllipticCurveOps.td",
+    deps = [":EllipticCurvePyTdFiles"],
+)
+
+cc_library(
+    name = "EllipticCurveAttributesAndTypes",
+    srcs = [
+        "EllipticCurveAttributes.cpp",
+        "EllipticCurveTypes.cpp",
+    ],
+    hdrs = [
+        "EllipticCurveAttributes.h",
+        "EllipticCurveTypes.h",
+    ],
+    deps = [
+        "//prime_ir/Dialect/EllipticCurve/C:CAPI",
+        "@llvm-project//mlir:CAPIIR",
+        "@llvm-project//mlir:MLIRBindingsPythonCore",
+        "@llvm-project//mlir:MLIRBindingsPythonHeadersAndDeps",
+        "@nanobind",
+    ],
+)
