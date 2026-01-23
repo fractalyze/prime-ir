@@ -16,8 +16,12 @@ limitations under the License.
 #ifndef PRIME_IR_DIALECT_FIELD_PYTHON_FIELDTYPES_H_
 #define PRIME_IR_DIALECT_FIELD_PYTHON_FIELDTYPES_H_
 
-#include "mlir/Bindings/Python/Nanobind.h"
+// clang-format off
+// This should be included before mlir/Bindings/Python/IRAttributes.h
 #include "mlir/lib/Bindings/Python/IRModule.h"
+// clang-format on
+#include "mlir/Bindings/Python/IRAttributes.h"
+#include "mlir/Bindings/Python/Nanobind.h"
 #include "prime_ir/Dialect/Field/C/FieldTypes.h"
 
 namespace mlir::prime_ir::field::python {

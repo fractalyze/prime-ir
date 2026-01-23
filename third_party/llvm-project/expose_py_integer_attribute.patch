@@ -1,0 +1,138 @@
+diff --git a/mlir/include/mlir/Bindings/Python/IRAttributes.h b/mlir/include/mlir/Bindings/Python/IRAttributes.h
+new file mode 100644
+index 000000000000..a954874152dc
+--- /dev/null
++++ b/mlir/include/mlir/Bindings/Python/IRAttributes.h
+@@ -0,0 +1,32 @@
++//===- IRAttributes.h - Attribute Interfaces ------------------------------===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++#ifndef MLIR_BINDINGS_PYTHON_IRATTRIBUTES_H
++#define MLIR_BINDINGS_PYTHON_IRATTRIBUTES_H
++
++#include "mlir/Bindings/Python/NanobindAdaptors.h"
++
++namespace mlir {
++
++/// Integer Attribute subclass - IntegerAttr
++class PyIntegerAttribute
++    : public python::PyConcreteAttribute<PyIntegerAttribute> {
++public:
++  static const IsAFunctionTy isaFunction;
++  static constexpr const char *pyClassName = "IntegerAttr";
++  using PyConcreteAttribute::PyConcreteAttribute;
++
++  static void bindDerived(ClassTy &c);
++
++private:
++  static int64_t toPyInt(PyIntegerAttribute &self);
++};
++
++} // namespace mlir
++
++#endif // MLIR_BINDINGS_PYTHON_IRATTRIBUTES_H
+diff --git a/mlir/lib/Bindings/Python/IRAttributes.cpp b/mlir/lib/Bindings/Python/IRAttributes.cpp
+index 12725a0ed093..d21f84cb9df8 100644
+--- a/mlir/lib/Bindings/Python/IRAttributes.cpp
++++ b/mlir/lib/Bindings/Python/IRAttributes.cpp
+@@ -12,7 +12,11 @@
+ #include <string_view>
+ #include <utility>
+ 
++// clang-format off
+ #include "IRModule.h"
++#include "mlir/Bindings/Python/IRAttributes.h"
++// clang-format on
++
+ #include "NanobindUtils.h"
+ #include "mlir-c/BuiltinAttributes.h"
+ #include "mlir-c/BuiltinTypes.h"
+@@ -591,42 +595,8 @@ public:
+   }
+ };
+ 
+-/// Integer Attribute subclass - IntegerAttr.
+-class PyIntegerAttribute : public PyConcreteAttribute<PyIntegerAttribute> {
+-public:
+-  static constexpr IsAFunctionTy isaFunction = mlirAttributeIsAInteger;
+-  static constexpr const char *pyClassName = "IntegerAttr";
+-  using PyConcreteAttribute::PyConcreteAttribute;
+-
+-  static void bindDerived(ClassTy &c) {
+-    c.def_static(
+-        "get",
+-        [](PyType &type, int64_t value) {
+-          MlirAttribute attr = mlirIntegerAttrGet(type, value);
+-          return PyIntegerAttribute(type.getContext(), attr);
+-        },
+-        nb::arg("type"), nb::arg("value"),
+-        "Gets an uniqued integer attribute associated to a type");
+-    c.def_prop_ro("value", toPyInt,
+-                  "Returns the value of the integer attribute");
+-    c.def("__int__", toPyInt,
+-          "Converts the value of the integer attribute to a Python int");
+-    c.def_prop_ro_static("static_typeid",
+-                         [](nb::object & /*class*/) -> MlirTypeID {
+-                           return mlirIntegerAttrGetTypeID();
+-                         });
+-  }
+-
+-private:
+-  static int64_t toPyInt(PyIntegerAttribute &self) {
+-    MlirType type = mlirAttributeGetType(self);
+-    if (mlirTypeIsAIndex(type) || mlirIntegerTypeIsSignless(type))
+-      return mlirIntegerAttrGetValueInt(self);
+-    if (mlirIntegerTypeIsSigned(type))
+-      return mlirIntegerAttrGetValueSInt(self);
+-    return mlirIntegerAttrGetValueUInt(self);
+-  }
+-};
++// Note: PyIntegerAttribute is declared in
++// mlir/include/mlir/Bindings/Python/IRAttributes.h
+ 
+ /// Bool Attribute subclass - BoolAttr.
+ class PyBoolAttribute : public PyConcreteAttribute<PyBoolAttribute> {
+@@ -1756,6 +1726,38 @@ nb::object symbolRefOrFlatSymbolRefAttributeCaster(PyAttribute &pyAttribute) {
+ 
+ } // namespace
+ 
++// Integer Attribute subclass - IntegerAttr
++void mlir::PyIntegerAttribute::bindDerived(ClassTy &c) {
++  c.def_static(
++      "get",
++      [](PyType &type, int64_t value) {
++        MlirAttribute attr = mlirIntegerAttrGet(type, value);
++        return PyIntegerAttribute(type.getContext(), attr);
++      },
++      nb::arg("type"), nb::arg("value"),
++      "Gets an uniqued integer attribute associated to a type");
++  c.def_prop_ro("value", toPyInt,
++                "Returns the value of the integer attribute");
++  c.def("__int__", toPyInt,
++        "Converts the value of the integer attribute to a Python int");
++  c.def_prop_ro_static("static_typeid",
++                       [](nb::object & /*class*/) -> MlirTypeID {
++                         return mlirIntegerAttrGetTypeID();
++                       });
++}
++
++int64_t mlir::PyIntegerAttribute::toPyInt(PyIntegerAttribute &self) {
++  MlirType type = mlirAttributeGetType(self);
++  if (mlirTypeIsAIndex(type) || mlirIntegerTypeIsSignless(type))
++    return mlirIntegerAttrGetValueInt(self);
++  if (mlirIntegerTypeIsSigned(type))
++    return mlirIntegerAttrGetValueSInt(self);
++  return mlirIntegerAttrGetValueUInt(self);
++}
++
++const mlir::PyIntegerAttribute::IsAFunctionTy
++    mlir::PyIntegerAttribute::isaFunction = mlirAttributeIsAInteger;
++
+ void mlir::python::populateIRAttributes(nb::module_ &m) {
+   PyAffineMapAttribute::bind(m);
+   PyDenseBoolArrayAttribute::bind(m);

@@ -62,6 +62,7 @@ patches=(
     "$patch_dir/lazy_linking.patch"
     "$patch_dir/elementwise_op_fusion_constant_support.patch"
     "$patch_dir/constant_like_interface.patch"
+    "$patch_dir/expose_py_integer_attribute.patch"
 )
 shopt -u nullglob
 

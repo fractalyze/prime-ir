@@ -34,9 +34,9 @@ void PyPrimeFieldType::bindDerived(ClassTy &c) {
       nb::arg("context") = nb::none(), "Create a prime field type");
   c.def_prop_ro(
       "modulus",
-      [](PyPrimeFieldType &self) -> PyAttribute {
-        return PyAttribute(self.getContext(),
-                           primeIRPrimeFieldTypeGetModulus(self));
+      [](PyPrimeFieldType &self) -> PyIntegerAttribute {
+        return PyIntegerAttribute(self.getContext(),
+                                  primeIRPrimeFieldTypeGetModulus(self));
       },
       "Returns the modulus of the prime field type");
   c.def_prop_ro(
@@ -74,9 +74,9 @@ void PyExtensionFieldType::bindDerived(ClassTy &c) {
       "Returns the base field of the extension field type");
   c.def_prop_ro(
       "non_residue",
-      [](PyExtensionFieldType &self) -> PyAttribute {
-        return PyAttribute(self.getContext(),
-                           primeIRExtensionFieldTypeGetNonResidue(self));
+      [](PyExtensionFieldType &self) -> PyIntegerAttribute {
+        return PyIntegerAttribute(self.getContext(),
+                                  primeIRExtensionFieldTypeGetNonResidue(self));
       },
       "Returns the non-residue of the extension field type");
   c.def_prop_ro(
