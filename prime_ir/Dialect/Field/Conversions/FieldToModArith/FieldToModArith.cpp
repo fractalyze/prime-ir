@@ -91,23 +91,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // NOTE(chokobole): **Extension Field Tensor Restriction Rationale**
-    //
-    // 1. **Prime Field Only:** Shaped types (like tensors/memrefs) using
-    //    `DenseIntElementsAttr` are currently only permitted for the **Prime
-    //    Field type**.
-    //
-    // 2. **Lowering Ambiguity:** Allowing tensor constants for Extension Fields
-    //    (e.g., `field.constant dense<[[1, 2], [3, 4]]> :
-    //    !field.ef<2x!bn254_bf, #nr>`) creates an **ambiguity** during lowering
-    //    to the `mod_arith` dialect.
-    //
-    //    The intended lower form,
-    //    `mod_arith.constant dense<[[1, 2], [3, 4]]> :
-    //    tensor<2x2x!mod_arith.int<#modulus>>`, is indistinguishable from a
-    //    standard **tensor of tensors** (`tensor<2x2x!bn254_bf>`) when the
-    //    extension field degree is higher than 1. This prevents reliable type
-    //    conversion and subsequent code generation.
+    // Case 1: Prime field constants (scalar or tensor)
     if (auto pfType =
             dyn_cast<PrimeFieldType>(getElementTypeOrSelf(op.getType()))) {
       auto cval = b.create<mod_arith::ConstantOp>(
@@ -116,14 +100,60 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       return success();
     }
 
-    mod_arith::ModArithType modType;
-    if (auto efType = dyn_cast<ExtensionFieldType>(op.getType())) {
-      modType = cast<mod_arith::ModArithType>(
+    // Case 2: Tensor of extension field constants
+    // Use efficient approach: create prime field tensor constant + bitcast
+    if (auto shapedType = dyn_cast<ShapedType>(op.getType())) {
+      auto efType = dyn_cast<ExtensionFieldType>(shapedType.getElementType());
+      if (!efType) {
+        op.emitOpError(
+            "unsupported shaped type with non-extension field element type: ")
+            << shapedType.getElementType();
+        return failure();
+      }
+
+      auto modType = cast<mod_arith::ModArithType>(
           typeConverter->convertType(efType.getBaseField()));
-    } else {
+      unsigned degree = efType.getDegreeOverPrime();
+
+      auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
+      auto allValues = denseAttr.getValues<APInt>();
+      size_t totalCoeffs = allValues.size();
+
+      // Create a flattened prime field tensor constant
+      // tensor<K x !EF> with degree N becomes tensor<K*N x !ModArith>
+      SmallVector<int64_t> flatShape;
+      for (int64_t dim : shapedType.getShape()) {
+        flatShape.push_back(dim);
+      }
+      flatShape.back() *= degree;
+
+      auto flatTensorType = RankedTensorType::get(flatShape, modType);
+      SmallVector<APInt> flatCoeffs;
+      flatCoeffs.reserve(totalCoeffs);
+      for (auto val : allValues) {
+        flatCoeffs.push_back(val);
+      }
+      auto flatDenseAttr = DenseIntElementsAttr::get(
+          flatTensorType.clone(modType.getStorageType()), flatCoeffs);
+      auto flatConstant =
+          b.create<mod_arith::ConstantOp>(flatTensorType, flatDenseAttr);
+
+      // Bitcast the flattened prime field tensor to extension field tensor
+      auto efTensorType = RankedTensorType::get(shapedType.getShape(), efType);
+      auto bitcast = b.create<BitcastOp>(efTensorType, flatConstant);
+      rewriter.replaceOp(op, bitcast);
+      return success();
+    }
+
+    // Case 3: Scalar extension field constant
+    auto efType = dyn_cast<ExtensionFieldType>(op.getType());
+    if (!efType) {
       op.emitOpError("unsupported output type");
       return failure();
     }
+
+    auto modType = cast<mod_arith::ModArithType>(
+        typeConverter->convertType(efType.getBaseField()));
 
     auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
     SmallVector<Value> coeffs;
