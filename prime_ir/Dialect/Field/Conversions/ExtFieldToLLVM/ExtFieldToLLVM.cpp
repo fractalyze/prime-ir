@@ -102,18 +102,9 @@ struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
     Type inputType = op.getInput().getType();
     Type outputType = op.getType();
 
-    // Only handle shaped type bitcasts (extension field <-> prime field).
-    // Scalar bitcasts are handled in FieldToModArith.
-    auto inputShaped = dyn_cast<ShapedType>(inputType);
-    auto outputShaped = dyn_cast<ShapedType>(outputType);
-    if (!inputShaped || !outputShaped)
-      return failure();
-
-    Type inputElementType = inputShaped.getElementType();
-    Type outputElementType = outputShaped.getElementType();
-    bool hasExtensionField = isa<ExtensionFieldType>(inputElementType) ||
-                             isa<ExtensionFieldType>(outputElementType);
-    if (!hasExtensionField)
+    // Only handle tensor reinterpret bitcasts (extension field <-> prime
+    // field). Scalar bitcasts are handled in FieldToModArith.
+    if (!isTensorReinterpretBitcast(inputType, outputType))
       return failure();
 
     // After type conversion, both types should have the same underlying storage

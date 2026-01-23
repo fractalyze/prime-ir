@@ -152,16 +152,9 @@ struct ConvertBitcast : public OpConversionPattern<BitcastOp> {
 
     // Check if this is a tensor reinterpret bitcast (extension field <-> prime
     // field tensors)
-    auto inputShaped = dyn_cast<ShapedType>(inputType);
-    auto outputShaped = dyn_cast<ShapedType>(outputType);
-    if (inputShaped && outputShaped) {
-      Type inputElementType = inputShaped.getElementType();
-      Type outputElementType = outputShaped.getElementType();
-      bool hasExtensionField = isa<ExtensionFieldType>(inputElementType) ||
-                               isa<ExtensionFieldType>(outputElementType);
-      if (hasExtensionField) {
-        return convertTensorBitcast(op, adaptor, rewriter, outputShaped);
-      }
+    if (isTensorReinterpretBitcast(inputType, outputType)) {
+      auto outputShaped = cast<ShapedType>(outputType);
+      return convertTensorBitcast(op, adaptor, rewriter, outputShaped);
     }
 
     // Scalar bitcast: just convert to mod_arith.bitcast

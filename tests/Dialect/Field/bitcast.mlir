@@ -93,3 +93,58 @@ func.func @test_flatten_ef_to_pf_tensor(%arg0: tensor<2x3x!EF2>) -> tensor<12x!P
   %0 = field.bitcast %arg0 : tensor<2x3x!EF2> -> tensor<12x!PF>
   return %0 : tensor<12x!PF>
 }
+
+//===----------------------------------------------------------------------===//
+// Montgomery form bitcast: prime field
+//===----------------------------------------------------------------------===//
+
+!PFm = !field.pf<7:i32, true>
+
+// CHECK-LABEL: @test_pf_to_mont_scalar
+func.func @test_pf_to_mont_scalar(%arg0: !PF) -> !PFm {
+  // CHECK: field.bitcast
+  %0 = field.bitcast %arg0 : !PF -> !PFm
+  return %0 : !PFm
+}
+
+// CHECK-LABEL: @test_pf_from_mont_scalar
+func.func @test_pf_from_mont_scalar(%arg0: !PFm) -> !PF {
+  // CHECK: field.bitcast
+  %0 = field.bitcast %arg0 : !PFm -> !PF
+  return %0 : !PF
+}
+
+// CHECK-LABEL: @test_pf_to_mont_tensor
+func.func @test_pf_to_mont_tensor(%arg0: tensor<4x!PF>) -> tensor<4x!PFm> {
+  // CHECK: field.bitcast
+  %0 = field.bitcast %arg0 : tensor<4x!PF> -> tensor<4x!PFm>
+  return %0 : tensor<4x!PFm>
+}
+
+//===----------------------------------------------------------------------===//
+// Montgomery form bitcast: extension field
+//===----------------------------------------------------------------------===//
+
+!EF2m = !field.ef<2x!PFm, 6:i32>
+!EF3m = !field.ef<3x!PFm, 2:i32>
+
+// CHECK-LABEL: @test_ef_to_mont_scalar
+func.func @test_ef_to_mont_scalar(%arg0: !EF2) -> !EF2m {
+  // CHECK: field.bitcast
+  %0 = field.bitcast %arg0 : !EF2 -> !EF2m
+  return %0 : !EF2m
+}
+
+// CHECK-LABEL: @test_ef_from_mont_scalar
+func.func @test_ef_from_mont_scalar(%arg0: !EF2m) -> !EF2 {
+  // CHECK: field.bitcast
+  %0 = field.bitcast %arg0 : !EF2m -> !EF2
+  return %0 : !EF2
+}
+
+// CHECK-LABEL: @test_ef_to_mont_tensor
+func.func @test_ef_to_mont_tensor(%arg0: tensor<4x!EF3>) -> tensor<4x!EF3m> {
+  // CHECK: field.bitcast
+  %0 = field.bitcast %arg0 : tensor<4x!EF3> -> tensor<4x!EF3m>
+  return %0 : tensor<4x!EF3m>
+}

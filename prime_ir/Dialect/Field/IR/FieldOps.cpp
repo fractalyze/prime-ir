@@ -417,15 +417,12 @@ LogicalResult ToMontOp::verify() {
   return success();
 }
 
-namespace {
-
-// Helper function to check if a type is a field-like type (PrimeFieldType,
-// ExtensionFieldType, ModArithType which represents a converted prime field,
-// or IntegerType which represents a fully lowered prime field element).
 bool isFieldLikeType(Type type) {
   return isa<PrimeFieldType, ExtensionFieldType, mod_arith::ModArithType,
              IntegerType>(type);
 }
+
+namespace {
 
 // Helper function to get the modulus from a field-like type.
 // Returns the modulus APInt for PrimeFieldType, ExtensionFieldType (base
@@ -465,9 +462,47 @@ std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
   return std::nullopt;
 }
 
-// Check if the bitcast is a tensor reinterpret bitcast between extension field
-// and prime field tensors. Also accepts mod_arith::ModArithType as equivalent
-// to PrimeFieldType (for use after type conversion in FieldToModArith).
+// Check if two prime field types have the same modulus.
+bool haveSameModulus(PrimeFieldType inputPF, PrimeFieldType outputPF) {
+  return inputPF.getModulus() == outputPF.getModulus();
+}
+
+// Check if two extension field types have compatible structure (same degree,
+// same base field modulus, and same non-residue in standard form).
+bool haveCompatibleStructure(ExtensionFieldType inputEF,
+                             ExtensionFieldType outputEF) {
+  // Must have the same degree
+  if (inputEF.getDegree() != outputEF.getDegree()) {
+    return false;
+  }
+
+  // Check base field modulus
+  auto inputBaseField = cast<PrimeFieldType>(inputEF.getBaseField());
+  auto outputBaseField = cast<PrimeFieldType>(outputEF.getBaseField());
+  if (!haveSameModulus(inputBaseField, outputBaseField)) {
+    return false;
+  }
+
+  // Compare non-residue values in standard form
+  auto inputNonResidue = cast<IntegerAttr>(inputEF.getNonResidue());
+  auto outputNonResidue = cast<IntegerAttr>(outputEF.getNonResidue());
+
+  // Convert both non-residues to standard form for comparison
+  IntegerAttr modulus = inputBaseField.getModulus();
+  IntegerAttr inputNRStd =
+      inputEF.isMontgomery()
+          ? mod_arith::getAttrAsStandardForm(modulus, inputNonResidue)
+          : inputNonResidue;
+  IntegerAttr outputNRStd =
+      outputEF.isMontgomery()
+          ? mod_arith::getAttrAsStandardForm(modulus, outputNonResidue)
+          : outputNonResidue;
+
+  return inputNRStd.getValue() == outputNRStd.getValue();
+}
+
+} // namespace
+
 bool isTensorReinterpretBitcast(Type inputType, Type outputType) {
   auto inputShaped = dyn_cast<ShapedType>(inputType);
   auto outputShaped = dyn_cast<ShapedType>(outputType);
@@ -490,8 +525,6 @@ bool isTensorReinterpretBitcast(Type inputType, Type outputType) {
   return isa<ExtensionFieldType>(inputElementType) ||
          isa<ExtensionFieldType>(outputElementType);
 }
-
-} // namespace
 
 bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   Type inputType = inputs.front();
@@ -522,10 +555,50 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     return inputTotal && outputTotal && *inputTotal == *outputTotal;
   }
 
-  // Case 2: Original scalar/element-wise bitcast (prime field <-> integer)
+  // Case 2: Montgomery form bitcast (same field type, different Montgomery
+  // flag)
   Type inputElementType = getElementTypeOrSelf(inputType);
   Type outputElementType = getElementTypeOrSelf(outputType);
 
+  // Check for prime field bitcast (Montgomery form conversion)
+  if (auto inputPF = dyn_cast<PrimeFieldType>(inputElementType)) {
+    if (auto outputPF = dyn_cast<PrimeFieldType>(outputElementType)) {
+      // Same type is not allowed (no-op)
+      if (inputPF == outputPF) {
+        return false;
+      }
+      // Allow if shapes match and they have the same modulus
+      if (auto inputShaped = dyn_cast<ShapedType>(inputType)) {
+        auto outputShaped = dyn_cast<ShapedType>(outputType);
+        if (!outputShaped ||
+            inputShaped.getShape() != outputShaped.getShape()) {
+          return false;
+        }
+      }
+      return haveSameModulus(inputPF, outputPF);
+    }
+  }
+
+  // Check for extension field bitcast (Montgomery form conversion)
+  if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
+    if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
+      // Same type is not allowed (no-op)
+      if (inputEF == outputEF) {
+        return false;
+      }
+      // Allow if shapes match and they have compatible structure
+      if (auto inputShaped = dyn_cast<ShapedType>(inputType)) {
+        auto outputShaped = dyn_cast<ShapedType>(outputType);
+        if (!outputShaped ||
+            inputShaped.getShape() != outputShaped.getShape()) {
+          return false;
+        }
+      }
+      return haveCompatibleStructure(inputEF, outputEF);
+    }
+  }
+
+  // Case 3: Original scalar/element-wise bitcast (prime field <-> integer)
   // Must be prime field or integer types
   if (!isa<PrimeFieldType, IntegerType>(inputElementType) ||
       !isa<PrimeFieldType, IntegerType>(outputElementType)) {
@@ -535,13 +608,6 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   // Integer to integer is not allowed (use arith.bitcast)
   if (isa<IntegerType>(inputElementType) &&
       isa<IntegerType>(outputElementType)) {
-    return false;
-  }
-
-  // Prime field to prime field is not allowed (no conversion happening)
-  // Use tensor reinterpret bitcast with extension fields instead
-  if (isa<PrimeFieldType>(inputElementType) &&
-      isa<PrimeFieldType>(outputElementType)) {
     return false;
   }
 
