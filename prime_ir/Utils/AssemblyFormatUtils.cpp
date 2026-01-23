@@ -76,7 +76,8 @@ parseOptionalModularInteger(OpAsmParser &parser, APInt &parsedInt,
 ParseResult parseModularIntegerList(OpAsmParser &parser,
                                     SmallVector<APInt> &parsedInts,
                                     Type &parsedType,
-                                    GetModulusCallback getModulusCallback) {
+                                    GetModulusCallback getModulusCallback,
+                                    ShapeValidationCallback shapeCallback) {
   if (failed(parser.parseKeyword("dense")) || failed(parser.parseLess())) {
     return failure();
   }
@@ -131,14 +132,22 @@ ParseResult parseModularIntegerList(OpAsmParser &parser,
   }
   if (shapedType.hasStaticShape()) {
     if (!isSplat) {
-      ArrayRef<int64_t> expectedShape = shapedType.getShape();
-      if (expectedShape.size() != parsedShape.size() ||
-          !std::equal(expectedShape.begin(), expectedShape.end(),
-                      parsedShape.begin())) {
-        return parser.emitError(parser.getCurrentLocation(),
-                                "tensor constant shape [")
-               << llvm::make_range(parsedShape.begin(), parsedShape.end())
-               << "] does not match type shape " << shapedType;
+      ArrayRef<int64_t> typeShape = shapedType.getShape();
+      // Use custom shape validation callback if provided
+      if (shapeCallback) {
+        if (failed(shapeCallback(typeShape, parsedShape))) {
+          return failure();
+        }
+      } else {
+        // Default validation: exact shape match
+        if (typeShape.size() != parsedShape.size() ||
+            !std::equal(typeShape.begin(), typeShape.end(),
+                        parsedShape.begin())) {
+          return parser.emitError(parser.getCurrentLocation(),
+                                  "tensor constant shape [")
+                 << llvm::make_range(parsedShape.begin(), parsedShape.end())
+                 << "] does not match type shape " << shapedType;
+        }
       }
     }
   } else {

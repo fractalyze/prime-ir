@@ -149,6 +149,8 @@ def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
   let results = (outs AnyType:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
   let hasVerifier = 1;
+  let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def Field_CmpOp : Field_Op<"cmp", [SameTypeOperands, TypesMatchWith<

@@ -40,19 +40,13 @@ public:
     virtual OpFoldResult
     getTensorAttr(ShapedType type, ArrayRef<NativeOutputType> values) const = 0;
 
-    OpFoldResult foldScalar(ScalarAttr lhs) const {
+    virtual OpFoldResult foldScalar(ScalarAttr lhs) const {
       return getScalarAttr(operate(getNativeInput(lhs)));
     }
-    OpFoldResult foldTensor(TensorAttr lhs) const {
+    virtual OpFoldResult foldTensor(TensorAttr lhs) const {
       if constexpr (std::is_same_v<ScalarAttr, TensorAttr>) {
-        // TODO(chokobole): Temporary workaround for complex types like
-        // Extension Fields. For these types, `lhs` is a `DenseIntElementsAttr`,
-        // which stores basis coefficients as a flattened integer array rather
-        // than native field elements. Calling `getValues<NativeInputType>()`
-        // would fail to reconstruct the field elements correctly.
-        //
-        // A robust solution for folding tensor constants of extension fields
-        // needs to be implemented.
+        // Default behavior for complex types like Extension Fields returns
+        // empty. Subclasses should override foldTensor to handle these cases.
         return {};
       } else {
         SmallVector<NativeOutputType> values;
@@ -101,20 +95,14 @@ public:
     virtual OpFoldResult
     getTensorAttr(ShapedType type, ArrayRef<NativeOutputType> values) const = 0;
 
-    OpFoldResult foldScalar(ScalarAttr lhs, ScalarAttr rhs) const {
+    virtual OpFoldResult foldScalar(ScalarAttr lhs, ScalarAttr rhs) const {
       return getScalarAttr(operate(getNativeInput(lhs), getNativeInput(rhs)));
     }
     virtual OpFoldResult foldScalar(ScalarAttr rhs) const { return {}; }
-    OpFoldResult foldTensor(TensorAttr lhs, TensorAttr rhs) const {
+    virtual OpFoldResult foldTensor(TensorAttr lhs, TensorAttr rhs) const {
       if constexpr (std::is_same_v<ScalarAttr, TensorAttr>) {
-        // TODO(chokobole): Temporary workaround for complex types like
-        // Extension Fields. For these types, `lhs` is a `DenseIntElementsAttr`,
-        // which stores basis coefficients as a flattened integer array rather
-        // than native field elements. Calling `getValues<NativeInputType>()`
-        // would fail to reconstruct the field elements correctly.
-        //
-        // A robust solution for folding tensor constants of extension fields
-        // needs to be implemented.
+        // Default behavior for complex types like Extension Fields returns
+        // empty. Subclasses should override foldTensor to handle these cases.
         return {};
       } else {
         SmallVector<NativeOutputType> values;
@@ -181,14 +169,8 @@ public:
 
   OpFoldResult foldTensor(TensorAttr rhs) const override {
     if constexpr (std::is_same_v<ScalarAttr, TensorAttr>) {
-      // TODO(chokobole): Temporary workaround for complex types like
-      // Extension Fields. For these types, `lhs` is a `DenseIntElementsAttr`,
-      // which stores basis coefficients as a flattened integer array rather
-      // than native field elements. Calling `getValues<NativeInputType>()`
-      // would fail to reconstruct the field elements correctly.
-      //
-      // A robust solution for folding tensor constants of extension fields
-      // needs to be implemented.
+      // Default behavior for complex types like Extension Fields returns
+      // empty. Subclasses should override foldTensor to handle these cases.
       return {};
     } else {
       if (rhs.isSplat()) {
@@ -240,14 +222,8 @@ public:
 
   OpFoldResult foldTensor(TensorAttr rhs) const override {
     if constexpr (std::is_same_v<ScalarAttr, TensorAttr>) {
-      // TODO(chokobole): Temporary workaround for complex types like
-      // Extension Fields. For these types, `lhs` is a `DenseIntElementsAttr`,
-      // which stores basis coefficients as a flattened integer array rather
-      // than native field elements. Calling `getValues<NativeInputType>()`
-      // would fail to reconstruct the field elements correctly.
-      //
-      // A robust solution for folding tensor constants of extension fields
-      // needs to be implemented.
+      // Default behavior for complex types like Extension Fields returns
+      // empty. Subclasses should override foldTensor to handle these cases.
       return {};
     } else {
       if (rhs.isSplat()) {
