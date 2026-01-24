@@ -84,22 +84,25 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
       return build($_builder, $_state, ty, IntegerAttr::get(ty.getStorageType(), value));
     }]>,
     OpBuilder<(ins "ExtensionFieldType":$ty, "uint64_t":$c0), [{
-      auto baseField = ty.getBaseField();
-      unsigned degree = ty.getDegree();
-      unsigned bitWidth = baseField.getStorageBitWidth();
-      SmallVector<APInt> coeffs(degree, APInt(bitWidth, 0));
-      coeffs[0] = static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c0), baseField));
-      auto tensorType = RankedTensorType::get({static_cast<int64_t>(degree)}, baseField.getStorageType());
+      // For tower extensions, use the underlying prime field for storage
+      auto primeField = ty.getBasePrimeField();
+      unsigned degreeOverPrime = ty.getDegreeOverPrime();
+      unsigned bitWidth = primeField.getStorageBitWidth();
+      SmallVector<APInt> coeffs(degreeOverPrime, APInt(bitWidth, 0));
+      coeffs[0] = static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c0), primeField));
+      auto tensorType = RankedTensorType::get({static_cast<int64_t>(degreeOverPrime)}, primeField.getStorageType());
       return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, coeffs));
     }]>,
     OpBuilder<(ins "ExtensionFieldType":$ty, "llvm::ArrayRef<uint64_t>":$coeffs), [{
-      assert(coeffs.size() == ty.getDegree() && "coefficient count must match extension degree");
-      auto baseField = ty.getBaseField();
-      unsigned bitWidth = baseField.getStorageBitWidth();
+      // For tower extensions, we need total degree over prime
+      unsigned degreeOverPrime = ty.getDegreeOverPrime();
+      assert(coeffs.size() == degreeOverPrime && "coefficient count must match total degree over prime");
+      auto primeField = ty.getBasePrimeField();
+      unsigned bitWidth = primeField.getStorageBitWidth();
       SmallVector<APInt> coeffInts;
       for (auto c : coeffs)
-        coeffInts.push_back(static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c), baseField)));
-      auto tensorType = RankedTensorType::get({static_cast<int64_t>(coeffs.size())}, baseField.getStorageType());
+        coeffInts.push_back(static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c), primeField)));
+      auto tensorType = RankedTensorType::get({static_cast<int64_t>(coeffs.size())}, primeField.getStorageType());
       return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, coeffInts));
     }]>,
   ];
@@ -347,6 +350,7 @@ def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
   let description = [{
     Gets the coefficient representation of an extension field element.
     This operation does NOT accept tensors since it cannot be applied elementwise.
+    For tower extensions, the coefficients are extension field elements themselves.
 
     Example:
     ```
@@ -355,10 +359,14 @@ def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
 
     !EF3 = field.ef<3x!PF, #xi>
     %c0, %c1, %c2 = field.ext_to_coeffs %ef3 : !EF3 -> !PF, !PF, !PF
+
+    // Tower extension: Fp6 = (Fp2)^3
+    !EF6 = field.ef<3x!EF2, #xi>
+    %c0, %c1, %c2 = field.ext_to_coeffs %ef6 : !EF6 -> !EF2, !EF2, !EF2
     ```
   }];
   let arguments = (ins Field_ExtensionFieldType:$input);
-  let results = (outs Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$output);
+  let results = (outs Variadic<AnyTypeOf<[Field_PrimeFieldType, Field_ExtensionFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasCanonicalizer = 1;
   let hasVerifier = 1;
@@ -369,6 +377,7 @@ def Field_ExtFromCoeffsOp : Field_Op<"ext_from_coeffs", [Pure]> {
   let description = [{
     Constructs extension field element from the coefficients.
     This operation does NOT accept tensors since it cannot be applied elementwise.
+    For tower extensions, the coefficients are extension field elements themselves.
 
     Example:
     ```
@@ -377,9 +386,13 @@ def Field_ExtFromCoeffsOp : Field_Op<"ext_from_coeffs", [Pure]> {
 
     !EF3 = field.ef<3x!PF, #xi>
     %ef3 = field.ext_from_coeffs %c0, %c1, %c2 : !PF, !PF, !PF -> !EF3
+
+    // Tower extension: Fp6 = (Fp2)^3
+    !EF6 = field.ef<3x!EF2, #xi>
+    %ef6 = field.ext_from_coeffs %c0, %c1, %c2 : !EF2, !EF2, !EF2 -> !EF6
     ```
   }];
-  let arguments = (ins Variadic<AnyTypeOf<[Field_PrimeFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$input);
+  let arguments = (ins Variadic<AnyTypeOf<[Field_PrimeFieldType, Field_ExtensionFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$input);
   let results = (outs Field_ExtensionFieldType:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasCanonicalizer = 1;

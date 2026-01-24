@@ -485,7 +485,8 @@ std::optional<APInt> getFieldModulus(Type elementType) {
     return pfType.getModulus().getValue();
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    return efType.getBaseField().getModulus().getValue();
+    // Use getBasePrimeField() to handle tower extensions
+    return efType.getBasePrimeField().getModulus().getValue();
   }
   if (auto maType = dyn_cast<mod_arith::ModArithType>(elementType)) {
     return maType.getModulus().getValue();

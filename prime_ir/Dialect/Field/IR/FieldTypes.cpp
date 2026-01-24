@@ -92,9 +92,9 @@ Attribute maybeToMontgomery(Type type, Attribute attr) {
   auto efType = cast<field::ExtensionFieldType>(type);
   auto denseElementsAttr = cast<DenseElementsAttr>(attr);
   if (efType.isMontgomery()) {
+    // Use the underlying prime field's modulus for Montgomery conversion
     return mod_arith::getAttrAsMontgomeryForm(
-        cast<field::PrimeFieldType>(efType.getBaseField()).getModulus(),
-        denseElementsAttr);
+        efType.getBasePrimeField().getModulus(), denseElementsAttr);
   } else {
     return denseElementsAttr;
   }
@@ -130,9 +130,9 @@ Attribute maybeToStandard(Type type, Attribute attr) {
   auto efType = cast<field::ExtensionFieldType>(type);
   auto denseElementsAttr = cast<DenseElementsAttr>(attr);
   if (efType.isMontgomery()) {
+    // Use the underlying prime field's modulus for Montgomery conversion
     return mod_arith::getAttrAsStandardForm(
-        cast<field::PrimeFieldType>(efType.getBaseField()).getModulus(),
-        denseElementsAttr);
+        efType.getBasePrimeField().getModulus(), denseElementsAttr);
   } else {
     return denseElementsAttr;
   }
@@ -274,18 +274,31 @@ constexpr auto kExtDegreeSequence = makeExtDegreeSequence<kMinExtDegree>(
 
 LogicalResult
 ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
-                           unsigned degree, PrimeFieldType baseField,
+                           unsigned degree, Type baseField,
                            IntegerAttr nonResidue) {
   if (degree < 2 || degree > kMaxExtDegree) {
     return emitError() << "extension field degree must be between 2 and "
                        << kMaxExtDegree << ", got " << degree;
   }
 
-  // Validate that nonResidue is actually a non-residue:
-  // nonResidue^((p - 1) / n) ≢ 1 (mod p)
-  // TODO(junbeomlee): Use order of baseField instead of modulus for towers.
-  auto nrOp = PrimeFieldOperation::fromUnchecked(nonResidue, baseField);
-  APInt p = baseField.getModulus().getValue();
+  // Base field must be either a prime field or an extension field
+  if (!isa<PrimeFieldType>(baseField) && !isa<ExtensionFieldType>(baseField)) {
+    return emitError() << "base field must be a prime field or extension field";
+  }
+
+  // For towers, skip non-residue validation (would need extension field
+  // arithmetic). The non-residue should be an element of the base field.
+  if (isa<ExtensionFieldType>(baseField)) {
+    // TODO(chokobole): Add proper non-residue validation for tower extensions.
+    // For now, we trust that the user provides a valid non-residue.
+    return success();
+  }
+
+  // For direct extensions over prime fields, validate that nonResidue is
+  // actually a non-residue: nonResidue^((p - 1) / n) ≢ 1 (mod p)
+  auto pfType = cast<PrimeFieldType>(baseField);
+  auto nrOp = PrimeFieldOperation::fromUnchecked(nonResidue, pfType);
+  APInt p = pfType.getModulus().getValue();
   APInt exp = (p - 1).udiv(APInt(p.getBitWidth(), degree));
   if (nrOp.power(exp).isOne()) {
     return emitError() << "nonResidue must satisfy nonResidue^((p - 1) / "
@@ -319,17 +332,17 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
     return nullptr;
   }
 
-  // Parse base field type
+  // Parse base field type (can be prime or extension field)
   Type baseFieldType;
   if (failed(parser.parseType(baseFieldType))) {
     return nullptr;
   }
-  if (!isa<PrimeFieldType>(baseFieldType)) {
+  if (!isa<PrimeFieldType>(baseFieldType) &&
+      !isa<ExtensionFieldType>(baseFieldType)) {
     parser.emitError(parser.getCurrentLocation(),
-                     "base field must be a prime field");
+                     "base field must be a prime field or extension field");
     return nullptr;
   }
-  auto pfType = cast<PrimeFieldType>(baseFieldType);
 
   // Parse non-residue
   if (failed(parser.parseComma())) {
@@ -339,42 +352,71 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
   if (failed(parser.parseAttribute(nonResidue))) {
     return nullptr;
   }
-  if (pfType.getIsMontgomery()) {
-    nonResidue =
-        mod_arith::getAttrAsMontgomeryForm(pfType.getModulus(), nonResidue);
+
+  // Convert non-residue to Montgomery form if base field is in Montgomery form
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseFieldType)) {
+    if (pfType.getIsMontgomery()) {
+      nonResidue =
+          mod_arith::getAttrAsMontgomeryForm(pfType.getModulus(), nonResidue);
+    }
+  } else if (auto efType = dyn_cast<ExtensionFieldType>(baseFieldType)) {
+    if (efType.isMontgomery()) {
+      // For tower extensions, the non-residue is in the base field
+      // which may itself be an extension field. For now, we store it as-is.
+      // TODO(chokobole): Handle Montgomery form for tower non-residues.
+    }
   }
 
   if (failed(parser.parseGreater())) {
     return nullptr;
   }
-  return ExtensionFieldType::get(parser.getContext(), degree, pfType,
+  return ExtensionFieldType::get(parser.getContext(), degree, baseFieldType,
                                  nonResidue);
 }
 
 void ExtensionFieldType::print(AsmPrinter &printer) const {
-  auto pfType = getBaseField();
+  Type baseField = getBaseField();
   auto nonResidue = getNonResidue();
-  if (pfType.getIsMontgomery()) {
-    nonResidue =
-        mod_arith::getAttrAsStandardForm(pfType.getModulus(), nonResidue);
+
+  // Convert non-residue from Montgomery form for printing
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    if (pfType.getIsMontgomery()) {
+      nonResidue =
+          mod_arith::getAttrAsStandardForm(pfType.getModulus(), nonResidue);
+    }
   }
-  printer << "<" << getDegree() << "x" << pfType << ", " << nonResidue << ">";
+  // For tower extensions, print non-residue as-is
+
+  printer << "<" << getDegree() << "x" << baseField << ", " << nonResidue
+          << ">";
 }
 
 llvm::TypeSize ExtensionFieldType::getTypeSizeInBits(
-    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getBaseField().getStorageBitWidth() *
-                                  getDegree());
+    DataLayout const &dataLayout,
+    llvm::ArrayRef<DataLayoutEntryInterface> params) const {
+  Type baseField = getBaseField();
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    return llvm::TypeSize::getFixed(pfType.getStorageBitWidth() * getDegree());
+  }
+  // For tower: recursively compute base field size
+  auto efType = cast<ExtensionFieldType>(baseField);
+  auto baseSize = efType.getTypeSizeInBits(dataLayout, params);
+  return llvm::TypeSize::getFixed(baseSize.getFixedValue() * getDegree());
 }
 
 uint64_t ExtensionFieldType::getABIAlignment(
     DataLayout const &dataLayout,
-    llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return dataLayout.getTypeABIAlignment(getBaseField().getStorageType());
+    llvm::ArrayRef<DataLayoutEntryInterface> params) const {
+  Type baseField = getBaseField();
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    return dataLayout.getTypeABIAlignment(pfType.getStorageType());
+  }
+  // For tower: use alignment of the underlying prime field
+  return dataLayout.getTypeABIAlignment(getBasePrimeField().getStorageType());
 }
 
 bool ExtensionFieldType::isMontgomery() const {
-  return getBaseField().getIsMontgomery();
+  return getBasePrimeField().getIsMontgomery();
 }
 
 TypedAttr ExtensionFieldType::createConstantAttr(int64_t c) const {
@@ -392,12 +434,49 @@ ShapedType ExtensionFieldType::overrideShapedType(ShapedType type) const {
   return type;
 }
 
-unsigned ExtensionFieldType::getDegreeOverPrime() const { return getDegree(); }
+unsigned ExtensionFieldType::getDegreeOverPrime() const {
+  Type baseField = getBaseField();
+  if (isa<PrimeFieldType>(baseField)) {
+    return getDegree();
+  }
+  // For tower: multiply degrees
+  auto efBase = cast<ExtensionFieldType>(baseField);
+  return getDegree() * efBase.getDegreeOverPrime();
+}
+
+PrimeFieldType ExtensionFieldType::getBasePrimeField() const {
+  Type baseField = getBaseField();
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    return pfType;
+  }
+  // Recursively find the prime field at the base of the tower
+  return cast<ExtensionFieldType>(baseField).getBasePrimeField();
+}
+
+bool ExtensionFieldType::isTower() const {
+  return isa<ExtensionFieldType>(getBaseField());
+}
+
+unsigned ExtensionFieldType::getTowerDepth() const {
+  Type baseField = getBaseField();
+  if (isa<PrimeFieldType>(baseField)) {
+    return 1;
+  }
+  return 1 + cast<ExtensionFieldType>(baseField).getTowerDepth();
+}
 
 Type ExtensionFieldType::cloneWith(Type baseField, Attribute element) const {
-  return ExtensionFieldType::get(getContext(), getDegree(),
-                                 cast<PrimeFieldType>(baseField),
+  return ExtensionFieldType::get(getContext(), getDegree(), baseField,
                                  cast<IntegerAttr>(element));
+}
+
+TypedAttr ExtensionFieldType::createConstantAttr(
+    llvm::ArrayRef<llvm::APInt> coeffs) const {
+  // For tower extensions, create a tensor with shape matching the total degree
+  auto tensorType = RankedTensorType::get(
+      {static_cast<int64_t>(getDegreeOverPrime())},
+      IntegerType::get(getContext(), getBasePrimeField().getStorageBitWidth()));
+  return DenseIntElementsAttr::get(tensorType, coeffs);
 }
 
 Value ExtensionFieldType::buildStructFromCoeffs(
