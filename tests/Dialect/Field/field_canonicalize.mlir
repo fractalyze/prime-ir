@@ -16,6 +16,7 @@
 // RUN: prime-ir-opt -canonicalize %s | FileCheck %s -enable-var-scope
 
 !PF17 = !field.pf<17:i32>
+!PF17m = !field.pf<17:i32, true>
 
 //===----------------------------------------------------------------------===//
 // Constant Folding
@@ -1011,4 +1012,52 @@ func.func @test_cmp_splat_tensor_fold() -> tensor<2xi1> {
   // CHECK-NOT: field.cmp
   // CHECK: return %[[C]] : [[T]]
   return %2 : tensor<2xi1>
+}
+
+//===----------------------------------------------------------------------===//
+// ToMont/FromMont cancellation
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_from_mont_to_mont_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_from_mont_to_mont_cancel(%arg0: !PF17) -> !PF17 {
+  // CHECK-NOT: field.to_mont
+  // CHECK-NOT: field.from_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = field.to_mont %arg0 : !PF17m
+  %1 = field.from_mont %0 : !PF17
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_from_mont_to_mont_tensor_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_from_mont_to_mont_tensor_cancel(%arg0: tensor<2x!PF17>) -> tensor<2x!PF17> {
+  // CHECK-NOT: field.to_mont
+  // CHECK-NOT: field.from_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = field.to_mont %arg0 : tensor<2x!PF17m>
+  %1 = field.from_mont %0 : tensor<2x!PF17>
+  return %1 : tensor<2x!PF17>
+}
+
+// CHECK-LABEL: @test_to_mont_from_mont_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_to_mont_from_mont_cancel(%arg0: !PF17m) -> !PF17m {
+  // CHECK-NOT: field.from_mont
+  // CHECK-NOT: field.to_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = field.from_mont %arg0 : !PF17
+  %1 = field.to_mont %0 : !PF17m
+  return %1 : !PF17m
+}
+
+// CHECK-LABEL: @test_to_mont_from_mont_tensor_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_to_mont_from_mont_tensor_cancel(%arg0: tensor<2x!PF17m>) -> tensor<2x!PF17m> {
+  // CHECK-NOT: field.from_mont
+  // CHECK-NOT: field.to_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = field.from_mont %arg0 : tensor<2x!PF17>
+  %1 = field.to_mont %0 : tensor<2x!PF17m>
+  return %1 : tensor<2x!PF17m>
 }

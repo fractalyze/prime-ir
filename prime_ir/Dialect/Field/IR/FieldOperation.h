@@ -126,6 +126,8 @@ public:
   FieldOperation square() const;
   FieldOperation power(const APInt &exponent) const;
   FieldOperation inverse() const;
+  FieldOperation fromMont() const;
+  FieldOperation toMont() const;
 
   bool isZero() const;
   bool isOne() const;

@@ -460,6 +460,7 @@ LogicalResult FromMontOp::verify() {
   }
   return success();
 }
+
 LogicalResult ToMontOp::verify() {
   bool isMont = isMontgomery(getType());
   if (!isMont) {
@@ -906,16 +907,20 @@ class GenericUnaryPrimeFieldFolder
     : public PrimeFieldFolderMixin<
           UnaryConstantFolder<PrimeFieldConstantFolderConfig>::Delegate> {
 public:
-  GenericUnaryPrimeFieldFolder(Type type, Func fn)
-      : PrimeFieldFolderMixin(type), fn(fn) {}
+  GenericUnaryPrimeFieldFolder(Type type, Func fn, Type inputType = nullptr)
+      : PrimeFieldFolderMixin(type), fn(fn),
+        inputPfType(inputType
+                        ? cast<PrimeFieldType>(getElementTypeOrSelf(inputType))
+                        : this->pfType) {}
 
   APInt operate(const APInt &value) const final {
     return static_cast<APInt>(
-        fn(FieldOperation::fromUnchecked(value, this->pfType)));
+        fn(FieldOperation::fromUnchecked(value, inputPfType)));
   }
 
 private:
   Func fn;
+  PrimeFieldType inputPfType;
 };
 
 template <typename Func>
@@ -923,12 +928,15 @@ class GenericUnaryExtFieldFolder
     : public ExtensionFieldFolderMixin<
           UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::Delegate> {
 public:
-  GenericUnaryExtFieldFolder(Type type, Func fn)
-      : ExtensionFieldFolderMixin(type), fn(fn) {}
+  GenericUnaryExtFieldFolder(Type type, Func fn, Type inputType = nullptr)
+      : ExtensionFieldFolderMixin(type), fn(fn),
+        inputEfType(inputType ? cast<ExtensionFieldType>(
+                                    getElementTypeOrSelf(inputType))
+                              : this->efType) {}
 
   SmallVector<APInt> operate(const SmallVector<APInt> &coeffs) const final {
     return static_cast<SmallVector<APInt>>(
-        fn(FieldOperation::fromUnchecked(coeffs, this->efType)));
+        fn(FieldOperation::fromUnchecked(coeffs, inputEfType)));
   }
 
   // Override foldScalar to dispatch to foldTensor when dealing with tensors.
@@ -970,6 +978,7 @@ public:
 
 private:
   Func fn;
+  ExtensionFieldType inputEfType;
 };
 
 template <typename BaseDelegate, typename Op, typename Func>
@@ -1216,17 +1225,18 @@ private:
 //===----------------------------------------------------------------------===//
 
 template <typename Op, typename Func>
-OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
+OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn,
+                         Type inputType = nullptr) {
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
   if (isa<PrimeFieldType>(elemType)) {
-    GenericUnaryPrimeFieldFolder<Func> folder(type, fn);
+    GenericUnaryPrimeFieldFolder<Func> folder(type, fn, inputType);
     return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
                                                                      &folder);
   }
   if (isa<ExtensionFieldType>(elemType)) {
-    GenericUnaryExtFieldFolder<Func> folder(type, fn);
+    GenericUnaryExtFieldFolder<Func> folder(type, fn, inputType);
     return UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
         adaptor, &folder);
   }
@@ -1291,6 +1301,28 @@ OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
 OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
   return foldUnaryOp(this, adaptor,
                      [](const FieldOperation &op) { return op.inverse(); });
+}
+
+OpFoldResult FromMontOp::fold(FoldAdaptor adaptor) {
+  // from_mont(to_mont(x)) -> x
+  if (auto toMont = getInput().getDefiningOp<ToMontOp>()) {
+    return toMont.getInput();
+  }
+  auto montType = getMontgomeryFormType(getType());
+  return foldUnaryOp(
+      this, adaptor, [](const FieldOperation &op) { return op.fromMont(); },
+      montType);
+}
+
+OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
+  // to_mont(from_mont(x)) -> x
+  if (auto fromMont = getInput().getDefiningOp<FromMontOp>()) {
+    return fromMont.getInput();
+  }
+  auto stdType = getStandardFormType(getType());
+  return foldUnaryOp(
+      this, adaptor, [](const FieldOperation &op) { return op.toMont(); },
+      stdType);
 }
 
 OpFoldResult AddOp::fold(FoldAdaptor adaptor) {

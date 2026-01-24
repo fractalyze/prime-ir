@@ -16,7 +16,9 @@
 // RUN: prime-ir-opt -canonicalize %s | FileCheck %s -enable-var-scope
 
 !PF = !field.pf<7:i32>
+!PFm = !field.pf<7:i32, true>
 !QF = !field.ef<2x!PF, 6:i32>
+!QFm = !field.ef<2x!PFm, 6:i32>
 
 //===----------------------------------------------------------------------===//
 // NegateOp constant folding
@@ -378,4 +380,52 @@ func.func @test_bitcast_chain_simplify(%arg0: tensor<2x!QF>) -> tensor<4x!PF> {
   %0 = field.bitcast %arg0 : tensor<2x!QF> -> tensor<4xi32>
   %1 = field.bitcast %0 : tensor<4xi32> -> tensor<4x!PF>
   return %1 : tensor<4x!PF>
+}
+
+//===----------------------------------------------------------------------===//
+// ToMont/FromMont cancellation
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_from_mont_to_mont_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_from_mont_to_mont_cancel(%arg0: !QF) -> !QF {
+  // CHECK-NOT: field.to_mont
+  // CHECK-NOT: field.from_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = field.to_mont %arg0 : !QFm
+  %1 = field.from_mont %0 : !QF
+  return %1 : !QF
+}
+
+// CHECK-LABEL: @test_from_mont_to_mont_tensor_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_from_mont_to_mont_tensor_cancel(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  // CHECK-NOT: field.to_mont
+  // CHECK-NOT: field.from_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = field.to_mont %arg0 : tensor<2x!QFm>
+  %1 = field.from_mont %0 : tensor<2x!QF>
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_to_mont_from_mont_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_to_mont_from_mont_cancel(%arg0: !QFm) -> !QFm {
+  // CHECK-NOT: field.from_mont
+  // CHECK-NOT: field.to_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = field.from_mont %arg0 : !QF
+  %1 = field.to_mont %0 : !QFm
+  return %1 : !QFm
+}
+
+// CHECK-LABEL: @test_to_mont_from_mont_tensor_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_to_mont_from_mont_tensor_cancel(%arg0: tensor<2x!QFm>) -> tensor<2x!QFm> {
+  // CHECK-NOT: field.from_mont
+  // CHECK-NOT: field.to_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = field.from_mont %arg0 : tensor<2x!QF>
+  %1 = field.to_mont %0 : tensor<2x!QFm>
+  return %1 : tensor<2x!QFm>
 }

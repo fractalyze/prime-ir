@@ -123,6 +123,14 @@ FieldOperation FieldOperation::inverse() const {
   return applyUnaryOp(operation, [](const auto &v) { return v.inverse(); });
 }
 
+FieldOperation FieldOperation::fromMont() const {
+  return applyUnaryOp(operation, [](const auto &v) { return v.fromMont(); });
+}
+
+FieldOperation FieldOperation::toMont() const {
+  return applyUnaryOp(operation, [](const auto &v) { return v.toMont(); });
+}
+
 bool FieldOperation::isZero() const {
   return std::visit([](const auto &op) -> bool { return op.isZero(); },
                     operation);
