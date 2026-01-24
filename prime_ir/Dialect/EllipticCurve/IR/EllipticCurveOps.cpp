@@ -23,10 +23,12 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "prime_ir/Dialect/EllipticCurve/IR/PointOperation.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "prime_ir/Utils/ConstantFolder.h"
 
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveCanonicalization.cpp.inc
@@ -555,6 +557,243 @@ void ToCoordsOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 namespace {
 
 //===----------------------------------------------------------------------===//
+// Constant folding infrastructure for EllipticCurve operations
+//===----------------------------------------------------------------------===//
+
+// Extract a FieldOperation from an attribute (IntegerAttr or DenseElementsAttr)
+field::FieldOperation getFieldOpFromAttr(Attribute attr, Type fieldType) {
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
+    return field::FieldOperation::fromUnchecked(intAttr.getValue(), fieldType);
+  }
+  auto denseAttr = cast<DenseIntElementsAttr>(attr);
+  // Use the non-template overload for SmallVector<APInt>
+  auto values = denseAttr.getValues<APInt>();
+  const SmallVector<APInt> coeffs(values.begin(), values.end());
+  return field::FieldOperation::fromUnchecked(coeffs, fieldType);
+}
+
+// Convert ArrayAttr (coordinates) to PointOperation
+template <PointKind Kind>
+PointOperationBase<Kind> pointOpFromArrayAttr(ArrayAttr coordsAttr,
+                                              PointTypeInterface pointType) {
+  constexpr size_t kNumCoords = static_cast<size_t>(Kind) + 2;
+  assert(
+      coordsAttr.size() == kNumCoords &&
+      "ArrayAttr size must match the number of coordinates for the PointKind");
+
+  Type baseFieldType = pointType.getBaseFieldType();
+  std::array<field::FieldOperation, kNumCoords> coords;
+
+  for (size_t i = 0; i < kNumCoords; ++i) {
+    auto fieldOp = getFieldOpFromAttr(coordsAttr[i], baseFieldType);
+    coords[i] = fieldOp;
+  }
+
+  return PointOperationBase<Kind>::fromUnchecked(coords, pointType);
+}
+
+// Convert PointOperation to ArrayAttr
+template <PointKind Kind>
+ArrayAttr pointOpToArrayAttr(MLIRContext *ctx,
+                             const PointOperationBase<Kind> &op) {
+  SmallVector<Attribute> attrs;
+  Type baseFieldType = op.getPointType().getBaseFieldType();
+
+  for (const auto &coord : op.getCoords()) {
+    if (isa<field::PrimeFieldType>(baseFieldType)) {
+      auto pfType = cast<field::PrimeFieldType>(baseFieldType);
+      attrs.push_back(
+          IntegerAttr::get(pfType.getStorageType(), static_cast<APInt>(coord)));
+    } else if (isa<field::ExtensionFieldType>(baseFieldType)) {
+      auto efType = cast<field::ExtensionFieldType>(baseFieldType);
+      auto pfType = cast<field::PrimeFieldType>(efType.getBaseField());
+      SmallVector<APInt> coeffs = static_cast<SmallVector<APInt>>(coord);
+      auto tensorType = RankedTensorType::get(
+          {static_cast<int64_t>(coeffs.size())}, pfType.getStorageType());
+      attrs.push_back(DenseIntElementsAttr::get(tensorType, coeffs));
+    }
+  }
+
+  return ArrayAttr::get(ctx, attrs);
+}
+
+// Create a PointOperation from ArrayAttr based on PointKind
+PointOperation createPointOp(ArrayAttr coordsAttr,
+                             PointTypeInterface pointType) {
+  unsigned numCoords = pointType.getNumCoords();
+  switch (numCoords) {
+  case 2:
+    return pointOpFromArrayAttr<PointKind::kAffine>(coordsAttr, pointType);
+  case 3:
+    return pointOpFromArrayAttr<PointKind::kJacobian>(coordsAttr, pointType);
+  case 4:
+    return pointOpFromArrayAttr<PointKind::kXYZZ>(coordsAttr, pointType);
+  default:
+    llvm_unreachable("invalid number of coordinates for point type");
+  }
+}
+
+// Convert a PointOperation back to ArrayAttr
+ArrayAttr toArrayAttr(MLIRContext *ctx, const PointOperation &op) {
+  return std::visit(
+      [ctx](const auto &pointOp) -> ArrayAttr {
+        return pointOpToArrayAttr(ctx, pointOp);
+      },
+      op.getOperation());
+}
+
+//===----------------------------------------------------------------------===//
+// Config & Mixins following ConstantFolder.h pattern
+//===----------------------------------------------------------------------===//
+
+struct EllipticCurveConstantFolderConfig {
+  using NativeInputType = PointOperation;
+  using NativeOutputType = PointOperation;
+  using ScalarAttr = ArrayAttr;
+  using TensorAttr = ArrayAttr;
+};
+
+template <typename BaseDelegate>
+class EllipticCurvePointFolderMixin : public BaseDelegate {
+public:
+  explicit EllipticCurvePointFolderMixin(PointTypeInterface inputPointType)
+      : inputPointType(inputPointType), ctx(inputPointType.getContext()) {}
+
+  PointOperation getNativeInput(ArrayAttr attr) const final {
+    return createPointOp(attr, inputPointType);
+  }
+
+  OpFoldResult getScalarAttr(const PointOperation &value) const final {
+    return toArrayAttr(ctx, value);
+  }
+
+  OpFoldResult getTensorAttr(ShapedType type,
+                             ArrayRef<PointOperation> values) const final {
+    // EC points don't support tensor constant folding
+    return {};
+  }
+
+protected:
+  PointTypeInterface inputPointType;
+  MLIRContext *ctx; // not owned
+};
+
+//===----------------------------------------------------------------------===//
+// Unary Folder - different input/output type (e.g., DoubleOp)
+//===----------------------------------------------------------------------===//
+
+template <typename Func>
+class GenericUnaryEllipticCurveFolder
+    : public EllipticCurvePointFolderMixin<
+          UnaryConstantFolder<EllipticCurveConstantFolderConfig>::Delegate> {
+public:
+  GenericUnaryEllipticCurveFolder(PointTypeInterface inputPointType,
+                                  PointKind outputKind, Func fn)
+      : EllipticCurvePointFolderMixin(inputPointType), outputKind(outputKind),
+        fn(fn) {}
+
+  PointOperation operate(const PointOperation &value) const final {
+    return fn(value, outputKind);
+  }
+
+private:
+  PointKind outputKind;
+  Func fn;
+};
+
+//===----------------------------------------------------------------------===//
+// Binary Folder - handles heterogeneous input types (e.g., AddOp, SubOp)
+//===----------------------------------------------------------------------===//
+
+template <typename Op, typename Func>
+class GenericEllipticCurveBinaryFolder
+    : public BinaryConstantFolder<EllipticCurveConstantFolderConfig>::Delegate {
+public:
+  GenericEllipticCurveBinaryFolder(Op *op, Func fn)
+      : op(op), fn(fn),
+        lhsPointType(cast<PointTypeInterface>(op->getLhs().getType())),
+        rhsPointType(cast<PointTypeInterface>(op->getRhs().getType())),
+        outputKind(static_cast<PointKind>(
+            cast<PointTypeInterface>(op->getType()).getNumCoords() - 2)) {}
+
+  // This won't be called directly since we override foldScalar(lhs, rhs)
+  PointOperation getNativeInput(ArrayAttr attr) const final {
+    llvm_unreachable("getNativeInput should not be called directly");
+  }
+
+  OpFoldResult getScalarAttr(const PointOperation &value) const final {
+    return toArrayAttr(op->getContext(), value);
+  }
+
+  OpFoldResult getTensorAttr(ShapedType type,
+                             ArrayRef<PointOperation> values) const final {
+    return {};
+  }
+
+  PointOperation operate(const PointOperation &lhs,
+                         const PointOperation &rhs) const final {
+    return fn(lhs, rhs, outputKind);
+  }
+
+  // Bring base class overloads into scope
+  using BinaryConstantFolder<
+      EllipticCurveConstantFolderConfig>::Delegate::foldScalar;
+  using BinaryConstantFolder<
+      EllipticCurveConstantFolderConfig>::Delegate::foldTensor;
+
+  // Override to handle heterogeneous input types
+  OpFoldResult foldScalar(ArrayAttr lhsAttr, ArrayAttr rhsAttr) const {
+    auto lhsOp = createPointOp(lhsAttr, lhsPointType);
+    auto rhsOp = createPointOp(rhsAttr, rhsPointType);
+    return getScalarAttr(operate(lhsOp, rhsOp));
+  }
+
+private:
+  Op *const op; // not owned
+  Func fn;
+  PointTypeInterface lhsPointType;
+  PointTypeInterface rhsPointType;
+  PointKind outputKind;
+};
+
+//===----------------------------------------------------------------------===//
+// Helper Functions
+//===----------------------------------------------------------------------===//
+
+template <typename Op, typename Func>
+OpFoldResult foldUnaryPointOp(Op *op, typename Op::FoldAdaptor adaptor,
+                              Func fn) {
+  auto inputAttr = dyn_cast_if_present<ArrayAttr>(adaptor.getInput());
+  if (!inputAttr)
+    return {};
+
+  Type inputType = op->getInput().getType();
+  auto inputPointType = dyn_cast<PointTypeInterface>(inputType);
+  if (!inputPointType)
+    return {};
+
+  Type outputType = op->getType();
+  auto outputPointType = cast<PointTypeInterface>(outputType);
+  PointKind outputKind =
+      static_cast<PointKind>(outputPointType.getNumCoords() - 2);
+
+  GenericUnaryEllipticCurveFolder<Func> folder(inputPointType, outputKind, fn);
+  return folder.foldScalar(inputAttr);
+}
+
+template <typename Op, typename Func>
+OpFoldResult foldBinaryPointOp(Op *op, typename Op::FoldAdaptor adaptor,
+                               Func fn) {
+  auto lhsAttr = dyn_cast_if_present<ArrayAttr>(adaptor.getLhs());
+  auto rhsAttr = dyn_cast_if_present<ArrayAttr>(adaptor.getRhs());
+  if (!lhsAttr || !rhsAttr)
+    return {};
+
+  GenericEllipticCurveBinaryFolder<Op, Func> folder(op, fn);
+  return folder.foldScalar(lhsAttr, rhsAttr);
+}
+
+//===----------------------------------------------------------------------===//
 // Helper functions for scalar constant matching (used by canonicalization)
 //===----------------------------------------------------------------------===//
 
@@ -575,6 +814,38 @@ bool isScalarNegativeOf(Attribute attr, uint64_t value) {
 
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveCanonicalization.cpp.inc"
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Constant folding
+//===----------------------------------------------------------------------===//
+
+OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
+  return foldUnaryPointOp(
+      this, adaptor, [](const PointOperation &op, PointKind) { return -op; });
+}
+
+OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
+  return foldUnaryPointOp(this, adaptor,
+                          [](const PointOperation &op, PointKind outputKind) {
+                            return op.dbl(outputKind);
+                          });
+}
+
+OpFoldResult AddOp::fold(FoldAdaptor adaptor) {
+  return foldBinaryPointOp(
+      this, adaptor,
+      [](const PointOperation &lhs, const PointOperation &rhs,
+         // NOLINTNEXTLINE(whitespace/newline)
+         PointKind outputKind) { return lhs.add(rhs, outputKind); });
+}
+
+OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
+  return foldBinaryPointOp(
+      this, adaptor,
+      [](const PointOperation &lhs, const PointOperation &rhs,
+         // NOLINTNEXTLINE(whitespace/newline)
+         PointKind outputKind) { return lhs.sub(rhs, outputKind); });
+}
 
 #include "prime_ir/Utils/CanonicalizationPatterns.inc"
 

@@ -26,6 +26,11 @@ PointKind PointOperation::getKind() const {
                     operation);
 }
 
+PointOperation PointOperation::operator-() const {
+  return std::visit([](const auto &v) -> PointOperation { return -v; },
+                    operation);
+}
+
 namespace {
 
 template <typename F>
@@ -70,6 +75,22 @@ PointOperation PointOperation::add(const PointOperation &other,
 
   return applyBinaryOp(operation, other.operation,
                        [](const auto &a, const auto &b) { return a + b; });
+}
+
+PointOperation PointOperation::sub(const PointOperation &other,
+                                   PointKind outputKind) const {
+  PointKind lhsKind = getKind();
+  PointKind rhsKind = other.getKind();
+  if (lhsKind == PointKind::kAffine && lhsKind == rhsKind) {
+    if (outputKind == PointKind::kXYZZ) {
+      // sub(a, b) = add(a, negate(b))
+      return std::get<AffinePointOperation>(operation).AddToXyzz(
+          -std::get<AffinePointOperation>(other.operation));
+    }
+  }
+
+  return applyBinaryOp(operation, other.operation,
+                       [](const auto &a, const auto &b) { return a - b; });
 }
 
 PointOperation PointOperation::dbl(PointKind outputKind) const {

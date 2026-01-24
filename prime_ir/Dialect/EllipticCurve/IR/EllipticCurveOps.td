@@ -175,6 +175,7 @@ def EllipticCurve_AddOp : EllipticCurve_BinaryOp<"add", [Commutative]> {
     %sum = elliptic_curve.add %a, %b : !affine, !jacobian -> !jacobian
     ```
   }];
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -196,6 +197,7 @@ def EllipticCurve_SubOp : EllipticCurve_BinaryOp<"sub"> {
     %difference = elliptic_curve.sub %a, %b : !affine, !jacobian -> !jacobian
     ```
   }];
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
 }
 
@@ -214,6 +216,7 @@ def EllipticCurve_NegateOp : EllipticCurve_UnaryOp<"negate", [Involution, SameOp
     %negation = elliptic_curve.negate %a : !jacobian
     ```
   }];
+  let hasFolder = 1;
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
@@ -235,6 +238,7 @@ def EllipticCurve_DoubleOp : EllipticCurve_UnaryOp<"double"> {
     ```
   }];
   let hasVerifier = 1;
+  let hasFolder = 1;
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
 }
 
