@@ -93,7 +93,7 @@ LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
       // NOTE: In case of extension fields, the types are not lowered to modular
       // types since struct cannot contain modular types so we can ignore that
       // case.
-      auto baseFieldStorageType = efType.getBaseField().getStorageType();
+      auto baseFieldStorageType = efType.getBasePrimeField().getStorageType();
       for (unsigned i = 0; i < degree; ++i) {
         if (structType.getBody()[i] != baseFieldStorageType)
           return op.emitError() << "output struct element must have the same "
