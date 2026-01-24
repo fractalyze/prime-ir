@@ -38,4 +38,5 @@ LLVM_PATCHES = [
     "@prime_ir//third_party/llvm-project:vector_type_support.patch",
     "@prime_ir//third_party/llvm-project:memref_folding.patch",
     "@prime_ir//third_party/llvm-project:lazy_linking.patch",
+    "@prime_ir//third_party/llvm-project:elementwise_op_fusion_constant_support.patch",
 ]

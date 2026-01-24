@@ -1,0 +1,19 @@
+diff --git a/mlir/lib/Dialect/Linalg/Transforms/ElementwiseOpFusion.cpp b/mlir/lib/Dialect/Linalg/Transforms/ElementwiseOpFusion.cpp
+index f97ed3d6d511..e548ca0cd367 100644
+--- a/mlir/lib/Dialect/Linalg/Transforms/ElementwiseOpFusion.cpp
++++ b/mlir/lib/Dialect/Linalg/Transforms/ElementwiseOpFusion.cpp
+@@ -2112,8 +2112,12 @@ public:
+       }
+ 
+       // Create a constant scalar value from the splat constant.
+-      Value scalarConstant =
+-          rewriter.create<arith::ConstantOp>(def->getLoc(), constantAttr);
++      Operation *scalarConstantOp = def->getDialect()->materializeConstant(
++          rewriter, constantAttr, constantAttr.getType(), def->getLoc());
++      if (!scalarConstantOp)
++        return rewriter.notifyMatchFailure(
++            genericOp, "failed to materialize scalar constant");
++      Value scalarConstant = scalarConstantOp->getResult(0);
+ 
+       SmallVector<Value> outputOperands = genericOp.getOutputs();
+       auto fusedOp = rewriter.create<GenericOp>(
