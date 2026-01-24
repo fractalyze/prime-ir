@@ -18,6 +18,7 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for EllipticCurveTypes.h.inc
+#include "mlir/IR/ConstantLikeInterface.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointKind.h"
 // IWYU pragma: end_keep

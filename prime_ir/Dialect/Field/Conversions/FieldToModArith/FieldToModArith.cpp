@@ -397,7 +397,7 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       // TODO(chokobole): Support towers of extension field.
       modulus =
           cast<PrimeFieldType>(efType.getBaseField()).getModulus().getValue();
-      init = efType.createOneConstant(b);
+      init = field::createFieldOne(efType, b);
     } else {
       op.emitOpError("unsupported output type");
       return failure();

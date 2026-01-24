@@ -23,6 +23,7 @@ include "mlir/IR/DialectBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/ConstantLikeInterface.td"
 
 // Base type definition for EllipticCurve types.
 class EllipticCurve_Type<string name, string typeMnemonic, list<Trait> traits = []>
@@ -51,7 +52,8 @@ def EllipticCurve_PointTypeInterface : TypeInterface<"PointTypeInterface"> {
 
 def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [
   MemRefElementTypeInterface,
-  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>
+  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>
   ]> {
   let summary = "An affine point within an elliptic curve";
   let description = [{
@@ -70,7 +72,8 @@ def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [
 
 def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [
   MemRefElementTypeInterface,
-  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>
+  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>
   ]> {
   let summary = "A jacobian point within an elliptic curve";
   let description = [{
@@ -90,7 +93,8 @@ def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [
 
 def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [
   MemRefElementTypeInterface,
-  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>
+  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>
   ]> {
   let summary = "A xyzz point within an elliptic curve";
   let description = [{

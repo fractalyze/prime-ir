@@ -100,6 +100,23 @@ Attribute maybeToMontgomery(Type type, Attribute attr) {
   }
 }
 
+Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
+                          uint64_t value) {
+  TypedAttr attr;
+  auto constantLike = cast<ConstantLikeInterface>(fieldType);
+  if (auto efType = dyn_cast<field::ExtensionFieldType>(fieldType)) {
+    SmallVector<APInt> coeffs(
+        efType.getDegree(),
+        APInt(getIntOrPrimeFieldBitWidth(efType.getBaseField()), 0));
+    coeffs[0] = APInt(getIntOrPrimeFieldBitWidth(efType.getBaseField()), value);
+    attr = constantLike.createConstantAttrFromValues(coeffs);
+  } else {
+    attr = constantLike.createConstantAttrFromValues(
+        ArrayRef<APInt>{APInt(getIntOrPrimeFieldBitWidth(fieldType), value)});
+  }
+  return builder.create<ConstantOp>(fieldType, attr)->getResult(0);
+}
+
 Attribute maybeToStandard(Type type, Attribute attr) {
   if (auto pfType = dyn_cast<field::PrimeFieldType>(type)) {
     auto intAttr = cast<IntegerAttr>(attr);
@@ -120,50 +137,6 @@ Attribute maybeToStandard(Type type, Attribute attr) {
     return denseElementsAttr;
   }
 }
-
-//===----------------------------------------------------------------------===//
-// FieldTypeInterface utilities
-//===----------------------------------------------------------------------===//
-
-namespace field_utils {
-namespace {
-
-template <typename T>
-bool isMontgomery(const T *field) {
-  if constexpr (std::is_same_v<T, PrimeFieldType>) {
-    return field->getIsMontgomery();
-  } else {
-    return field->getBaseField().getIsMontgomery();
-  }
-}
-
-template <typename T>
-Value createZeroConstant(const T *field, ImplicitLocOpBuilder &builder) {
-  return builder.create<ConstantOp>(*field, 0);
-}
-
-template <typename T>
-Value createOneConstant(const T *field, ImplicitLocOpBuilder &builder) {
-  return field->isMontgomery()
-             ? builder
-                   .create<ToMontOp>(*field,
-                                     builder.create<ConstantOp>(
-                                         getStandardFormType(*field), 1))
-                   .getResult()
-             : builder.create<ConstantOp>(*field, 1);
-}
-
-} // namespace
-} // namespace field_utils
-
-#define DEFINE_FIELD_TYPE_INTERFACE_METHODS(TYPE)                              \
-  bool TYPE::isMontgomery() const { return field_utils::isMontgomery(this); }  \
-  Value TYPE::createZeroConstant(ImplicitLocOpBuilder &builder) const {        \
-    return field_utils::createZeroConstant(this, builder);                     \
-  }                                                                            \
-  Value TYPE::createOneConstant(ImplicitLocOpBuilder &builder) const {         \
-    return field_utils::createOneConstant(this, builder);                      \
-  }
 
 //===----------------------------------------------------------------------===//
 // PrimeFieldType
@@ -190,7 +163,23 @@ uint64_t PrimeFieldType::getABIAlignment(
   return dataLayout.getTypeABIAlignment(getStorageType());
 }
 
-DEFINE_FIELD_TYPE_INTERFACE_METHODS(PrimeFieldType);
+bool PrimeFieldType::isMontgomery() const { return getIsMontgomery(); }
+
+TypedAttr PrimeFieldType::createConstantAttr(int64_t c) const {
+  PrimeFieldOperation pfOp(c, *this);
+  return pfOp.getIntegerAttr();
+}
+
+TypedAttr
+PrimeFieldType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  assert(values.size() == 1);
+  PrimeFieldOperation pfOp(values[0], *this);
+  return pfOp.getIntegerAttr();
+}
+
+ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
+  return type.clone(getStorageType());
+}
 
 //===----------------------------------------------------------------------===//
 // ExtensionFieldType utilities
@@ -198,6 +187,15 @@ DEFINE_FIELD_TYPE_INTERFACE_METHODS(PrimeFieldType);
 
 namespace ext_field_utils {
 namespace {
+
+template <unsigned kDegreeOverPrime>
+TypedAttr createConstantAttr(ArrayRef<APInt> coeffs,
+                             ExtensionFieldType efType) {
+  assert(coeffs.size() == kDegreeOverPrime);
+  SmallVector<APInt> coeffsVec(coeffs.begin(), coeffs.end());
+  ExtensionFieldOperation<kDegreeOverPrime> efOp(coeffsVec, efType);
+  return efOp.getDenseIntElementsAttr();
+}
 
 template <unsigned kDegreeOverPrime>
 Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder, Type structType,
@@ -223,6 +221,20 @@ Value dispatchBuildStructFromCoeffs(
                                    builder, structType, coeffs),
                                true)
                             : false) ||
+         ...);
+  assert(result && "unsupported extension field degree");
+  return result;
+}
+
+template <unsigned... Degrees>
+TypedAttr
+dispatchCreateConstantAttr(unsigned degree, ArrayRef<APInt> coeffs,
+                           ExtensionFieldType efType,
+                           std::integer_sequence<unsigned, Degrees...>) {
+  TypedAttr result;
+  (void)((Degrees == degree
+              ? (result = createConstantAttr<Degrees>(coeffs, efType), true)
+              : false) ||
          ...);
   assert(result && "unsupported extension field degree");
   return result;
@@ -365,19 +377,19 @@ bool ExtensionFieldType::isMontgomery() const {
   return getBaseField().getIsMontgomery();
 }
 
-Value ExtensionFieldType::createZeroConstant(
-    ImplicitLocOpBuilder &builder) const {
-  return builder.create<ConstantOp>(*this, 0);
+TypedAttr ExtensionFieldType::createConstantAttr(int64_t c) const {
+  APInt baseCoeff = APInt(getIntOrPrimeFieldBitWidth(getBaseField()), c);
+  return createConstantAttrFromValues(ArrayRef<APInt>{baseCoeff});
 }
 
-Value ExtensionFieldType::createOneConstant(
-    ImplicitLocOpBuilder &builder) const {
-  return isMontgomery()
-             ? builder
-                   .create<ToMontOp>(*this, builder.create<ConstantOp>(
-                                                getStandardFormType(*this), 1))
-                   .getResult()
-             : builder.create<ConstantOp>(*this, 1);
+TypedAttr
+ExtensionFieldType::createConstantAttrFromValues(ArrayRef<APInt> coeffs) const {
+  return ext_field_utils::dispatchCreateConstantAttr(
+      getDegree(), coeffs, *this, ext_field_utils::kExtDegreeSequence);
+}
+
+ShapedType ExtensionFieldType::overrideShapedType(ShapedType type) const {
+  return type;
 }
 
 unsigned ExtensionFieldType::getDegreeOverPrime() const { return getDegree(); }
@@ -386,14 +398,6 @@ Type ExtensionFieldType::cloneWith(Type baseField, Attribute element) const {
   return ExtensionFieldType::get(getContext(), getDegree(),
                                  cast<PrimeFieldType>(baseField),
                                  cast<IntegerAttr>(element));
-}
-
-TypedAttr ExtensionFieldType::createConstantAttr(
-    llvm::ArrayRef<llvm::APInt> coeffs) const {
-  auto tensorType = RankedTensorType::get(
-      {static_cast<int64_t>(getDegree())},
-      IntegerType::get(getContext(), getBaseField().getStorageBitWidth()));
-  return DenseIntElementsAttr::get(tensorType, coeffs);
 }
 
 Value ExtensionFieldType::buildStructFromCoeffs(

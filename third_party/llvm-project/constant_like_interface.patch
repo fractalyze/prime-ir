@@ -1,0 +1,258 @@
+diff --git a/mlir/include/mlir/IR/ConstantLikeInterface.h b/mlir/include/mlir/IR/ConstantLikeInterface.h
+new file mode 100644
+index 000000000000..e8d4a2794d2c
+--- /dev/null
++++ b/mlir/include/mlir/IR/ConstantLikeInterface.h
+@@ -0,0 +1,34 @@
++//===- ConstantLikeInterface.h - Constant Creation Interface -------*- C++
++//-*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++//
++// This file contains definitions for type interfaces that allow types to
++// define how to create constant attributes and operations for themselves.
++//
++//===----------------------------------------------------------------------===//
++
++#ifndef MLIR_IR_CONSTANTLIKEINTERFACE_H
++#define MLIR_IR_CONSTANTLIKEINTERFACE_H
++
++#include "mlir/IR/Builders.h"
++#include "mlir/IR/Types.h"
++
++namespace llvm {
++class APInt;
++} // namespace llvm
++
++namespace mlir {
++class TypedAttr;
++class OpBuilder;
++class Location;
++class Operation;
++} // namespace mlir
++
++#include "mlir/IR/ConstantLikeInterface.h.inc"
++
++#endif // MLIR_IR_CONSTANTLIKEINTERFACE_H
+diff --git a/mlir/include/mlir/IR/ConstantLikeInterface.td b/mlir/include/mlir/IR/ConstantLikeInterface.td
+new file mode 100644
+index 000000000000..5e044b79f5b2
+--- /dev/null
++++ b/mlir/include/mlir/IR/ConstantLikeInterface.td
+@@ -0,0 +1,70 @@
++//===- ConstantLikeInterface.td - Constant creation interfaces -*- tablegen -*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++//
++// This file contains definitions for type interfaces that allow types to
++// define how to create constant attributes and operations for themselves.
++//
++//===----------------------------------------------------------------------===//
++
++#ifndef MLIR_IR_CONSTANTLIKEINTERFACE_TD_
++#define MLIR_IR_CONSTANTLIKEINTERFACE_TD_
++
++include "mlir/IR/OpBase.td"
++
++//===----------------------------------------------------------------------===//
++// ConstantLikeInterface
++//===----------------------------------------------------------------------===//
++
++def ConstantLikeInterface : TypeInterface<"ConstantLikeInterface"> {
++  let cppNamespace = "::mlir";
++  let description = [{
++    This interface allows types to define how to create constant attributes
++    and operations for their values. This decouples generic MLIR code from
++    specific constant operation types, enabling better layering and extensibility.
++
++    Types implementing this interface can provide custom constant creation logic,
++    which is particularly useful for domain-specific types (e.g., field elements,
++    custom numeric types) that need special constant handling.
++  }];
++
++  let methods = [
++    InterfaceMethod<
++      /*desc=*/[{
++        Creates a constant attribute for this type from the given int64 value.
++        Returns null if the type does not support this operation.
++      }],
++      /*retTy=*/"::mlir::TypedAttr",
++      /*methodName=*/"createConstantAttr",
++      /*args=*/(ins "int64_t ":$value)
++    >,
++    InterfaceMethod<
++      /*desc=*/[{
++        Creates a constant attribute for this type from the given APInt values.
++        The APInt should be compatible with this type's bit width and semantics.
++        Returns null if the type does not support this operation.
++      }],
++      /*retTy=*/"::mlir::TypedAttr",
++      /*methodName=*/"createConstantAttrFromValues",
++      /*args=*/(ins "::llvm::ArrayRef<APInt> ":$values)
++    >,
++    InterfaceMethod<
++      /*desc=*/[{
++        Allows custom types to override the shaped type (tensor/vector) used for
++        constant creation. This is useful when a custom element type needs to
++        substitute the shaped type with a different representation (e.g., using
++        a storage type instead of the semantic type).
++        Returns the potentially modified shaped type.
++      }],
++      /*retTy=*/"::mlir::ShapedType",
++      /*methodName=*/"overrideShapedType",
++      /*args=*/(ins "::mlir::ShapedType":$shapedType)
++    >
++  ];
++}
++
++#endif // MLIR_IR_CONSTANTLIKEINTERFACE_TD_
+diff --git a/mlir/lib/IR/Builders.cpp b/mlir/lib/IR/Builders.cpp
+index 5f7bc50afc41..be75f7aa866b 100644
+--- a/mlir/lib/IR/Builders.cpp
++++ b/mlir/lib/IR/Builders.cpp
+@@ -10,6 +10,7 @@
+ #include "mlir/IR/AffineExpr.h"
+ #include "mlir/IR/AffineMap.h"
+ #include "mlir/IR/BuiltinTypes.h"
++#include "mlir/IR/ConstantLikeInterface.h"
+ #include "mlir/IR/Dialect.h"
+ #include "mlir/IR/IRMapping.h"
+ #include "mlir/IR/IntegerSet.h"
+@@ -320,6 +321,14 @@ ArrayAttr Builder::getAffineMapArrayAttr(ArrayRef<AffineMap> values) {
+ }
+ 
+ TypedAttr Builder::getZeroAttr(Type type) {
++  // Check if the type implements ConstantLikeInterface for custom constant
++  // creation
++  if (auto constType = llvm::dyn_cast<ConstantLikeInterface>(type)) {
++    if (auto attr = constType.createConstantAttr(0))
++      return attr;
++  }
++
++  // Fallback to built-in type handling
+   if (llvm::isa<FloatType>(type))
+     return getFloatAttr(type, 0.0);
+   if (llvm::isa<IndexType>(type))
+@@ -329,15 +338,30 @@ TypedAttr Builder::getZeroAttr(Type type) {
+                           APInt(llvm::cast<IntegerType>(type).getWidth(), 0));
+   if (llvm::isa<RankedTensorType, VectorType>(type)) {
+     auto vtType = llvm::cast<ShapedType>(type);
+-    auto element = getZeroAttr(vtType.getElementType());
++    auto elementType = vtType.getElementType();
++
++    auto element = getZeroAttr(elementType);
+     if (!element)
+       return {};
++    // Check if element type implements ConstantLikeInterface for custom
++    // shaped constant creation
++    if (auto constType = llvm::dyn_cast<ConstantLikeInterface>(elementType)) {
++      vtType = constType.overrideShapedType(vtType);
++    }
+     return DenseElementsAttr::get(vtType, element);
+   }
+   return {};
+ }
+ 
+ TypedAttr Builder::getOneAttr(Type type) {
++  // Check if the type implements ConstantLikeInterface for custom constant
++  // creation
++  if (auto constType = llvm::dyn_cast<ConstantLikeInterface>(type)) {
++    if (auto attr = constType.createConstantAttr(1))
++      return attr;
++  }
++
++  // Fallback to built-in type handling
+   if (llvm::isa<FloatType>(type))
+     return getFloatAttr(type, 1.0);
+   if (llvm::isa<IndexType>(type))
+@@ -347,9 +371,16 @@ TypedAttr Builder::getOneAttr(Type type) {
+                           APInt(llvm::cast<IntegerType>(type).getWidth(), 1));
+   if (llvm::isa<RankedTensorType, VectorType>(type)) {
+     auto vtType = llvm::cast<ShapedType>(type);
+-    auto element = getOneAttr(vtType.getElementType());
++    auto elementType = vtType.getElementType();
++
++    auto element = getOneAttr(elementType);
+     if (!element)
+       return {};
++    // Check if element type implements ConstantLikeInterface for custom
++    // shaped constant creation
++    if (auto constType = llvm::dyn_cast<ConstantLikeInterface>(elementType)) {
++      vtType = constType.overrideShapedType(vtType);
++    }
+     return DenseElementsAttr::get(vtType, element);
+   }
+   return {};
+diff --git a/mlir/lib/IR/ConstantLikeInterface.cpp b/mlir/lib/IR/ConstantLikeInterface.cpp
+new file mode 100644
+index 000000000000..028434eea577
+--- /dev/null
++++ b/mlir/lib/IR/ConstantLikeInterface.cpp
+@@ -0,0 +1,15 @@
++//===- ConstantLikeInterface.cpp - Constant Creation Interface --*- C++ -*-===//
++//
++// Part of the LLVM Project, under the Apache License v2.0 with LLVM Exceptions.
++// See https://llvm.org/LICENSE.txt for license information.
++// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
++//
++//===----------------------------------------------------------------------===//
++
++#include "mlir/IR/ConstantLikeInterface.h"
++
++namespace mlir {
++
++#include "mlir/IR/ConstantLikeInterface.cpp.inc"
++
++} // namespace mlir
+diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+index 94b0ec4eb878..4e7f826e1842 100644
+--- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
++++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+@@ -107,6 +107,17 @@ gentbl_cc_library(
+     deps = [":OpBaseTdFiles"],
+ )
+ 
++gentbl_cc_library(
++    name = "ConstantLikeInterfaceIncGen",
++    tbl_outs = {
++        "include/mlir/IR/ConstantLikeInterface.h.inc": ["-gen-type-interface-decls"],
++        "include/mlir/IR/ConstantLikeInterface.cpp.inc": ["-gen-type-interface-defs"],
++    },
++    tblgen = ":mlir-tblgen",
++    td_file = "include/mlir/IR/ConstantLikeInterface.td",
++    deps = [":OpBaseTdFiles"],
++)
++
+ gentbl_cc_library(
+     name = "TensorEncodingIncGen",
+     tbl_outs = {
+@@ -244,6 +255,13 @@ gentbl_cc_library(
+     ],
+ )
+ 
++td_library(
++    name = "ConstantLikeInterfaceTdFiles",
++    srcs = ["include/mlir/IR/ConstantLikeInterface.td"],
++    includes = ["include"],
++    deps = [":OpBaseTdFiles"],
++)
++
+ td_library(
+     name = "FunctionInterfacesTdFiles",
+     srcs = ["include/mlir/Interfaces/FunctionInterfaces.td"],
+@@ -387,6 +405,7 @@ cc_library(
+         ":BuiltinTypesIncGen",
+         ":BytecodeOpInterfaceIncGen",
+         ":CallOpInterfacesIncGen",
++        ":ConstantLikeInterfaceIncGen",
+         ":DataLayoutInterfacesIncGen",
+         ":InferIntRangeInterfaceIncGen",
+         ":OpAsmInterfaceIncGen",

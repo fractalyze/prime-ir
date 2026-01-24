@@ -61,6 +61,7 @@ patches=(
     "$patch_dir/memref_folding.patch"
     "$patch_dir/lazy_linking.patch"
     "$patch_dir/elementwise_op_fusion_constant_support.patch"
+    "$patch_dir/constant_like_interface.patch"
 )
 shopt -u nullglob
 

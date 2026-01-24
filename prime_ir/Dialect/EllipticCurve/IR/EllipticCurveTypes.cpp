@@ -15,6 +15,10 @@ limitations under the License.
 
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 
+#include "mlir/IR/BuiltinAttributes.h"
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
+#include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+
 namespace mlir::prime_ir::elliptic_curve {
 
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypesInterfaces.cpp.inc"
@@ -32,5 +36,51 @@ DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS(Jacobian, 3);
 DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS(XYZZ, 4);
 
 #undef DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS
+
+//===----------------------------------------------------------------------===//
+// ConstantLikeInterface implementations
+//===----------------------------------------------------------------------===//
+
+TypedAttr AffineType::createConstantAttr(int64_t c) const {
+  // TODO(chokobole): Implement this.
+  return {};
+}
+
+TypedAttr
+AffineType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  // TODO(chokobole): Implement this.
+  return {};
+}
+
+ShapedType AffineType::overrideShapedType(ShapedType type) const {
+  return type;
+}
+
+TypedAttr JacobianType::createConstantAttr(int64_t c) const {
+  // TODO(chokobole): Implement this.
+  return {};
+}
+
+TypedAttr
+JacobianType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  // TODO(chokobole): Implement this.
+  return {};
+}
+
+ShapedType JacobianType::overrideShapedType(ShapedType type) const {
+  return type;
+}
+
+TypedAttr XYZZType::createConstantAttr(int64_t c) const {
+  // TODO(chokobole): Implement this.
+  return {};
+}
+
+TypedAttr XYZZType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  // TODO(chokobole): Implement this.
+  return {};
+}
+
+ShapedType XYZZType::overrideShapedType(ShapedType type) const { return type; }
 
 } // namespace mlir::prime_ir::elliptic_curve
