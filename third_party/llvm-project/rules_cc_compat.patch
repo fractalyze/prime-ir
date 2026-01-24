@@ -1,0 +1,34 @@
+diff --git a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel b/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
+--- a/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
++++ b/utils/bazel/llvm-project-overlay/llvm/BUILD.bazel
+@@ -232,25 +232,25 @@ write_file(
+ config_setting(
+     name = "is_windows_clang_mingw",
+     constraint_values = ["@platforms//os:windows"],
+-    flag_values = {"@rules_cc//cc/compiler:compiler": "clang"},
++    flag_values = {"@rules_cc//cc/private/toolchain:compiler": "clang"},
+ )
+
+ config_setting(
+     name = "is_windows_clang_cl",
+     constraint_values = ["@platforms//os:windows"],
+-    flag_values = {"@rules_cc//cc/compiler:compiler": "clang-cl"},
++    flag_values = {"@rules_cc//cc/private/toolchain:compiler": "clang-cl"},
+ )
+
+ config_setting(
+     name = "is_windows_msvc",
+     constraint_values = ["@platforms//os:windows"],
+-    flag_values = {"@rules_cc//cc/compiler:compiler": "msvc-cl"},
++    flag_values = {"@rules_cc//cc/private/toolchain:compiler": "msvc-cl"},
+ )
+
+ config_setting(
+     name = "is_x86_64_windows_clang_mingw",
+     constraint_values = [
+         "@platforms//cpu:x86_64",
+         "@platforms//os:windows",
+     ],
+-    flag_values = {"@rules_cc//cc/compiler:compiler": "clang"},
++    flag_values = {"@rules_cc//cc/private/toolchain:compiler": "clang"},
+ )

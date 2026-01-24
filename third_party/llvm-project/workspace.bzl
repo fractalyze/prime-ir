@@ -13,9 +13,9 @@
 # limitations under the License.
 
 # buildifier: disable=module-docstring
-LLVM_COMMIT = "5ed852f7f72855710eeff53179e6a6f2271a3c2a"
+LLVM_COMMIT = "668f1c01624b2a7b15bc1639c49f6d0b39cd2e32"
 
-LLVM_SHA256 = "95792e50d5f84847721545b645a6ca2c2b3b7610d02e3de07d65a6148e68508c"
+LLVM_SHA256 = "ba4e2a11a50c52b1ba459da349fb723596d3fc0e79edac10a2811dca441a3b9b"
 
 # TODO(chokobole): We must review the applied patches below and remove any that
 # are not strictly necessary for this project.
@@ -24,18 +24,13 @@ LLVM_SHA256 = "95792e50d5f84847721545b645a6ca2c2b3b7610d02e3de07d65a6148e68508c"
 LLVM_PATCHES = [
     # TODO(chokobole): Remove once the issues are resolved upstream.
     "@prime_ir//third_party/llvm-project:cuda_runtime.patch",
-    "@prime_ir//third_party/llvm-project:kernel_outlining.patch",
     "@prime_ir//third_party/llvm-project:nvptx_lowering.patch",
-    # TODO(chokobole): Remove owning_memref_free.patch once we upgrade the version of LLVM.
-    # See https://github.com/llvm/llvm-project/pull/153133
-    "@prime_ir//third_party/llvm-project:owning_memref_free.patch",
-    # TODO(chokobole): Remove owning_memref_memset.patch once we upgrade the version of LLVM.
-    # See https://github.com/llvm/llvm-project/pull/158200
-    "@prime_ir//third_party/llvm-project:owning_memref_memset.patch",
+    # Compatibility patch for rules_cc version mismatch
+    "@prime_ir//third_party/llvm-project:rules_cc_compat.patch",
     # NOTE(chokobole): Patches for supporting PrimeIR Dialects.
     "@prime_ir//third_party/llvm-project:linalg_type_support.patch",
     "@prime_ir//third_party/llvm-project:tensor_type_support.patch",
     "@prime_ir//third_party/llvm-project:vector_type_support.patch",
-    "@prime_ir//third_party/llvm-project:memref_folding.patch",
-    "@prime_ir//third_party/llvm-project:lazy_linking.patch",
+    # NOTE: memref_folding.patch is no longer needed - the fix has been applied upstream
+    # "@prime_ir//third_party/llvm-project:lazy_linking.patch",
 ]

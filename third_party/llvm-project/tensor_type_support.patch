@@ -1,19 +1,18 @@
 diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
-index 22a25fd1a5af..1832036990e4 100644
 --- a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 +++ b/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
-@@ -41,6 +41,10 @@
- #include <optional>
- #include <vector>
- 
+@@ -37,6 +37,10 @@
+ #include "llvm/ADT/StringRef.h"
+ #include "llvm/Support/Casting.h"
+ #include "llvm/Support/MathExtras.h"
++
 +#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 +#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 +#include "prime_ir/IR/Attributes.h"
-+
+ #include <optional>
+
  using namespace mlir;
- using namespace mlir::tensor;
- 
-@@ -53,6 +57,11 @@ using llvm::mod;
+@@ -47,6 +51,11 @@ using namespace mlir::tensor;
  Operation *TensorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
                                                Location loc) {
@@ -25,9 +24,9 @@ index 22a25fd1a5af..1832036990e4 100644
    if (auto op = arith::ConstantOp::materialize(builder, value, type, loc))
      return op;
    if (complex::ConstantOp::isBuildableWith(value, type))
-@@ -1465,8 +1474,10 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
+@@ -1457,8 +1466,10 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
  }
- 
+
  OpFoldResult FromElementsOp::fold(FoldAdaptor adaptor) {
 -  if (!llvm::is_contained(adaptor.getElements(), nullptr))
 -    return DenseElementsAttr::get(getType(), adaptor.getElements());
@@ -37,9 +36,9 @@ index 22a25fd1a5af..1832036990e4 100644
 +  }
    return {};
  }
- 
-@@ -4052,7 +4063,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
- 
+
+@@ -4059,7 +4070,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+
    // SplatElementsAttr::get treats single value for second arg as being a
    // splat.
 -  return SplatElementsAttr::get(getType(), {constOperand});
@@ -47,13 +46,12 @@ index 22a25fd1a5af..1832036990e4 100644
 +      cast<ShapedType>(prime_ir::maybeConvertPrimeIRToBuiltinType(getType()));
 +  return SplatElementsAttr::get(destType, {constOperand});
  }
- 
+
  //===----------------------------------------------------------------------===//
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 7829b11da096..e86158d51727 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -7134,6 +7134,9 @@ cc_library(
+@@ -7682,6 +7682,9 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",
@@ -62,4 +60,4 @@ index 7829b11da096..e86158d51727 100644
 +        "@prime_ir//prime_ir/IR:Attributes",
      ],
  )
- 
+
