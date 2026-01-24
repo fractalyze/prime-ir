@@ -29,6 +29,8 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
     "arith::ArithDialect",
     "scf::SCFDialect",
     "tensor::TensorDialect",
+    "ub::UBDialect",
+    "vector::VectorDialect",
     "prime_ir::mod_arith::ModArithDialect",
   ];
 }
