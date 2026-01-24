@@ -144,7 +144,6 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
 }
 
 ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
-  // TODO(chokboole): support towers of extension fields
   SmallVector<APInt> parsedInts;
   Type parsedType;
 
@@ -483,7 +482,8 @@ namespace {
 
 // Helper function to compute the total number of prime field elements
 // represented by a shaped type. IntegerType is treated as a single element
-// (after mod-arith-to-arith lowering).
+// (after mod-arith-to-arith lowering). For tower extensions, uses
+// getDegreeOverPrime() to get the total degree.
 std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
   if (!shapedType.hasStaticShape()) {
     return std::nullopt;
@@ -496,7 +496,8 @@ std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
     return numElements;
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    return numElements * efType.getDegree();
+    // Use getDegreeOverPrime() to handle tower extensions correctly
+    return numElements * efType.getDegreeOverPrime();
   }
   return std::nullopt;
 }
@@ -552,16 +553,8 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     // Calculate bitwidth for each element type
     unsigned inputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      // For extension fields, multiply base field bitwidth by degree
-      if (auto baseField = dyn_cast<PrimeFieldType>(efType.getBaseField())) {
-        inputBitWidth =
-            getIntOrPrimeFieldBitWidth(baseField) * efType.getDegree();
-      } else {
-        // After field-to-mod-arith pass, base field may be ModArithType
-        inputBitWidth =
-            mod_arith::getIntOrModArithBitWidth(efType.getBaseField()) *
-            efType.getDegree();
-      }
+      inputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBasePrimeField()) *
+                      efType.getDegreeOverPrime();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(inputElementType)) {
       inputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -571,16 +564,8 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 
     unsigned outputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      // For extension fields, multiply base field bitwidth by degree
-      if (auto baseField = dyn_cast<PrimeFieldType>(efType.getBaseField())) {
-        outputBitWidth =
-            getIntOrPrimeFieldBitWidth(baseField) * efType.getDegree();
-      } else {
-        // After field-to-mod-arith pass, base field may be ModArithType
-        outputBitWidth =
-            mod_arith::getIntOrModArithBitWidth(efType.getBaseField()) *
-            efType.getDegree();
-      }
+      outputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBasePrimeField()) *
+                       efType.getDegreeOverPrime();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(outputElementType)) {
       outputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -615,16 +600,17 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   }
 
   // Case 3: extension field <-> extension field bitcast
+  // This handles both simple extensions (EF over PF) and tower extensions
+  // (EF over EF over ... over PF)
   if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
     if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      // Degree must match
-      if (inputEF.getDegree() != outputEF.getDegree()) {
+      // Total degree over prime must match (handles tower extensions)
+      if (inputEF.getDegreeOverPrime() != outputEF.getDegreeOverPrime()) {
         return false;
       }
-      // Allow if bitwidths match (base field modulus and non-residue can be
-      // different)
-      return getIntOrPrimeFieldBitWidth(inputEF.getBaseField()) ==
-             getIntOrPrimeFieldBitWidth(outputEF.getBaseField());
+      // Allow if base prime field bitwidths match
+      return getIntOrPrimeFieldBitWidth(inputEF.getBasePrimeField()) ==
+             getIntOrPrimeFieldBitWidth(outputEF.getBasePrimeField());
     }
   }
 
@@ -676,20 +662,21 @@ LogicalResult BitcastOp::verify() {
                            << *outputTotal;
     }
 
-    // Check bitwidth
+    // Check bitwidth (handles tower extensions via getBasePrimeField and
+    // getDegreeOverPrime)
     Type inputElementType = inputShaped.getElementType();
     Type outputElementType = outputShaped.getElementType();
     unsigned inputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      inputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBaseField()) *
-                      efType.getDegree();
+      inputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBasePrimeField()) *
+                      efType.getDegreeOverPrime();
     } else {
       inputBitWidth = getIntOrPrimeFieldBitWidth(inputElementType);
     }
     unsigned outputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      outputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBaseField()) *
-                       efType.getDegree();
+      outputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBasePrimeField()) *
+                       efType.getDegreeOverPrime();
     } else {
       outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
     }
@@ -718,23 +705,22 @@ LogicalResult BitcastOp::verify() {
            << " bits";
   }
 
-  // Case 3: Extension field bitcast
+  // Case 3: Extension field bitcast (including tower extensions)
   if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
     if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      if (inputEF.getDegree() != outputEF.getDegree()) {
+      if (inputEF.getDegreeOverPrime() != outputEF.getDegreeOverPrime()) {
         return emitOpError()
-               << "extension field bitcast requires matching degrees, but "
-                  "input has "
-               << "degree " << inputEF.getDegree() << " and output has degree "
-               << outputEF.getDegree();
+               << "extension field bitcast requires matching total degrees "
+                  "over prime, but input has degree "
+               << inputEF.getDegreeOverPrime() << " and output has degree "
+               << outputEF.getDegreeOverPrime();
       }
       unsigned inputBitWidth =
-          getIntOrPrimeFieldBitWidth(inputEF.getBaseField());
+          getIntOrPrimeFieldBitWidth(inputEF.getBasePrimeField());
       unsigned outputBitWidth =
-          getIntOrPrimeFieldBitWidth(outputEF.getBaseField());
+          getIntOrPrimeFieldBitWidth(outputEF.getBasePrimeField());
       return emitOpError() << "extension field bitcast requires matching base "
-                              "field bitwidths, "
-                              "but input has "
+                              "prime field bitwidths, but input has "
                            << inputBitWidth << " bits and output has "
                            << outputBitWidth << " bits";
     }

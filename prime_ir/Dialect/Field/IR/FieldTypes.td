@@ -92,6 +92,8 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
 
 // Unified extension field type definition.
 // This type represents an element in an extension field of degree N (2, 3, or 4).
+// Supports tower extensions where base field can be either a prime field or
+// another extension field.
 def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
@@ -102,25 +104,43 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   let summary = "Extension field element type";
   let description = [{
     Represents an element in an extension field of degree N (2, 3, or 4)
-    defined by the given prime field `baseField` and the non-residue `nonResidue`.
+    defined by the given base field and the non-residue `nonResidue`.
+    The base field can be either a prime field or another extension field,
+    allowing for tower constructions.
 
     An element is represented as a₀ + a₁v + ... + aₙ₋₁vⁿ⁻¹ where vⁿ = nonResidue.
 
     Example:
     ```
     !PF = !field.pf<7:i32>
-    !EF2 = !field.ef<2x!PF, 6:i32>  // quadratic extension
-    !EF3 = !field.ef<3x!PF, 2:i32>  // cubic extension
-    !EF4 = !field.ef<4x!PF, 2:i32>  // quartic extension
+    !EF2 = !field.ef<2x!PF, 6:i32>      // quadratic extension over prime
+    !EF3 = !field.ef<3x!PF, 2:i32>      // cubic extension over prime
+    !EF4 = !field.ef<4x!PF, 2:i32>      // quartic extension over prime
+    !EF6 = !field.ef<3x!EF2, 2:i32>     // tower: Fp6 = (Fp2)^3
+    !EF12 = !field.ef<2x!EF6, 2:i32>    // tower: Fp12 = (Fp6)^2
     ```
   }];
   let parameters = (ins
     "unsigned": $degree,
-    Field_PrimeFieldType: $baseField,
+    "Type": $baseField,  // Can be PrimeFieldType or ExtensionFieldType
     "IntegerAttr": $nonResidue
   );
   let extraClassDeclaration = [{
+    // Returns the total degree over the underlying prime field.
+    // For Fp2 over Fp: returns 2
+    // For Fp6 = (Fp2)^3: returns 6
+    // For Fp12 = (Fp6)^2 = ((Fp2)^3)^2: returns 12
     unsigned getDegreeOverPrime() const;
+
+    // Returns the underlying prime field at the base of the tower.
+    PrimeFieldType getBasePrimeField() const;
+
+    // Returns true if this is a tower extension (base field is an extension).
+    bool isTower() const;
+
+    // Returns the tower depth (1 for direct extension over prime).
+    unsigned getTowerDepth() const;
+
     Type cloneWith(Type baseField, Attribute element) const;
     Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder,
                                 Type structType,
