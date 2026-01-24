@@ -542,6 +542,50 @@ func.func @test_to_mont_splat_tensor_fold() -> tensor<2x!Zpm> {
   return %1 : tensor<2x!Zpm>
 }
 
+// CHECK-LABEL: @test_from_mont_to_mont_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_from_mont_to_mont_cancel(%arg0: !Zp) -> !Zp {
+  // CHECK-NOT: mod_arith.to_mont
+  // CHECK-NOT: mod_arith.from_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = mod_arith.to_mont %arg0 : !Zpm
+  %1 = mod_arith.from_mont %0 : !Zp
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_from_mont_to_mont_tensor_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_from_mont_to_mont_tensor_cancel(%arg0: tensor<2x!Zp>) -> tensor<2x!Zp> {
+  // CHECK-NOT: mod_arith.to_mont
+  // CHECK-NOT: mod_arith.from_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = mod_arith.to_mont %arg0 : tensor<2x!Zpm>
+  %1 = mod_arith.from_mont %0 : tensor<2x!Zp>
+  return %1 : tensor<2x!Zp>
+}
+
+// CHECK-LABEL: @test_to_mont_from_mont_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_to_mont_from_mont_cancel(%arg0: !Zpm) -> !Zpm {
+  // CHECK-NOT: mod_arith.from_mont
+  // CHECK-NOT: mod_arith.to_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = mod_arith.from_mont %arg0 : !Zp
+  %1 = mod_arith.to_mont %0 : !Zpm
+  return %1 : !Zpm
+}
+
+// CHECK-LABEL: @test_to_mont_from_mont_tensor_cancel
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_to_mont_from_mont_tensor_cancel(%arg0: tensor<2x!Zpm>) -> tensor<2x!Zpm> {
+  // CHECK-NOT: mod_arith.from_mont
+  // CHECK-NOT: mod_arith.to_mont
+  // CHECK: return %[[ARG0]] : [[T]]
+  %0 = mod_arith.from_mont %arg0 : tensor<2x!Zp>
+  %1 = mod_arith.to_mont %0 : tensor<2x!Zpm>
+  return %1 : tensor<2x!Zpm>
+}
+
 // CHECK-LABEL: @test_cmp_fold
 // CHECK-SAME: () -> i1 {
 func.func @test_cmp_fold() -> i1 {
