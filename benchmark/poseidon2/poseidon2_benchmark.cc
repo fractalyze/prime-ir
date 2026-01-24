@@ -26,6 +26,8 @@ extern "C" void
 _mlir_ciface_permute_10000(StridedMemRefType<uint32_t, 1> *input);
 extern "C" void
 _mlir_ciface_packed_permute_10000(StridedMemRefType<Vector16xI32, 1> *input);
+extern "C" void
+_mlir_ciface_auto_vec_permute_10000(StridedMemRefType<Vector16xI32, 1> *input);
 
 // Set each element to 0.
 void fillWithZero(uint32_t &elem, [[maybe_unused]] ArrayRef<int64_t> coords) {
@@ -37,29 +39,40 @@ void fillVectorWithZero(Vector16xI32 &data,
   data = Vector16xI32{0};
 }
 
-template <bool kIsPacked>
+enum class BenchmarkMode { kScalar, kManualPacked, kAutoVectorized };
+
+template <BenchmarkMode kMode>
 void BM_permute_10000_benchmark(::benchmark::State &state) {
-  if constexpr (kIsPacked) {
+  if constexpr (kMode == BenchmarkMode::kScalar) {
+    OwningMemRef<uint32_t, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
+                                    /*init=*/fillWithZero);
+    for (auto _ : state) {
+      _mlir_ciface_permute_10000(&*input);
+    }
+  } else if constexpr (kMode == BenchmarkMode::kManualPacked) {
     OwningMemRef<Vector16xI32, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
                                         /*init=*/fillVectorWithZero);
     for (auto _ : state) {
       _mlir_ciface_packed_permute_10000(&*input);
     }
   } else {
-    OwningMemRef<uint32_t, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
-                                    /*init=*/fillWithZero);
+    OwningMemRef<Vector16xI32, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
+                                        /*init=*/fillVectorWithZero);
     for (auto _ : state) {
-      _mlir_ciface_permute_10000(&*input);
+      _mlir_ciface_auto_vec_permute_10000(&*input);
     }
   }
 }
 
-BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/false)
+BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, BenchmarkMode::kScalar)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("permute_10000");
-BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/true)
+    ->Name("permute_10000_scalar");
+BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, BenchmarkMode::kManualPacked)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("permute_packed_10000");
+    ->Name("permute_10000_manual_packed");
+BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, BenchmarkMode::kAutoVectorized)
+    ->Unit(::benchmark::kMillisecond)
+    ->Name("permute_10000_auto_vectorized");
 
 } // namespace
 } // namespace mlir::prime_ir::benchmark

@@ -37,10 +37,25 @@ prime_ir_mlir_cc_import(
     ],
 )
 
+prime_ir_mlir_cc_import(
+    name = "poseidon2_auto_vectorized_ciface",
+    llc_flags = [
+        "-mcpu=native",
+    ],
+    mlir_src = "poseidon2_auto_vectorized.mlir",
+    prime_ir_opt_flags = select({
+        "//:prime_ir_has_avx512": ["-field-to-llvm=specialize-avx"],
+        "//conditions:default": ["-field-to-llvm"],
+    }) + [
+        "-convert-vector-to-llvm",
+    ],
+)
+
 prime_ir_benchmark(
     name = "poseidon2_benchmark",
     srcs = ["poseidon2_benchmark.cc"],
     deps = [
+        ":poseidon2_auto_vectorized_ciface",
         ":poseidon2_ciface",
         ":poseidon2_packed_ciface",
         "@llvm-project//mlir:ExecutionEngine",

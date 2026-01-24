@@ -44,6 +44,7 @@ cc_binary(
         "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM",
         "//prime_ir/Dialect/Field/Conversions/FieldToModArith",
+        "//prime_ir/Dialect/Field/Conversions/FieldVectorize",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/Field/Pipelines:Passes",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith",
