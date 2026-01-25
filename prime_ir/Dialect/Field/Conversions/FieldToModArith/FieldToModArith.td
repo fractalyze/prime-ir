@@ -28,6 +28,7 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
   let dependentDialects = [
     "arith::ArithDialect",
     "scf::SCFDialect",
+    "tensor::TensorDialect",
     "prime_ir::mod_arith::ModArithDialect",
   ];
 }

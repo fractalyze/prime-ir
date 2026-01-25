@@ -93,6 +93,43 @@ struct ConvertExtToCoeffs : public ConvertOpToLLVMPattern<ExtToCoeffsOp> {
   }
 };
 
+struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
+  using ConvertOpToLLVMPattern<BitcastOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(BitcastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type inputType = op.getInput().getType();
+    Type outputType = op.getType();
+
+    // Only handle tensor reinterpret bitcasts (extension field <-> prime
+    // field). Scalar bitcasts are handled in FieldToModArith.
+    if (!isTensorReinterpretBitcast(inputType, outputType))
+      return failure();
+
+    // After type conversion, both types should have the same underlying storage
+    // representation.
+    Type convertedOutputType = typeConverter->convertType(op.getType());
+    if (!convertedOutputType) {
+      return op.emitOpError("failed to convert output type");
+    }
+
+    // If the converted types are the same, we can directly replace with the
+    // input.
+    if (adaptor.getInput().getType() == convertedOutputType) {
+      rewriter.replaceOp(op, adaptor.getInput());
+      return success();
+    }
+
+    // For memref types, use unrealized_conversion_cast which will be cleaned up
+    // by reconcile-unrealized-casts pass. The underlying memory is the same,
+    // just viewed differently.
+    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
+        op, convertedOutputType, adaptor.getInput());
+    return success();
+  }
+};
+
 #include "prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.cpp.inc"
 } // namespace
 
@@ -105,6 +142,7 @@ void populateExtFieldToLLVMConversionPatterns(
     const LLVMTypeConverter &converter, RewritePatternSet &patterns) {
   patterns.add<
       // clang-format off
+      ConvertBitcast,
       ConvertExtFromCoeffs,
       ConvertExtToCoeffs
       // clang-format on

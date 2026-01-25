@@ -147,9 +147,42 @@ struct ConvertBitcast : public OpConversionPattern<BitcastOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    Type inputType = op.getInput().getType();
+    Type outputType = op.getType();
+
+    // Check if this is a tensor reinterpret bitcast (extension field <-> prime
+    // field tensors)
+    if (isTensorReinterpretBitcast(inputType, outputType)) {
+      auto outputShaped = cast<ShapedType>(outputType);
+      return convertTensorBitcast(op, adaptor, rewriter, outputShaped);
+    }
+
+    // Scalar bitcast: just convert to mod_arith.bitcast
     auto bitcast = b.create<mod_arith::BitcastOp>(
         typeConverter->convertType(op.getType()), adaptor.getInput());
     rewriter.replaceOp(op, bitcast);
+    return success();
+  }
+
+private:
+  LogicalResult convertTensorBitcast(BitcastOp op, OpAdaptor adaptor,
+                                     ConversionPatternRewriter &rewriter,
+                                     ShapedType outputTensorType) const {
+    // Get the converted output type
+    Type convertedOutputType = typeConverter->convertType(outputTensorType);
+    if (!convertedOutputType) {
+      return op.emitOpError("failed to convert output type");
+    }
+
+    // Keep the field.bitcast op but with updated types.
+    // This preserves zero-copy semantics by deferring the actual memory
+    // reinterpretation to the bufferization stage, where it will be
+    // converted to a memref-level bitcast, and then to LLVM pointer casts.
+    //
+    // NOTE: We intentionally do NOT extract/reconstruct tensor elements here
+    // as that would cause memory copies.
+    rewriter.replaceOpWithNewOp<BitcastOp>(op, convertedOutputType,
+                                           adaptor.getInput());
     return success();
   }
 };
@@ -668,6 +701,7 @@ void FieldToModArith::runOnOperation() {
 
   target.addDynamicallyLegalOp<
       // clang-format off
+      BitcastOp,
       ExtFromCoeffsOp,
       ExtToCoeffsOp,
       affine::AffineForOp,
