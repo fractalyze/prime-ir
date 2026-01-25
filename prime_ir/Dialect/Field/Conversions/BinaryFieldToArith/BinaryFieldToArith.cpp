@@ -242,6 +242,48 @@ struct ConvertBinaryFieldCmp : public OpConversionPattern<CmpOp> {
   }
 };
 
+// Convert unrealized_conversion_cast ops involving binary field types.
+// After type conversion, casts like bf<6> -> i64 become i64 -> i64 (no-op).
+// This handles casts created by PCLMULQDQ/GFNI specialization passes.
+struct ConvertBinaryFieldUnrealizedCast
+    : public OpConversionPattern<UnrealizedConversionCastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(UnrealizedConversionCastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // Only handle single-input single-output casts
+    if (adaptor.getInputs().size() != 1 || op.getResults().size() != 1)
+      return failure();
+
+    Type origInputType = op.getInputs()[0].getType();
+    Type origOutputType = op.getResultTypes()[0];
+
+    // Only convert casts involving binary field types
+    if (!containsBinaryFieldType(origInputType) &&
+        !containsBinaryFieldType(origOutputType)) {
+      return failure();
+    }
+
+    Type convertedOutputType = typeConverter->convertType(origOutputType);
+    if (!convertedOutputType)
+      return failure();
+
+    Value convertedInput = adaptor.getInputs()[0];
+
+    // If types match after conversion, this cast becomes a no-op
+    if (convertedInput.getType() == convertedOutputType) {
+      rewriter.replaceOp(op, convertedInput);
+      return success();
+    }
+
+    // Otherwise, create a new cast with the converted types
+    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
+        op, convertedOutputType, convertedInput);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -281,6 +323,22 @@ struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
     target.addLegalDialect<arith::ArithDialect>();
     target.addLegalDialect<scf::SCFDialect>();
 
+    // Unrealized casts involving binary field types need to be converted.
+    // Casts created by PCLMULQDQ/GFNI specialization (bf<6> -> i64) become
+    // no-ops after type conversion (i64 -> i64). Other casts remain legal.
+    target.addDynamicallyLegalOp<UnrealizedConversionCastOp>(
+        [](UnrealizedConversionCastOp op) {
+          for (Type t : op.getOperandTypes()) {
+            if (containsBinaryFieldType(t))
+              return false;
+          }
+          for (Type t : op.getResultTypes()) {
+            if (containsBinaryFieldType(t))
+              return false;
+          }
+          return true;
+        });
+
     RewritePatternSet patterns(context);
     patterns.add<
         // clang-format off
@@ -293,6 +351,7 @@ struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
         ConvertBinaryFieldSquare,
         ConvertBinaryFieldInverse,
         ConvertBinaryFieldCmp,
+        ConvertBinaryFieldUnrealizedCast,
         ConvertAny<tensor::ExtractOp>,
         ConvertAny<tensor::FromElementsOp>,
         ConvertAny<tensor::InsertOp>
