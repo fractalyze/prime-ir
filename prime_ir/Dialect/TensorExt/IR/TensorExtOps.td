@@ -30,17 +30,26 @@ class TensorExt_Op<string mnemonic, list<Trait> traits = []> :
 }
 
 def TensorExt_BitReverseOp : TensorExt_Op<"bit_reverse", [Pure, DestinationStyleOpInterface, SameOperandsAndResultType]> {
-  let summary = "Bit-reverse the given order.";
+  let summary = "Bit-reverse the given order along a specified dimension.";
   let description = [{
-    Transforms a tensor to its bit-reversed order.
+    Transforms a tensor to its bit-reversed order along the specified dimension.
+    The size of the dimension must be a power of 2.
 
     Example:
     ```
-    %1 = tensor_ext.bit_reverse %0 : tensor<16xi32>
+    // 1D tensor
+    %1 = tensor_ext.bit_reverse %0 into %dest {dimension = 0} : tensor<16xi32>
+
+    // 2D tensor, bit-reverse along dimension 1
+    %2 = tensor_ext.bit_reverse %0 into %dest {dimension = 1} : tensor<4x8xi32>
     ```
   }];
 
-  let arguments = (ins AnyRankedTensor:$source, AnyRankedTensor:$dest);
+  let arguments = (ins
+    AnyRankedTensor:$source,
+    AnyRankedTensor:$dest,
+    I64Attr:$dimension
+  );
   let results = (outs AnyRankedTensor:$output);
   let assemblyFormat = "$source `into` $dest attr-dict `:` type($output)";
   let extraClassDeclaration = [{
@@ -48,6 +57,7 @@ def TensorExt_BitReverseOp : TensorExt_Op<"bit_reverse", [Pure, DestinationStyle
   }];
   let hasFolder = 1;
   let hasCanonicalizer = 1;
+  let hasVerifier = 1;
 }
 
 #endif  // PRIME_IR_DIALECT_TENSOREXT_IR_TENSOREXTOPS_TD_

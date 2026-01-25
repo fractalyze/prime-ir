@@ -20,13 +20,21 @@ include "mlir/IR/PatternBase.td"
 include "prime_ir/Dialect/Field/IR/FieldOps.td"
 include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.td"
 
-// bit_reverse(bit_reverse(x)) -> x
-def BitReverseIsInvolution : Pat<(TensorExt_BitReverseOp (TensorExt_BitReverseOp $x, $dst0), $dst1), (replaceWithValue $x)>;
+// Constraint to check if two attributes are equal
+def EqualAttrs : Constraint<CPred<"$0 == $1">>;
 
-// bit_reverse(mul(bit_reverse(x), y)) -> mul(x, bit_reverse(y))
+// bit_reverse(bit_reverse(x, dim0), dim1) -> x (when dim0 == dim1)
+def BitReverseIsInvolution : Pat<
+    (TensorExt_BitReverseOp (TensorExt_BitReverseOp $x, $dst0, $dim0), $dst1, $dim1),
+    (replaceWithValue $x),
+    [(EqualAttrs $dim0, $dim1)]>;
+
+// bit_reverse(mul(bit_reverse(x, dim0), y), dim1) -> mul(x, bit_reverse(y, dim1))
+// (when dim0 == dim1)
 def BitReverseMulBitReverse :
-    Pat<(TensorExt_BitReverseOp (Field_MulOp (TensorExt_BitReverseOp $x, $dst0), $y), $dst1),
-        (Field_MulOp $x, (TensorExt_BitReverseOp $y, $y))>;
+    Pat<(TensorExt_BitReverseOp (Field_MulOp (TensorExt_BitReverseOp $x, $dst0, $dim0), $y), $dst1, $dim1),
+        (Field_MulOp $x, (TensorExt_BitReverseOp $y, $dst1, $dim1)),
+        [(EqualAttrs $dim0, $dim1)]>;
 
 
 #endif // PRIME_IR_TENSOREXT_IR_TENSOREXT_CANONICALIZATION_TD

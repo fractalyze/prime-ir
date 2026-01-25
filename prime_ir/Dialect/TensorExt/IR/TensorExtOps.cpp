@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
 
+#include "llvm/ADT/bit.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
@@ -31,27 +32,62 @@ Operation *TensorExtDialect::materializeConstant(OpBuilder &builder,
   return nullptr;
 }
 
-OpFoldResult BitReverseOp::fold(FoldAdaptor adaptor) {
-  if (auto constTensor =
-          dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getSource())) {
-    SmallVector<APInt> reversed(constTensor.begin(), constTensor.end());
-    unsigned bitWidth = llvm::countr_zero(reversed.size());
+LogicalResult BitReverseOp::verify() {
+  auto tensorType = cast<RankedTensorType>(getSource().getType());
+  int64_t rank = tensorType.getRank();
+  int64_t dim = getDimension();
 
-    // Apply the bit reversal mapping
-    for (size_t i = 0; i < reversed.size(); ++i) {
-      APInt fromIndex(bitWidth, i);
-      APInt toIndex = fromIndex.reverseBits();
-      if (toIndex.ugt(fromIndex)) {
-        size_t j = toIndex.getZExtValue();
-        APInt tmp = reversed[i];
-        reversed[i] = reversed[j];
-        reversed[j] = tmp;
-      }
-    }
-
-    return DenseElementsAttr::get(constTensor.getType(), reversed);
+  if (dim < 0 || dim >= rank) {
+    return emitOpError("dimension ")
+           << dim << " is out of range for tensor of rank " << rank;
   }
-  return {};
+
+  int64_t dimSize = tensorType.getShape()[dim];
+  if (!llvm::has_single_bit<uint64_t>(dimSize)) {
+    return emitOpError("dimension size ") << dimSize << " is not a power of 2";
+  }
+
+  return success();
+}
+
+OpFoldResult BitReverseOp::fold(FoldAdaptor adaptor) {
+  auto constTensor =
+      dyn_cast_if_present<DenseIntElementsAttr>(adaptor.getSource());
+  if (!constTensor)
+    return {};
+
+  auto tensorType = cast<RankedTensorType>(constTensor.getType());
+  int64_t rank = tensorType.getRank();
+  int64_t dim = getDimension();
+  int64_t dimSize = tensorType.getShape()[dim];
+
+  SmallVector<APInt> values(constTensor.getValues<APInt>());
+  unsigned bitWidth = llvm::countr_zero<uint64_t>(dimSize);
+
+  SmallVector<int64_t> strides(rank);
+  strides[rank - 1] = 1;
+  for (int i = rank - 2; i >= 0; --i) {
+    strides[i] = strides[i + 1] * tensorType.getShape()[i + 1];
+  }
+
+  int64_t numElements = tensorType.getNumElements();
+  for (int64_t linearIndex = 0; linearIndex < numElements; ++linearIndex) {
+    // Derive multi-dimensional index from linear index.
+    int64_t dimIndex = (linearIndex / strides[dim]) % dimSize;
+
+    APInt fromIndex(bitWidth, dimIndex);
+    APInt toIndex = fromIndex.reverseBits();
+    int64_t revDimIndex = toIndex.getZExtValue();
+
+    if (revDimIndex > dimIndex) {
+      // Calculate linear index of the element to swap with.
+      int64_t linearRevIndex =
+          linearIndex - dimIndex * strides[dim] + revDimIndex * strides[dim];
+      std::swap(values[linearIndex], values[linearRevIndex]);
+    }
+  }
+
+  return DenseElementsAttr::get(tensorType, values);
 }
 
 namespace {
