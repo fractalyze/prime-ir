@@ -19,6 +19,11 @@ limitations under the License.
 include "mlir/IR/PatternBase.td"
 include "prime_ir/Dialect/ModArith/IR/ModArithOps.td"
 
+//===----------------------------------------------------------------------===//
+// Helper Definitions
+//===----------------------------------------------------------------------===//
+
+// Scalar constant matchers
 def IsZero : Constraint<CPred<"isEqualTo($0, $1, 0)">>;
 def IsOne : Constraint<CPred<"isEqualTo($0, $1, 1)">>;
 def IsTwo : Constraint<CPred<"isEqualTo($0, $1, 2)">>;
@@ -26,26 +31,47 @@ def IsNegativeOne : Constraint<CPred<"isNegativeOf($0, $1, 1)">>;
 def IsNegativeTwo : Constraint<CPred<"isNegativeOf($0, $1, 2)">>;
 def IsNegativeThree : Constraint<CPred<"isNegativeOf($0, $1, 3)">>;
 def IsNegativeFour : Constraint<CPred<"isNegativeOf($0, $1, 4)">>;
+
+// Constant materialization
 def GetAsConstant : NativeCodeCall<"$_builder.create<ConstantOp>(odsLoc, $0.getType(), cast<TypedAttr>($1))">;
 def GetZeroAttr : NativeCodeCall<"$_builder.getZeroAttr(cast<IntegerType>($0))">;
 def GetIntegerType : NativeCodeCall<"cast<ModArithType>($0.getType()).getStorageType()">;
 
-// Helper functions to create AddOp/SubOp.
-// For mod_arith operations, result types are inferred from operands (SameOperandsAndResultType).
-def CreateAddOp : NativeCodeCall<"$_builder.create<AddOp>(odsLoc, $0, $1)">;
-def CreateSubOp : NativeCodeCall<"$_builder.create<SubOp>(odsLoc, $0, $1)">;
+//===----------------------------------------------------------------------===//
+// Include Canonicalization Pattern Files
+//===----------------------------------------------------------------------===//
 
-include "prime_ir/Utils/AdditiveCanonicalization.td"
-include "prime_ir/Utils/MultiplicativeCanonicalization.td"
-include "prime_ir/Utils/DistributivityCanonicalization.td"
+include "prime_ir/Utils/FieldCanonicalization.td"
 
-defm ModArith : AdditiveCanonicalizationPatterns<
+//===----------------------------------------------------------------------===//
+// Instantiate Patterns for ModArith Dialect
+//===----------------------------------------------------------------------===//
+
+// ModArith is a Ring (no multiplicative inverse), so we use:
+// - Additive patterns (Add, Sub, Neg, Double)
+// - Multiplicative patterns (Mul, Square) - no Inverse
+// - Strength reduction and distributivity patterns
+
+// 1. Additive patterns (Add, Sub, Neg, Double)
+defm ModArith : FieldAdditiveCorePatterns<
     ModArith_AddOp, ModArith_SubOp, ModArith_NegateOp, ModArith_DoubleOp>;
+defm ModArith : FieldAdditiveConstantPatterns<
+    ModArith_AddOp, ModArith_SubOp>;
 
-defm ModArith : MultiplicativeCanonicalizationPatterns<
-    ModArith_MulOp, ModArith_SquareOp, ModArith_DoubleOp, ModArith_NegateOp>;
+// 2. Multiplicative patterns (Mul, Square)
+defm ModArith : FieldMultiplicativeCorePatterns<
+    ModArith_MulOp, ModArith_SquareOp>;
+defm ModArith : FieldMultiplicativeConstantPatterns<
+    ModArith_MulOp>;
 
-defm ModArith : DistributivityCanonicalizationPatterns<
-    ModArith_AddOp, ModArith_SubOp, ModArith_MulOp, ModArith_SquareOp, ModArith_DoubleOp, ModArith_NegateOp>;
+// Note: ModArith does not have InverseOp, so we skip FieldInversePatterns
+
+// 3. Strength reduction patterns (mul by small constants -> double/neg)
+defm ModArith : FieldStrengthReductionPatterns<
+    ModArith_AddOp, ModArith_MulOp, ModArith_DoubleOp, ModArith_NegateOp>;
+
+// 4. Distributivity patterns
+defm ModArith : FieldDistributivityPatterns<
+    ModArith_AddOp, ModArith_SubOp, ModArith_MulOp, ModArith_SquareOp, ModArith_DoubleOp>;
 
 #endif // PRIME_IR_MODARITH_IR_MODARITH_CANONICALIZATION_TD

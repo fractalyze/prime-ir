@@ -19,6 +19,11 @@ limitations under the License.
 include "mlir/IR/PatternBase.td"
 include "prime_ir/Dialect/Field/IR/FieldOps.td"
 
+//===----------------------------------------------------------------------===//
+// Helper Definitions
+//===----------------------------------------------------------------------===//
+
+// Scalar constant matchers
 def IsZero : Constraint<CPred<"isEqualTo($0, $1, 0)">>;
 def IsOne : Constraint<CPred<"isEqualTo($0, $1, 1)">>;
 def IsTwo : Constraint<CPred<"isEqualTo($0, $1, 2)">>;
@@ -26,26 +31,43 @@ def IsNegativeOne : Constraint<CPred<"isNegativeOf($0, $1, 1)">>;
 def IsNegativeTwo : Constraint<CPred<"isNegativeOf($0, $1, 2)">>;
 def IsNegativeThree : Constraint<CPred<"isNegativeOf($0, $1, 3)">>;
 def IsNegativeFour : Constraint<CPred<"isNegativeOf($0, $1, 4)">>;
+
+// Constant materialization
 def GetAsConstant : NativeCodeCall<"$_builder.create<ConstantOp>(odsLoc, $0.getType(), cast<TypedAttr>($1))">;
 def GetZeroAttr : NativeCodeCall<"$_builder.getZeroAttr(cast<IntegerType>($0))">;
 def GetIntegerType : NativeCodeCall<"cast<PrimeFieldType>($0.getType()).getStorageType()">;
 
-// Helper functions to create AddOp/SubOp.
-// For field operations, result types are inferred from operands (SameOperandsAndResultType).
-def CreateAddOp : NativeCodeCall<"$_builder.create<AddOp>(odsLoc, $0, $1)">;
-def CreateSubOp : NativeCodeCall<"$_builder.create<SubOp>(odsLoc, $0, $1)">;
+//===----------------------------------------------------------------------===//
+// Include Canonicalization Pattern Files
+//===----------------------------------------------------------------------===//
 
-include "prime_ir/Utils/AdditiveCanonicalization.td"
-include "prime_ir/Utils/MultiplicativeCanonicalization.td"
-include "prime_ir/Utils/DistributivityCanonicalization.td"
+include "prime_ir/Utils/FieldCanonicalization.td"
 
-defm Field : AdditiveCanonicalizationPatterns<
+//===----------------------------------------------------------------------===//
+// Instantiate Patterns for Field Dialect
+//===----------------------------------------------------------------------===//
+
+// Field is a complete algebraic structure with additive, multiplicative,
+// and inverse operations.
+
+// 1. Additive patterns (Add, Sub, Neg, Double)
+defm Field : FieldAdditiveCorePatterns<
     Field_AddOp, Field_SubOp, Field_NegateOp, Field_DoubleOp>;
+defm Field : FieldAdditiveConstantPatterns<
+    Field_AddOp, Field_SubOp>;
 
-defm Field : MultiplicativeCanonicalizationPatterns<
-    Field_MulOp, Field_SquareOp, Field_DoubleOp, Field_NegateOp>;
+// 2. Multiplicative patterns (Mul, Square)
+defm Field : FieldMultiplicativeCorePatterns<
+    Field_MulOp, Field_SquareOp>;
+defm Field : FieldMultiplicativeConstantPatterns<
+    Field_MulOp>;
 
-defm Field : DistributivityCanonicalizationPatterns<
-    Field_AddOp, Field_SubOp, Field_MulOp, Field_SquareOp, Field_DoubleOp, Field_NegateOp>;
+// 3. Strength reduction patterns (mul by small constants -> double/neg)
+defm Field : FieldStrengthReductionPatterns<
+    Field_AddOp, Field_MulOp, Field_DoubleOp, Field_NegateOp>;
+
+// 4. Distributivity patterns
+defm Field : FieldDistributivityPatterns<
+    Field_AddOp, Field_SubOp, Field_MulOp, Field_SquareOp, Field_DoubleOp>;
 
 #endif // PRIME_IR_FIELD_IR_FIELD_CANONICALIZATION_TD

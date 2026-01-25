@@ -18,16 +18,15 @@ limitations under the License.
 
 include "mlir/IR/PatternBase.td"
 include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.td"
+include "prime_ir/Dialect/Field/IR/FieldOps.td"
 
-def GetAsConstant : NativeCodeCall<"$_builder.create<FromCoordsOp>(odsLoc, $0.getType(), ValueRange{})">;
-def GetZeroAttr : NativeCodeCall<"IntegerAttr::get(IntegerType::get($_builder.getContext(), 1), 0)">;
-def GetIntegerType : NativeCodeCall<"IntegerType::get($_builder.getContext(), 1)">;
+//===----------------------------------------------------------------------===//
+// Helper Definitions for Point Operations
+//===----------------------------------------------------------------------===//
 
-// Helper functions to create AddOp/SubOp with explicit result types.
-// For elliptic curves, we need to specify the result type explicitly.
-// These helpers use the result type from the original operation being matched.
-// In the generated code, the lambda captures the surrounding scope with [&],
-// so we can access `castedOp0` which is the original operation cast to AddOp/SubOp.
+// Helper functions to create operations with explicit result types.
+// For elliptic curves, we need to specify the result type explicitly since
+// the result type may differ from operand types (e.g., affine + affine -> jacobian).
 def CreateAddOp : NativeCodeCall<"[&]{ "
     "Type resultType = castedOp0.getType(); "
     "ImplicitLocOpBuilder b(odsLoc, $_builder); "
@@ -38,10 +37,67 @@ def CreateSubOp : NativeCodeCall<"[&]{ "
     "ImplicitLocOpBuilder b(odsLoc, $_builder); "
     "return b.create<SubOp>(resultType, $0, $1); "
     "}()">;
+def CreateScalarMulOp : NativeCodeCall<"[&]{ "
+    "Type resultType = castedOp0.getType(); "
+    "ImplicitLocOpBuilder b(odsLoc, $_builder); "
+    "return b.create<ScalarMulOp>(resultType, $0, $1); "
+    "}()">;
+def CreateNegOp : NativeCodeCall<"[&]{ "
+    "Type resultType = castedOp0.getType(); "
+    "ImplicitLocOpBuilder b(odsLoc, $_builder); "
+    "return b.create<NegateOp>(resultType, $0); "
+    "}()">;
+def CreateDoubleOp : NativeCodeCall<"[&]{ "
+    "Type resultType = castedOp0.getType(); "
+    "ImplicitLocOpBuilder b(odsLoc, $_builder); "
+    "return b.create<DoubleOp>(resultType, $0); "
+    "}()">;
 
-include "prime_ir/Utils/AdditiveCanonicalization.td"
+//===----------------------------------------------------------------------===//
+// Helper Definitions for Scalar Constants
+//===----------------------------------------------------------------------===//
 
-defm EllipticCurve : AdditiveCanonicalizationPatterns<
-    EllipticCurve_AddOp, EllipticCurve_SubOp, EllipticCurve_NegateOp, EllipticCurve_DoubleOp>;
+// Scalar constant matchers (for scalar field values)
+def IsScalarZero : Constraint<CPred<"isScalarEqualTo($0, 0)">>;
+def IsScalarOne : Constraint<CPred<"isScalarEqualTo($0, 1)">>;
+def IsScalarTwo : Constraint<CPred<"isScalarEqualTo($0, 2)">>;
+def IsScalarNegOne : Constraint<CPred<"isScalarNegativeOf($0, 1)">>;
+
+// Create zero point (identity element in the additive group)
+def GetZeroPoint : NativeCodeCall<"[&]{ "
+    "ImplicitLocOpBuilder b(odsLoc, $_builder); "
+    "return createZeroPoint(b, $0.getType()); "
+    "}()">;
+
+//===----------------------------------------------------------------------===//
+// Include Canonicalization Pattern Files
+//===----------------------------------------------------------------------===//
+
+include "prime_ir/Utils/AdditiveGroupCanonicalization.td"
+
+//===----------------------------------------------------------------------===//
+// Instantiate Patterns for Elliptic Curve Dialect
+//===----------------------------------------------------------------------===//
+
+// Elliptic Curve points form an additive group with scalar multiplication.
+
+// 1. Additive Group Core Patterns (Add, Sub, Double)
+defm EllipticCurve : AdditiveGroupCorePatterns<
+    EllipticCurve_AddOp, EllipticCurve_SubOp, EllipticCurve_NegateOp>;
+
+// 2. Scalar Multiplication Strength Reduction
+//    1*P -> P, 0*P -> zero, 2*P -> double(P), (-1)*P -> -P
+defm EllipticCurve : ScalarMulStrengthReductionPatterns<
+    EllipticCurve_ScalarMulOp>;
+
+// 3. Scalar Multiplication Distributivity (factoring)
+//    s*P + s*Q -> s*(P + Q), s*P - s*Q -> s*(P - Q)
+defm EllipticCurve : ScalarMulDistributivityPatterns<
+    EllipticCurve_ScalarMulOp, EllipticCurve_AddOp, EllipticCurve_SubOp>;
+
+// 4. Scalar Multiplication Associativity
+//    s * (t * P) -> (s * t) * P
+defm EllipticCurve : ScalarMulAssociativityPatterns<
+    EllipticCurve_ScalarMulOp, Field_MulOp>;
 
 #endif // PRIME_IR_ELLIPTICCURVE_IR_ELLIPTICCURVE_CANONICALIZATION_TD
