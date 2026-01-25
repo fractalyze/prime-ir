@@ -21,10 +21,11 @@
 // Tower extension: Fp6 = (Fp2)^3 where Fp2 = Fp[v]/(v² - 6), Fp6 = Fp2[w]/(w³ - 2)
 // An Fp6 element: (a₀ + a₁v) + (b₀ + b₁v)w + (c₀ + c₁v)w²
 // Stored as 6 coefficients: [a₀, a₁, b₀, b₁, c₀, c₁]
+// nonResidue for Fp6 over Fp2 is dense<[2, 0]> representing 2 + 0v = 2 in Fp2
 
 !PF = !field.pf<7:i32>
 !QF = !field.ef<2x!PF, 6:i32>
-!TowerF6 = !field.ef<3x!QF, 2:i32>
+!TowerF6 = !field.ef<3x!QF, dense<[2, 0]> : tensor<2xi32>>
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 

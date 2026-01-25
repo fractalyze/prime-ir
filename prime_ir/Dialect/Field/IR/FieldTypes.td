@@ -113,17 +113,19 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     Example:
     ```
     !PF = !field.pf<7:i32>
-    !EF2 = !field.ef<2x!PF, 6:i32>      // quadratic extension over prime
-    !EF3 = !field.ef<3x!PF, 2:i32>      // cubic extension over prime
-    !EF4 = !field.ef<4x!PF, 2:i32>      // quartic extension over prime
-    !EF6 = !field.ef<3x!EF2, 2:i32>     // tower: Fp6 = (Fp2)^3
-    !EF12 = !field.ef<2x!EF6, 2:i32>    // tower: Fp12 = (Fp6)^2
+    !EF2 = !field.ef<2x!PF, 6>       // quadratic extension over prime
+    !EF3 = !field.ef<3x!PF, 2>       // cubic extension over prime
+    !EF4 = !field.ef<4x!PF, 2>       // quartic extension over prime
+    // tower: Fp6 = (Fp2)^3, nonResidue = 1+2v (flattened to [1, 2])
+    !EF6 = !field.ef<3x!EF2, dense<[1, 2]> : tensor<2xi32>>
+    // tower: Fp12 = (Fp6)^2, nonResidue in Fp6 (flattened to 6 elements)
+    !EF12 = !field.ef<2x!EF6, dense<[1, 0, 2, 0, 0, 0]> : tensor<6xi32>>
     ```
   }];
   let parameters = (ins
     "unsigned": $degree,
     "Type": $baseField,  // Can be PrimeFieldType or ExtensionFieldType
-    "IntegerAttr": $nonResidue
+    "Attribute": $nonResidue  // IntegerAttr for prime base, DenseIntElementsAttr for extension base
   );
   let extraClassDeclaration = [{
     // Returns the total degree over the underlying prime field.

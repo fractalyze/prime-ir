@@ -30,6 +30,103 @@ limitations under the License.
 // IWYU pragma: end_keep
 namespace mlir::prime_ir::field {
 
+namespace {
+
+// Convert DenseIntElementsAttr to standard form
+DenseIntElementsAttr convertDenseToStandardForm(DenseIntElementsAttr denseAttr,
+                                                IntegerAttr primeModulus) {
+  SmallVector<APInt> values;
+  for (APInt val : denseAttr.getValues<APInt>()) {
+    auto intAttr = IntegerAttr::get(
+        IntegerType::get(denseAttr.getContext(), val.getBitWidth()), val);
+    auto stdAttr = mod_arith::getAttrAsStandardForm(primeModulus, intAttr);
+    values.push_back(stdAttr.getValue());
+  }
+  return DenseIntElementsAttr::get(denseAttr.getType(), values);
+}
+
+// Convert DenseIntElementsAttr to Montgomery form
+DenseIntElementsAttr convertDenseToMontgomeryForm(DenseIntElementsAttr denseAttr,
+                                                  IntegerAttr primeModulus) {
+  SmallVector<APInt> values;
+  for (APInt val : denseAttr.getValues<APInt>()) {
+    auto intAttr = IntegerAttr::get(
+        IntegerType::get(denseAttr.getContext(), val.getBitWidth()), val);
+    auto montAttr = mod_arith::getAttrAsMontgomeryForm(primeModulus, intAttr);
+    values.push_back(montAttr.getValue());
+  }
+  return DenseIntElementsAttr::get(denseAttr.getType(), values);
+}
+
+// Convert nonResidue attribute to standard form
+Attribute convertNonResidueToStandardForm(Attribute nonResidue, Type baseField,
+                                          IntegerAttr primeModulus) {
+  if (isa<PrimeFieldType>(baseField)) {
+    return mod_arith::getAttrAsStandardForm(primeModulus,
+                                            cast<IntegerAttr>(nonResidue));
+  }
+  return convertDenseToStandardForm(cast<DenseIntElementsAttr>(nonResidue),
+                                    primeModulus);
+}
+
+// Convert nonResidue attribute to Montgomery form
+Attribute convertNonResidueToMontgomeryForm(Attribute nonResidue,
+                                            Type baseField,
+                                            IntegerAttr primeModulus) {
+  if (isa<PrimeFieldType>(baseField)) {
+    return mod_arith::getAttrAsMontgomeryForm(primeModulus,
+                                              cast<IntegerAttr>(nonResidue));
+  }
+  return convertDenseToMontgomeryForm(cast<DenseIntElementsAttr>(nonResidue),
+                                      primeModulus);
+}
+
+// Recursively convert extension field type to standard form
+Type convertExtFieldToStandardForm(ExtensionFieldType extField) {
+  Type baseField = extField.getBaseField();
+  IntegerAttr primeModulus = extField.getBasePrimeField().getModulus();
+
+  // Convert base field
+  Type standardBaseField;
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    standardBaseField =
+        PrimeFieldType::get(extField.getContext(), pfType.getModulus());
+  } else {
+    standardBaseField =
+        convertExtFieldToStandardForm(cast<ExtensionFieldType>(baseField));
+  }
+
+  // Convert nonResidue
+  Attribute standardNonResidue = convertNonResidueToStandardForm(
+      extField.getNonResidue(), baseField, primeModulus);
+
+  return extField.cloneWith(standardBaseField, standardNonResidue);
+}
+
+// Recursively convert extension field type to Montgomery form
+Type convertExtFieldToMontgomeryForm(ExtensionFieldType extField) {
+  Type baseField = extField.getBaseField();
+  IntegerAttr primeModulus = extField.getBasePrimeField().getModulus();
+
+  // Convert base field
+  Type montBaseField;
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    montBaseField =
+        PrimeFieldType::get(extField.getContext(), pfType.getModulus(), true);
+  } else {
+    montBaseField =
+        convertExtFieldToMontgomeryForm(cast<ExtensionFieldType>(baseField));
+  }
+
+  // Convert nonResidue
+  Attribute montNonResidue = convertNonResidueToMontgomeryForm(
+      extField.getNonResidue(), baseField, primeModulus);
+
+  return extField.cloneWith(montBaseField, montNonResidue);
+}
+
+} // namespace
+
 Type getStandardFormType(Type type) {
   Type standardType = getElementTypeOrSelf(type);
   if (auto pfType = dyn_cast<PrimeFieldType>(standardType)) {
@@ -39,13 +136,7 @@ Type getStandardFormType(Type type) {
     }
   } else if (auto extField = dyn_cast<ExtensionFieldType>(standardType)) {
     if (extField.isMontgomery()) {
-      auto baseField = cast<PrimeFieldType>(extField.getBaseField());
-      auto pfType =
-          PrimeFieldType::get(type.getContext(), baseField.getModulus());
-      auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
-      standardType = extField.cloneWith(
-          pfType,
-          mod_arith::getAttrAsStandardForm(baseField.getModulus(), nonResidue));
+      standardType = convertExtFieldToStandardForm(extField);
     }
   }
   if (auto memrefType = dyn_cast<MemRefType>(type)) {
@@ -67,13 +158,7 @@ Type getMontgomeryFormType(Type type) {
     }
   } else if (auto extField = dyn_cast<ExtensionFieldType>(montType)) {
     if (!extField.isMontgomery()) {
-      auto baseField = cast<PrimeFieldType>(extField.getBaseField());
-      auto pfType =
-          PrimeFieldType::get(type.getContext(), baseField.getModulus(), true);
-      auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
-      montType =
-          extField.cloneWith(pfType, mod_arith::getAttrAsMontgomeryForm(
-                                         baseField.getModulus(), nonResidue));
+      montType = convertExtFieldToMontgomeryForm(extField);
     }
   }
   if (auto memrefType = dyn_cast<MemRefType>(type)) {
@@ -510,7 +595,8 @@ std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
     return numElements;
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    return numElements * efType.getDegree();
+    // Use getDegreeOverPrime() to handle tower extensions correctly
+    return numElements * efType.getDegreeOverPrime();
   }
   return std::nullopt;
 }
@@ -520,8 +606,59 @@ bool haveSameModulus(PrimeFieldType inputPF, PrimeFieldType outputPF) {
   return inputPF.getModulus() == outputPF.getModulus();
 }
 
+// Compare non-residue attributes (IntegerAttr for prime base,
+// DenseIntElementsAttr for tower extensions).
+bool compareNonResidues(Attribute inputNR, Attribute outputNR, Type baseField,
+                        bool inputIsMontgomery, bool outputIsMontgomery,
+                        IntegerAttr primeModulus) {
+  if (isa<PrimeFieldType>(baseField)) {
+    auto inputInt = cast<IntegerAttr>(inputNR);
+    auto outputInt = cast<IntegerAttr>(outputNR);
+
+    // Convert to standard form for comparison
+    IntegerAttr inputStd =
+        inputIsMontgomery
+            ? mod_arith::getAttrAsStandardForm(primeModulus, inputInt)
+            : inputInt;
+    IntegerAttr outputStd =
+        outputIsMontgomery
+            ? mod_arith::getAttrAsStandardForm(primeModulus, outputInt)
+            : outputInt;
+
+    return inputStd.getValue() == outputStd.getValue();
+  }
+
+  // For tower: compare DenseIntElementsAttr
+  auto inputDense = cast<DenseIntElementsAttr>(inputNR);
+  auto outputDense = cast<DenseIntElementsAttr>(outputNR);
+
+  if (inputDense.getNumElements() != outputDense.getNumElements()) {
+    return false;
+  }
+
+  // Convert to standard form and compare
+  DenseIntElementsAttr inputStd =
+      inputIsMontgomery
+          ? convertDenseToStandardForm(inputDense, primeModulus)
+          : inputDense;
+  DenseIntElementsAttr outputStd =
+      outputIsMontgomery
+          ? convertDenseToStandardForm(outputDense, primeModulus)
+          : outputDense;
+
+  auto inputIt = inputStd.getValues<APInt>().begin();
+  auto outputIt = outputStd.getValues<APInt>().begin();
+  for (int64_t i = 0; i < inputStd.getNumElements(); ++i, ++inputIt, ++outputIt) {
+    if (*inputIt != *outputIt) {
+      return false;
+    }
+  }
+  return true;
+}
+
 // Check if two extension field types have compatible structure (same degree,
 // same base field modulus, and same non-residue in standard form).
+// Supports tower extensions.
 bool haveCompatibleStructure(ExtensionFieldType inputEF,
                              ExtensionFieldType outputEF) {
   // Must have the same degree
@@ -529,29 +666,32 @@ bool haveCompatibleStructure(ExtensionFieldType inputEF,
     return false;
   }
 
-  // Check base field modulus
-  auto inputBaseField = cast<PrimeFieldType>(inputEF.getBaseField());
-  auto outputBaseField = cast<PrimeFieldType>(outputEF.getBaseField());
-  if (!haveSameModulus(inputBaseField, outputBaseField)) {
+  // Check base prime field modulus
+  if (!haveSameModulus(inputEF.getBasePrimeField(),
+                       outputEF.getBasePrimeField())) {
     return false;
   }
 
+  // For towers, recursively check base field structure
+  Type inputBase = inputEF.getBaseField();
+  Type outputBase = outputEF.getBaseField();
+
+  if (isa<PrimeFieldType>(inputBase) != isa<PrimeFieldType>(outputBase)) {
+    return false; // One is tower, other is not
+  }
+
+  if (auto inputBaseEF = dyn_cast<ExtensionFieldType>(inputBase)) {
+    auto outputBaseEF = cast<ExtensionFieldType>(outputBase);
+    if (!haveCompatibleStructure(inputBaseEF, outputBaseEF)) {
+      return false;
+    }
+  }
+
   // Compare non-residue values in standard form
-  auto inputNonResidue = cast<IntegerAttr>(inputEF.getNonResidue());
-  auto outputNonResidue = cast<IntegerAttr>(outputEF.getNonResidue());
-
-  // Convert both non-residues to standard form for comparison
-  IntegerAttr modulus = inputBaseField.getModulus();
-  IntegerAttr inputNRStd =
-      inputEF.isMontgomery()
-          ? mod_arith::getAttrAsStandardForm(modulus, inputNonResidue)
-          : inputNonResidue;
-  IntegerAttr outputNRStd =
-      outputEF.isMontgomery()
-          ? mod_arith::getAttrAsStandardForm(modulus, outputNonResidue)
-          : outputNonResidue;
-
-  return inputNRStd.getValue() == outputNRStd.getValue();
+  IntegerAttr primeModulus = inputEF.getBasePrimeField().getModulus();
+  return compareNonResidues(inputEF.getNonResidue(), outputEF.getNonResidue(),
+                            inputBase, inputEF.isMontgomery(),
+                            outputEF.isMontgomery(), primeModulus);
 }
 
 } // namespace

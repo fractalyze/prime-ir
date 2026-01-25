@@ -33,31 +33,16 @@ Value createNonResidueConstant(ImplicitLocOpBuilder &b,
   Attribute nonResidueAttr = efType.getNonResidue();
 
   if (isa<PrimeFieldType>(baseFieldType)) {
-    // Non-tower: non-residue is in the prime field
+    // Non-tower: non-residue is IntegerAttr in the prime field
     return b.create<mod_arith::ConstantOp>(
         converter->convertType(baseFieldType),
         cast<IntegerAttr>(nonResidueAttr));
   }
 
-  // Tower: non-residue is in the base extension field
+  // Tower: non-residue is DenseIntElementsAttr in the base extension field
   auto baseEfType = cast<ExtensionFieldType>(baseFieldType);
-
-  // If non-residue is a simple integer, convert it to extension field constant
-  if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
-    unsigned baseDegree = baseEfType.getDegreeOverPrime();
-    auto primeField = baseEfType.getBasePrimeField();
-    auto storageType = primeField.getStorageType();
-
-    // Create [val, 0, 0, ...] coefficient array
-    SmallVector<APInt> coeffs(baseDegree,
-                              APInt::getZero(storageType.getWidth()));
-    coeffs[0] = intAttr.getValue();
-    nonResidueAttr = DenseIntElementsAttr::get(
-        RankedTensorType::get({static_cast<int64_t>(baseDegree)}, storageType),
-        coeffs);
-  }
-
-  return ConstantOp::materialize(b, nonResidueAttr, baseEfType, b.getLoc());
+  auto denseAttr = cast<DenseIntElementsAttr>(nonResidueAttr);
+  return ConstantOp::materialize(b, denseAttr, baseEfType, b.getLoc());
 }
 
 // Returns a signature encoding the tower structure.
