@@ -26,6 +26,7 @@ cc_library(
     deps = [
         "//prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM",
+        "//prime_ir/Dialect/Field/Conversions/BinaryFieldToArith",
         "//prime_ir/Dialect/Field/Conversions/FieldToModArith",
         "//prime_ir/Dialect/Field/Transforms:FoldFieldLinalgContraction",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith",

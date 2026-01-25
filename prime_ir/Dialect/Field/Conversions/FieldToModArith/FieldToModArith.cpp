@@ -88,6 +88,11 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
   LogicalResult
   matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Skip binary field operations - they are handled by BinaryFieldToArith
+    if (isa<BinaryFieldType>(getElementTypeOrSelf(op.getType()))) {
+      return failure();
+    }
+
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     // Case 1: Prime field constants (scalar or tensor)
@@ -643,6 +648,31 @@ namespace rewrites {
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
 } // namespace rewrites
 
+namespace {
+
+// Check if a type contains BinaryFieldType
+bool containsBinaryFieldType(Type type) {
+  Type elemType = getElementTypeOrSelf(type);
+  return isa<BinaryFieldType>(elemType);
+}
+
+// Check if any type in the operation contains BinaryFieldType
+bool operationContainsBinaryFieldType(Operation *op) {
+  // Check result types
+  for (Type type : op->getResultTypes()) {
+    if (containsBinaryFieldType(type))
+      return true;
+  }
+  // Check operand types
+  for (Value operand : op->getOperands()) {
+    if (containsBinaryFieldType(operand.getType()))
+      return true;
+  }
+  return false;
+}
+
+} // namespace
+
 struct FieldToModArith : impl::FieldToModArithBase<FieldToModArith> {
   using FieldToModArithBase::FieldToModArithBase;
 
@@ -655,6 +685,14 @@ void FieldToModArith::runOnOperation() {
   FieldToModArithTypeConverter typeConverter(context);
 
   ConversionTarget target(*context);
+
+  // Mark field operations as dynamically legal if they contain BinaryFieldType
+  // (those will be handled by BinaryFieldToArith pass instead)
+  target.addDynamicallyLegalOp<ConstantOp, AddOp, SubOp, MulOp, NegateOp,
+                               DoubleOp, SquareOp, InverseOp, CmpOp, PowUIOp>(
+      [](Operation *op) { return operationContainsBinaryFieldType(op); });
+
+  // Mark remaining field dialect ops as illegal (prime/extension field ops)
   target.addIllegalDialect<FieldDialect>();
   target.addLegalDialect<mod_arith::ModArithDialect>();
 

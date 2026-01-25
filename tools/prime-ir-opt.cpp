@@ -25,6 +25,7 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
+#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldToArith.h"
 #include "prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
@@ -64,6 +65,7 @@ int main(int argc, char **argv) {
 
   // Dialect conversion passes
   mlir::prime_ir::mod_arith::registerModArithToArithPasses();
+  mlir::prime_ir::field::registerBinaryFieldToArithPasses();
   mlir::prime_ir::field::registerFieldToModArithPasses();
   mlir::prime_ir::field::registerExtFieldToLLVMPasses();
   mlir::prime_ir::poly::registerPolyToFieldPasses();

@@ -34,6 +34,7 @@ limitations under the License.
 #include "mlir/Transforms/Passes.h"
 #include "prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
+#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldToArith.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
 #include "prime_ir/Dialect/Field/Transforms/FoldFieldLinalgContraction.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
@@ -52,6 +53,8 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   // If we convert elementwise to linalg, tensor folding in ModArithDialect will
   // not work.
   pm.addPass(createFieldToModArith());
+  // Binary fields lower directly to arith (not through mod_arith)
+  pm.addPass(createBinaryFieldToArith());
   pm.addPass(createCanonicalizerPass());
 
   pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
@@ -104,6 +107,8 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
   pm.addPass(createFieldToModArith());
+  // Binary fields lower directly to arith (not through mod_arith)
+  pm.addPass(createBinaryFieldToArith());
   pm.addPass(createCanonicalizerPass());
 
   pm.addPass(mod_arith::createModArithToArith());
