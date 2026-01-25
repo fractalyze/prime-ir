@@ -284,6 +284,27 @@ struct ConvertBinaryFieldUnrealizedCast
   }
 };
 
+struct ConvertBinaryFieldBitcast : public OpConversionPattern<BitcastOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(BitcastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    Type inputElemType = getElementTypeOrSelf(op.getInput().getType());
+    Type outputElemType = getElementTypeOrSelf(op.getOutput().getType());
+
+    // Only handle bitcasts involving BinaryFieldType
+    if (!isa<BinaryFieldType>(inputElemType) &&
+        !isa<BinaryFieldType>(outputElemType)) {
+      return failure();
+    }
+
+    // After type conversion, both sides are integers with same bitwidth (no-op)
+    rewriter.replaceOp(op, adaptor.getInput());
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -317,6 +338,12 @@ struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
         [](InverseOp op) { return !containsBinaryFieldType(op.getType()); });
     target.addDynamicallyLegalOp<CmpOp>([](CmpOp op) {
       return !containsBinaryFieldType(op.getLhs().getType());
+    });
+    target.addDynamicallyLegalOp<BitcastOp>([](BitcastOp op) {
+      Type inputElemType = getElementTypeOrSelf(op.getInput().getType());
+      Type outputElemType = getElementTypeOrSelf(op.getOutput().getType());
+      return !isa<BinaryFieldType>(inputElemType) &&
+             !isa<BinaryFieldType>(outputElemType);
     });
 
     // Arith dialect is legal
@@ -352,6 +379,7 @@ struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
         ConvertBinaryFieldInverse,
         ConvertBinaryFieldCmp,
         ConvertBinaryFieldUnrealizedCast,
+        ConvertBinaryFieldBitcast,
         ConvertAny<tensor::ExtractOp>,
         ConvertAny<tensor::FromElementsOp>,
         ConvertAny<tensor::InsertOp>

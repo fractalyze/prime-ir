@@ -634,6 +634,34 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     }
   }
 
+  // Case 3: Binary field <-> integer bitcast
+  if (auto inputBF = dyn_cast<BinaryFieldType>(inputElementType)) {
+    if (auto outputInt = dyn_cast<IntegerType>(outputElementType)) {
+      // Allow if shapes match and bitwidths match
+      if (auto inputShaped = dyn_cast<ShapedType>(inputType)) {
+        auto outputShaped = dyn_cast<ShapedType>(outputType);
+        if (!outputShaped ||
+            inputShaped.getShape() != outputShaped.getShape()) {
+          return false;
+        }
+      }
+      return inputBF.getBitWidth() == outputInt.getWidth();
+    }
+  }
+  if (auto inputInt = dyn_cast<IntegerType>(inputElementType)) {
+    if (auto outputBF = dyn_cast<BinaryFieldType>(outputElementType)) {
+      // Allow if shapes match and bitwidths match
+      if (auto inputShaped = dyn_cast<ShapedType>(inputType)) {
+        auto outputShaped = dyn_cast<ShapedType>(outputType);
+        if (!outputShaped ||
+            inputShaped.getShape() != outputShaped.getShape()) {
+          return false;
+        }
+      }
+      return inputInt.getWidth() == outputBF.getBitWidth();
+    }
+  }
+
   // Case 4: prime field <- > integer bitcast
   if (!isa<PrimeFieldType, IntegerType>(inputElementType) ||
       !isa<PrimeFieldType, IntegerType>(outputElementType)) {
