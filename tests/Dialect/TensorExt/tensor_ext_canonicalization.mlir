@@ -26,6 +26,8 @@ func.func @test_constant_folding() -> tensor<8xi32> {
   return %const_reversed : tensor<8xi32>
 }
 
+// Test that bit_reverse(bit_reverse(x)) is simplified to x.
+// Both bit_reverse operations are eliminated since they cancel each other out.
 // CHECK-LABEL: @test_involution
 // CHECK-SAME: (%arg0: [[T:.*]]) -> [[T]] {
 func.func @test_involution(%arg0: tensor<8xi32>) -> tensor<8xi32> {
@@ -34,4 +36,21 @@ func.func @test_involution(%arg0: tensor<8xi32>) -> tensor<8xi32> {
   %reversed = tensor_ext.bit_reverse %arg0 into %arg0 {dimension = 0 : i64} : tensor<8xi32>
   %reversed_reversed = tensor_ext.bit_reverse %reversed into %reversed {dimension = 0 : i64} : tensor<8xi32>
   return %reversed_reversed : tensor<8xi32>
+}
+
+!PF = !field.pf<7:i32>
+!PFTensor = tensor<8x!PF>
+
+// Test that bit_reverse(mul(bit_reverse(x), y)) -> mul(x, bit_reverse(y))
+// This optimization is useful for NTT algorithms.
+// CHECK-LABEL: @test_bit_reverse_mul_bit_reverse
+// CHECK-SAME: (%[[X:.*]]: [[T:.*]], %[[Y:.*]]: [[T]], %[[TMP:.*]]: [[T]]) -> [[T]] {
+func.func @test_bit_reverse_mul_bit_reverse(%x: !PFTensor, %y: !PFTensor, %tmp: !PFTensor) -> !PFTensor {
+  // CHECK: %[[BR_Y:.*]] = tensor_ext.bit_reverse %[[Y]] into %[[TMP]]
+  // CHECK: %[[MUL:.*]] = field.mul %[[X]], %[[BR_Y]] : [[T]]
+  // CHECK: return %[[MUL]] : [[T]]
+  %br_x = tensor_ext.bit_reverse %x into %tmp {dimension = 0 : i64} : !PFTensor
+  %mul = field.mul %br_x, %y : !PFTensor
+  %result = tensor_ext.bit_reverse %mul into %tmp {dimension = 0 : i64} : !PFTensor
+  return %result : !PFTensor
 }

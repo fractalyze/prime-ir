@@ -29,7 +29,7 @@ class TensorExt_Op<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
-def TensorExt_BitReverseOp : TensorExt_Op<"bit_reverse", [Pure, DestinationStyleOpInterface, SameOperandsAndResultType]> {
+def TensorExt_BitReverseOp : TensorExt_Op<"bit_reverse", [DestinationStyleOpInterface, SameOperandsAndResultType]> {
   let summary = "Bit-reverse the given order along a specified dimension.";
   let description = [{
     Transforms a tensor to its bit-reversed order along the specified dimension.

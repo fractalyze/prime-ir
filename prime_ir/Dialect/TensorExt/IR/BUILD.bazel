@@ -31,7 +31,6 @@ cc_library(
         "TensorExtOps.h",
     ],
     deps = [
-        ":canonicalization_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
         "//prime_ir/Dialect/Field/IR:Field",
@@ -58,19 +57,6 @@ td_library(
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:SideEffectInterfacesTdFiles",
         "@llvm-project//mlir:TensorOpsTdFiles",
-    ],
-)
-
-gentbl_cc_library(
-    name = "canonicalization_inc_gen",
-    tbl_outs = {
-        "TensorExtCanonicalization.cpp.inc": ["-gen-rewriters"],
-    },
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "TensorExtCanonicalization.td",
-    deps = [
-        ":td_files",
-        "//prime_ir/Dialect/Field/IR:td_files",
     ],
 )
 
