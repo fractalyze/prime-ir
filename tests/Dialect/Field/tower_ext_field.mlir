@@ -19,10 +19,10 @@
 
 !PF = !field.pf<7:i32>
 !QF = !field.ef<2x!PF, 6:i32>
-// Tower: Fp6 = (Fp2)^3 over Fp
-!TowerF6 = !field.ef<3x!QF, 2:i32>
-// Tower: Fp12 = (Fp6)^2
-!TowerF12 = !field.ef<2x!TowerF6, 2:i32>
+// Tower: Fp6 = (Fp2)^3 over Fp, nonResidue = 2 in Fp2
+!TowerF6 = !field.ef<3x!QF, dense<[2, 0]> : tensor<2xi32>>
+// Tower: Fp12 = (Fp6)^2, nonResidue = 2 in Fp6 (flattened: [2, 0, 0, 0, 0, 0])
+!TowerF12 = !field.ef<2x!TowerF6, dense<[2, 0, 0, 0, 0, 0]> : tensor<6xi32>>
 
 //===----------------------------------------------------------------------===//
 // Test tower type parsing round-trip

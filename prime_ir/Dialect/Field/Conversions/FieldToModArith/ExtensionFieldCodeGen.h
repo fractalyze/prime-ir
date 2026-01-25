@@ -248,16 +248,15 @@ private:
     Type baseBaseField = baseEfType.getBaseField();
 
     if (isa<PrimeFieldType>(baseBaseField)) {
-      // Base is prime field - nonResidue is already in the right form
+      // Base is prime field - nonResidue is IntegerAttr
       auto primeField = cast<PrimeFieldType>(baseBaseField);
-      if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
-        return createConst(b, primeField, intAttr.getInt());
-      }
+      auto intAttr = cast<IntegerAttr>(nonResidueAttr);
+      return createConst(b, primeField, intAttr.getInt());
     }
 
-    // For deeper towers or DenseElementsAttr, materialize directly
-    return ConstantOp::materialize(b, nonResidueAttr, baseBaseField,
-                                   b.getLoc());
+    // For deeper towers, nonResidue is DenseIntElementsAttr
+    auto denseAttr = cast<DenseIntElementsAttr>(nonResidueAttr);
+    return ConstantOp::materialize(b, denseAttr, baseBaseField, b.getLoc());
   }
 
   Value value;

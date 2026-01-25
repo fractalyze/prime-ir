@@ -275,7 +275,7 @@ constexpr auto kExtDegreeSequence = makeExtDegreeSequence<kMinExtDegree>(
 LogicalResult
 ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
                            unsigned degree, Type baseField,
-                           IntegerAttr nonResidue) {
+                           Attribute nonResidue) {
   if (degree < 2 || degree > kMaxExtDegree) {
     return emitError() << "extension field degree must be between 2 and "
                        << kMaxExtDegree << ", got " << degree;
@@ -286,18 +286,40 @@ ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
     return emitError() << "base field must be a prime field or extension field";
   }
 
+  // Validate nonResidue type and shape
+  if (isa<PrimeFieldType>(baseField)) {
+    // For prime base: nonResidue must be IntegerAttr
+    if (!isa<IntegerAttr>(nonResidue)) {
+      return emitError() << "nonResidue for prime field base must be an "
+                            "integer, got " << nonResidue;
+    }
+  } else {
+    // For extension base: nonResidue must be DenseIntElementsAttr
+    auto denseAttr = dyn_cast<DenseIntElementsAttr>(nonResidue);
+    if (!denseAttr) {
+      return emitError() << "nonResidue for extension field base must be a "
+                            "dense int elements attribute, got " << nonResidue;
+    }
+    auto efBase = cast<ExtensionFieldType>(baseField);
+    unsigned expectedSize = efBase.getDegreeOverPrime();
+    if (static_cast<unsigned>(denseAttr.getNumElements()) != expectedSize) {
+      return emitError() << "nonResidue size " << denseAttr.getNumElements()
+                         << " does not match base field degree over prime "
+                         << expectedSize;
+    }
+  }
+
   // For towers, skip non-residue validation (would need extension field
   // arithmetic). The non-residue should be an element of the base field.
   if (isa<ExtensionFieldType>(baseField)) {
-    // TODO(chokobole): Add proper non-residue validation for tower extensions.
-    // For now, we trust that the user provides a valid non-residue.
     return success();
   }
 
   // For direct extensions over prime fields, validate that nonResidue is
   // actually a non-residue: nonResidue^((p - 1) / n) ≢ 1 (mod p)
   auto pfType = cast<PrimeFieldType>(baseField);
-  auto nrOp = PrimeFieldOperation::fromUnchecked(nonResidue, pfType);
+  auto nrOp = PrimeFieldOperation::fromUnchecked(cast<IntegerAttr>(nonResidue),
+                                                 pfType);
   APInt p = pfType.getModulus().getValue();
   APInt exp = (p - 1).udiv(APInt(p.getBitWidth(), degree));
   if (nrOp.power(exp).isOne()) {
@@ -307,6 +329,36 @@ ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
 
   return success();
 }
+
+namespace {
+
+// Convert DenseIntElementsAttr to Montgomery form
+DenseIntElementsAttr convertDenseToMontgomery(DenseIntElementsAttr denseAttr,
+                                              IntegerAttr primeModulus) {
+  SmallVector<APInt> values;
+  for (APInt val : denseAttr.getValues<APInt>()) {
+    auto intAttr = IntegerAttr::get(
+        IntegerType::get(denseAttr.getContext(), val.getBitWidth()), val);
+    auto montAttr = mod_arith::getAttrAsMontgomeryForm(primeModulus, intAttr);
+    values.push_back(montAttr.getValue());
+  }
+  return DenseIntElementsAttr::get(denseAttr.getType(), values);
+}
+
+// Convert DenseIntElementsAttr from Montgomery form
+DenseIntElementsAttr convertDenseFromMontgomery(DenseIntElementsAttr denseAttr,
+                                                IntegerAttr primeModulus) {
+  SmallVector<APInt> values;
+  for (APInt val : denseAttr.getValues<APInt>()) {
+    auto intAttr = IntegerAttr::get(
+        IntegerType::get(denseAttr.getContext(), val.getBitWidth()), val);
+    auto stdAttr = mod_arith::getAttrAsStandardForm(primeModulus, intAttr);
+    values.push_back(stdAttr.getValue());
+  }
+  return DenseIntElementsAttr::get(denseAttr.getType(), values);
+}
+
+}  // namespace
 
 // static
 Type ExtensionFieldType::parse(AsmParser &parser) {
@@ -348,23 +400,34 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
   if (failed(parser.parseComma())) {
     return nullptr;
   }
-  IntegerAttr nonResidue;
-  if (failed(parser.parseAttribute(nonResidue))) {
-    return nullptr;
-  }
 
-  // Convert non-residue to Montgomery form if base field is in Montgomery form
-  if (auto pfType = dyn_cast<PrimeFieldType>(baseFieldType)) {
+  Attribute nonResidue;
+  if (isa<PrimeFieldType>(baseFieldType)) {
+    // For prime field base, parse as IntegerAttr
+    IntegerAttr intAttr;
+    if (failed(parser.parseAttribute(intAttr))) {
+      return nullptr;
+    }
+    // Convert to Montgomery form if needed
+    auto pfType = cast<PrimeFieldType>(baseFieldType);
     if (pfType.getIsMontgomery()) {
-      nonResidue =
-          mod_arith::getAttrAsMontgomeryForm(pfType.getModulus(), nonResidue);
+      intAttr =
+          mod_arith::getAttrAsMontgomeryForm(pfType.getModulus(), intAttr);
     }
-  } else if (auto efType = dyn_cast<ExtensionFieldType>(baseFieldType)) {
+    nonResidue = intAttr;
+  } else {
+    // For extension field base, parse as DenseIntElementsAttr
+    DenseIntElementsAttr denseAttr;
+    if (failed(parser.parseAttribute(denseAttr))) {
+      return nullptr;
+    }
+    // Convert to Montgomery form if needed
+    auto efType = cast<ExtensionFieldType>(baseFieldType);
     if (efType.isMontgomery()) {
-      // For tower extensions, the non-residue is in the base field
-      // which may itself be an extension field. For now, we store it as-is.
-      // TODO(chokobole): Handle Montgomery form for tower non-residues.
+      denseAttr = convertDenseToMontgomery(
+          denseAttr, efType.getBasePrimeField().getModulus());
     }
+    nonResidue = denseAttr;
   }
 
   if (failed(parser.parseGreater())) {
@@ -376,16 +439,22 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
 
 void ExtensionFieldType::print(AsmPrinter &printer) const {
   Type baseField = getBaseField();
-  auto nonResidue = getNonResidue();
+  Attribute nonResidue = getNonResidue();
 
-  // Convert non-residue from Montgomery form for printing
+  // Convert from Montgomery form for printing
   if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
     if (pfType.getIsMontgomery()) {
-      nonResidue =
-          mod_arith::getAttrAsStandardForm(pfType.getModulus(), nonResidue);
+      nonResidue = mod_arith::getAttrAsStandardForm(pfType.getModulus(),
+                                                    cast<IntegerAttr>(nonResidue));
+    }
+  } else {
+    auto efType = cast<ExtensionFieldType>(baseField);
+    if (efType.isMontgomery()) {
+      nonResidue = convertDenseFromMontgomery(
+          cast<DenseIntElementsAttr>(nonResidue),
+          efType.getBasePrimeField().getModulus());
     }
   }
-  // For tower extensions, print non-residue as-is
 
   printer << "<" << getDegree() << "x" << baseField << ", " << nonResidue
           << ">";
@@ -466,17 +535,7 @@ unsigned ExtensionFieldType::getTowerDepth() const {
 }
 
 Type ExtensionFieldType::cloneWith(Type baseField, Attribute element) const {
-  return ExtensionFieldType::get(getContext(), getDegree(), baseField,
-                                 cast<IntegerAttr>(element));
-}
-
-TypedAttr ExtensionFieldType::createConstantAttr(
-    llvm::ArrayRef<llvm::APInt> coeffs) const {
-  // For tower extensions, create a tensor with shape matching the total degree
-  auto tensorType = RankedTensorType::get(
-      {static_cast<int64_t>(getDegreeOverPrime())},
-      IntegerType::get(getContext(), getBasePrimeField().getStorageBitWidth()));
-  return DenseIntElementsAttr::get(tensorType, coeffs);
+  return ExtensionFieldType::get(getContext(), getDegree(), baseField, element);
 }
 
 Value ExtensionFieldType::buildStructFromCoeffs(
