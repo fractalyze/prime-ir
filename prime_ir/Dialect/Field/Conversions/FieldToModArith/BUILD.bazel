@@ -46,6 +46,7 @@ cc_library(
         ":PrimeFieldCodeGen",
         "//prime_ir/Dialect/Field/IR:ExtensionFieldOperationSelector",
         "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/Field/IR:QuarticKaratsubaOnlyOperation",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Utils:BuilderContext",
         "@llvm-project//mlir:IR",

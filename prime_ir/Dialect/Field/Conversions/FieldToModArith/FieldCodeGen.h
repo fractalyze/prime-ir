@@ -28,9 +28,26 @@ namespace mlir::prime_ir::field {
 
 class FieldCodeGen {
 public:
+  // clang-format off
   using CodeGenType =
-      std::variant<PrimeFieldCodeGen, QuadraticExtensionFieldCodeGen,
-                   CubicExtensionFieldCodeGen, QuarticExtensionFieldCodeGen>;
+      std::variant<PrimeFieldCodeGen,
+                   // Non-tower extension fields
+                   QuadraticExtensionFieldCodeGen,
+                   CubicExtensionFieldCodeGen,
+                   QuarticExtensionFieldCodeGen,
+                   // Depth-1 tower extension fields
+                   TowerQuadraticOverQuadraticCodeGen,
+                   TowerCubicOverQuadraticCodeGen,
+                   TowerQuarticOverQuadraticCodeGen,
+                   TowerQuadraticOverCubicCodeGen,
+                   // Depth-2 tower extension fields
+                   TowerQuadraticOverCubicOverQuadraticCodeGen,      // Fp12 = ((Fp2)^3)^2
+                   TowerCubicOverQuadraticOverQuadraticCodeGen,      // Fp12 = ((Fp2)^2)^3
+                   TowerQuadraticOverQuadraticOverQuadraticCodeGen,  // Fp8 = ((Fp2)^2)^2
+                   TowerQuadraticOverQuadraticOverCubicCodeGen,      // Fp12 = ((Fp3)^2)^2
+                   // Depth-3 tower extension fields
+                   TowerQuadraticOverQuadraticOverCubicOverQuadraticCodeGen>;  // Fp24
+  // clang-format on
 
   template <typename T, typename = std::enable_if_t<
                             !std::is_same_v<std::decay_t<T>, FieldCodeGen> &&

@@ -84,42 +84,38 @@ Value FieldCodeGen::IsZero() const {
 
 namespace {
 
-template <size_t N>
-struct DegreeDispatcher {
-  static std::optional<FieldCodeGen>
-  dispatch(size_t degree, ImplicitLocOpBuilder *b, Type type, int64_t constant,
-           field::ExtensionFieldType efType) {
-    if (degree == N) {
-      return FieldCodeGen(b->create<field::ConstantOp>(
-          type, field::ExtensionFieldOperation<N>(constant, efType)
-                    .getDenseIntElementsAttr()));
-    }
-    if constexpr (N > field::kMinExtDegree) {
-      return DegreeDispatcher<N - 1>::dispatch(degree, b, type, constant,
-                                               efType);
-    }
-    return std::nullopt;
+// Creates a constant in the given field type.
+// For tower extensions, this recursively creates constants at each level.
+Value createFieldConstant(ImplicitLocOpBuilder &b, Type fieldType,
+                          int64_t constant) {
+  if (auto pfType = dyn_cast<field::PrimeFieldType>(fieldType)) {
+    return b.create<field::ConstantOp>(
+        fieldType, field::PrimeFieldOperation(constant, pfType).getIntegerAttr());
   }
-};
+
+  auto efType = cast<field::ExtensionFieldType>(fieldType);
+  Type baseFieldType = efType.getBaseField();
+  unsigned degree = efType.getDegree();
+
+  // Recursively create constant in base field (handles tower extensions)
+  Value baseConstant = createFieldConstant(b, baseFieldType, constant);
+
+  // Create [baseConstant, 0, 0, ...] with 'degree' coefficients
+  SmallVector<Value> coeffs(degree);
+  coeffs[0] = baseConstant;
+  Value zero = createFieldConstant(b, baseFieldType, 0);
+  for (unsigned i = 1; i < degree; ++i) {
+    coeffs[i] = zero;
+  }
+
+  return b.create<field::ExtFromCoeffsOp>(efType, coeffs);
+}
 
 } // namespace
 
 FieldCodeGen FieldCodeGen::CreateConst(int64_t constant) const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  if (auto pfType = dyn_cast<field::PrimeFieldType>(value.getType())) {
-    return FieldCodeGen(b->create<field::ConstantOp>(
-        value.getType(),
-        field::PrimeFieldOperation(constant, pfType).getIntegerAttr()));
-  } else if (auto efType =
-                 dyn_cast<field::ExtensionFieldType>(value.getType())) {
-    size_t degree = efType.getDegreeOverPrime();
-    auto result = DegreeDispatcher<field::kMaxExtDegree>::dispatch(
-        degree, b, value.getType(), constant, efType);
-    if (result)
-      return *result;
-    llvm_unreachable("Unsupported extension field degree");
-  }
-  llvm_unreachable("Unsupported field type");
+  return FieldCodeGen(createFieldConstant(*b, value.getType(), constant));
 }
 
 } // namespace mlir::prime_ir::elliptic_curve
