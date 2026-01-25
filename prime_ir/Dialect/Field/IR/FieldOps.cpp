@@ -873,12 +873,11 @@ public:
       flattenedValues.append(coeffs.begin(), coeffs.end());
     }
     // Create result attribute with shape [tensor_dims..., degree]
-    PrimeFieldType baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+    PrimeFieldType pfType = cast<PrimeFieldType>(efType.getBaseField());
     unsigned degree = efType.getDegreeOverPrime();
     SmallVector<int64_t> attrShape(type.getShape());
     attrShape.push_back(static_cast<int64_t>(degree));
-    auto attrType =
-        RankedTensorType::get(attrShape, baseFieldType.getStorageType());
+    auto attrType = RankedTensorType::get(attrShape, pfType.getStorageType());
     return DenseIntElementsAttr::get(attrType, flattenedValues);
   }
 

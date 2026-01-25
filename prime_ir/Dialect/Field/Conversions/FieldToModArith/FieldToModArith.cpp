@@ -117,7 +117,6 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
 
       auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
       auto allValues = denseAttr.getValues<APInt>();
-      size_t totalCoeffs = allValues.size();
 
       // Create a flattened prime field tensor constant
       // tensor<K x !EF> with degree N becomes tensor<K*N x !ModArith>
