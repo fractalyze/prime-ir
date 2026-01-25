@@ -39,14 +39,14 @@ struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
     auto tensorType = cast<RankedTensorType>(adaptor.getSource().getType());
     MemRefType memrefType =
         MemRefType::get(tensorType.getShape(), tensorType.getElementType());
-    unsigned numCoeffs = tensorType.getShape()[0];
-    assert(llvm::has_single_bit(numCoeffs) &&
-           "expected the number of coefficients to be a power of 2");
-    unsigned indexBitWidth = llvm::countr_zero(numCoeffs);
+    unsigned numElements = tensorType.getShape()[0];
+    assert(llvm::has_single_bit(numElements) &&
+           "expected the number of elements to be a power of 2");
+    unsigned indexBitWidth = llvm::countr_zero(numElements);
 
     auto c0 = b.create<arith::ConstantIndexOp>(0);
     auto c1 = b.create<arith::ConstantIndexOp>(1);
-    auto cN = b.create<arith::ConstantIndexOp>(numCoeffs);
+    auto cN = b.create<arith::ConstantIndexOp>(numElements);
     auto sourceMemref =
         b.create<bufferization::ToBufferOp>(memrefType, adaptor.getSource(),
                                             /*read_only=*/true);
