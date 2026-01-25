@@ -80,7 +80,7 @@ struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
           auto index = nb.create<arith::IndexCastUIOp>(
               nb.getIntegerType(indexBitWidth), args[dimension]);
           auto bitReversed = nb.create<LLVM::BitReverseOp>(index);
-          auto isGE = nb.create<arith::CmpIOp>(arith::CmpIPredicate::sge,
+          auto isGE = nb.create<arith::CmpIOp>(arith::CmpIPredicate::uge,
                                                bitReversed, index);
           nb.create<scf::IfOp>(
               isGE, /*thenBuilder=*/
