@@ -110,8 +110,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
         return failure();
       }
 
+      // For tower extensions, use the underlying prime field
       auto modType = cast<mod_arith::ModArithType>(
-          typeConverter->convertType(efType.getBaseField()));
+          typeConverter->convertType(efType.getBasePrimeField()));
       unsigned degree = efType.getDegreeOverPrime();
 
       auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
@@ -281,10 +282,10 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
 };
 
 struct ConvertInverse : public OpConversionPattern<InverseOp> {
-  explicit ConvertInverse(MLIRContext *context)
-      : OpConversionPattern<InverseOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertInverse(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<InverseOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
@@ -300,10 +301,10 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
 };
 
 struct ConvertNegate : public OpConversionPattern<NegateOp> {
-  explicit ConvertNegate(MLIRContext *context)
-      : OpConversionPattern<NegateOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertNegate(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<NegateOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(NegateOp op, OpAdaptor adaptor,
@@ -319,10 +320,10 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
 };
 
 struct ConvertAdd : public OpConversionPattern<AddOp> {
-  explicit ConvertAdd(MLIRContext *context)
-      : OpConversionPattern<AddOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertAdd(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<AddOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
@@ -339,10 +340,10 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 };
 
 struct ConvertDouble : public OpConversionPattern<DoubleOp> {
-  explicit ConvertDouble(MLIRContext *context)
-      : OpConversionPattern<DoubleOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertDouble(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<DoubleOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(DoubleOp op, OpAdaptor adaptor,
@@ -358,10 +359,10 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
 };
 
 struct ConvertSub : public OpConversionPattern<SubOp> {
-  explicit ConvertSub(MLIRContext *context)
-      : OpConversionPattern<SubOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertSub(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<SubOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(SubOp op, OpAdaptor adaptor,
@@ -378,10 +379,10 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 };
 
 struct ConvertMul : public OpConversionPattern<MulOp> {
-  explicit ConvertMul(MLIRContext *context)
-      : OpConversionPattern<MulOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertMul(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<MulOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(MulOp op, OpAdaptor adaptor,
@@ -398,10 +399,10 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 };
 
 struct ConvertSquare : public OpConversionPattern<SquareOp> {
-  explicit ConvertSquare(MLIRContext *context)
-      : OpConversionPattern<SquareOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertSquare(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<SquareOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(SquareOp op, OpAdaptor adaptor,

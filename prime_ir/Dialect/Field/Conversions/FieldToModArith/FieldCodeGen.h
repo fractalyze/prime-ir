@@ -23,14 +23,14 @@ limitations under the License.
 #include "mlir/Transforms/DialectConversion.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/ExtensionFieldCodeGen.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/PrimeFieldCodeGen.h"
+#include "prime_ir/Dialect/Field/IR/TowerFieldConfig.h"
 
 namespace mlir::prime_ir::field {
 
 class FieldCodeGen {
 public:
-  using CodeGenType =
-      std::variant<PrimeFieldCodeGen, QuadraticExtensionFieldCodeGen,
-                   CubicExtensionFieldCodeGen, QuarticExtensionFieldCodeGen>;
+  using CodeGenType = TOWER_FIELD_VARIANT(PrimeFieldCodeGen,
+                                          ExtensionFieldCodeGen, CodeGen);
 
   template <typename T, typename = std::enable_if_t<
                             !std::is_same_v<std::decay_t<T>, FieldCodeGen> &&

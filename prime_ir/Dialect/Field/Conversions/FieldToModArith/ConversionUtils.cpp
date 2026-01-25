@@ -25,9 +25,16 @@ namespace {
 
 SmallVector<Type> coeffsTypeRange(Type type) {
   auto extField = cast<ExtensionFieldType>(type);
-  auto baseField = cast<PrimeFieldType>(extField.getBaseField());
-  return SmallVector<Type>(extField.getDegree(),
-                           convertPrimeFieldType(baseField));
+  Type baseField = extField.getBaseField();
+
+  // For tower extensions, the coefficients are extension field elements
+  if (isa<ExtensionFieldType>(baseField)) {
+    return SmallVector<Type>(extField.getDegree(), baseField);
+  }
+
+  // For direct extensions over prime field, convert to mod_arith type
+  auto pfType = cast<PrimeFieldType>(baseField);
+  return SmallVector<Type>(extField.getDegree(), convertPrimeFieldType(pfType));
 }
 
 } // namespace
