@@ -23,6 +23,7 @@ include "mlir/IR/DialectBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/ConstantLikeInterface.td"
 
 // Base type definition for Field types.
 class Field_Type<string name, string typeMnemonic, list<Trait> traits = []>
@@ -40,12 +41,6 @@ def FieldTypeInterface : TypeInterface<"FieldTypeInterface"> {
   let methods = [
     InterfaceMethod<"Check if the field is in Montgomery form",
       "bool", "isMontgomery">,
-    InterfaceMethod<"Create zero constant",
-      "Value", "createZeroConstant",
-      (ins "ImplicitLocOpBuilder &":$builder)>,
-    InterfaceMethod<"Create one constant",
-      "Value", "createOneConstant",
-      (ins "ImplicitLocOpBuilder &":$builder)>,
   ];
 }
 
@@ -55,7 +50,8 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<FieldTypeInterface>,
-  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>
   ]> {
   let summary = "Prime field element type";
   let description = [{
@@ -100,7 +96,8 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<FieldTypeInterface>,
-  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>
   ]> {
   let summary = "Extension field element type";
   let description = [{
@@ -125,7 +122,6 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   let extraClassDeclaration = [{
     unsigned getDegreeOverPrime() const;
     Type cloneWith(Type baseField, Attribute element) const;
-    TypedAttr createConstantAttr(ArrayRef<APInt> coeffs) const;
     Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder,
                                 Type structType,
                                 ArrayRef<Value> coeffs) const;

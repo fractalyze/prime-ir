@@ -140,8 +140,7 @@ protected:
     Type baseFieldType =
         cast<PointTypeInterface>(value.getType()).getBaseFieldType();
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    Value zero =
-        cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(*b);
+    Value zero = field::createFieldZero(baseFieldType, *b);
     return b->create<field::CmpOp>(arith::CmpIPredicate::eq, GetA(), zero);
   }
 

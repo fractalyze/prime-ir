@@ -29,6 +29,7 @@ limitations under the License.
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypeInterfaces.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/ConstantLikeInterface.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "prime_ir/Utils/SimpleStructBuilder.h"
@@ -53,6 +54,22 @@ ParseResult validateAttribute(AsmParser &parser, Type type, Attribute attr,
                               std::string_view attrName);
 Attribute maybeToMontgomery(Type type, Attribute attr);
 Attribute maybeToStandard(Type type, Attribute attr);
+
+// Creates a constant value for a field type using ConstantLikeInterface.
+// This is a convenience function that creates both the attribute and
+// operation.
+Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
+                          uint64_t value);
+
+// Creates a zero constant for a field type.
+inline Value createFieldZero(Type fieldType, ImplicitLocOpBuilder &builder) {
+  return createFieldConstant(fieldType, builder, 0);
+}
+
+// Creates a one constant for a field type.
+inline Value createFieldOne(Type fieldType, ImplicitLocOpBuilder &builder) {
+  return createFieldConstant(fieldType, builder, 1);
+}
 
 #include "prime_ir/Dialect/Field/IR/FieldTypesInterfaces.h.inc"
 

@@ -89,8 +89,7 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
     Operation::result_range coords = toCoords(b, op.getInput());
     Type baseFieldType =
         cast<PointTypeInterface>(op.getInput().getType()).getBaseFieldType();
-    Value zeroBF =
-        cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
+    Value zeroBF = field::createFieldZero(baseFieldType, b);
 
     Value isZero;
     if (isa<AffineType>(op.getInput().getType())) {

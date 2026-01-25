@@ -78,8 +78,7 @@ FieldCodeGen FieldCodeGen::Inverse() const {
 
 Value FieldCodeGen::IsZero() const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  Value zero =
-      cast<field::FieldTypeInterface>(value.getType()).createZeroConstant(*b);
+  Value zero = field::createFieldZero(value.getType(), *b);
   return b->create<field::CmpOp>(arith::CmpIPredicate::eq, value, zero);
 }
 

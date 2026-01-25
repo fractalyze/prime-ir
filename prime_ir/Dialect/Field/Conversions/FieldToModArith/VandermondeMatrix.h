@@ -46,19 +46,24 @@ public:
       return PrimeFieldCodeGen(createRationalConst(*b, baseField, x, y));
     };
 
-    // NOLINTBEGIN(whitespace/line_length)
     // clang-format off
     return {{
+        // NOLINTNEXTLINE(whitespace/line_length)
         {C(1),       C(0),       C(0),       C(0),       C(0),        C(0),       C(0)},
+        // NOLINTNEXTLINE(whitespace/line_length)
         {C2(-1, 3),  C(1),       C2(-1, 2),  C2(-1, 4),  C2(1, 20),   C2(1, 30),  C(-12)},
+        // NOLINTNEXTLINE(whitespace/line_length)
         {C2(-5, 4),  C2(2, 3),   C2(2, 3),   C2(-1, 24), C2(-1, 24),  C(0),       C(4)},
+        // NOLINTNEXTLINE(whitespace/line_length)
         {C2(5, 12),  C2(-7, 12), C2(-1, 24), C2(7, 24),  C2(-1, 24),  C2(-1, 24), C(15)},
+        // NOLINTNEXTLINE(whitespace/line_length)
         {C2(1, 4),   C2(-1, 6),  C2(-1, 6),  C2(1, 24),  C2(1, 24),   C(0),       C(-5)},
+        // NOLINTNEXTLINE(whitespace/line_length)
         {C2(-1, 12), C2(1, 12),  C2(1, 24),  C2(-1, 24), C2(-1, 120), C2(1, 120), C(-3)},
+        // NOLINTNEXTLINE(whitespace/line_length)
         {C(0),       C(0),       C(0),       C(0),       C(0),        C(0),       C(1)},
     }};
     // clang-format on
-    // NOLINTEND
   }
 };
 

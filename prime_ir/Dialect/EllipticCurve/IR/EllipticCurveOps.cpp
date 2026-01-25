@@ -108,10 +108,8 @@ LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
 // WARNING: Assumes Jacobian or XYZZ point types
 Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   auto baseFieldType = cast<PointTypeInterface>(pointType).getBaseFieldType();
-  auto zeroBF =
-      cast<field::FieldTypeInterface>(baseFieldType).createZeroConstant(b);
-  Value oneBF =
-      cast<field::FieldTypeInterface>(baseFieldType).createOneConstant(b);
+  Value zeroBF = field::createFieldZero(baseFieldType, b);
+  Value oneBF = field::createFieldOne(baseFieldType, b);
   return isa<XYZZType>(pointType)
              ? b.create<FromCoordsOp>(pointType,
                                       ValueRange{oneBF, oneBF, zeroBF, zeroBF})
