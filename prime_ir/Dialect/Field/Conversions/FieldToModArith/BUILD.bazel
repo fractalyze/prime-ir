@@ -49,6 +49,7 @@ cc_library(
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Utils:BuilderContext",
         "@llvm-project//mlir:IR",
+        "@zk_dtypes//zk_dtypes:extension_field_operation_traits_forward",
     ],
 )
 

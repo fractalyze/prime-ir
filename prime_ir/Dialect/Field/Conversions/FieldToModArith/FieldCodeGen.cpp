@@ -15,10 +15,52 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldCodeGen.h"
 
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/BuilderContext.h"
 
 namespace mlir::prime_ir::field {
+
+namespace {
+
+// Helper to create non-residue constant for extension fields
+Value createNonResidueConstant(ImplicitLocOpBuilder &b,
+                               ExtensionFieldType efType,
+                               const TypeConverter *converter) {
+  Type baseFieldType = efType.getBaseField();
+  Attribute nonResidueAttr = efType.getNonResidue();
+
+  if (isa<PrimeFieldType>(baseFieldType)) {
+    // Non-tower: non-residue is in the prime field
+    return b.create<mod_arith::ConstantOp>(
+        converter->convertType(baseFieldType),
+        cast<IntegerAttr>(nonResidueAttr));
+  }
+
+  // Tower: non-residue is in the base extension field
+  auto baseEfType = cast<ExtensionFieldType>(baseFieldType);
+
+  // If non-residue is a simple integer, convert it to extension field constant
+  if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
+    unsigned baseDegree = baseEfType.getDegreeOverPrime();
+    auto primeField = baseEfType.getBasePrimeField();
+    auto storageType = primeField.getStorageType();
+
+    // Create [val, 0, 0, ...] coefficient array
+    SmallVector<APInt> coeffs(baseDegree,
+                              APInt::getZero(storageType.getWidth()));
+    coeffs[0] = intAttr.getValue();
+    nonResidueAttr = DenseIntElementsAttr::get(
+        RankedTensorType::get({static_cast<int64_t>(baseDegree)}, storageType),
+        coeffs);
+  }
+
+  return ConstantOp::materialize(b, nonResidueAttr, baseEfType, b.getLoc());
+}
+
+} // namespace
 
 FieldCodeGen::FieldCodeGen(Type type, Value value,
                            const TypeConverter *converter) {
@@ -29,23 +71,14 @@ FieldCodeGen::FieldCodeGen(Type type, Value value,
 
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   auto efType = cast<ExtensionFieldType>(type);
-  Value nonResidue = b->create<mod_arith::ConstantOp>(
-      converter->convertType(efType.getBaseField()),
-      cast<IntegerAttr>(efType.getNonResidue()));
-  unsigned degree = efType.getDegree();
-  switch (degree) {
-  case 2:
-    codeGen = ExtensionFieldCodeGen<2>(value, nonResidue);
-    break;
-  case 3:
-    codeGen = ExtensionFieldCodeGen<3>(value, nonResidue);
-    break;
-  case 4:
-    codeGen = ExtensionFieldCodeGen<4>(value, nonResidue);
-    break;
-  default:
-    llvm_unreachable("Unsupported extension field degree");
-  }
+  Value nonResidue = createNonResidueConstant(*b, efType, converter);
+
+  auto sig = getTowerSignature(efType);
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define CREATE_CODEGEN(unused_sig, TypeName) codeGen = TypeName(value, nonResidue);
+  DISPATCH_TOWER_BY_SIGNATURE(sig, CREATE_CODEGEN, ExtensionFieldCodeGen,
+                              CodeGen)
+#undef CREATE_CODEGEN
 }
 
 FieldCodeGen::operator Value() const {
