@@ -53,7 +53,7 @@ func.func @test_linalg_generic(%input : tensor<4x!PF>, %output: tensor<4x!PF>) -
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]], %[[OUTPUT:.*]]: [[OUTPUT_TYPE:.*]]) -> [[T:.*]] {
 func.func @test_linalg_map(%input : tensor<4x!PF>, %output: tensor<4x!PF>) -> tensor<4x!PF> {
   // CHECK: %[[RES:.*]] = linalg.map { mod_arith.double } ins(%[[INPUT]] : [[INPUT_TYPE]]) outs(%[[OUTPUT]] : [[OUTPUT_TYPE]])
-  %res = linalg.map ins(%input : tensor<4x!PF>) outs(%output : tensor<4x!PF>) (%arg0: !PF) {
+  %res = linalg.map ins(%input : tensor<4x!PF>) outs(%output : tensor<4x!PF>) (%arg0: !PF, %arg1: !PF) {
     %double = field.double %arg0 : !PF
     linalg.yield %double : !PF
   }

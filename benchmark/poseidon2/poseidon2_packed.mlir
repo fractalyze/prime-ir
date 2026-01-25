@@ -171,27 +171,27 @@ func.func @packed_internal_layer_mat_mul(%state: !packed_state, %sum : !packed) 
   // Precompute powers of 2 inverses using powui
   // [-2, 1, 2, 1/2, 3, 4, -1/2, -3, -4, 1/2^8, 1/4, 1/8, 1/2^27, -1/2^8, -1/16, -1/2^27]
   %inv_two_scalar = arith.constant 134217727 : i32
-  %inv_two_vec = vector.splat %inv_two_scalar : vector<16xi32>
+  %inv_two_vec = vector.broadcast %inv_two_scalar : i32 to vector<16xi32>
   %inv_two = field.bitcast %inv_two_vec : vector<16xi32> -> !packed
 
   %inv_four_scalar = arith.constant 1073741824 : i32
-  %inv_four_vec = vector.splat %inv_four_scalar : vector<16xi32>
+  %inv_four_vec = vector.broadcast %inv_four_scalar : i32 to vector<16xi32>
   %inv_four = field.bitcast %inv_four_vec : vector<16xi32> -> !packed
 
   %inv_eight_scalar = arith.constant 536870912 : i32
-  %inv_eight_vec = vector.splat %inv_eight_scalar : vector<16xi32>
+  %inv_eight_vec = vector.broadcast %inv_eight_scalar : i32 to vector<16xi32>
   %inv_eight = field.bitcast %inv_eight_vec : vector<16xi32> -> !packed
 
   %inv_sixteen_scalar = arith.constant 268435456 : i32
-  %inv_sixteen_vec = vector.splat %inv_sixteen_scalar : vector<16xi32>
+  %inv_sixteen_vec = vector.broadcast %inv_sixteen_scalar : i32 to vector<16xi32>
   %inv_sixteen = field.bitcast %inv_sixteen_vec : vector<16xi32> -> !packed
 
   %inv_256_scalar = arith.constant 16777216 : i32
-  %inv_256_vec = vector.splat %inv_256_scalar : vector<16xi32>
+  %inv_256_vec = vector.broadcast %inv_256_scalar : i32 to vector<16xi32>
   %inv_256 = field.bitcast %inv_256_vec : vector<16xi32> -> !packed
 
   %inv_2_27_scalar = arith.constant 32 : i32
-  %inv_2_27_vec = vector.splat %inv_2_27_scalar : vector<16xi32>
+  %inv_2_27_vec = vector.broadcast %inv_2_27_scalar : i32 to vector<16xi32>
   %inv_2_27 = field.bitcast %inv_2_27_vec : vector<16xi32> -> !packed
 
   // state[1] += sum
@@ -318,7 +318,7 @@ func.func @packed_permute_state(%state: !packed_state) {
   affine.for %round = 0 to 13 {
     // Get current round constant via tensor.extract
     %rc_scalar = tensor.extract %rc_internal_mont[%round] : tensor<13x!scalar>
-    %rc = vector.splat %rc_scalar : !packed
+    %rc = vector.broadcast %rc_scalar : !scalar to !packed
 
     // Add RC and apply S-box to first element
     %s0 = memref.load %state[%c0] : !packed_state
@@ -405,7 +405,7 @@ func.func @packed_permute_state_terminal(%state: !packed_state) {
     affine.for %i = 0 to 16 {
       %s = tensor.extract %state_tensor[%i] : tensor<16x!packed>
       %c_scalar = tensor.extract %rc_external_final[%round, %i] : tensor<4x16x!scalar>
-      %c = vector.splat %c_scalar : !packed
+      %c = vector.broadcast %c_scalar : !scalar to !packed
 
       %sbox = func.call @packed_add_rc_and_sbox(%s, %c) : (!packed, !packed) -> !packed
       affine.store %sbox, %state[%i] : !packed_state
@@ -441,7 +441,7 @@ func.func @packed_permute_state_initial(%state: !packed_state) {
     affine.for %i = 0 to 16 {
       %s = tensor.extract %state_tensor[%i] : tensor<16x!packed>
       %c_scalar = tensor.extract %rc_external_final[%round, %i] : tensor<4x16x!scalar>
-      %c = vector.splat %c_scalar : !packed
+      %c = vector.broadcast %c_scalar : !scalar to !packed
       %sbox = func.call @packed_add_rc_and_sbox(%s, %c) : (!packed, !packed) -> !packed
       affine.store %sbox, %state[%i] : !packed_state
     }

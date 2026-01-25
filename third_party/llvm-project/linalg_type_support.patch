@@ -258,9 +258,9 @@ diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llv
 @@ -11406,4 +11406,7 @@ cc_library(
          ":ViewLikeInterface",
          "//llvm:Support",
-+        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurveHdrs",
-+        "@prime_ir//prime_ir/Dialect/Field/IR:FieldHdrs",
-+        "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArithHdrs",
++        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
++        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
++        "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArith",
      ],
  )
 

@@ -230,9 +230,9 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
   }
 
   if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
-    return builder.create<ConstantOp>(loc, type, intAttr);
+    return ConstantOp::create(builder, loc, type, intAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
-    return builder.create<ConstantOp>(loc, type, denseElementsAttr);
+    return ConstantOp::create(builder, loc, type, denseElementsAttr);
   }
   return nullptr;
 }
@@ -241,11 +241,11 @@ Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
                                                 Attribute value, Type type,
                                                 Location loc) {
   if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
-    return builder.create<arith::ConstantOp>(loc, boolAttr);
+    return arith::ConstantOp::create(builder, loc, boolAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
     if (!isa<ModArithType>(getElementTypeOrSelf(type))) {
       // This could be a folding result of CmpOp.
-      return builder.create<arith::ConstantOp>(loc, denseElementsAttr);
+      return arith::ConstantOp::create(builder, loc, denseElementsAttr);
     }
   }
   return ConstantOp::materialize(builder, value, type, loc);

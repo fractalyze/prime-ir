@@ -861,10 +861,10 @@ func.func @test_vector_extract() -> !PF17 {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_splat_fold() -> vector<2x!PF17> {
   // CHECK: %[[C:.*]] = field.constant dense<1> : [[T]]
-  // CHECK-NOT: vector.splat
+  // CHECK-NOT: vector.broadcast
   // CHECK: return %[[C]] : [[T]]
   %0 = field.constant 1 : !PF17
-  %1 = vector.splat %0 : vector<2x!PF17>
+  %1 = vector.broadcast %0 : !PF17 to vector<2x!PF17>
   return %1 : vector<2x!PF17>
 }
 

@@ -91,12 +91,12 @@ Pippengers::Pippengers(Value scalarsIn, Value points, Type outputType,
   windowSums = b.create<memref::AllocaOp>(windowSumsType);
 
   Value numWindows = b.create<arith::ConstantIndexOp>(this->numWindows);
-  b.create<scf::ForOp>(
-      zero, numWindows, one, std::nullopt,
+  scf::ForOp::create(
+      b, b.getLoc(), zero, numWindows, one, ValueRange{},
       [&](OpBuilder &builder, Location loc, Value i, ValueRange args) {
         ImplicitLocOpBuilder b0(loc, builder);
-        b0.create<memref::StoreOp>(zeroPoint, windowSums, i);
-        b0.create<scf::YieldOp>();
+        memref::StoreOp::create(b0, b0.getLoc(), zeroPoint, windowSums, i);
+        scf::YieldOp::create(b0, b0.getLoc());
       });
 }
 

@@ -487,7 +487,7 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
   }
 
   if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
-    return builder.create<ConstantOp>(loc, type, arrayAttr);
+    return ConstantOp::create(builder, loc, type, arrayAttr);
   }
   return nullptr;
 }

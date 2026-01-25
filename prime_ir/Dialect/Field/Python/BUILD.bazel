@@ -61,7 +61,7 @@ cc_library(
         "//prime_ir/Dialect/Field/C:CAPI",
         "@llvm-project//mlir:CAPIIR",
         "@llvm-project//mlir:MLIRBindingsPythonCore",
-        "@llvm-project//mlir:MLIRBindingsPythonHeadersAndDeps",
+        "@llvm-project//mlir:MLIRBindingsPythonNanobindHeadersAndDeps",
         "@nanobind",
     ],
 )

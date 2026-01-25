@@ -51,10 +51,7 @@ shopt -s nullglob
 # List of patches in the order specified in workspace.bzl (lines 23-37)
 patches=(
     "$patch_dir/cuda_runtime.patch"
-    "$patch_dir/kernel_outlining.patch"
     "$patch_dir/nvptx_lowering.patch"
-    "$patch_dir/owning_memref_free.patch"
-    "$patch_dir/owning_memref_memset.patch"
     "$patch_dir/linalg_type_support.patch"
     "$patch_dir/tensor_type_support.patch"
     "$patch_dir/vector_type_support.patch"

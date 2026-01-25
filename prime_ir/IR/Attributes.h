@@ -20,6 +20,8 @@ limitations under the License.
 
 namespace mlir::prime_ir {
 
+// Converts PrimeIR element types to their underlying storage types in a
+// ShapedType. Returns the original type unchanged if not a PrimeIR type.
 ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type);
 
 } // namespace mlir::prime_ir

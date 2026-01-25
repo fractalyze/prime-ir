@@ -660,7 +660,7 @@ void FieldToModArith::runOnOperation() {
       ConvertAny<tensor::ReshapeOp>,
       ConvertAny<tensor::YieldOp>,
       ConvertAny<tensor_ext::BitReverseOp>,
-      ConvertAny<vector::SplatOp>
+      ConvertAny<vector::BroadcastOp>
       // clang-format on
       >(typeConverter, context);
 
@@ -711,7 +711,7 @@ void FieldToModArith::runOnOperation() {
       tensor::ReshapeOp,
       tensor::YieldOp,
       tensor_ext::BitReverseOp,
-      vector::SplatOp
+      vector::BroadcastOp
       // clang-format on
       >([&](auto op) { return typeConverter.isLegal(op); });
 

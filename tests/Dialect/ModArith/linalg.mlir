@@ -51,7 +51,7 @@ func.func @test_linalg_generic(%input : tensor<4x!Zp>, %output: tensor<4x!Zp>) -
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]], %[[OUTPUT:.*]]: [[OUTPUT_TYPE:.*]]) -> [[T:.*]] {
 func.func @test_linalg_map(%input : tensor<4x!Zp>, %output: tensor<4x!Zp>) -> tensor<4x!Zp> {
   // CHECK: %[[RES:.*]] = linalg.map ins(%[[INPUT]] : [[INPUT_TYPE]]) outs(%[[OUTPUT]] : [[OUTPUT_TYPE]])
-  %res = linalg.map ins(%input : tensor<4x!Zp>) outs(%output : tensor<4x!Zp>) (%arg0: !Zp) {
+  %res = linalg.map ins(%input : tensor<4x!Zp>) outs(%output : tensor<4x!Zp>) (%arg0: !Zp, %arg1: !Zp) {
     %square = mod_arith.double %arg0 : !Zp
     linalg.yield %square : !Zp
   }

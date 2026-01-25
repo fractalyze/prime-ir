@@ -1224,10 +1224,10 @@ func.func @test_vector_extract() -> !Zp {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_splat_fold() -> vector<2x!Zp> {
   // CHECK: %[[C:.*]] = mod_arith.constant dense<1> : [[T]]
-  // CHECK-NOT: vector.splat
+  // CHECK-NOT: vector.broadcast
   // CHECK: return %[[C]] : [[T]]
   %0 = mod_arith.constant 1 : !Zp
-  %1 = vector.splat %0 : vector<2x!Zp>
+  %1 = vector.broadcast %0 : !Zp to vector<2x!Zp>
   return %1 : vector<2x!Zp>
 }
 

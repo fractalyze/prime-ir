@@ -85,7 +85,7 @@ func.func @test_packed_poseidon2_permute() {
   %one = arith.constant 1 : index
   scf.for %i = %zero to %sixteen step %one {
     %val = arith.index_cast %i : index to i32
-    %v_i32 = vector.splat %val : vector<16xi32>
+    %v_i32 = vector.broadcast %val : i32 to vector<16xi32>
     %v_std = field.bitcast %v_i32 : vector<16xi32> -> !packed_std
     %v_mont = field.to_mont %v_std : !packed
     memref.store %v_mont, %state[%i] : !packed_state

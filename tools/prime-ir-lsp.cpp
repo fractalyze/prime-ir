@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllExtensions.h"
-#include "mlir/InitAllPasses.h"
 #include "mlir/Tools/mlir-lsp-server/MlirLspServerMain.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"

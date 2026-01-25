@@ -19,6 +19,8 @@ limitations under the License.
 #include <cstddef>
 #include <type_traits>
 
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "zk_dtypes/include/big_int.h"
@@ -32,7 +34,7 @@ constexpr bool isPowerOfTwo(size_t value) {
 template <size_t N>
 APInt convertToAPInt(const zk_dtypes::BigInt<N> &value,
                      unsigned bits = N * 64) {
-  return {bits, static_cast<unsigned>(N), value.limbs()};
+  return APInt(bits, ArrayRef<uint64_t>(value.limbs(), N));
 }
 
 template <typename T, std::enable_if_t<std::is_integral_v<T>> * = nullptr>
