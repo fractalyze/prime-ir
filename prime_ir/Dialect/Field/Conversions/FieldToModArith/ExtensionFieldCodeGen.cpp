@@ -17,8 +17,9 @@ limitations under the License.
 
 namespace mlir::prime_ir::field {
 
-template class ExtensionFieldCodeGen<2>;
-template class ExtensionFieldCodeGen<3>;
-template class ExtensionFieldCodeGen<4>;
+// Non-tower extension fields (base field is PrimeFieldCodeGen)
+template class ExtensionFieldCodeGen<2, PrimeFieldCodeGen>;
+template class ExtensionFieldCodeGen<3, PrimeFieldCodeGen>;
+template class ExtensionFieldCodeGen<4, PrimeFieldCodeGen>;
 
 } // namespace mlir::prime_ir::field
