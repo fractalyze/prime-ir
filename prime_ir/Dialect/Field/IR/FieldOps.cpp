@@ -1081,9 +1081,24 @@ public:
   using GenericBinaryExtFieldConstantFolder<
       AdditiveConstantFolderDelegate<ExtensionFieldConstantFolderConfig>, Op,
       Func>::GenericBinaryExtFieldConstantFolder;
+  // Make base class foldTensor overloads visible
+  using GenericBinaryExtFieldConstantFolder<
+      AdditiveConstantFolderDelegate<ExtensionFieldConstantFolderConfig>, Op,
+      Func>::foldTensor;
 
   bool isZero(const SmallVector<APInt> &value) const final {
     return llvm::all_of(value, [](const APInt &v) { return v.isZero(); });
+  }
+
+  // Fold additive identity: x + 0 = x
+  OpFoldResult foldTensor(DenseIntElementsAttr rhs) const override {
+    auto rhsValues = rhs.getValues<APInt>();
+    // If all elements are zero, return lhs (x + 0 = x)
+    // NOLINTNEXTLINE(whitespace/newline)
+    if (llvm::all_of(rhsValues, [](const APInt &v) { return v.isZero(); })) {
+      return this->op->getOperand(0);
+    }
+    return {};
   }
 };
 
@@ -1093,6 +1108,11 @@ class ExtMultiplicativeFolder : public GenericBinaryExtFieldConstantFolder<
                                         ExtensionFieldConstantFolderConfig>,
                                     Op, Func> {
 public:
+  // Make base class foldTensor overloads visible
+  using GenericBinaryExtFieldConstantFolder<
+      MultiplicativeConstantFolderDelegate<ExtensionFieldConstantFolderConfig>,
+      Op, Func>::foldTensor;
+
   ExtMultiplicativeFolder(Op *op, Func fn)
       : GenericBinaryExtFieldConstantFolder<
             MultiplicativeConstantFolderDelegate<
@@ -1107,6 +1127,46 @@ public:
   }
   bool isOne(const SmallVector<APInt> &value) const final {
     return value == one;
+  }
+
+  // Fold multiplicative identities: x * 0 = 0, x * 1 = x
+  OpFoldResult foldTensor(DenseIntElementsAttr rhs) const override {
+    auto rhsValues = rhs.getValues<APInt>();
+    unsigned degree = this->efType.getDegreeOverPrime();
+    size_t numElements = rhsValues.size();
+
+    if (numElements % degree != 0) {
+      return {};
+    }
+
+    // Check if all extension field elements are zero or one
+    bool allZeros = true;
+    bool allOnes = true;
+
+    for (size_t i = 0; i < numElements; i += degree) {
+      SmallVector<APInt> coeffs(rhsValues.begin() + i,
+                                rhsValues.begin() + i + degree);
+      if (!isZero(coeffs)) {
+        allZeros = false;
+      }
+      if (!isOne(coeffs)) {
+        allOnes = false;
+      }
+      if (!allZeros && !allOnes) {
+        break; // Early exit if neither condition holds
+      }
+    }
+
+    // x * 0 = 0, return rhs
+    if (allZeros) {
+      return this->op->getOperand(1);
+    }
+    // x * 1 = x, return lhs
+    if (allOnes) {
+      return this->op->getOperand(0);
+    }
+
+    return {};
   }
 
 private:
