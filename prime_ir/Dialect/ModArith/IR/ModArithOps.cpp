@@ -253,19 +253,13 @@ Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
-  // Fold bitcast with same input and output types.
-  if (getInput().getType() == getOutput().getType()) {
-    return getInput();
-  }
-
-  // Fold bitcast(bitcast(x)) -> x when final type matches original type.
-  if (auto inputBitcast = getInput().getDefiningOp<BitcastOp>()) {
-    if (inputBitcast.getInput().getType() == getOutput().getType()) {
-      return inputBitcast.getInput();
-    }
-  }
+  OpFoldResult result = foldBitcast(*this, adaptor);
+  if (result)
+    return result;
 
   // Fold constant bitcast.
+  // Bitcasting a constant is a no-op since only the type interpretation
+  // changes, not the underlying data.
   if (isa_and_present<IntegerAttr>(adaptor.getInput()) ||
       isa_and_present<DenseIntElementsAttr>(adaptor.getInput())) {
     return adaptor.getInput();

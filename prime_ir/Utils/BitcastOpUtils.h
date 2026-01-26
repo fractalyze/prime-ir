@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef PRIME_IR_UTILS_BITCASTOPUTILS_H_
 #define PRIME_IR_UTILS_BITCASTOPUTILS_H_
 
+#include "mlir/IR/Attributes.h"
+#include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/LogicalResult.h"
 
@@ -53,6 +55,37 @@ LogicalResult canonicalizeBitcast(BitcastOpT op, PatternRewriter &rewriter) {
   }
 
   return failure();
+}
+
+// Template function for folding bitcast operations.
+// This function performs common bitcast folding optimizations:
+// 1. Fold bitcast with same input and output types
+// 2. Fold bitcast(bitcast(x)) -> x when final type matches original type
+//
+// Template parameters:
+// - BitcastOpT: The bitcast operation type (e.g., field::BitcastOp,
+//               mod_arith::BitcastOp)
+//
+// The BitcastOpT must have:
+// - getInput() method returning the input value
+// - getOutput() method returning the output value
+// - FoldAdaptor type for accessing constant attributes
+template <typename BitcastOpT>
+OpFoldResult foldBitcast(BitcastOpT op,
+                         typename BitcastOpT::FoldAdaptor adaptor) {
+  // Fold bitcast with same input and output types.
+  if (op.getInput().getType() == op.getOutput().getType()) {
+    return op.getInput();
+  }
+
+  // Fold bitcast(bitcast(x)) -> x when final type matches original type.
+  if (auto inputBitcast = op.getInput().template getDefiningOp<BitcastOpT>()) {
+    if (inputBitcast.getInput().getType() == op.getOutput().getType()) {
+      return inputBitcast.getInput();
+    }
+  }
+
+  return {};
 }
 
 } // namespace mlir::prime_ir

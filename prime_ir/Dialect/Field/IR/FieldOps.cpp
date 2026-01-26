@@ -721,19 +721,7 @@ LogicalResult BitcastOp::verify() {
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
-  // Fold bitcast with same input and output types.
-  if (getInput().getType() == getOutput().getType()) {
-    return getInput();
-  }
-
-  // Fold bitcast(bitcast(x)) -> x when final type matches original type.
-  if (auto inputBitcast = getInput().getDefiningOp<BitcastOp>()) {
-    if (inputBitcast.getInput().getType() == getOutput().getType()) {
-      return inputBitcast.getInput();
-    }
-  }
-
-  return {};
+  return foldBitcast(*this, adaptor);
 }
 
 LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
