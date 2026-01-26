@@ -311,6 +311,39 @@ func.func @test_tensor_ext_field_fold_mul() -> tensor<2x!QF> {
 }
 
 //===----------------------------------------------------------------------===//
+// Identity operation folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_add_tensor_zero_is_self
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_add_tensor_zero_is_self(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  %0 = field.constant dense<0> : tensor<2x!QF>
+  %1 = field.add %arg0, %0 : tensor<2x!QF>
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_mul_tensor_by_zero_is_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_tensor_by_zero_is_zero(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  %0 = field.constant dense<0> : tensor<2x!QF>
+  %1 = field.mul %arg0, %0 : tensor<2x!QF>
+  // CHECK: %[[C:.*]] = field.constant dense<0> : [[T]]
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_mul_tensor_by_one_is_self
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_tensor_by_one_is_self(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  // Multiplicative identity for QF is [1, 0] (1 in base field, 0 for other coefficients)
+  %0 = field.constant dense<[[1, 0], [1, 0]]> : tensor<2x!QF>
+  %1 = field.mul %arg0, %0 : tensor<2x!QF>
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+//===----------------------------------------------------------------------===//
 // BitcastOp folding
 //===----------------------------------------------------------------------===//
 

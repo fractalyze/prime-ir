@@ -1282,7 +1282,10 @@ bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
   }
   if (intAttr) {
     auto primeFieldType =
-        cast<PrimeFieldType>(getElementTypeOrSelf(val.getType()));
+        dyn_cast<PrimeFieldType>(getElementTypeOrSelf(val.getType()));
+    if (!primeFieldType) {
+      return false;
+    }
     PrimeFieldOperation valueOp(intAttr.getValue(), primeFieldType);
     PrimeFieldType stdType = primeFieldType;
     if (primeFieldType.isMontgomery()) {
@@ -1303,7 +1306,10 @@ bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
   }
   if (intAttr) {
     auto primeFieldType =
-        cast<PrimeFieldType>(getElementTypeOrSelf(val.getType()));
+        dyn_cast<PrimeFieldType>(getElementTypeOrSelf(val.getType()));
+    if (!primeFieldType) {
+      return false;
+    }
     PrimeFieldOperation valueOp(intAttr.getValue(), primeFieldType);
     PrimeFieldType stdType = primeFieldType;
     if (primeFieldType.isMontgomery()) {
