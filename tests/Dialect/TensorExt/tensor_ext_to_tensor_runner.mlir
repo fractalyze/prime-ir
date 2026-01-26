@@ -13,23 +13,17 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: prime-ir-opt %s -tensor-ext-to-tensor -one-shot-bufferize -convert-bufferization-to-memref \
-// RUN:   -convert-scf-to-cf -finalize-memref-to-llvm -convert-arith-to-llvm -convert-index-to-llvm \
-// RUN:   -convert-cf-to-llvm -convert-func-to-llvm -reconcile-unrealized-casts \
+// RUN: prime-ir-opt %s -tensor-ext-to-tensor -one-shot-bufferize -convert-to-llvm \
 // RUN:   | mlir-runner -e test_bit_reverse_1d -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_1D < %t
 
-// RUN: prime-ir-opt %s -tensor-ext-to-tensor -one-shot-bufferize -convert-bufferization-to-memref \
-// RUN:   -convert-scf-to-cf -finalize-memref-to-llvm -convert-arith-to-llvm -convert-index-to-llvm \
-// RUN:   -convert-cf-to-llvm -convert-func-to-llvm -reconcile-unrealized-casts \
+// RUN: prime-ir-opt %s -tensor-ext-to-tensor -one-shot-bufferize -convert-to-llvm \
 // RUN:   | mlir-runner -e test_bit_reverse_2d_dim0 -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_2D_DIM0 < %t
 
-// RUN: prime-ir-opt %s -tensor-ext-to-tensor -one-shot-bufferize -convert-bufferization-to-memref \
-// RUN:   -convert-scf-to-cf -finalize-memref-to-llvm -convert-arith-to-llvm -convert-index-to-llvm \
-// RUN:   -convert-cf-to-llvm -convert-func-to-llvm -reconcile-unrealized-casts \
+// RUN: prime-ir-opt %s -tensor-ext-to-tensor -one-shot-bufferize -convert-to-llvm \
 // RUN:   | mlir-runner -e test_bit_reverse_2d_dim1 -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_2D_DIM1 < %t
