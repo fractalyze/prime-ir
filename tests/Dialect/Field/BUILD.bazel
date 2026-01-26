@@ -54,3 +54,14 @@ cc_test(
         "@zk_dtypes//zk_dtypes:goldilocks3",
     ],
 )
+
+cc_test(
+    name = "BitcastOpTest",
+    srcs = ["BitcastOpTest.cpp"],
+    deps = [
+        "//prime_ir/Dialect/Field/IR:Field",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@llvm-project//mlir:IR",
+    ],
+)

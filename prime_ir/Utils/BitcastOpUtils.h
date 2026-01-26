@@ -23,6 +23,19 @@ limitations under the License.
 
 namespace mlir::prime_ir {
 
+// Helper function to check if input and output types are the same (no-op).
+inline bool isSameTypeBitcast(Type inputType, Type outputType) {
+  return inputType == outputType;
+}
+
+// Helper function to check if element types are both integer types.
+// This is used to reject integer-to-integer bitcasts (should use
+// arith.bitcast).
+inline bool areBothIntegerTypes(Type inputElementType, Type outputElementType) {
+  return isa<IntegerType>(inputElementType) &&
+         isa<IntegerType>(outputElementType);
+}
+
 // Template function for canonicalizing bitcast operations.
 // This function folds bitcast(bitcast(x)) -> bitcast(x) when there's a
 // transitive cast and the types are compatible.
@@ -34,7 +47,7 @@ namespace mlir::prime_ir {
 // The BitcastOpT must have:
 // - getInput() method returning the input value
 // - getOutput() method returning the output value
-// - static areCastCompatible(Type, Type) method for checking type
+// - static areCastCompatible(TypeRange, TypeRange) method for checking type
 //   compatibility
 template <typename BitcastOpT>
 LogicalResult canonicalizeBitcast(BitcastOpT op, PatternRewriter &rewriter) {
@@ -48,7 +61,7 @@ LogicalResult canonicalizeBitcast(BitcastOpT op, PatternRewriter &rewriter) {
   Type srcType = inputBitcast.getInput().getType();
   Type dstType = op.getOutput().getType();
 
-  if (BitcastOpT::areCastCompatible(srcType, dstType)) {
+  if (BitcastOpT::areCastCompatible(TypeRange{srcType}, TypeRange{dstType})) {
     rewriter.replaceOpWithNewOp<BitcastOpT>(op, dstType,
                                             inputBitcast.getInput());
     return success();

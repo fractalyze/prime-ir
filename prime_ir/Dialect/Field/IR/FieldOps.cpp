@@ -477,24 +477,6 @@ bool isFieldLikeType(Type type) {
 
 namespace {
 
-// Helper function to get the modulus from a field-like type.
-// Returns the modulus APInt for PrimeFieldType, ExtensionFieldType (base
-// field), or ModArithType. Returns std::nullopt for IntegerType (which doesn't
-// carry modulus information after mod-arith-to-arith lowering).
-std::optional<APInt> getFieldModulus(Type elementType) {
-  if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
-    return pfType.getModulus().getValue();
-  }
-  if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    return efType.getBaseField().getModulus().getValue();
-  }
-  if (auto maType = dyn_cast<mod_arith::ModArithType>(elementType)) {
-    return maType.getModulus().getValue();
-  }
-  // IntegerType (and other types) don't carry modulus information
-  return std::nullopt;
-}
-
 // Helper function to compute the total number of prime field elements
 // represented by a shaped type. IntegerType is treated as a single element
 // (after mod-arith-to-arith lowering).
@@ -513,45 +495,6 @@ std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
     return numElements * efType.getDegree();
   }
   return std::nullopt;
-}
-
-// Check if two prime field types have the same modulus.
-bool haveSameModulus(PrimeFieldType inputPF, PrimeFieldType outputPF) {
-  return inputPF.getModulus() == outputPF.getModulus();
-}
-
-// Check if two extension field types have compatible structure (same degree,
-// same base field modulus, and same non-residue in standard form).
-bool haveCompatibleStructure(ExtensionFieldType inputEF,
-                             ExtensionFieldType outputEF) {
-  // Must have the same degree
-  if (inputEF.getDegree() != outputEF.getDegree()) {
-    return false;
-  }
-
-  // Check base field modulus
-  auto inputBaseField = cast<PrimeFieldType>(inputEF.getBaseField());
-  auto outputBaseField = cast<PrimeFieldType>(outputEF.getBaseField());
-  if (!haveSameModulus(inputBaseField, outputBaseField)) {
-    return false;
-  }
-
-  // Compare non-residue values in standard form
-  auto inputNonResidue = cast<IntegerAttr>(inputEF.getNonResidue());
-  auto outputNonResidue = cast<IntegerAttr>(outputEF.getNonResidue());
-
-  // Convert both non-residues to standard form for comparison
-  IntegerAttr modulus = inputBaseField.getModulus();
-  IntegerAttr inputNRStd =
-      inputEF.isMontgomery()
-          ? mod_arith::getAttrAsStandardForm(modulus, inputNonResidue)
-          : inputNonResidue;
-  IntegerAttr outputNRStd =
-      outputEF.isMontgomery()
-          ? mod_arith::getAttrAsStandardForm(modulus, outputNonResidue)
-          : outputNonResidue;
-
-  return inputNRStd.getValue() == outputNRStd.getValue();
 }
 
 } // namespace
@@ -583,84 +526,107 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   Type inputType = inputs.front();
   Type outputType = outputs.front();
 
+  Type inputElementType = getElementTypeOrSelf(inputType);
+  Type outputElementType = getElementTypeOrSelf(outputType);
+
+  // Integer to integer is not allowed (use arith.bitcast), check this first
+  if (areBothIntegerTypes(inputElementType, outputElementType)) {
+    return false;
+  }
+
+  // Same type is allowed for verification (will be folded away by folder)
+  if (isSameTypeBitcast(inputType, outputType)) {
+    return true;
+  }
+
   // Case 1: Tensor reinterpret bitcast (extension field <->
   // prime/mod_arith/integer field)
   if (isTensorReinterpretBitcast(inputType, outputType)) {
     auto inputShaped = cast<ShapedType>(inputType);
     auto outputShaped = cast<ShapedType>(outputType);
 
-    Type inputElementType = inputShaped.getElementType();
-    Type outputElementType = outputShaped.getElementType();
+    // Calculate bitwidth for each element type
+    unsigned inputBitWidth;
+    if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
+      // For extension fields, multiply base field bitwidth by degree
+      if (auto baseField = dyn_cast<PrimeFieldType>(efType.getBaseField())) {
+        inputBitWidth =
+            getIntOrPrimeFieldBitWidth(baseField) * efType.getDegree();
+      } else {
+        // After field-to-mod-arith pass, base field may be ModArithType
+        inputBitWidth =
+            mod_arith::getIntOrModArithBitWidth(efType.getBaseField()) *
+            efType.getDegree();
+      }
+    } else if (auto maType =
+                   dyn_cast<mod_arith::ModArithType>(inputElementType)) {
+      inputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
+    } else {
+      inputBitWidth = getIntOrPrimeFieldBitWidth(inputElementType);
+    }
 
-    // The base field modulus must match (works with PrimeFieldType,
-    // ExtensionFieldType, and ModArithType). IntegerType doesn't carry modulus
-    // info (returns std::nullopt), so we skip the check if one side is integer.
-    auto inputModulus = getFieldModulus(inputElementType);
-    auto outputModulus = getFieldModulus(outputElementType);
-    // If both sides have modulus info, they must match
-    if (inputModulus && outputModulus && *inputModulus != *outputModulus) {
-      return false;
+    unsigned outputBitWidth;
+    if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
+      // For extension fields, multiply base field bitwidth by degree
+      if (auto baseField = dyn_cast<PrimeFieldType>(efType.getBaseField())) {
+        outputBitWidth =
+            getIntOrPrimeFieldBitWidth(baseField) * efType.getDegree();
+      } else {
+        // After field-to-mod-arith pass, base field may be ModArithType
+        outputBitWidth =
+            mod_arith::getIntOrModArithBitWidth(efType.getBaseField()) *
+            efType.getDegree();
+      }
+    } else if (auto maType =
+                   dyn_cast<mod_arith::ModArithType>(outputElementType)) {
+      outputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
+    } else {
+      outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
     }
 
     // The total number of prime field elements must match
     auto inputTotal = getTotalPrimeFieldElements(inputShaped);
     auto outputTotal = getTotalPrimeFieldElements(outputShaped);
-    return inputTotal && outputTotal && *inputTotal == *outputTotal;
-  }
-
-  // Case 2: Montgomery form bitcast (same field type, different Montgomery
-  // flag)
-  Type inputElementType = getElementTypeOrSelf(inputType);
-  Type outputElementType = getElementTypeOrSelf(outputType);
-
-  // Check for prime field bitcast (Montgomery form conversion)
-  if (auto inputPF = dyn_cast<PrimeFieldType>(inputElementType)) {
-    if (auto outputPF = dyn_cast<PrimeFieldType>(outputElementType)) {
-      // Same type is not allowed (no-op)
-      if (inputPF == outputPF) {
-        return false;
-      }
-      // Allow if shapes match and they have the same modulus
-      if (auto inputShaped = dyn_cast<ShapedType>(inputType)) {
-        auto outputShaped = dyn_cast<ShapedType>(outputType);
-        if (!outputShaped ||
-            inputShaped.getShape() != outputShaped.getShape()) {
-          return false;
-        }
-      }
-      return haveSameModulus(inputPF, outputPF);
+    if (!inputTotal || !outputTotal || *inputTotal != *outputTotal) {
+      return false;
     }
+
+    // Total bitwidth must match
+    return inputBitWidth * inputShaped.getNumElements() ==
+           outputBitWidth * outputShaped.getNumElements();
   }
 
-  // Check for extension field bitcast (Montgomery form conversion)
-  if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
-    if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      // Same type is not allowed (no-op)
-      if (inputEF == outputEF) {
-        return false;
-      }
-      // Allow if shapes match and they have compatible structure
-      if (auto inputShaped = dyn_cast<ShapedType>(inputType)) {
-        auto outputShaped = dyn_cast<ShapedType>(outputType);
-        if (!outputShaped ||
-            inputShaped.getShape() != outputShaped.getShape()) {
-          return false;
-        }
-      }
-      return haveCompatibleStructure(inputEF, outputEF);
-    }
-  }
-
-  // Case 3: Original scalar/element-wise bitcast (prime field <-> integer)
-  // Must be prime field or integer types
-  if (!isa<PrimeFieldType, IntegerType>(inputElementType) ||
-      !isa<PrimeFieldType, IntegerType>(outputElementType)) {
+  // Check shape compatibility
+  if (failed(verifyCompatibleShape(inputType, outputType))) {
     return false;
   }
 
-  // Integer to integer is not allowed (use arith.bitcast)
-  if (isa<IntegerType>(inputElementType) &&
-      isa<IntegerType>(outputElementType)) {
+  // Case 2: prime field <-> prime field bitcast
+  if (auto inputPF = dyn_cast<PrimeFieldType>(inputElementType)) {
+    if (auto outputPF = dyn_cast<PrimeFieldType>(outputElementType)) {
+      // Allow if bitwidths match (modulus can be different)
+      return getIntOrPrimeFieldBitWidth(inputElementType) ==
+             getIntOrPrimeFieldBitWidth(outputElementType);
+    }
+  }
+
+  // Case 3: extension field <-> extension field bitcast
+  if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
+    if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
+      // Degree must match
+      if (inputEF.getDegree() != outputEF.getDegree()) {
+        return false;
+      }
+      // Allow if bitwidths match (base field modulus and non-residue can be
+      // different)
+      return getIntOrPrimeFieldBitWidth(inputEF.getBaseField()) ==
+             getIntOrPrimeFieldBitWidth(outputEF.getBaseField());
+    }
+  }
+
+  // Case 4: prime field <- > integer bitcast
+  if (!isa<PrimeFieldType, IntegerType>(inputElementType) ||
+      !isa<PrimeFieldType, IntegerType>(outputElementType)) {
     return false;
   }
 
@@ -673,51 +639,123 @@ LogicalResult BitcastOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
 
-  if (areCastCompatible(inputType, outputType)) {
+  if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType})) {
     return success();
   }
 
-  // Provide detailed error messages
-  if (isTensorReinterpretBitcast(inputType, outputType)) {
-    auto inputShaped = cast<ShapedType>(inputType);
-    auto outputShaped = cast<ShapedType>(outputType);
-
-    Type inputElementType = inputShaped.getElementType();
-    Type outputElementType = outputShaped.getElementType();
-
-    auto inputModulus = getFieldModulus(inputElementType);
-    auto outputModulus = getFieldModulus(outputElementType);
-    // Only report modulus mismatch if both sides have modulus info
-    if (inputModulus && outputModulus && *inputModulus != *outputModulus) {
-      return emitOpError()
-             << "base field moduli must match; input element type "
-             << inputElementType << " and output element type "
-             << outputElementType << " have different moduli";
-    }
-
-    auto inputTotal = getTotalPrimeFieldElements(inputShaped);
-    auto outputTotal = getTotalPrimeFieldElements(outputShaped);
-    if (!inputTotal || !outputTotal) {
-      return emitOpError() << "tensor shapes must be static";
-    }
-    if (*inputTotal != *outputTotal) {
-      return emitOpError()
-             << "total prime field element count must match; input has "
-             << *inputTotal << " elements but output has " << *outputTotal;
-    }
-  }
+  // Provide detailed error messages for all failure cases
 
   Type inputElementType = getElementTypeOrSelf(inputType);
   Type outputElementType = getElementTypeOrSelf(outputType);
 
-  if (isa<IntegerType>(inputElementType) &&
-      isa<IntegerType>(outputElementType)) {
+  if (areBothIntegerTypes(inputElementType, outputElementType)) {
     return emitOpError()
            << "integer to integer bitcast should use arith.bitcast";
   }
 
-  return emitOpError() << "input type '" << inputType << "' and output type '"
-                       << outputType << "' are not compatible for bitcast";
+  // Case 1: Tensor reinterpret bitcast
+  if (isTensorReinterpretBitcast(inputType, outputType)) {
+    auto inputShaped = cast<ShapedType>(inputType);
+    auto outputShaped = cast<ShapedType>(outputType);
+
+    auto inputTotal = getTotalPrimeFieldElements(inputShaped);
+    auto outputTotal = getTotalPrimeFieldElements(outputShaped);
+    if (!inputTotal || !outputTotal) {
+      return emitOpError()
+             << "tensor reinterpret bitcast requires static shapes";
+    }
+    if (*inputTotal != *outputTotal) {
+      return emitOpError() << "tensor reinterpret bitcast requires matching "
+                              "total prime field "
+                              "element count; input has "
+                           << *inputTotal << " elements but output has "
+                           << *outputTotal;
+    }
+
+    // Check bitwidth
+    Type inputElementType = inputShaped.getElementType();
+    Type outputElementType = outputShaped.getElementType();
+    unsigned inputBitWidth;
+    if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
+      inputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBaseField()) *
+                      efType.getDegree();
+    } else {
+      inputBitWidth = getIntOrPrimeFieldBitWidth(inputElementType);
+    }
+    unsigned outputBitWidth;
+    if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
+      outputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBaseField()) *
+                       efType.getDegree();
+    } else {
+      outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
+    }
+    return emitOpError()
+           << "tensor reinterpret bitcast requires matching total bitwidth; "
+              "input has "
+           << (inputBitWidth * inputShaped.getNumElements())
+           << " bits but output has "
+           << (outputBitWidth * outputShaped.getNumElements()) << " bits";
+  }
+
+  // Check shape compatibility for non-tensor-reinterpret cases
+  if (failed(verifyCompatibleShape(inputType, outputType))) {
+    return emitOpError()
+           << "input and output shapes are incompatible for bitcast";
+  }
+
+  // Case 2: Prime field bitcast
+  if (isa<PrimeFieldType>(inputElementType) &&
+      isa<PrimeFieldType>(outputElementType)) {
+    unsigned inputBitWidth = getIntOrPrimeFieldBitWidth(inputElementType);
+    unsigned outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
+    return emitOpError()
+           << "prime field bitcast requires matching bitwidths, but input has "
+           << inputBitWidth << " bits and output has " << outputBitWidth
+           << " bits";
+  }
+
+  // Case 3: Extension field bitcast
+  if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
+    if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
+      if (inputEF.getDegree() != outputEF.getDegree()) {
+        return emitOpError()
+               << "extension field bitcast requires matching degrees, but "
+                  "input has "
+               << "degree " << inputEF.getDegree() << " and output has degree "
+               << outputEF.getDegree();
+      }
+      unsigned inputBitWidth =
+          getIntOrPrimeFieldBitWidth(inputEF.getBaseField());
+      unsigned outputBitWidth =
+          getIntOrPrimeFieldBitWidth(outputEF.getBaseField());
+      return emitOpError() << "extension field bitcast requires matching base "
+                              "field bitwidths, "
+                              "but input has "
+                           << inputBitWidth << " bits and output has "
+                           << outputBitWidth << " bits";
+    }
+  }
+
+  // Case 4: Scalar/element-wise bitcast (prime field <-> integer)
+  if (!isa<PrimeFieldType, IntegerType>(inputElementType) ||
+      !isa<PrimeFieldType, IntegerType>(outputElementType)) {
+    return emitOpError()
+           << "bitcast requires field or integer types, but got input type '"
+           << inputType << "' and output type '" << outputType << "'";
+  }
+
+  unsigned inputBitWidth = getIntOrPrimeFieldBitWidth(inputElementType);
+  unsigned outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
+  if (inputBitWidth != outputBitWidth) {
+    return emitOpError()
+           << "bitcast requires matching bitwidths, but input has "
+           << inputBitWidth << " bits and output has " << outputBitWidth
+           << " bits";
+  }
+
+  return emitOpError()
+         << "internal error: operands are cast-incompatible for unknown reason "
+         << "(input: " << inputType << ", output: " << outputType << ")";
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
