@@ -460,7 +460,6 @@ LogicalResult FromMontOp::verify() {
   }
   return success();
 }
-
 LogicalResult ToMontOp::verify() {
   bool isMont = isMontgomery(getType());
   if (!isMont) {
