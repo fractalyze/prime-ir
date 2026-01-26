@@ -76,6 +76,7 @@ cc_library(
         "//prime_ir/Dialect/EllipticCurve/IR:PointOperationBaseForward",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Utils:AssemblyFormatUtils",
+        "//prime_ir/Utils:BitcastOpUtils",
         "//prime_ir/Utils:CanonicalizationPatterns",
         "//prime_ir/Utils:ConstantFolder",
         "//prime_ir/Utils:KnownModulus",

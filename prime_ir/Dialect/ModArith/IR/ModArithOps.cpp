@@ -21,6 +21,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
+#include "prime_ir/Utils/BitcastOpUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
 
 // IWYU pragma: begin_keep
@@ -273,23 +274,7 @@ OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
 }
 
 LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
-  // Fold bitcast(bitcast(x)) -> bitcast(x) when there's a transitive cast.
-  auto inputBitcast = op.getInput().getDefiningOp<BitcastOp>();
-  if (!inputBitcast) {
-    return failure();
-  }
-
-  // If the types are compatible for direct cast, replace with single bitcast.
-  Type srcType = inputBitcast.getInput().getType();
-  Type dstType = op.getOutput().getType();
-
-  if (BitcastOp::areCastCompatible(srcType, dstType)) {
-    rewriter.replaceOpWithNewOp<BitcastOp>(op, dstType,
-                                           inputBitcast.getInput());
-    return success();
-  }
-
-  return failure();
+  return canonicalizeBitcast(op, rewriter);
 }
 
 OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
