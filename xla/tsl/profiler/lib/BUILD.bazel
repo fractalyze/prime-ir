@@ -147,12 +147,14 @@ zkx_cc_unittest(
     srcs = [
         "profiler_factory_unittest.cc",
         "profiler_lock_unittest.cc",
+        "scoped_annotation_unittest.cc",
         "traceme_encode_unittest.cc",
     ],
     deps = [
         ":profiler_factory",
         ":profiler_interface",
         ":profiler_lock",
+        ":scoped_annotation",
         ":traceme_encode",
         "//xla/tsl/profiler/protobuf:profiler_options_cc_proto",
         "//xla/tsl/profiler/protobuf:xplane_cc_proto",
