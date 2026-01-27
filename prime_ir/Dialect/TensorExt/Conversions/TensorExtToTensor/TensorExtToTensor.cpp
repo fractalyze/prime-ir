@@ -39,31 +39,48 @@ struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
     auto tensorType = cast<RankedTensorType>(adaptor.getSource().getType());
     MemRefType memrefType =
         MemRefType::get(tensorType.getShape(), tensorType.getElementType());
-    unsigned numCoeffs = tensorType.getShape()[0];
-    assert(llvm::has_single_bit(numCoeffs) &&
-           "expected the number of coefficients to be a power of 2");
-    unsigned indexBitWidth = llvm::countr_zero(numCoeffs);
+    int64_t rank = tensorType.getRank();
+    int64_t dimension = op.getDimension();
+
+    // Validate dimension
+    assert(dimension >= 0 && dimension < rank && "dimension out of range");
+
+    unsigned numElements = tensorType.getShape()[dimension];
+    assert(llvm::has_single_bit(numElements) &&
+           "expected the size of the dimension to be a power of 2");
+    unsigned indexBitWidth = llvm::countr_zero(numElements);
 
     auto c0 = b.create<arith::ConstantIndexOp>(0);
     auto c1 = b.create<arith::ConstantIndexOp>(1);
-    auto cN = b.create<arith::ConstantIndexOp>(numCoeffs);
+
+    // Create upper bounds for all dimensions
+    SmallVector<Value> lowerBounds(rank, c0);
+    SmallVector<Value> upperBounds;
+    SmallVector<Value> steps(rank, c1);
+    for (int64_t i = 0; i < rank; ++i) {
+      upperBounds.push_back(
+          b.create<arith::ConstantIndexOp>(tensorType.getShape()[i]));
+    }
+
     auto sourceMemref =
         b.create<bufferization::ToBufferOp>(memrefType, adaptor.getSource(),
                                             /*read_only=*/true);
     auto destMemref =
         b.create<bufferization::ToBufferOp>(memrefType, adaptor.getDest());
+
     auto parallelOp = b.create<scf::ParallelOp>(
-        /*lowerBound=*/ValueRange{c0},
-        /*upperBound=*/ValueRange{cN},
-        /*steps=*/ValueRange{c1},
+        /*lowerBound=*/lowerBounds,
+        /*upperBound=*/upperBounds,
+        /*steps=*/steps,
         /*bodyBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
           ImplicitLocOpBuilder nb(nestedLoc, nestedBuilder);
 
+          // Compute bit-reversed index for the target dimension
           auto index = nb.create<arith::IndexCastUIOp>(
-              nb.getIntegerType(indexBitWidth), args[0]);
+              nb.getIntegerType(indexBitWidth), args[dimension]);
           auto bitReversed = nb.create<LLVM::BitReverseOp>(index);
-          auto isGE = nb.create<arith::CmpIOp>(arith::CmpIPredicate::sge,
+          auto isGE = nb.create<arith::CmpIOp>(arith::CmpIPredicate::uge,
                                                bitReversed, index);
           nb.create<scf::IfOp>(
               isGE, /*thenBuilder=*/
@@ -72,14 +89,17 @@ struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
                 auto bitReversedIndex =
                     thenBuilder.create<arith::IndexCastUIOp>(nb.getIndexType(),
                                                              bitReversed);
-                auto e1 = thenBuilder.create<memref::LoadOp>(
-                    sourceMemref, ValueRange{args[0]});
-                auto e2 = thenBuilder.create<memref::LoadOp>(
-                    sourceMemref, ValueRange{bitReversedIndex});
-                thenBuilder.create<memref::StoreOp>(
-                    e1, destMemref, ValueRange{bitReversedIndex});
-                thenBuilder.create<memref::StoreOp>(e2, destMemref,
-                                                    ValueRange{args[0]});
+
+                // Build indices for source position and bit-reversed position
+                SmallVector<Value> revIndices(args.begin(), args.end());
+                revIndices[dimension] = bitReversedIndex;
+
+                auto e1 =
+                    thenBuilder.create<memref::LoadOp>(sourceMemref, args);
+                auto e2 = thenBuilder.create<memref::LoadOp>(sourceMemref,
+                                                             revIndices);
+                thenBuilder.create<memref::StoreOp>(e1, destMemref, revIndices);
+                thenBuilder.create<memref::StoreOp>(e2, destMemref, args);
                 thenBuilder.create<scf::YieldOp>();
               });
         });

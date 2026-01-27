@@ -469,8 +469,8 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     // Transform the input tensor to bit-reversed order at first if performing
     // forward NTT.
     if (!adaptor.getInverse() && adaptor.getBitReverse()) {
-      auto bitReversed = b.create<tensor_ext::BitReverseOp>(adaptor.getSource(),
-                                                            adaptor.getDest());
+      auto bitReversed = b.create<tensor_ext::BitReverseOp>(
+          adaptor.getSource(), adaptor.getDest(), /*dimension=*/0);
 
       // Forward GPU mapping attribute if present.
       if (bitReverseMappingAttr) {
@@ -490,8 +490,8 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     // Transform the input tensor to bit-reversed order at last if performing
     // inverse NTT.
     if (adaptor.getInverse() && adaptor.getBitReverse()) {
-      auto nttResultBitReversed =
-          b.create<tensor_ext::BitReverseOp>(nttResult, nttResult);
+      auto nttResultBitReversed = b.create<tensor_ext::BitReverseOp>(
+          nttResult, nttResult, /*dimension=*/0);
 
       // Forward GPU mapping attribute if present.
       if (bitReverseMappingAttr) {
