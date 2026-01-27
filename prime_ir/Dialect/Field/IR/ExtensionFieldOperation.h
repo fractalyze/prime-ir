@@ -255,6 +255,15 @@ public:
 
   static ExtensionFieldOperation fromUnchecked(const SmallVector<APInt> &coeffs,
                                                ExtensionFieldType efType) {
+    // Handle flattened prime field coefficients (e.g., from constant folding)
+    // If size matches degreeOverPrime, treat as flattened; otherwise as direct.
+    unsigned degreeOverPrime = efType.getDegreeOverPrime();
+    if (coeffs.size() == degreeOverPrime && degreeOverPrime != N) {
+      // Flattened coefficients - use fromFlatPrimeCoeffs
+      return fromFlatPrimeCoeffs(coeffs, efType);
+    }
+
+    // Direct coefficients (size == N) - original behavior
     assert(coeffs.size() == N);
     std::array<BaseFieldT, N> newCoeffs;
     for (size_t i = 0; i < N; ++i) {
@@ -354,14 +363,64 @@ public:
     return result;
   }
 
-  // Only available for non-tower extensions.
-  template <typename T = BaseFieldT,
-            std::enable_if_t<std::is_same_v<T, PrimeFieldOperation>, int> = 0>
-  DenseIntElementsAttr getDenseIntElementsAttr() const {
+  // Construct from flattened prime field coefficients.
+  // Works for both non-tower and tower extensions.
+  // For Fp4 = (Fp2)^2: [a0, a1, a2, a3] -> [[a0,a1], [a2,a3]]
+  static ExtensionFieldOperation
+  fromFlatPrimeCoeffs(ArrayRef<APInt> flatCoeffs, ExtensionFieldType efType) {
+    unsigned expectedSize = efType.getDegreeOverPrime();
+    assert(flatCoeffs.size() == expectedSize &&
+           "Coefficient count mismatch for extension field");
+
+    std::array<BaseFieldT, N> newCoeffs;
+    if constexpr (kIsTower) {
+      // Get base extension field type and its degree over prime
+      auto baseEfType = cast<ExtensionFieldType>(efType.getBaseField());
+      unsigned baseSize = baseEfType.getDegreeOverPrime();
+
+      // Split flatCoeffs into N groups, each of size baseSize
+      for (size_t i = 0; i < N; ++i) {
+        ArrayRef<APInt> subCoeffs = flatCoeffs.slice(i * baseSize, baseSize);
+        newCoeffs[i] = BaseFieldT::fromFlatPrimeCoeffs(subCoeffs, baseEfType);
+      }
+    } else {
+      // Non-tower: each coefficient is directly an APInt
+      for (size_t i = 0; i < N; ++i) {
+        auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+        newCoeffs[i] =
+            PrimeFieldOperation::fromUnchecked(flatCoeffs[i], baseFieldType);
+      }
+    }
+    return fromUnchecked(newCoeffs, efType);
+  }
+
+  // Flatten all prime field coefficients to a single SmallVector<APInt>.
+  // Works for both non-tower and tower extensions.
+  // For Fp4 = (Fp2)^2: [[a0,a1], [a2,a3]] -> [a0, a1, a2, a3]
+  SmallVector<APInt> flattenToPrimeCoeffs() const {
+    SmallVector<APInt> result;
+    for (const auto &c : coeffs) {
+      if constexpr (kIsTower) {
+        // Recursively flatten base extension field coefficients
+        auto subCoeffs = c.flattenToPrimeCoeffs();
+        result.append(subCoeffs.begin(), subCoeffs.end());
+      } else {
+        // Base is prime field - just get the APInt directly
+        result.push_back(static_cast<APInt>(c));
+      }
+    }
+    return result;
+  }
+
+  // Get DenseIntElementsAttr with all prime field coefficients.
+  // Works for both non-tower and tower extensions.
+  DenseIntElementsAttr getFlatDenseIntElementsAttr() const {
+    auto primeField = efType.getBasePrimeField();
+    auto flatCoeffs = flattenToPrimeCoeffs();
     return DenseIntElementsAttr::get(
-        RankedTensorType::get(
-            {N}, cast<PrimeFieldType>(efType.getBaseField()).getStorageType()),
-        static_cast<SmallVector<APInt>>(*this));
+        RankedTensorType::get({static_cast<int64_t>(flatCoeffs.size())},
+                              primeField.getStorageType()),
+        flatCoeffs);
   }
 
   ExtensionFieldOperation &operator+=(const ExtensionFieldOperation &other) {
