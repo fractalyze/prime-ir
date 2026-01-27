@@ -250,3 +250,59 @@ func.func @test_scalar_mul_assoc_left(%s: !SF, %t: !SF, %p: !jacobian) -> !jacob
   %result = elliptic_curve.scalar_mul %s, %tp : !SF, !jacobian -> !jacobian
   return %result : !jacobian
 }
+
+//===----------------------------------------------------------------------===//
+// Constant Folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_negate_fold
+// CHECK-SAME: () -> [[JACOBIAN:.*]] {
+func.func @test_negate_fold() -> !jacobian {
+  // negate((1, 2, 1)) = (1, P-2, 1) where P is the base field modulus
+  // P = 21888242871839275222246405745257275088696311157297823662689037894645226208583
+  // P - 2 = 21888242871839275222246405745257275088696311157297823662689037894645226208581
+  // CHECK: %[[C:.*]] = elliptic_curve.constant 1, 21888242871839275222246405745257275088696311157297823662689037894645226208581, 1 : [[JACOBIAN]]
+  // CHECK-NOT: elliptic_curve.negate
+  // CHECK: return %[[C]] : [[JACOBIAN]]
+  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %1 = elliptic_curve.negate %0 : !jacobian
+  return %1 : !jacobian
+}
+
+// CHECK-LABEL: @test_double_fold
+// CHECK-SAME: () -> [[JACOBIAN:.*]] {
+func.func @test_double_fold() -> !jacobian {
+  // double((1, 2, 1)) computes the point doubling using Jacobian formulas
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.double
+  // CHECK: return %[[C]] : [[JACOBIAN]]
+  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %1 = elliptic_curve.double %0 : !jacobian -> !jacobian
+  return %1 : !jacobian
+}
+
+// CHECK-LABEL: @test_add_fold
+// CHECK-SAME: () -> [[JACOBIAN:.*]] {
+func.func @test_add_fold() -> !jacobian {
+  // add((1, 2, 1), (3, 4, 1)) computes point addition
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.add
+  // CHECK: return %[[C]] : [[JACOBIAN]]
+  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %1 = elliptic_curve.constant 3, 4, 1 : !jacobian
+  %2 = elliptic_curve.add %0, %1 : !jacobian, !jacobian -> !jacobian
+  return %2 : !jacobian
+}
+
+// CHECK-LABEL: @test_sub_fold
+// CHECK-SAME: () -> [[JACOBIAN:.*]] {
+func.func @test_sub_fold() -> !jacobian {
+  // sub((1, 2, 1), (3, 4, 1)) computes point subtraction
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.sub
+  // CHECK: return %[[C]] : [[JACOBIAN]]
+  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %1 = elliptic_curve.constant 3, 4, 1 : !jacobian
+  %2 = elliptic_curve.sub %0, %1 : !jacobian, !jacobian -> !jacobian
+  return %2 : !jacobian
+}

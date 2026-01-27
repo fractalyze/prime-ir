@@ -142,6 +142,12 @@ public:
 
   auto dbl() const { return this->Double(); }
 
+  const std::array<field::FieldOperation, kNumCoords> &getCoords() const {
+    return coords;
+  }
+
+  PointTypeInterface getPointType() const { return pointType; }
+
   bool operator==(const PointOperationBase &other) const {
     assert(pointType == other.pointType);
     return coords == other.coords;
@@ -331,9 +337,13 @@ public:
 
   PointKind getKind() const;
 
+  PointOperation operator-() const;
   PointOperation add(const PointOperation &other, PointKind outputKind) const;
+  PointOperation sub(const PointOperation &other, PointKind outputKind) const;
   PointOperation dbl(PointKind outputKind) const;
   PointOperation convert(PointKind outputKind) const;
+
+  const OperationType &getOperation() const { return operation; }
 
 private:
   OperationType operation;
