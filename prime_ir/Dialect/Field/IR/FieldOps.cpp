@@ -230,8 +230,9 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
 
   if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
     return builder.create<ConstantOp>(loc, type, intAttr);
-  } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
-    return builder.create<ConstantOp>(loc, type, denseElementsAttr);
+  } else {
+    return builder.create<ConstantOp>(loc, type,
+                                      cast<DenseIntElementsAttr>(value));
   }
   return nullptr;
 }
