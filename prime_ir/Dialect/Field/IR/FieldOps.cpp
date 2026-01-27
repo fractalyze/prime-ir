@@ -118,7 +118,7 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
              << " coefficients, but expected " << degree;
     }
 
-    auto pfType = cast<PrimeFieldType>(efType.getBaseField());
+    auto pfType = efType.getBasePrimeField();
     APInt modulus = pfType.getModulus().getValue();
 
     SmallVector<APInt> adjustedValues;
@@ -153,8 +153,7 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
       modulus = pfType.getModulus().getValue();
       return success();
     } else if (auto extField = dyn_cast<ExtensionFieldType>(elementType)) {
-      modulus =
-          cast<PrimeFieldType>(extField.getBaseField()).getModulus().getValue();
+      modulus = extField.getBasePrimeField().getModulus().getValue();
       return success();
     }
 
@@ -182,7 +181,7 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
                << "extension field constant has " << parsedInts.size()
                << " coefficients, but expected " << efType.getDegreeOverPrime();
       }
-      auto pfType = cast<PrimeFieldType>(efType.getBaseField());
+      auto pfType = efType.getBasePrimeField();
       result.addAttribute(
           "value", DenseElementsAttr::get(
                        RankedTensorType::get({efType.getDegreeOverPrime()},
@@ -248,7 +247,7 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     return success();
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    auto pfType = cast<PrimeFieldType>(efType.getBaseField());
+    auto pfType = efType.getBasePrimeField();
     // For tensor<Nx!EF{d}>, the attribute shape is [N, d].
     SmallVector<int64_t> attrShape(shapedType.getShape());
     attrShape.push_back(static_cast<int64_t>(efType.getDegreeOverPrime()));
@@ -856,7 +855,7 @@ public:
   }
 
   OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
-    PrimeFieldType baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+    PrimeFieldType baseFieldType = efType.getBasePrimeField();
     auto tensorType = RankedTensorType::get(
         {static_cast<int64_t>(coeffs.size())}, baseFieldType.getStorageType());
     return DenseIntElementsAttr::get(tensorType, coeffs);
@@ -870,7 +869,7 @@ public:
       flattenedValues.append(coeffs.begin(), coeffs.end());
     }
     // Create result attribute with shape [tensor_dims..., degree]
-    PrimeFieldType pfType = cast<PrimeFieldType>(efType.getBaseField());
+    PrimeFieldType pfType = efType.getBasePrimeField();
     unsigned degree = efType.getDegreeOverPrime();
     SmallVector<int64_t> attrShape(type.getShape());
     attrShape.push_back(static_cast<int64_t>(degree));
