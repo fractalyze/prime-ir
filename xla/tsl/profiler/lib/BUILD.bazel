@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//bazel:zkx_cc.bzl", "zkx_cc_library")
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -41,5 +41,28 @@ zkx_cc_library(
     deps = [
         "//xla/tsl/platform:status",
         "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+    ],
+)
+
+zkx_cc_library(
+    name = "profiler_lock",
+    srcs = ["profiler_lock.cc"],
+    hdrs = ["profiler_lock.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/util:env_var",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "lib_unittests",
+    srcs = ["profiler_lock_unittest.cc"],
+    deps = [
+        ":profiler_lock",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
