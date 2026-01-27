@@ -174,20 +174,20 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
                << "prime field constant must have a single value, but got "
                << parsedInts.size();
       }
-      result.addAttribute(
-          "value", IntegerAttr::get(pfType.getStorageType(), parsedInts[0]));
+      auto valueAttr = IntegerAttr::get(pfType.getStorageType(), parsedInts[0]);
+      result.addAttribute("value", maybeToMontgomery(pfType, valueAttr));
     } else if (auto efType = dyn_cast<ExtensionFieldType>(parsedType)) {
       if (parsedInts.size() != efType.getDegreeOverPrime()) {
         return parser.emitError(parser.getCurrentLocation())
                << "extension field constant has " << parsedInts.size()
                << " coefficients, but expected " << efType.getDegreeOverPrime();
       }
-      auto pfType = cast<PrimeFieldType>(efType.getBaseField());
-      result.addAttribute(
-          "value", DenseElementsAttr::get(
-                       RankedTensorType::get({efType.getDegreeOverPrime()},
-                                             pfType.getStorageType()),
-                       parsedInts));
+      auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+      auto denseAttr = DenseElementsAttr::get(
+          RankedTensorType::get({efType.getDegreeOverPrime()},
+                                baseFieldType.getStorageType()),
+          parsedInts);
+      result.addAttribute("value", maybeToMontgomery(efType, denseAttr));
     } else {
       return parser.emitError(parser.getCurrentLocation(),
                               "unsupported type for constant: ")
@@ -207,7 +207,7 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
   if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
     auto denseElementsAttr = DenseIntElementsAttr::get(
         shapedType.clone(pfType.getStorageType()), parsedInts);
-    result.addAttribute("value", denseElementsAttr);
+    result.addAttribute("value", maybeToMontgomery(pfType, denseElementsAttr));
     result.addTypes(parsedType);
     return success();
   }
@@ -257,9 +257,14 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttributeWithoutType(getValue());
+
+  Type type = getType();
+  Type elementType = getElementTypeOrSelf(type);
+  Attribute value = maybeToStandard(elementType, getValue());
+
+  p.printAttributeWithoutType(value);
   p << " : ";
-  p.printType(getType());
+  p.printType(type);
 }
 
 LogicalResult CmpOp::verify() {

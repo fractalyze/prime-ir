@@ -21,20 +21,9 @@
 
 // CHECK-LABEL: @test_ops_in_order
 func.func @test_ops_in_order() {
-  %c1 = arith.constant 1 : i256
-  %c2 = arith.constant 2 : i256
-
-  %c7 = field.constant 7 : !SF
-
-  %index1 = arith.constant 0 : index
-  %index2 = arith.constant 1 : index
-
-  %c_tensor = tensor.from_elements %c1, %c2: tensor<2xi256>
-  %f_tensor = field.bitcast %c_tensor : tensor<2xi256> -> tensor<2x!PF>
-  %c_mont_tensor = field.to_mont %f_tensor : tensor<2x!PFm>
-  %var1 = tensor.extract %c_mont_tensor[%index1] : tensor<2x!PFm>
-  %var2 = tensor.extract %c_mont_tensor[%index2] : tensor<2x!PFm>
-  %var7 = field.to_mont %c7 : !SFm
+  %var1 = field.constant 1 : !PFm
+  %var2 = field.constant 2 : !PFm
+  %var7 = field.constant 7 : !SFm
 
   // (1,2)
   %affine1 = elliptic_curve.from_coords %var1, %var2 : (!PFm, !PFm) -> !affine

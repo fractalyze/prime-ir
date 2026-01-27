@@ -86,7 +86,7 @@ func.func @test_cubic_ext_field() {
   func.call @printMemrefI32(%inv_unranked) : (memref<*xi32>) -> ()
 
   // Test 6: Montgomery form conversion
-  %a_mont = field.to_mont %a : !CFm
+  %a_mont = field.constant [1, 2, 3] : !CFm
   %a_back = field.from_mont %a_mont : !CF
   %back0, %back1, %back2 = field.ext_to_coeffs %a_back : (!CF) -> (!PF, !PF, !PF)
   %back0_i32 = field.bitcast %back0 : !PF -> i32

@@ -407,10 +407,14 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     if (failed(parseResult.value())) {
       return failure();
     }
-    result.addAttribute(
-        "value",
-        IntegerAttr::get(cast<ModArithType>(parsedType).getStorageType(),
-                         parsedInts[0]));
+    auto modArithType = cast<ModArithType>(parsedType);
+    auto valueAttr =
+        IntegerAttr::get(modArithType.getStorageType(), parsedInts[0]);
+    // Convert to Montgomery form if the type is Montgomery
+    if (modArithType.isMontgomery()) {
+      valueAttr = getAttrAsMontgomeryForm(modArithType.getModulus(), valueAttr);
+    }
+    result.addAttribute("value", valueAttr);
     result.addTypes(parsedType);
     return success();
   }
@@ -422,10 +426,14 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   }
 
   auto shapedType = cast<ShapedType>(parsedType);
-  auto denseElementsAttr = DenseIntElementsAttr::get(
-      shapedType.clone(
-          cast<ModArithType>(shapedType.getElementType()).getStorageType()),
-      parsedInts);
+  auto modArithType = cast<ModArithType>(shapedType.getElementType());
+  DenseElementsAttr denseElementsAttr = DenseIntElementsAttr::get(
+      shapedType.clone(modArithType.getStorageType()), parsedInts);
+  // Convert to Montgomery form if the type is Montgomery
+  if (modArithType.isMontgomery()) {
+    denseElementsAttr =
+        getAttrAsMontgomeryForm(modArithType.getModulus(), denseElementsAttr);
+  }
   result.addAttribute("value", denseElementsAttr);
   result.addTypes(parsedType);
   return success();
@@ -433,9 +441,25 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttributeWithoutType(getValue());
+
+  // Print value in standard form for readability
+  Type type = getType();
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
+  Attribute value = getValue();
+
+  if (modArithType.isMontgomery()) {
+    // Convert Montgomery form value to standard form for printing
+    if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
+      value = getAttrAsStandardForm(modArithType.getModulus(), intAttr);
+    } else {
+      value = getAttrAsStandardForm(modArithType.getModulus(),
+                                    cast<DenseElementsAttr>(value));
+    }
+  }
+
+  p.printAttributeWithoutType(value);
   p << " : ";
-  p.printType(getType());
+  p.printType(type);
 }
 
 namespace {

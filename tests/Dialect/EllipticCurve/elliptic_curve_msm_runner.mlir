@@ -21,18 +21,12 @@
 
 // CHECK-LABEL: @test_msm
 func.func @test_msm() {
-  %c1 = field.constant 1 : !PF
-  %c2 = field.constant 2 : !PF
-  %var1 = field.to_mont %c1 : !PFm
-  %var2 = field.to_mont %c2 : !PFm
+  %var1 = field.constant 1 : !PFm
+  %var2 = field.constant 2 : !PFm
 
-  %c3 = field.constant 3 : !SF
-  %c5 = field.constant 5 : !SF
-  %c7 = field.constant 7 : !SF
-
-  %scalar3 = field.to_mont %c3 : !SFm
-  %scalar5 = field.to_mont %c5 : !SFm
-  %scalar7 = field.to_mont %c7 : !SFm
+  %scalar3 = field.constant 3 : !SFm
+  %scalar5 = field.constant 5 : !SFm
+  %scalar7 = field.constant 7 : !SFm
 
   %jacobian1 = elliptic_curve.from_coords %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobian
   %jacobian2 = elliptic_curve.double %jacobian1 : !jacobian -> !jacobian

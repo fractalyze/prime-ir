@@ -27,9 +27,7 @@
 // Input: [x0, x1, x2, x3] with seeded random values
 // Expected: Matrix multiplication with [2 3 1 1; 1 2 3 1; 1 1 2 3; 3 1 1 2]
 func.func @test_apply_mat4() {
-  %input_int = arith.constant dense<[1983708094, 1477844074, 1638775686, 98517138]> : tensor<4xi32>
-  %input_std = field.bitcast %input_int : tensor<4xi32> -> tensor<4x!pf_std>
-  %input = field.to_mont %input_std : tensor<4x!pf>
+  %input = field.constant dense<[1983708094, 1477844074, 1638775686, 98517138]> : tensor<4x!pf>
 
   %input_memref = bufferization.to_buffer %input : tensor<4x!pf> to memref<4x!pf, strided<[1], offset: ?>>
   func.call @apply_mat4(%input_memref) : (memref<4x!pf, strided<[1], offset: ?>>) -> ()
@@ -57,9 +55,7 @@ func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interf
 // Test: Poseidon2 permutation on state [0, 1, ..., 15] (Plonky3 test vector)
 func.func @test_poseidon2_permute() {
   // Prepare input tensor [0, 1, ..., 15]
-  %input_int = arith.constant dense<[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]> : tensor<16xi32>
-  %input_std = field.bitcast %input_int : tensor<16xi32> -> tensor<16x!pf_std>
-  %input = field.to_mont %input_std : tensor<16x!pf>
+  %input = field.constant dense<[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]> : tensor<16x!pf>
   // Run Poseidon2 permutation
   %state = bufferization.to_buffer %input : tensor<16x!pf> to !state
   func.call @poseidon2_permute(%state) : (!state) -> ()
