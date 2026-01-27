@@ -229,8 +229,9 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      auto baseField = cast<PrimeFieldType>(efType.getBaseField());
-      Type baseModArithType = typeConverter->convertType(baseField);
+      // Use getBasePrimeField() to handle both direct and tower extensions
+      auto basePrimeField = efType.getBasePrimeField();
+      Type baseModArithType = typeConverter->convertType(basePrimeField);
       auto coeffs = toCoeffs(b, adaptor.getInput());
 
       SmallVector<Value> montCoeffs;
@@ -265,8 +266,9 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      auto baseField = cast<PrimeFieldType>(efType.getBaseField());
-      Type baseModArithType = typeConverter->convertType(baseField);
+      // Use getBasePrimeField() to handle both direct and tower extensions
+      auto basePrimeField = efType.getBasePrimeField();
+      Type baseModArithType = typeConverter->convertType(basePrimeField);
       auto coeffs = toCoeffs(b, adaptor.getInput());
 
       SmallVector<Value> stdCoeffs;
