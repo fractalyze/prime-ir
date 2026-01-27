@@ -53,6 +53,20 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "profiler_factory",
+    srcs = ["profiler_factory.cc"],
+    hdrs = ["profiler_factory.h"],
+    deps = [
+        ":profiler_controller",
+        ":profiler_interface",
+        "//xla/tsl/profiler/protobuf:profiler_options_cc_proto",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/debugging:leak_check",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_library(
     name = "profiler_interface",
     hdrs = ["profiler_interface.h"],
     deps = [
@@ -95,12 +109,18 @@ zkx_cc_library(
 zkx_cc_unittest(
     name = "lib_unittests",
     srcs = [
+        "profiler_factory_unittest.cc",
         "profiler_lock_unittest.cc",
         "traceme_encode_unittest.cc",
     ],
     deps = [
+        ":profiler_factory",
+        ":profiler_interface",
         ":profiler_lock",
         ":traceme_encode",
+        "//xla/tsl/profiler/protobuf:profiler_options_cc_proto",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
