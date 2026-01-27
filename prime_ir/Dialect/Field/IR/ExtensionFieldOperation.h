@@ -543,10 +543,17 @@ private:
   // NonResidue returns an element in the base field
   BaseFieldT NonResidue() const {
     if constexpr (kIsTower) {
-      // For towers, non-residue is stored as DenseIntElementsAttr
+      // For towers, non-residue can be stored as:
+      // - DenseIntElementsAttr: full coefficients (e.g., from zk_dtypes)
+      // - IntegerAttr: scalar that gets embedded as [value, 0, 0, ...]
       auto baseEfType = cast<ExtensionFieldType>(efType.getBaseField());
-      return BaseFieldT::fromUnchecked(
-          cast<DenseIntElementsAttr>(efType.getNonResidue()), baseEfType);
+      Attribute nrAttr = efType.getNonResidue();
+      if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(nrAttr)) {
+        return BaseFieldT::fromUnchecked(denseAttr, baseEfType);
+      }
+      // Scalar IntegerAttr: embed as [value, 0, 0, ...] in base extension field
+      auto intAttr = cast<IntegerAttr>(nrAttr);
+      return BaseFieldT(intAttr.getValue(), baseEfType);
     } else {
       auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
       return PrimeFieldOperation::fromUnchecked(

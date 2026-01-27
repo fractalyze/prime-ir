@@ -382,10 +382,15 @@ void ExtensionFieldType::print(AsmPrinter &printer) const {
     }
   } else if (auto efType = dyn_cast<ExtensionFieldType>(baseField)) {
     if (efType.isMontgomery()) {
-      // For tower extensions, convert the scalar non-residue from Montgomery
-      // form using the underlying prime field's modulus.
-      nonResidue = mod_arith::getAttrAsStandardForm(
-          efType.getBasePrimeField().getModulus(), nonResidue);
+      // For tower extensions, convert the non-residue from Montgomery form
+      // using the underlying prime field's modulus.
+      auto modulus = efType.getBasePrimeField().getModulus();
+      if (auto intAttr = dyn_cast<IntegerAttr>(nonResidue)) {
+        nonResidue = mod_arith::getAttrAsStandardForm(modulus, intAttr);
+      } else {
+        nonResidue = mod_arith::getAttrAsStandardForm(
+            modulus, cast<DenseIntElementsAttr>(nonResidue));
+      }
     }
   }
 
