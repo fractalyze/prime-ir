@@ -203,6 +203,7 @@ def Field_ToMontOp : Field_Op<"to_mont", [TypesMatchWith<
   let arguments = (ins FieldLike:$input);
   let results = (outs FieldLike:$output);
   let hasVerifier = 1;
+  let hasFolder = 1;
   let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
@@ -221,6 +222,7 @@ def Field_FromMontOp : Field_Op<"from_mont", [TypesMatchWith<
   let arguments = (ins FieldLike:$input);
   let results = (outs FieldLike:$output);
   let hasVerifier = 1;
+  let hasFolder = 1;
   let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 

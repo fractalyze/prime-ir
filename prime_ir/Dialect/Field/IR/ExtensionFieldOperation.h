@@ -210,6 +210,48 @@ public:
 
   ExtensionFieldOperation inverse() const { return this->Inverse(); }
 
+  ExtensionFieldOperation fromMont() const {
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+    assert(baseFieldType.isMontgomery());
+    auto stdBaseType = PrimeFieldType::get(baseFieldType.getContext(),
+                                           baseFieldType.getModulus(), false);
+
+    auto nonResidueAttr = cast<IntegerAttr>(efType.getNonResidue());
+    auto nonResidueOp =
+        PrimeFieldOperation::fromUnchecked(nonResidueAttr, baseFieldType);
+    auto stdNonResidueAttr = nonResidueOp.fromMont().getIntegerAttr();
+
+    auto stdExtType =
+        ExtensionFieldType::get(efType.getContext(), efType.getDegree(),
+                                stdBaseType, stdNonResidueAttr);
+    std::array<PrimeFieldOperation, N> newCoeffs;
+    for (size_t i = 0; i < N; ++i) {
+      newCoeffs[i] = coeffs[i].fromMont();
+    }
+    return fromUnchecked(newCoeffs, stdExtType);
+  }
+
+  ExtensionFieldOperation toMont() const {
+    auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+    assert(!baseFieldType.isMontgomery());
+    auto montBaseType = PrimeFieldType::get(baseFieldType.getContext(),
+                                            baseFieldType.getModulus(), true);
+
+    auto nonResidueAttr = cast<IntegerAttr>(efType.getNonResidue());
+    auto nonResidueOp =
+        PrimeFieldOperation::fromUnchecked(nonResidueAttr, baseFieldType);
+    auto montNonResidueAttr = nonResidueOp.toMont().getIntegerAttr();
+
+    auto montExtType =
+        ExtensionFieldType::get(efType.getContext(), efType.getDegree(),
+                                montBaseType, montNonResidueAttr);
+    std::array<PrimeFieldOperation, N> newCoeffs;
+    for (size_t i = 0; i < N; ++i) {
+      newCoeffs[i] = coeffs[i].toMont();
+    }
+    return fromUnchecked(newCoeffs, montExtType);
+  }
+
   bool isOne() const {
     for (size_t i = 1; i < N; ++i) {
       if (!coeffs[i].isZero()) {

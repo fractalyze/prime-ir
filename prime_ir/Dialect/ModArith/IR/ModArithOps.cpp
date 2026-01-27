@@ -331,6 +331,10 @@ LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
 }
 
 OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
+  // to_mont(from_mont(x)) -> x
+  if (auto fromMont = getInput().getDefiningOp<FromMontOp>()) {
+    return fromMont.getInput();
+  }
   auto stdType = getStandardFormType(getType());
   return foldUnaryOp(
       this, adaptor, [](const ModArithOperation &op) { return op.toMont(); },
@@ -338,6 +342,10 @@ OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult FromMontOp::fold(FoldAdaptor adaptor) {
+  // from_mont(to_mont(x)) -> x
+  if (auto toMont = getInput().getDefiningOp<ToMontOp>()) {
+    return toMont.getInput();
+  }
   auto montType = getMontgomeryFormType(getType());
   return foldUnaryOp(
       this, adaptor, [](const ModArithOperation &op) { return op.fromMont(); },
