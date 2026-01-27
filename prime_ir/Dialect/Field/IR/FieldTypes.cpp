@@ -37,7 +37,7 @@ bool isMontgomery(Type type) {
 }
 
 unsigned getIntOrPrimeFieldBitWidth(Type type) {
-  assert(llvm::isa<PrimeFieldType>(type) || llvm::isa<IntegerType>(type));
+  assert((llvm::isa<PrimeFieldType, IntegerType>(type)));
   if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
     return pfType.getStorageBitWidth();
   }
@@ -54,11 +54,7 @@ ParseResult parseColonFieldType(AsmParser &parser, Type &type) {
   if (failed(parser.parseColonType(type)))
     return failure();
 
-  if (isa<PrimeFieldType>(type)) {
-    return success();
-  } else if (isa<BinaryFieldType>(type)) {
-    return success();
-  } else if (isa<ExtensionFieldType>(type)) {
+  if (isa<PrimeFieldType, BinaryFieldType, ExtensionFieldType>(type)) {
     return success();
   }
   return parser.emitError(
@@ -341,7 +337,7 @@ ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
   }
 
   // Base field must be either a prime field or an extension field
-  if (!isa<PrimeFieldType>(baseField) && !isa<ExtensionFieldType>(baseField)) {
+  if (!isa<PrimeFieldType, ExtensionFieldType>(baseField)) {
     return emitError() << "base field must be a prime field or extension field";
   }
 
@@ -445,8 +441,7 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
   if (failed(parser.parseType(baseFieldType))) {
     return nullptr;
   }
-  if (!isa<PrimeFieldType>(baseFieldType) &&
-      !isa<ExtensionFieldType>(baseFieldType)) {
+  if (!isa<PrimeFieldType, ExtensionFieldType>(baseFieldType)) {
     parser.emitError(parser.getCurrentLocation(),
                      "base field must be a prime field or extension field");
     return nullptr;

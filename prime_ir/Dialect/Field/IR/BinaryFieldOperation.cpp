@@ -52,7 +52,7 @@ struct TowerDispatcher {
 // Specialization for tower level 7 (128-bit) which uses BigInt<2>
 template <>
 struct TowerDispatcher<7> {
-  static zk_dtypes::BigInt<2> apintToBigInt(const llvm::APInt &a) {
+  static zk_dtypes::BigInt<2> apIntToBigInt(const llvm::APInt &a) {
     uint64_t lo = a.extractBitsAsZExtValue(64, 0);
     uint64_t hi = a.extractBitsAsZExtValue(64, 64);
     return zk_dtypes::BigInt<2>({lo, hi});
@@ -66,20 +66,20 @@ struct TowerDispatcher<7> {
   }
 
   static llvm::APInt multiply(const llvm::APInt &a, const llvm::APInt &b) {
-    auto aVal = apintToBigInt(a);
-    auto bVal = apintToBigInt(b);
+    auto aVal = apIntToBigInt(a);
+    auto bVal = apIntToBigInt(b);
     auto result = zk_dtypes::BinaryMul<7>(aVal, bVal);
     return bigIntToApint(result);
   }
 
   static llvm::APInt square(const llvm::APInt &a) {
-    auto aVal = apintToBigInt(a);
+    auto aVal = apIntToBigInt(a);
     auto result = zk_dtypes::BinarySquare<7>(aVal);
     return bigIntToApint(result);
   }
 
   static llvm::APInt inverse(const llvm::APInt &a) {
-    auto aVal = apintToBigInt(a);
+    auto aVal = apIntToBigInt(a);
     auto result = zk_dtypes::BinaryInverse<7>(aVal);
     return bigIntToApint(result);
   }

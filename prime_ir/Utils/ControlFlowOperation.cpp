@@ -26,8 +26,8 @@ mlir::Value ControlFlowOperation<mlir::Value>::Equal(mlir::Value x,
   mlir::ImplicitLocOpBuilder *b =
       mlir::prime_ir::BuilderContext::GetInstance().Top();
   mlir::Type xType = getElementTypeOrSelf(x.getType());
-  if (mlir::isa<mlir::prime_ir::field::PrimeFieldType>(xType) ||
-      mlir::isa<mlir::prime_ir::field::ExtensionFieldType>(xType)) {
+  if (mlir::isa<mlir::prime_ir::field::PrimeFieldType,
+                mlir::prime_ir::field::ExtensionFieldType>(xType)) {
     return b->create<mlir::prime_ir::field::CmpOp>(
         mlir::arith::CmpIPredicate::eq, x, y);
   }
@@ -40,8 +40,8 @@ mlir::Value ControlFlowOperation<mlir::Value>::NotEqual(mlir::Value x,
   mlir::ImplicitLocOpBuilder *b =
       mlir::prime_ir::BuilderContext::GetInstance().Top();
   mlir::Type xType = getElementTypeOrSelf(x.getType());
-  if (mlir::isa<mlir::prime_ir::field::PrimeFieldType>(xType) ||
-      mlir::isa<mlir::prime_ir::field::ExtensionFieldType>(xType)) {
+  if (mlir::isa<mlir::prime_ir::field::PrimeFieldType,
+                mlir::prime_ir::field::ExtensionFieldType>(xType)) {
     return b->create<mlir::prime_ir::field::CmpOp>(
         mlir::arith::CmpIPredicate::ne, x, y);
   }

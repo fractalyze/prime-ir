@@ -58,7 +58,7 @@ public:
   }
 
 protected:
-  ModArithType modArithType;
+  const ModArithType modArithType;
 };
 
 template <typename Func>
@@ -81,7 +81,7 @@ public:
   }
 
 private:
-  Func fn;
+  const Func fn;
   ModArithType inputType;
 };
 
@@ -109,7 +109,7 @@ public:
 
 protected:
   Op *const op;
-  Func fn;
+  const Func fn;
 };
 
 template <typename Op, typename Func>
@@ -133,15 +133,14 @@ public:
   GenericMultiplicativeModArithConstantFolder(Op *op, Func fn)
       : GenericBinaryModArithConstantFolder<
             MultiplicativeConstantFolderDelegate<ConstantFolderConfig>, Op,
-            Func>(op, fn) {
-    one = ModArithOperation(uint64_t{1}, this->modArithType);
-  }
+            Func>(op, fn),
+        one(ModArithOperation(uint64_t{1}, this->modArithType)) {}
 
   bool isZero(const APInt &value) const final { return value.isZero(); }
   bool isOne(const APInt &value) const final { return value == one; }
 
 private:
-  APInt one;
+  const APInt one;
 };
 
 template <typename Op, typename Func>

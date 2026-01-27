@@ -291,8 +291,7 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
                                    Type type, Location loc) {
   auto elementType = getElementTypeOrSelf(type);
-  if (!isa<PrimeFieldType>(elementType) && !isa<BinaryFieldType>(elementType) &&
-      !isa<ExtensionFieldType>(elementType)) {
+  if (!isa<PrimeFieldType, BinaryFieldType, ExtensionFieldType>(elementType)) {
     return nullptr;
   }
 
@@ -400,8 +399,8 @@ public:
 
 private:
   MLIRContext *const context;
-  arith::CmpIPredicate predicate;
-  PrimeFieldType pfType;
+  const arith::CmpIPredicate predicate;
+  const PrimeFieldType pfType;
 };
 
 struct ExtFieldCmpConstantFolderConfig {
@@ -449,8 +448,8 @@ public:
 
 private:
   MLIRContext *const context;
-  arith::CmpIPredicate predicate;
-  ExtensionFieldType efType;
+  const arith::CmpIPredicate predicate;
+  const ExtensionFieldType efType;
 };
 
 } // namespace
@@ -897,7 +896,7 @@ public:
   }
 
 protected:
-  PrimeFieldType pfType;
+  const PrimeFieldType pfType;
 };
 
 template <typename BaseDelegate>
@@ -936,8 +935,8 @@ public:
   }
 
 protected:
-  Type type;
-  ExtensionFieldType efType;
+  const Type type;
+  const ExtensionFieldType efType;
 };
 
 template <typename BaseDelegate>
@@ -959,7 +958,7 @@ public:
   }
 
 protected:
-  BinaryFieldType bfType;
+  const BinaryFieldType bfType;
 };
 
 //===----------------------------------------------------------------------===//
@@ -983,8 +982,8 @@ public:
   }
 
 private:
-  Func fn;
-  PrimeFieldType inputPfType;
+  const Func fn;
+  const PrimeFieldType inputPfType;
 };
 
 template <typename Func>
@@ -1041,8 +1040,8 @@ public:
   }
 
 private:
-  Func fn;
-  ExtensionFieldType inputEfType;
+  const Func fn;
+  const ExtensionFieldType inputEfType;
 };
 
 template <typename Func>
@@ -1059,7 +1058,7 @@ public:
   }
 
 private:
-  Func fn;
+  const Func fn;
 };
 
 template <typename BaseDelegate, typename Op, typename Func>
@@ -1079,7 +1078,7 @@ public:
 
 protected:
   Op *const op;
-  Func fn;
+  const Func fn;
 };
 
 template <typename BaseDelegate, typename Op, typename Func>
@@ -1160,7 +1159,7 @@ public:
 
 protected:
   Op *const op;
-  Func fn;
+  const Func fn;
 };
 
 template <typename BaseDelegate, typename Op, typename Func>
@@ -1180,7 +1179,7 @@ public:
 
 protected:
   Op *const op;
-  Func fn;
+  const Func fn;
 };
 
 //===----------------------------------------------------------------------===//
@@ -1210,14 +1209,14 @@ public:
       : GenericBinaryPrimeFieldConstantFolder<
             MultiplicativeConstantFolderDelegate<
                 PrimeFieldConstantFolderConfig>,
-            Op, Func>(op, fn) {
-    one = FieldOperation(uint64_t{1}, this->pfType);
-  }
+            Op, Func>(op, fn),
+        one(FieldOperation(uint64_t{1}, this->pfType)) {}
+
   bool isZero(const APInt &value) const final { return value.isZero(); }
   bool isOne(const APInt &value) const final { return value == one; }
 
 private:
-  APInt one;
+  const APInt one;
 };
 
 template <typename Op, typename Func>
@@ -1265,10 +1264,9 @@ public:
       : GenericBinaryExtFieldConstantFolder<
             MultiplicativeConstantFolderDelegate<
                 ExtensionFieldConstantFolderConfig>,
-            Op, Func>(op, fn) {
-    one = static_cast<SmallVector<APInt>>(
-        FieldOperation(uint64_t{1}, this->efType));
-  }
+            Op, Func>(op, fn),
+        one(static_cast<SmallVector<APInt>>(
+            FieldOperation(uint64_t{1}, this->efType))) {}
 
   bool isZero(const SmallVector<APInt> &value) const final {
     return llvm::all_of(value, [](const APInt &v) { return v.isZero(); });
@@ -1318,7 +1316,7 @@ public:
   }
 
 private:
-  SmallVector<APInt> one;
+  const SmallVector<APInt> one;
 };
 
 template <typename Op, typename Func>
@@ -1344,14 +1342,14 @@ public:
       : GenericBinaryBinaryFieldConstantFolder<
             MultiplicativeConstantFolderDelegate<
                 BinaryFieldConstantFolderConfig>,
-            Op, Func>(op, fn) {
-    one = static_cast<APInt>(FieldOperation(uint64_t{1}, this->bfType));
-  }
+            Op, Func>(op, fn),
+        one(static_cast<APInt>(FieldOperation(uint64_t{1}, this->bfType))) {}
+
   bool isZero(const APInt &value) const final { return value.isZero(); }
   bool isOne(const APInt &value) const final { return value == one; }
 
 private:
-  APInt one;
+  const APInt one;
 };
 
 //===----------------------------------------------------------------------===//

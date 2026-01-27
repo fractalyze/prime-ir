@@ -37,9 +37,8 @@ inline bool isConstantSplat(Value value) {
 }
 
 inline bool canSpecialize(Operation *op) {
-  return isa<arith::AddIOp>(op) || isa<arith::SubIOp>(op) ||
-         isa<arith::MulIOp>(op) || isa<arith::MulUIExtendedOp>(op) ||
-         isa<arith::MulSIExtendedOp>(op);
+  return isa<arith::AddIOp, arith::SubIOp, arith::MulIOp,
+             arith::MulUIExtendedOp, arith::MulSIExtendedOp>(op);
 }
 
 // Multiplies two vector<16xi32> operands using the vpmuludq instruction.

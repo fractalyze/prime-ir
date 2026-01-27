@@ -167,7 +167,7 @@ TYPED_TEST(BinaryFieldOperationTest, Negate) {
 TYPED_TEST(BinaryFieldOperationTest, Double) {
   using BinaryFieldType = TypeParam;
 
-  // In characteristic 2, -a = a
+  // In characteristic 2, a + a = 0
   this->runUnaryOperationTest(
       [](const BinaryFieldType &a) { return a.Double(); },
       [](const BinaryFieldOperation &a) { return a.dbl(); });
