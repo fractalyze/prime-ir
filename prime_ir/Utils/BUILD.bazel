@@ -197,3 +197,11 @@ cc_library(
         "@zk_dtypes//zk_dtypes:big_int",
     ],
 )
+
+cc_library(
+    name = "LoweringMode",
+    hdrs = ["LoweringMode.h"],
+    deps = [
+        "@llvm-project//llvm:Support",
+    ],
+)

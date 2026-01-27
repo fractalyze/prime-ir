@@ -24,14 +24,34 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
   let summary = "Lower `field` dialect to `mod_arith` dialect.";
   let description = [{
     This pass lowers the `field` dialect to their `mod_arith` equivalents.
+
+    The `lowering-mode` option controls how operations are lowered:
+    - `inline` (default): All operations are expanded inline.
+    - `intrinsic`: Complex operations (quartic extension field mul/square/inverse)
+      are lowered to function calls instead of inline expansion.
+    - `auto`: Uses heuristics to decide - quartic (degree >= 4) operations use
+      intrinsic mode, while simpler operations are inlined.
+
+    The intrinsic mode is useful for:
+    - Reducing code size for complex operations (Toom-Cook generates many ops)
+    - Avoiding NVPTX code generation issues with large aggregate returns
+      (See https://github.com/fractalyze/zkx/issues/84)
+    - Maintaining control flow for debugging
   }];
   let dependentDialects = [
     "arith::ArithDialect",
+    "func::FuncDialect",
+    "memref::MemRefDialect",
     "scf::SCFDialect",
     "tensor::TensorDialect",
     "ub::UBDialect",
     "vector::VectorDialect",
     "prime_ir::mod_arith::ModArithDialect",
+  ];
+  let options = [
+    Option<"loweringMode", "lowering-mode", "std::string",
+           /*default=*/"\"inline\"",
+           "Lowering mode: 'inline' (default), 'intrinsic', or 'auto'">,
   ];
 }
 
