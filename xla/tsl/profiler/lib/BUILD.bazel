@@ -18,6 +18,17 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "connected_traceme",
+    hdrs = ["connected_traceme.h"],
+    deps = [
+        ":context_types",
+        ":traceme",
+        ":traceme_encode",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
     name = "context_types",
     srcs = ["context_types.cc"],
     hdrs = ["context_types.h"],
@@ -90,9 +101,34 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "scoped_annotation",
+    hdrs = ["scoped_annotation.h"],
+    deps = [
+        ":nvtx_utils",
+        "//xla/tsl/profiler/backends/cpu:annotation_stack",
+        "@com_google_absl//absl/base:core_headers",
+    ],
+)
+
+zkx_cc_library(
     name = "scoped_memory_debug_annotation",
     srcs = ["scoped_memory_debug_annotation.cc"],
     hdrs = ["scoped_memory_debug_annotation.h"],
+)
+
+zkx_cc_library(
+    name = "traceme",
+    hdrs = ["traceme.h"],
+    deps = [
+        ":traceme_encode",
+        "//xla/tsl/platform",
+        "//xla/tsl/profiler/backends/cpu:traceme_recorder",
+        "//xla/tsl/profiler/utils:no_init",
+        "//xla/tsl/profiler/utils:time_utils",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+    ],
 )
 
 zkx_cc_library(
