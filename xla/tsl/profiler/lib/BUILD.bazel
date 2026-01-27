@@ -30,6 +30,17 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "profiler_collection",
+    srcs = ["profiler_collection.cc"],
+    hdrs = ["profiler_collection.h"],
+    deps = [
+        ":profiler_interface",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_google_absl//absl/status",
+    ],
+)
+
+zkx_cc_library(
     name = "profiler_controller",
     srcs = ["profiler_controller.cc"],
     hdrs = ["profiler_controller.h"],
