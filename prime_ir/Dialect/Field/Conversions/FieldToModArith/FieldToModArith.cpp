@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
@@ -37,6 +38,7 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldCodeGen.h"
+#include "prime_ir/Dialect/Field/Conversions/FieldToModArith/IntrinsicFunctionGenerator.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -281,10 +283,11 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
 };
 
 struct ConvertInverse : public OpConversionPattern<InverseOp> {
-  explicit ConvertInverse(MLIRContext *context)
-      : OpConversionPattern<InverseOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertInverse(const TypeConverter &converter, MLIRContext *context,
+                 IntrinsicFunctionGenerator *generator = nullptr,
+                 LoweringMode mode = LoweringMode::Inline)
+      : OpConversionPattern<InverseOp>(converter, context),
+        generator(generator), mode(mode) {}
 
   LogicalResult
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
@@ -293,10 +296,25 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
     ScopedBuilderContext scopedBuilderContext(&b);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
+
+    // Use intrinsic for quartic extension fields if enabled
+    if (generator &&
+        IntrinsicFunctionGenerator::shouldUseIntrinsic(fieldType, mode)) {
+      auto efType = cast<ExtensionFieldType>(fieldType);
+      Value result = generator->emitQuarticInverseCall(
+          rewriter, op.getLoc(), efType, adaptor.getInput());
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
     rewriter.replaceOp(op, {codeGen.inverse()});
     return success();
   }
+
+private:
+  IntrinsicFunctionGenerator *generator;
+  LoweringMode mode;
 };
 
 struct ConvertNegate : public OpConversionPattern<NegateOp> {
@@ -378,10 +396,11 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 };
 
 struct ConvertMul : public OpConversionPattern<MulOp> {
-  explicit ConvertMul(MLIRContext *context)
-      : OpConversionPattern<MulOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertMul(const TypeConverter &converter, MLIRContext *context,
+             IntrinsicFunctionGenerator *generator = nullptr,
+             LoweringMode mode = LoweringMode::Inline)
+      : OpConversionPattern<MulOp>(converter, context), generator(generator),
+        mode(mode) {}
 
   LogicalResult
   matchAndRewrite(MulOp op, OpAdaptor adaptor,
@@ -390,18 +409,34 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
     ScopedBuilderContext scopedBuilderContext(&b);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
+
+    // Use intrinsic for quartic extension fields if enabled
+    if (generator &&
+        IntrinsicFunctionGenerator::shouldUseIntrinsic(fieldType, mode)) {
+      auto efType = cast<ExtensionFieldType>(fieldType);
+      Value result = generator->emitQuarticMulCall(
+          rewriter, op.getLoc(), efType, adaptor.getLhs(), adaptor.getRhs());
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     FieldCodeGen lhsCodeGen(fieldType, adaptor.getLhs(), typeConverter);
     FieldCodeGen rhsCodeGen(fieldType, adaptor.getRhs(), typeConverter);
     rewriter.replaceOp(op, {lhsCodeGen * rhsCodeGen});
     return success();
   }
+
+private:
+  IntrinsicFunctionGenerator *generator;
+  LoweringMode mode;
 };
 
 struct ConvertSquare : public OpConversionPattern<SquareOp> {
-  explicit ConvertSquare(MLIRContext *context)
-      : OpConversionPattern<SquareOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertSquare(const TypeConverter &converter, MLIRContext *context,
+                IntrinsicFunctionGenerator *generator = nullptr,
+                LoweringMode mode = LoweringMode::Inline)
+      : OpConversionPattern<SquareOp>(converter, context), generator(generator),
+        mode(mode) {}
 
   LogicalResult
   matchAndRewrite(SquareOp op, OpAdaptor adaptor,
@@ -410,10 +445,25 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
     ScopedBuilderContext scopedBuilderContext(&b);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
+
+    // Use intrinsic for quartic extension fields if enabled
+    if (generator &&
+        IntrinsicFunctionGenerator::shouldUseIntrinsic(fieldType, mode)) {
+      auto efType = cast<ExtensionFieldType>(fieldType);
+      Value result = generator->emitQuarticSquareCall(
+          rewriter, op.getLoc(), efType, adaptor.getInput());
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
     rewriter.replaceOp(op, {codeGen.square()});
     return success();
   }
+
+private:
+  IntrinsicFunctionGenerator *generator;
+  LoweringMode mode;
 };
 
 struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
@@ -650,12 +700,29 @@ void FieldToModArith::runOnOperation() {
   ModuleOp module = getOperation();
   FieldToModArithTypeConverter typeConverter(context);
 
+  // Parse the lowering mode option
+  LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
+
+  // Create intrinsic function generator if needed
+  std::unique_ptr<IntrinsicFunctionGenerator> intrinsicGenerator;
+  if (mode != LoweringMode::Inline) {
+    intrinsicGenerator =
+        std::make_unique<IntrinsicFunctionGenerator>(module, &typeConverter);
+  }
+
   ConversionTarget target(*context);
   target.addIllegalDialect<FieldDialect>();
   target.addLegalDialect<mod_arith::ModArithDialect>();
+  target.addLegalDialect<func::FuncDialect>();
+  target.addLegalOp<func::FuncOp, func::CallOp, func::ReturnOp>();
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
+
+  // Register patterns that support intrinsic mode
+  patterns.add<ConvertInverse, ConvertMul, ConvertSquare>(
+      typeConverter, context, intrinsicGenerator.get(), mode);
+
   patterns.add<
       // clang-format off
       ConvertAdd,
@@ -664,11 +731,8 @@ void FieldToModArith::runOnOperation() {
       ConvertCmp,
       ConvertDouble,
       ConvertFromMont,
-      ConvertInverse,
-      ConvertMul,
       ConvertNegate,
       ConvertPowUI,
-      ConvertSquare,
       ConvertSub,
       ConvertToMont,
       ConvertAny<ExtFromCoeffsOp>,
