@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 
+#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
@@ -1209,17 +1210,19 @@ OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn,
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
-  if (isa<PrimeFieldType>(elemType)) {
-    GenericUnaryPrimeFieldFolder<Func> folder(type, fn, inputType);
-    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                     &folder);
-  }
-  if (isa<ExtensionFieldType>(elemType)) {
-    GenericUnaryExtFieldFolder<Func> folder(type, fn, inputType);
-    return UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
-        adaptor, &folder);
-  }
-  return {};
+  return llvm::TypeSwitch<Type, OpFoldResult>(elemType)
+      .Case<PrimeFieldType>([&](auto) {
+        GenericUnaryPrimeFieldFolder<Func> folder(type, fn, inputType);
+        return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      .template Case<ExtensionFieldType>([&](auto) {
+        GenericUnaryExtFieldFolder<Func> folder(type, fn, inputType);
+        return UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      // NOLINTNEXTLINE(whitespace/newline)
+      .Default([](auto) { return OpFoldResult{}; });
 }
 
 template <typename Op, typename Func>
@@ -1228,17 +1231,19 @@ OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
-  if (isa<PrimeFieldType>(elemType)) {
-    PrimeAdditiveFolder<Op, Func> folder(op, fn);
-    return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                      &folder);
-  }
-  if (isa<ExtensionFieldType>(elemType)) {
-    ExtAdditiveFolder<Op, Func> folder(op, fn);
-    return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
-        adaptor, &folder);
-  }
-  return {};
+  return llvm::TypeSwitch<Type, OpFoldResult>(elemType)
+      .Case<PrimeFieldType>([&](auto) {
+        PrimeAdditiveFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      .template Case<ExtensionFieldType>([&](auto) {
+        ExtAdditiveFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      // NOLINTNEXTLINE(whitespace/newline)
+      .Default([](auto) { return OpFoldResult{}; });
 }
 
 template <typename Op, typename Func>
@@ -1247,17 +1252,19 @@ foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
-  if (isa<PrimeFieldType>(elemType)) {
-    PrimeMultiplicativeFolder<Op, Func> folder(op, fn);
-    return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                      &folder);
-  }
-  if (isa<ExtensionFieldType>(elemType)) {
-    ExtMultiplicativeFolder<Op, Func> folder(op, fn);
-    return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
-        adaptor, &folder);
-  }
-  return {};
+  return llvm::TypeSwitch<Type, OpFoldResult>(elemType)
+      .Case<PrimeFieldType>([&](auto) {
+        PrimeMultiplicativeFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      .template Case<ExtensionFieldType>([&](auto) {
+        ExtMultiplicativeFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      // NOLINTNEXTLINE(whitespace/newline)
+      .Default([](auto) { return OpFoldResult{}; });
 }
 
 } // namespace
