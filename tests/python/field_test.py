@@ -26,11 +26,7 @@ class FieldTest(absltest.TestCase):
       field.register_dialect(ctx)
       pf = _createBabybearType(ctx)
       self.assertEqual(str(pf), "!field.pf<2013265921 : i32, true>")
-      i32 = IntegerType.get_signless(32)
-      # TODO(chokobole): The direct comparison to a native Python 'int' fails here:
-      # self.assertEqual(int(pf.modulus), BABYBEAR_MODULUS)
-      # See https://github.com/fractalyze/prime-ir/issues/110
-      self.assertEqual(pf.modulus, IntegerAttr.get(i32, BABYBEAR_MODULUS))
+      self.assertEqual(int(pf.modulus), BABYBEAR_MODULUS)
       self.assertTrue(pf.is_montgomery)
 
   def testExtensionFieldTypes(self):
@@ -48,7 +44,7 @@ class FieldTest(absltest.TestCase):
       )
       self.assertEqual(ef2_type.degree, 2)
       self.assertEqual(ef2_type.base_field, pf)
-      self.assertEqual(ef2_type.non_residue, non_residue_attr_2)
+      self.assertEqual(int(ef2_type.non_residue), non_residue_2)
       self.assertTrue(ef2_type.is_montgomery)
 
       # Test degree 3 (2 is a valid cubic non-residue)
@@ -61,7 +57,7 @@ class FieldTest(absltest.TestCase):
       )
       self.assertEqual(ef3_type.degree, 3)
       self.assertEqual(ef3_type.base_field, pf)
-      self.assertEqual(ef3_type.non_residue, non_residue_attr_3)
+      self.assertEqual(int(ef3_type.non_residue), non_residue_3)
       self.assertTrue(ef3_type.is_montgomery)
 
       # Test degree 4 (11 is a valid quartic non-residue)
@@ -74,7 +70,7 @@ class FieldTest(absltest.TestCase):
       )
       self.assertEqual(ef4_type.degree, 4)
       self.assertEqual(ef4_type.base_field, pf)
-      self.assertEqual(ef4_type.non_residue, non_residue_attr_4)
+      self.assertEqual(int(ef4_type.non_residue), non_residue_4)
       self.assertTrue(ef4_type.is_montgomery)
 
 
