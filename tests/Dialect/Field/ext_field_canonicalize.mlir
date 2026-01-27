@@ -429,3 +429,145 @@ func.func @test_to_mont_from_mont_tensor_cancel(%arg0: tensor<2x!QFm>) -> tensor
   %1 = field.to_mont %0 : tensor<2x!QFm>
   return %1 : tensor<2x!QFm>
 }
+
+//===----------------------------------------------------------------------===//
+// Tower Extension Field (Fp4 = (Fp2)^2) constant folding
+//===----------------------------------------------------------------------===//
+
+// Tower extension: Fp6 = (Fp2)^3 where Fp6 = Fp2[w]/(w³ - 2)
+// Note: For degree-2 tower extensions, scalar non-residues are always
+// quadratic residues in the base extension field (by Fermat's theorem).
+// So we use degree 3 instead, where 2^16 = 2 ≠ 1 in Fp2 (valid cubic non-residue).
+!Fp6 = !field.ef<3x!QF, 2:i32>
+
+// CHECK-LABEL: @test_tower_fold_negate
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_fold_negate() -> !Fp6 {
+  // CHECK: %[[C:.*]] = field.constant dense<[6, 5, 4, 3, 2, 1]> : [[T]]
+  // -[1, 2, 3, 4, 5, 6] mod 7 = [6, 5, 4, 3, 2, 1]
+  %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
+  %1 = field.negate %0 : !Fp6
+  // CHECK-NOT: field.negate
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !Fp6
+}
+
+// CHECK-LABEL: @test_tower_fold_double
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_fold_double() -> !Fp6 {
+  // CHECK: %[[C:.*]] = field.constant dense<[2, 4, 6, 1, 3, 5]> : [[T]]
+  // 2 * [1, 2, 3, 4, 5, 6] mod 7 = [2, 4, 6, 8, 10, 12] mod 7 = [2, 4, 6, 1, 3, 5]
+  %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
+  %1 = field.double %0 : !Fp6
+  // CHECK-NOT: field.double
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : !Fp6
+}
+
+// CHECK-LABEL: @test_tower_fold_add
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_fold_add() -> !Fp6 {
+  // CHECK: %[[C:.*]] = field.constant dense<6> : [[T]]
+  // [1, 2, 3, 4, 5, 6] + [5, 4, 3, 2, 1, 0] mod 7 = [6, 6, 6, 6, 6, 6] (splat)
+  %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
+  %1 = field.constant [5, 4, 3, 2, 1, 0] : !Fp6
+  %2 = field.add %0, %1 : !Fp6
+  // CHECK-NOT: field.add
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : !Fp6
+}
+
+// CHECK-LABEL: @test_tower_fold_sub
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_fold_sub() -> !Fp6 {
+  // CHECK: %[[C:.*]] = field.constant dense<[3, 5, 0, 2, 4, 6]> : [[T]]
+  // [1, 2, 3, 4, 5, 6] - [5, 4, 3, 2, 1, 0] mod 7 = [-4, -2, 0, 2, 4, 6] mod 7 = [3, 5, 0, 2, 4, 6]
+  %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
+  %1 = field.constant [5, 4, 3, 2, 1, 0] : !Fp6
+  %2 = field.sub %0, %1 : !Fp6
+  // CHECK-NOT: field.sub
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : !Fp6
+}
+
+// CHECK-LABEL: @test_tower_fold_mul
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_fold_mul() -> !Fp6 {
+  // Fp6 multiplication: (a + bw + cw²)(d + ew + fw²)
+  // where a, b, c, d, e, f ∈ Fp2 and w³ = 2 (non-residue for Fp6/Fp2)
+  %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
+  %1 = field.constant [5, 4, 3, 2, 1, 0] : !Fp6
+  %2 = field.mul %0, %1 : !Fp6
+  // CHECK-NOT: field.mul
+  // CHECK: return %{{.*}} : [[T]]
+  return %2 : !Fp6
+}
+
+//===----------------------------------------------------------------------===//
+// Tensor of Tower Extension Field (tensor<2x!Fp6>) constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_tower_fold_negate
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_tower_fold_negate() -> tensor<2x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[6, 5, 4, 3, 2, 1], [1, 2, 3, 4, 5, 6]{{\]}}> : [[T]]
+  // -[[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]] mod 7 = [[6, 5, 4, 3, 2, 1], [1, 2, 3, 4, 5, 6]]
+  %0 = field.constant dense<[[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]]> : tensor<2x!Fp6>
+  %1 = field.negate %0 : tensor<2x!Fp6>
+  // CHECK-NOT: field.negate
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!Fp6>
+}
+
+// CHECK-LABEL: @test_tensor_tower_fold_double
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_tower_fold_double() -> tensor<2x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[2, 4, 6, 1, 3, 5], [5, 3, 1, 6, 4, 2]{{\]}}> : [[T]]
+  // 2 * [[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]] mod 7 = [[2, 4, 6, 1, 3, 5], [5, 3, 1, 6, 4, 2]]
+  %0 = field.constant dense<[[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]]> : tensor<2x!Fp6>
+  %1 = field.double %0 : tensor<2x!Fp6>
+  // CHECK-NOT: field.double
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!Fp6>
+}
+
+// CHECK-LABEL: @test_tensor_tower_fold_add
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_tower_fold_add() -> tensor<2x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[6, 6, 6, 6, 6, 6], [0, 0, 0, 0, 0, 0]{{\]}}> : [[T]]
+  // [[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]] + [[5, 4, 3, 2, 1, 0], [1, 2, 3, 4, 5, 6]] mod 7
+  // = [[6, 6, 6, 6, 6, 6], [0, 0, 0, 0, 0, 0]]
+  %0 = field.constant dense<[[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]]> : tensor<2x!Fp6>
+  %1 = field.constant dense<[[5, 4, 3, 2, 1, 0], [1, 2, 3, 4, 5, 6]]> : tensor<2x!Fp6>
+  %2 = field.add %0, %1 : tensor<2x!Fp6>
+  // CHECK-NOT: field.add
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : tensor<2x!Fp6>
+}
+
+// CHECK-LABEL: @test_tensor_tower_fold_sub
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_tower_fold_sub() -> tensor<2x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[3, 5, 0, 2, 4, 6], [5, 3, 1, 6, 4, 2]{{\]}}> : [[T]]
+  // [[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]] - [[5, 4, 3, 2, 1, 0], [1, 2, 3, 4, 5, 6]] mod 7
+  // = [[-4, -2, 0, 2, 4, 6], [5, 3, 1, -1, -3, -5]] mod 7 = [[3, 5, 0, 2, 4, 6], [5, 3, 1, 6, 4, 2]]
+  %0 = field.constant dense<[[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]]> : tensor<2x!Fp6>
+  %1 = field.constant dense<[[5, 4, 3, 2, 1, 0], [1, 2, 3, 4, 5, 6]]> : tensor<2x!Fp6>
+  %2 = field.sub %0, %1 : tensor<2x!Fp6>
+  // CHECK-NOT: field.sub
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : tensor<2x!Fp6>
+}
+
+// CHECK-LABEL: @test_tensor_tower_fold_mul
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_tower_fold_mul() -> tensor<2x!Fp6> {
+  // Fp6 multiplication: (a + bw + cw²)(d + ew + fw²)
+  // where a, b, c, d, e, f ∈ Fp2 and w³ = 2 (non-residue for Fp6/Fp2)
+  %0 = field.constant dense<[[1, 2, 3, 4, 5, 6], [6, 5, 4, 3, 2, 1]]> : tensor<2x!Fp6>
+  %1 = field.constant dense<[[5, 4, 3, 2, 1, 0], [1, 2, 3, 4, 5, 6]]> : tensor<2x!Fp6>
+  %2 = field.mul %0, %1 : tensor<2x!Fp6>
+  // CHECK-NOT: field.mul
+  // CHECK: return %{{.*}} : [[T]]
+  return %2 : tensor<2x!Fp6>
+}

@@ -382,9 +382,13 @@ void ExtensionFieldType::print(AsmPrinter &printer) const {
   } else {
     auto efType = cast<ExtensionFieldType>(baseField);
     if (efType.isMontgomery()) {
-      nonResidue = mod_arith::getAttrAsStandardForm(
-          efType.getBasePrimeField().getModulus(),
-          cast<DenseIntElementsAttr>(nonResidue));
+      auto modulus = efType.getBasePrimeField().getModulus();
+      if (auto intAttr = dyn_cast<IntegerAttr>(nonResidue)) {
+        nonResidue = mod_arith::getAttrAsStandardForm(modulus, intAttr);
+      } else {
+        nonResidue = mod_arith::getAttrAsStandardForm(
+            modulus, cast<DenseIntElementsAttr>(nonResidue));
+      }
     }
   }
   printer << "<" << getDegree() << "x" << baseField << ", " << nonResidue
