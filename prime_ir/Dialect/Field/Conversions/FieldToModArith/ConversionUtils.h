@@ -30,6 +30,13 @@ Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
 
 Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs);
 
+// Build an extension field value from prime field coefficients.
+// For non-tower extensions: expects getDegree() prime field values.
+// For tower extensions: recursively builds nested structure from
+// getDegreeOverPrime() prime field values.
+Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
+                      ArrayRef<Value> primeCoeffs);
+
 // Create a mod_arith constant with value n.
 Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField, int64_t n);
 
