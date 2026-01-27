@@ -172,6 +172,26 @@ Type convertFormType(Type type, bool toMontgomery) {
   return newElementType;
 }
 
+Attribute maybeToMontgomery(ModArithType type, Attribute attr) {
+  if (!type.isMontgomery())
+    return attr;
+
+  auto modulus = type.getModulus();
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr))
+    return getAttrAsMontgomeryForm(modulus, intAttr);
+  return getAttrAsMontgomeryForm(modulus, cast<DenseElementsAttr>(attr));
+}
+
+Attribute maybeToStandard(ModArithType type, Attribute attr) {
+  if (!type.isMontgomery())
+    return attr;
+
+  auto modulus = type.getModulus();
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr))
+    return getAttrAsStandardForm(modulus, intAttr);
+  return getAttrAsStandardForm(modulus, cast<DenseElementsAttr>(attr));
+}
+
 } // namespace
 
 Type getStandardFormType(Type type) {
@@ -410,11 +430,7 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     auto modArithType = cast<ModArithType>(parsedType);
     auto valueAttr =
         IntegerAttr::get(modArithType.getStorageType(), parsedInts[0]);
-    // Convert to Montgomery form if the type is Montgomery
-    if (modArithType.isMontgomery()) {
-      valueAttr = getAttrAsMontgomeryForm(modArithType.getModulus(), valueAttr);
-    }
-    result.addAttribute("value", valueAttr);
+    result.addAttribute("value", maybeToMontgomery(modArithType, valueAttr));
     result.addTypes(parsedType);
     return success();
   }
@@ -427,14 +443,10 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
   auto shapedType = cast<ShapedType>(parsedType);
   auto modArithType = cast<ModArithType>(shapedType.getElementType());
-  DenseElementsAttr denseElementsAttr = DenseIntElementsAttr::get(
+  auto denseElementsAttr = DenseIntElementsAttr::get(
       shapedType.clone(modArithType.getStorageType()), parsedInts);
-  // Convert to Montgomery form if the type is Montgomery
-  if (modArithType.isMontgomery()) {
-    denseElementsAttr =
-        getAttrAsMontgomeryForm(modArithType.getModulus(), denseElementsAttr);
-  }
-  result.addAttribute("value", denseElementsAttr);
+  result.addAttribute("value",
+                      maybeToMontgomery(modArithType, denseElementsAttr));
   result.addTypes(parsedType);
   return success();
 }
@@ -442,20 +454,9 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
 
-  // Print value in standard form for readability
   Type type = getType();
   auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
-  Attribute value = getValue();
-
-  if (modArithType.isMontgomery()) {
-    // Convert Montgomery form value to standard form for printing
-    if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
-      value = getAttrAsStandardForm(modArithType.getModulus(), intAttr);
-    } else {
-      value = getAttrAsStandardForm(modArithType.getModulus(),
-                                    cast<DenseElementsAttr>(value));
-    }
-  }
+  Attribute value = maybeToStandard(modArithType, getValue());
 
   p.printAttributeWithoutType(value);
   p << " : ";
