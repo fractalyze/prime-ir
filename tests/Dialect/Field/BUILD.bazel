@@ -50,7 +50,8 @@ cc_test(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@zk_dtypes//zk_dtypes:babybear4",
-        "@zk_dtypes//zk_dtypes:bn254_fq2",
+        "@zk_dtypes//zk_dtypes:mersenne312",
+        "@zk_dtypes//zk_dtypes:mersenne314",
         "@zk_dtypes//zk_dtypes:goldilocks3",
     ],
 )
