@@ -13,45 +13,70 @@
 // limitations under the License.
 // ==============================================================================
 
-// Simple field operations benchmark to test affine-super-vectorize
+// Extension field operations benchmark
+// Note: Extension fields currently cannot be vectorized due to a bug in field-to-llvm
 
 !pf = !field.pf<2013265921 : i32, true>
 
-// Square all elements in a buffer (1M elements, 1000 iterations)
-func.func @square_buffer(%buffer: memref<1048576x!pf>) attributes { llvm.emit_c_interface } {
+// Extension fields for benchmarking
+// Quadratic extension: degree 2, non-residue 11
+!qf = !field.ef<2x!pf, 11:i32>
+// Quartic extension: degree 4, non-residue 11
+!qrf = !field.ef<4x!pf, 11:i32>
+
+// ==============================================================================
+// Extension Field Benchmarks (scalar only)
+// ==============================================================================
+
+// Quadratic extension field square (262144 elements, 1000 iterations)
+// Each element has 2 coefficients, so memory footprint is similar to 524288 prime field elements
+func.func @ext2_square_buffer(%buffer: memref<262144x!qf>) attributes { llvm.emit_c_interface } {
   affine.for %iter = 0 to 1000 {
-    affine.for %i = 0 to 1048576 {
-      %val = affine.load %buffer[%i] : memref<1048576x!pf>
-      %sq = field.square %val : !pf
-      affine.store %sq, %buffer[%i] : memref<1048576x!pf>
+    affine.for %i = 0 to 262144 {
+      %val = affine.load %buffer[%i] : memref<262144x!qf>
+      %sq = field.square %val : !qf
+      affine.store %sq, %buffer[%i] : memref<262144x!qf>
     }
   }
   return
 }
 
-// Add two buffers element-wise
-func.func @add_buffers(%a: memref<1048576x!pf>, %b: memref<1048576x!pf>, %c: memref<1048576x!pf>) attributes { llvm.emit_c_interface } {
+// Quadratic extension field multiply
+func.func @ext2_mul_buffers(%a: memref<262144x!qf>, %b: memref<262144x!qf>, %c: memref<262144x!qf>) attributes { llvm.emit_c_interface } {
   affine.for %iter = 0 to 1000 {
-    affine.for %i = 0 to 1048576 {
-      %va = affine.load %a[%i] : memref<1048576x!pf>
-      %vb = affine.load %b[%i] : memref<1048576x!pf>
-      %sum = field.add %va, %vb : !pf
-      affine.store %sum, %c[%i] : memref<1048576x!pf>
+    affine.for %i = 0 to 262144 {
+      %va = affine.load %a[%i] : memref<262144x!qf>
+      %vb = affine.load %b[%i] : memref<262144x!qf>
+      %prod = field.mul %va, %vb : !qf
+      affine.store %prod, %c[%i] : memref<262144x!qf>
     }
   }
   return
 }
 
-// Multiply-accumulate: c[i] = a[i] * b[i] + c[i]
-func.func @mul_add_buffers(%a: memref<1048576x!pf>, %b: memref<1048576x!pf>, %c: memref<1048576x!pf>) attributes { llvm.emit_c_interface } {
-  affine.for %iter = 0 to 1000 {
-    affine.for %i = 0 to 1048576 {
-      %va = affine.load %a[%i] : memref<1048576x!pf>
-      %vb = affine.load %b[%i] : memref<1048576x!pf>
-      %vc = affine.load %c[%i] : memref<1048576x!pf>
-      %prod = field.mul %va, %vb : !pf
-      %sum = field.add %prod, %vc : !pf
-      affine.store %sum, %c[%i] : memref<1048576x!pf>
+// Quartic extension field square (65536 elements, 100 iterations)
+// Each element has 4 coefficients, so memory footprint is similar to 262144 prime field elements
+// This operation generates significant code (Toom-Cook algorithm)
+func.func @ext4_square_buffer(%buffer: memref<65536x!qrf>) attributes { llvm.emit_c_interface } {
+  affine.for %iter = 0 to 100 {
+    affine.for %i = 0 to 65536 {
+      %val = affine.load %buffer[%i] : memref<65536x!qrf>
+      %sq = field.square %val : !qrf
+      affine.store %sq, %buffer[%i] : memref<65536x!qrf>
+    }
+  }
+  return
+}
+
+// Quartic extension field multiply
+// This is the most complex operation - candidate for intrinsic function mode
+func.func @ext4_mul_buffers(%a: memref<65536x!qrf>, %b: memref<65536x!qrf>, %c: memref<65536x!qrf>) attributes { llvm.emit_c_interface } {
+  affine.for %iter = 0 to 100 {
+    affine.for %i = 0 to 65536 {
+      %va = affine.load %a[%i] : memref<65536x!qrf>
+      %vb = affine.load %b[%i] : memref<65536x!qrf>
+      %prod = field.mul %va, %vb : !qrf
+      affine.store %prod, %c[%i] : memref<65536x!qrf>
     }
   }
   return

@@ -15,25 +15,29 @@
 
 load("//benchmark:benchmark.bzl", "prime_ir_benchmark", "prime_ir_mlir_cc_import")
 
-# Scalar (non-vectorized) version
+# ==============================================================================
+# Prime Field Benchmarks (supports vectorization)
+# ==============================================================================
+
+# Prime field scalar (non-vectorized) version
 prime_ir_mlir_cc_import(
     name = "vectorize_scalar_ciface",
     llc_flags = ["-mcpu=native"],
-    mlir_src = "vectorize.mlir",
+    mlir_src = "vectorize_pf.mlir",
     prime_ir_opt_flags = [
         "-field-to-llvm",
     ],
 )
 
-# Generate vectorized source with vec_ prefix to avoid symbol clashes
+# Generate vectorized prime field source with vec_ prefix to avoid symbol clashes
 genrule(
     name = "vectorize_vec_mlir",
-    srcs = ["vectorize.mlir"],
+    srcs = ["vectorize_pf.mlir"],
     outs = ["vectorize_vec.mlir"],
     cmd = "sed 's/@\\([a-zA-Z0-9_]*\\)(/@vec_\\1(/g' $< > $@",
 )
 
-# Vectorized version using affine-super-vectorize
+# Prime field vectorized version using affine-super-vectorize
 prime_ir_mlir_cc_import(
     name = "vectorize_vec_ciface",
     llc_flags = ["-mcpu=native"],
@@ -46,13 +50,101 @@ prime_ir_mlir_cc_import(
     ],
 )
 
+# ==============================================================================
+# Extension Field Benchmarks (scalar only - vectorization not yet supported)
+# ==============================================================================
+
+# Extension field scalar version
+prime_ir_mlir_cc_import(
+    name = "vectorize_ext_scalar_ciface",
+    llc_flags = ["-mcpu=native"],
+    mlir_src = "vectorize.mlir",
+    prime_ir_opt_flags = [
+        "-field-to-llvm",
+    ],
+)
+
+# Generate extension field source with vec_ prefix (same code, different symbols)
+# This is for API compatibility - both scalar and "vectorized" run the same code
+genrule(
+    name = "vectorize_ext_vec_mlir",
+    srcs = ["vectorize.mlir"],
+    outs = ["vectorize_ext_vec.mlir"],
+    cmd = "sed 's/@\\([a-zA-Z0-9_]*\\)(/@vec_\\1(/g' $< > $@",
+)
+
+# Extension field "vectorized" version (currently same as scalar due to bug)
+prime_ir_mlir_cc_import(
+    name = "vectorize_ext_vec_ciface",
+    llc_flags = ["-mcpu=native"],
+    mlir_src = ":vectorize_ext_vec_mlir",
+    prime_ir_opt_flags = [
+        # Note: -affine-super-vectorize crashes for extension fields
+        "-field-to-llvm",
+    ],
+)
+
 prime_ir_benchmark(
     name = "vectorize_benchmark",
     srcs = ["vectorize_benchmark.cc"],
     deps = [
+        ":vectorize_ext_scalar_ciface",
+        ":vectorize_ext_vec_ciface",
         ":vectorize_scalar_ciface",
         ":vectorize_vec_ciface",
         "@llvm-project//mlir:ExecutionEngine",
         "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:babybear4",
+        "@zk_dtypes//zk_dtypes:mersenne312",
+    ],
+)
+
+# ==============================================================================
+# Elliptic Curve Benchmarks
+# ==============================================================================
+
+# EC scalar version (no vectorization)
+prime_ir_mlir_cc_import(
+    name = "vectorize_ec_scalar_ciface",
+    llc_flags = ["-mcpu=native"],
+    mlir_src = "vectorize_ec.mlir",
+    prime_ir_opt_flags = [
+        "-elliptic-curve-to-field",
+        "-field-to-llvm",
+    ],
+)
+
+# Generate vectorized EC source with vec_ prefix
+genrule(
+    name = "vectorize_ec_vec_mlir",
+    srcs = ["vectorize_ec.mlir"],
+    outs = ["vectorize_ec_vec.mlir"],
+    cmd = "sed 's/@\\([a-zA-Z0-9_]*\\)(/@vec_\\1(/g' $< > $@",
+)
+
+# EC vectorized version
+prime_ir_mlir_cc_import(
+    name = "vectorize_ec_vec_ciface",
+    llc_flags = ["-mcpu=native"],
+    mlir_src = ":vectorize_ec_vec_mlir",
+    prime_ir_opt_flags = [
+        "-affine-super-vectorize=virtual-vector-size=4",
+        "-elliptic-curve-to-field",
+        "-field-to-llvm",
+        "-convert-vector-to-llvm",
+        "-convert-arith-to-llvm",
+    ],
+)
+
+prime_ir_benchmark(
+    name = "vectorize_ec_benchmark",
+    srcs = ["vectorize_ec_benchmark.cc"],
+    deps = [
+        ":vectorize_ec_scalar_ciface",
+        ":vectorize_ec_vec_ciface",
+        "@llvm-project//mlir:ExecutionEngine",
+        "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:bn254_fr",
+        "@zk_dtypes//zk_dtypes:bn254_g1",
     ],
 )
