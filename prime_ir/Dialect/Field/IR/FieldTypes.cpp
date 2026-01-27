@@ -108,9 +108,12 @@ Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
   if (auto efType = dyn_cast<field::ExtensionFieldType>(fieldType)) {
     // Use getDegreeOverPrime() and getBasePrimeField() to support tower
     // extensions
-    unsigned bitWidth = efType.getBasePrimeField().getStorageBitWidth();
+    PrimeFieldType pfType = efType.getBasePrimeField();
+    unsigned bitWidth = pfType.getStorageBitWidth();
     SmallVector<APInt> coeffs(efType.getDegreeOverPrime(), APInt(bitWidth, 0));
-    coeffs[0] = APInt(bitWidth, value);
+    // Use PrimeFieldOperation to handle Montgomery conversion if needed
+    PrimeFieldOperation pfOp(static_cast<int64_t>(value), pfType);
+    coeffs[0] = static_cast<APInt>(pfOp);
     attr = constantLike.createConstantAttrFromValues(coeffs);
   } else {
     attr = constantLike.createConstantAttrFromValues(
@@ -280,11 +283,59 @@ ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
     return emitError() << "base field must be a prime field or extension field";
   }
 
-  // For towers, skip non-residue validation (would need extension field
-  // arithmetic). The non-residue should be an element of the base field.
+  // For tower extensions, validate non-residue using extension field
+  // arithmetic. The non-residue must satisfy: nr^((q - 1) / n) ≢ 1 in the base
+  // field, where q = p^(base degree over prime) is the order of the base
+  // extension field.
   if (isa<ExtensionFieldType>(baseField)) {
-    // TODO(chokobole): Add proper non-residue validation for tower extensions.
-    // For now, we trust that the user provides a valid non-residue.
+    auto baseEfType = cast<ExtensionFieldType>(baseField);
+    PrimeFieldType pfType = baseEfType.getBasePrimeField();
+    APInt p = pfType.getModulus().getValue();
+    unsigned baseDegreeOverPrime = baseEfType.getDegreeOverPrime();
+
+    // Compute q = p^baseDegreeOverPrime (order of base extension field)
+    // Use extended precision to avoid overflow
+    unsigned resultBitWidth = p.getBitWidth() * baseDegreeOverPrime + 1;
+    APInt q(resultBitWidth, 1);
+    APInt pExt = p.zext(resultBitWidth);
+    for (unsigned i = 0; i < baseDegreeOverPrime; ++i) {
+      q *= pExt;
+    }
+
+    // exp = (q - 1) / degree
+    APInt exp = (q - 1).udiv(APInt(resultBitWidth, degree));
+
+    // Dispatch to the correct tower type and check nr^exp != 1
+    auto sig = getTowerSignature(baseEfType);
+
+    // Handle scalar non-residue: embed as [nr, 0, 0, ...] in base extension
+    // field
+    if (auto intAttr = dyn_cast<IntegerAttr>(nonResidue)) {
+#define CHECK_SCALAR_NON_RESIDUE(unused_sig, TypeName)                         \
+  auto nrOp = TypeName::fromUnchecked(intAttr.getValue(), baseEfType);         \
+  if (nrOp.power(exp).isOne()) {                                               \
+    return emitError() << "nonResidue must satisfy nonResidue^((q - 1) / "     \
+                       << degree << ") != 1 in base extension field";          \
+  }
+      DISPATCH_TOWER_BY_SIGNATURE(sig, CHECK_SCALAR_NON_RESIDUE,
+                                  ExtensionFieldOperation, Op)
+#undef CHECK_SCALAR_NON_RESIDUE
+      return success();
+    }
+
+    // Handle full extension field element non-residue
+    auto denseAttr = cast<DenseIntElementsAttr>(nonResidue);
+
+#define CHECK_NON_RESIDUE(unused_sig, TypeName)                                \
+  auto nrOp = TypeName::fromUnchecked(denseAttr, baseEfType);                  \
+  if (nrOp.power(exp).isOne()) {                                               \
+    return emitError() << "nonResidue must satisfy nonResidue^((q - 1) / "     \
+                       << degree << ") != 1 in base extension field";          \
+  }
+    DISPATCH_TOWER_BY_SIGNATURE(sig, CHECK_NON_RESIDUE, ExtensionFieldOperation,
+                                Op)
+#undef CHECK_NON_RESIDUE
+
     return success();
   }
 
