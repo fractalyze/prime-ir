@@ -123,7 +123,7 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   let parameters = (ins
     "unsigned": $degree,
     "Type": $baseField,  // Can be PrimeFieldType or ExtensionFieldType
-    "IntegerAttr": $nonResidue
+    "Attribute": $nonResidue  // IntegerAttr for non-tower, DenseIntElementsAttr for tower
   );
   let extraClassDeclaration = [{
     // Returns the total degree over the underlying prime field.
