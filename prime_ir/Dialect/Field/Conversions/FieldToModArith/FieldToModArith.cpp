@@ -45,6 +45,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
+#include "prime_ir/Utils/BitSerialAlgorithm.h"
 #include "prime_ir/Utils/BuilderContext.h"
 #include "prime_ir/Utils/ConversionUtils.h"
 #include "prime_ir/Utils/ShapedTypeConverter.h"
@@ -562,58 +563,13 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
           exp, b.create<arith::ConstantIntOp>(intType, order));
     }
 
-    Value zero = b.create<arith::ConstantIntOp>(intType, 0);
-    Value one = b.create<arith::ConstantIntOp>(intType, 1);
-    Value powerOfP = base;
-    auto ifOp = b.create<scf::IfOp>(
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ne,
-                                b.create<arith::AndIOp>(exp, one), zero),
-        [&](OpBuilder &builder, Location loc) {
-          ImplicitLocOpBuilder b(loc, builder);
-          auto newResult = b.create<MulOp>(init, powerOfP);
-          b.create<scf::YieldOp>(ValueRange{newResult});
-        },
-        [&](OpBuilder &builder, Location loc) {
-          ImplicitLocOpBuilder b(loc, builder);
-          b.create<scf::YieldOp>(ValueRange{init});
+    Value result = generateBitSerialLoop(
+        b, exp, base, init,
+        [](ImplicitLocOpBuilder &b, Value v) { return b.create<SquareOp>(v); },
+        [](ImplicitLocOpBuilder &b, Value acc, Value v) {
+          return b.create<MulOp>(acc, v);
         });
-    exp = b.create<arith::ShRUIOp>(exp, one);
-    init = ifOp.getResult(0);
-    auto whileOp = b.create<scf::WhileOp>(
-        TypeRange{intType, fieldType, fieldType},
-        ValueRange{exp, powerOfP, init},
-        [&](OpBuilder &builder, Location loc, ValueRange args) {
-          ImplicitLocOpBuilder b(loc, builder);
-          auto cond =
-              b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt, args[0], zero);
-          b.create<scf::ConditionOp>(cond, args);
-        },
-        [&](OpBuilder &builder, Location loc, ValueRange args) {
-          ImplicitLocOpBuilder b(loc, builder);
-          auto currExp = args[0];
-          auto currPowerOfP = args[1];
-          auto currResult = args[2];
-
-          auto newPowerOfP = b.create<SquareOp>(currPowerOfP);
-          auto masked = b.create<arith::AndIOp>(currExp, one);
-          auto isOdd =
-              b.create<arith::CmpIOp>(arith::CmpIPredicate::ne, masked, zero);
-          auto ifOp = b.create<scf::IfOp>(
-              isOdd,
-              [&](OpBuilder &builder, Location loc) {
-                ImplicitLocOpBuilder b(loc, builder);
-                auto newResult = b.create<MulOp>(currResult, newPowerOfP);
-                b.create<scf::YieldOp>(ValueRange{newResult});
-              },
-              [&](OpBuilder &builder, Location loc) {
-                ImplicitLocOpBuilder b(loc, builder);
-                b.create<scf::YieldOp>(ValueRange{currResult});
-              });
-          auto shifted = b.create<arith::ShRUIOp>(currExp, one);
-          b.create<scf::YieldOp>(
-              ValueRange{shifted, newPowerOfP, ifOp.getResult(0)});
-        });
-    rewriter.replaceOp(op, whileOp.getResult(2));
+    rewriter.replaceOp(op, result);
     return success();
   }
 };
