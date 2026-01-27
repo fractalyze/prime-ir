@@ -32,6 +32,21 @@ cc_library(
 )
 
 cc_library(
+    name = "IntrinsicFunctionGenerator",
+    srcs = ["IntrinsicFunctionGenerator.cpp"],
+    hdrs = ["IntrinsicFunctionGenerator.h"],
+    deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:IntrinsicFunctionGeneratorBase",
+        "//prime_ir/Utils:LoweringMode",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
+cc_library(
     name = "EllipticCurveToField",
     srcs = ["EllipticCurveToField.cpp"],
     hdrs = [
@@ -39,13 +54,16 @@ cc_library(
     ],
     deps = [
         ":ConversionUtils",
+        ":IntrinsicFunctionGenerator",
         ":pass_inc_gen",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers:Generic",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations:PointCodeGen",
         "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:BitSerialAlgorithm",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BufferizationDialect",
+        "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LinalgDialect",
         "@llvm-project//mlir:LinalgTransforms",
