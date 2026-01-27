@@ -80,6 +80,7 @@ cc_library(
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Dialect/TensorExt/IR:TensorExt",
+        "//prime_ir/Utils:BitSerialAlgorithm",
         "//prime_ir/Utils:BuilderContext",
         "//prime_ir/Utils:ConversionUtils",
         "//prime_ir/Utils:ShapedTypeConverter",

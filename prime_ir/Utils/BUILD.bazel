@@ -30,6 +30,17 @@ cc_library(
 )
 
 cc_library(
+    name = "BitSerialAlgorithm",
+    srcs = ["BitSerialAlgorithm.cpp"],
+    hdrs = ["BitSerialAlgorithm.h"],
+    deps = [
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:SCFDialect",
+    ],
+)
+
+cc_library(
     name = "AssemblyFormatUtils",
     srcs = ["AssemblyFormatUtils.cpp"],
     hdrs = ["AssemblyFormatUtils.h"],

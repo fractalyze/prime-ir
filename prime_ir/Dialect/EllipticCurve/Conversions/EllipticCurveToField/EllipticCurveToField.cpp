@@ -29,6 +29,7 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/Utils/BitSerialAlgorithm.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
@@ -297,71 +298,15 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
                              ? b.create<ConvertPointTypeOp>(outputType, point)
                              : point;
 
-    auto arithOne = b.create<arith::ConstantIntOp>(scalarIntType, 1);
-    auto arithZero = b.create<arith::ConstantIntOp>(scalarIntType, 0);
-    auto result = zeroPoint;
-    auto ifOp = b.create<scf::IfOp>(
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ne,
-                                b.create<arith::AndIOp>(scalarInt, arithOne),
-                                arithZero),
-        [&](OpBuilder &builder, Location loc) {
-          ImplicitLocOpBuilder b(loc, builder);
-          Value newResult = b.create<AddOp>(outputType, result, initialPoint);
-          b.create<scf::YieldOp>(newResult);
+    Value result = generateBitSerialLoop(
+        b, scalarInt, initialPoint, zeroPoint,
+        [outputType](ImplicitLocOpBuilder &b, Value v) -> Value {
+          return b.create<DoubleOp>(outputType, v);
         },
-        [&](OpBuilder &builder, Location loc) {
-          ImplicitLocOpBuilder b(loc, builder);
-          b.create<scf::YieldOp>(result);
+        [outputType](ImplicitLocOpBuilder &b, Value acc, Value v) -> Value {
+          return b.create<AddOp>(outputType, acc, v);
         });
-    result = ifOp.getResult(0);
-    scalarInt = b.create<arith::ShRUIOp>(scalarInt, arithOne);
-
-    auto whileOp = b.create<scf::WhileOp>(
-        /*resultTypes=*/TypeRange{scalarIntType, outputType, outputType},
-        /*operands=*/ValueRange{scalarInt, initialPoint, result},
-        /*beforeBuilder=*/
-        [&](OpBuilder &beforeBuilder, Location beforeLoc, ValueRange args) {
-          ImplicitLocOpBuilder b(beforeLoc, beforeBuilder);
-          // if `decreasingScalar` > 0, continue
-          Value decreasingScalar = args[0];
-          auto cmpGt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt,
-                                               decreasingScalar, arithZero);
-          b.create<scf::ConditionOp>(cmpGt, args);
-        },
-        /*afterBuilder=*/
-        [&](OpBuilder &afterBuilder, Location afterLoc, ValueRange args) {
-          ImplicitLocOpBuilder b(afterLoc, afterBuilder);
-          Value decreasingScalar = args[0];
-          Value multiplyingPoint = args[1];
-          Value result = args[2];
-
-          // double `multiplyingPoint`
-          Value doubledPoint = b.create<DoubleOp>(outputType, multiplyingPoint);
-          // if `decreasingScalar` % 1 == 1...
-          auto bitAdd = b.create<arith::AndIOp>(decreasingScalar, arithOne);
-          auto cmpEq = b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, bitAdd,
-                                               arithOne);
-          auto ifOp = b.create<scf::IfOp>(
-              cmpEq,
-              // ...then add `doubledPoint` to `result`
-              /*thenBuilder=*/
-              [&](OpBuilder &builder, Location loc) {
-                Value innerResult = builder.create<AddOp>(loc, outputType,
-                                                          result, doubledPoint);
-                builder.create<scf::YieldOp>(loc, innerResult);
-              },
-              /*elseBuilder=*/
-              [&](OpBuilder &builder, Location loc) {
-                builder.create<scf::YieldOp>(loc, result);
-              });
-          // right shift `decreasingScalar` by 1
-          decreasingScalar =
-              b.create<arith::ShRUIOp>(decreasingScalar, arithOne);
-
-          b.create<scf::YieldOp>(
-              ValueRange({decreasingScalar, doubledPoint, ifOp.getResult(0)}));
-        });
-    rewriter.replaceOp(op, whileOp.getResult(2));
+    rewriter.replaceOp(op, result);
     return success();
   }
 };

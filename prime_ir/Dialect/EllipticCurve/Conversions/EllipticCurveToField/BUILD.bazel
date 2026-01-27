@@ -44,6 +44,7 @@ cc_library(
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations:PointCodeGen",
         "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:BitSerialAlgorithm",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BufferizationDialect",
         "@llvm-project//mlir:IR",
