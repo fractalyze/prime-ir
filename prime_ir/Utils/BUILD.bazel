@@ -205,3 +205,14 @@ cc_library(
         "@llvm-project//llvm:Support",
     ],
 )
+
+cc_library(
+    name = "BitSerialAlgorithm",
+    srcs = ["BitSerialAlgorithm.cpp"],
+    hdrs = ["BitSerialAlgorithm.h"],
+    deps = [
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:SCFDialect",
+    ],
+)
