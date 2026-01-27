@@ -41,16 +41,10 @@ FieldOperation::operator SmallVector<APInt>() const {
         if constexpr (std::is_same_v<T, PrimeFieldOperation>) {
           llvm_unreachable(
               "Cannot convert PrimeFieldOperation to SmallVector<APInt>");
-        } else if constexpr (std::is_same_v<
-                                 T, QuadraticExtensionFieldOperation> ||
-                             std::is_same_v<T, CubicExtensionFieldOperation> ||
-                             std::is_same_v<T, QuarticExtensionFieldOperation>) {
-          // Non-tower extension fields can be converted to SmallVector<APInt>
-          return static_cast<SmallVector<APInt>>(op);
         } else {
-          // Tower extension fields cannot be flattened to SmallVector<APInt>
-          llvm_unreachable(
-              "Cannot convert tower ExtensionFieldOperation to SmallVector<APInt>");
+          // Both non-tower and tower extension fields can be flattened
+          // to SmallVector<APInt> using flattenToPrimeCoeffs()
+          return op.flattenToPrimeCoeffs();
         }
       },
       operation);

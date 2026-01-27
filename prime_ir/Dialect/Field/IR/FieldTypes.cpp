@@ -19,6 +19,7 @@ limitations under the License.
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
+#include "prime_ir/Dialect/Field/IR/TowerFieldConfig.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 
@@ -188,19 +189,26 @@ ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
 namespace ext_field_utils {
 namespace {
 
-template <unsigned kDegreeOverPrime>
-TypedAttr createConstantAttr(ArrayRef<APInt> coeffs,
-                             ExtensionFieldType efType) {
-  assert(coeffs.size() == kDegreeOverPrime);
+// Create constant attribute using tower-aware dispatch.
+// Uses getFlatDenseIntElementsAttr() which works for both tower and non-tower.
+TypedAttr createConstantAttrImpl(ArrayRef<APInt> coeffs,
+                                 ExtensionFieldType efType) {
+  assert(coeffs.size() == efType.getDegreeOverPrime());
   SmallVector<APInt> coeffsVec(coeffs.begin(), coeffs.end());
-  ExtensionFieldOperation<kDegreeOverPrime> efOp(coeffsVec, efType);
-  return efOp.getDenseIntElementsAttr();
+  auto sig = getTowerSignature(efType);
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define CREATE_CONSTANT_ATTR(unused_sig, TypeName)    \
+  TypeName efOp(coeffsVec, efType);                   \
+  return efOp.getFlatDenseIntElementsAttr();
+  DISPATCH_TOWER_BY_SIGNATURE(sig, CREATE_CONSTANT_ATTR, ExtensionFieldOperation,
+                              Op)
+#undef CREATE_CONSTANT_ATTR
 }
 
-template <unsigned kDegreeOverPrime>
+template <unsigned kDegreeOverBase>
 Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder, Type structType,
                             llvm::ArrayRef<Value> coeffs) {
-  return prime_ir::SimpleStructBuilder<kDegreeOverPrime>::initialized(
+  return prime_ir::SimpleStructBuilder<kDegreeOverBase>::initialized(
       builder, builder.getLoc(), structType, coeffs);
 }
 
@@ -221,20 +229,6 @@ Value dispatchBuildStructFromCoeffs(
                                    builder, structType, coeffs),
                                true)
                             : false) ||
-         ...);
-  assert(result && "unsupported extension field degree");
-  return result;
-}
-
-template <unsigned... Degrees>
-TypedAttr
-dispatchCreateConstantAttr(unsigned degree, ArrayRef<APInt> coeffs,
-                           ExtensionFieldType efType,
-                           std::integer_sequence<unsigned, Degrees...>) {
-  TypedAttr result;
-  (void)((Degrees == degree
-              ? (result = createConstantAttr<Degrees>(coeffs, efType), true)
-              : false) ||
          ...);
   assert(result && "unsupported extension field degree");
   return result;
@@ -275,7 +269,7 @@ constexpr auto kExtDegreeSequence = makeExtDegreeSequence<kMinExtDegree>(
 LogicalResult
 ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
                            unsigned degree, Type baseField,
-                           IntegerAttr nonResidue) {
+                           Attribute nonResidue) {
   if (degree < 2 || degree > kMaxExtDegree) {
     return emitError() << "extension field degree must be between 2 and "
                        << kMaxExtDegree << ", got " << degree;
@@ -297,7 +291,8 @@ ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
   // For direct extensions over prime fields, validate that nonResidue is
   // actually a non-residue: nonResidue^((p - 1) / n) ≢ 1 (mod p)
   auto pfType = cast<PrimeFieldType>(baseField);
-  auto nrOp = PrimeFieldOperation::fromUnchecked(nonResidue, pfType);
+  auto nrOp =
+      PrimeFieldOperation::fromUnchecked(cast<IntegerAttr>(nonResidue), pfType);
   APInt p = pfType.getModulus().getValue();
   APInt exp = (p - 1).udiv(APInt(p.getBitWidth(), degree));
   if (nrOp.power(exp).isOne()) {
@@ -361,9 +356,11 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
     }
   } else if (auto efType = dyn_cast<ExtensionFieldType>(baseFieldType)) {
     if (efType.isMontgomery()) {
-      // For tower extensions, the non-residue is in the base field
-      // which may itself be an extension field. For now, we store it as-is.
-      // TODO(chokobole): Handle Montgomery form for tower non-residues.
+      // For tower extensions, convert the scalar non-residue to Montgomery form
+      // using the underlying prime field's modulus. The scalar will later be
+      // embedded as [value, 0, 0, ...] in the base extension field.
+      nonResidue = mod_arith::getAttrAsMontgomeryForm(
+          efType.getBasePrimeField().getModulus(), nonResidue);
     }
   }
 
@@ -381,11 +378,18 @@ void ExtensionFieldType::print(AsmPrinter &printer) const {
   // Convert non-residue from Montgomery form for printing
   if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
     if (pfType.getIsMontgomery()) {
-      nonResidue =
-          mod_arith::getAttrAsStandardForm(pfType.getModulus(), nonResidue);
+      nonResidue = mod_arith::getAttrAsStandardForm(
+          pfType.getModulus(), cast<IntegerAttr>(nonResidue));
+    }
+  } else if (auto efType = dyn_cast<ExtensionFieldType>(baseField)) {
+    if (efType.isMontgomery()) {
+      // For tower extensions, convert the scalar non-residue from Montgomery
+      // form using the underlying prime field's modulus.
+      nonResidue = mod_arith::getAttrAsStandardForm(
+          efType.getBasePrimeField().getModulus(),
+          cast<IntegerAttr>(nonResidue));
     }
   }
-  // For tower extensions, print non-residue as-is
 
   printer << "<" << getDegree() << "x" << baseField << ", " << nonResidue
           << ">";
@@ -426,8 +430,7 @@ TypedAttr ExtensionFieldType::createConstantAttr(int64_t c) const {
 
 TypedAttr
 ExtensionFieldType::createConstantAttrFromValues(ArrayRef<APInt> coeffs) const {
-  return ext_field_utils::dispatchCreateConstantAttr(
-      getDegree(), coeffs, *this, ext_field_utils::kExtDegreeSequence);
+  return ext_field_utils::createConstantAttrImpl(coeffs, *this);
 }
 
 ShapedType ExtensionFieldType::overrideShapedType(ShapedType type) const {
