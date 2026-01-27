@@ -58,11 +58,28 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "traceme_encode",
+    hdrs = ["traceme_encode.h"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/log:absl_check",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
 zkx_cc_unittest(
     name = "lib_unittests",
-    srcs = ["profiler_lock_unittest.cc"],
+    srcs = [
+        "profiler_lock_unittest.cc",
+        "traceme_encode_unittest.cc",
+    ],
     deps = [
         ":profiler_lock",
+        ":traceme_encode",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
