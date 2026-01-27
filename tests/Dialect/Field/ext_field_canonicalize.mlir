@@ -187,3 +187,195 @@ func.func @test_cmp_fold() -> i1 {
   // CHECK: return %[[C]]
   return %2 : i1
 }
+
+//===----------------------------------------------------------------------===//
+// Tensor of extension field constants (parsing round-trip)
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_ext_field_constant
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_constant() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[1, 2], [3, 4]{{\]}}> : [[T]]
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_tensor_ext_field_splat_constant
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_splat_constant() -> tensor<2x!QF> {
+  // Splat constant: all elements are [1, 1]
+  // CHECK: %[[C:.*]] = field.constant dense<1> : [[T]]
+  %0 = field.constant dense<1> : tensor<2x!QF>
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : tensor<2x!QF>
+}
+
+//===----------------------------------------------------------------------===//
+// Tensor of extension field constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_ext_field_fold_negate
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_fold_negate() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[6, 5], [4, 3]{{\]}}> : [[T]]
+  // -[[1, 2], [3, 4]] mod 7 = [[6, 5], [4, 3]]
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %1 = field.negate %0 : tensor<2x!QF>
+  // CHECK-NOT: field.negate
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_tensor_ext_field_fold_double
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_fold_double() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[2, 4], [6, 1]{{\]}}> : [[T]]
+  // 2 * [[1, 2], [3, 4]] mod 7 = [[2, 4], [6, 8 mod 7]] = [[2, 4], [6, 1]]
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %1 = field.double %0 : tensor<2x!QF>
+  // CHECK-NOT: field.double
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_tensor_ext_field_fold_square
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_fold_square() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[4, 4], [0, 3]{{\]}}> : [[T]]
+  // [a, b]² = [a² + ξ * b², 2 * a * b] where ξ = 6
+  // [1, 2]² = [1 + 6 * 4, 2 * 1 * 2] = [25, 4] mod 7 = [4, 4]
+  // [3, 4]² = [9 + 6 * 16, 2 * 3 * 4] = [105, 24] mod 7 = [0, 3]
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %1 = field.square %0 : tensor<2x!QF>
+  // CHECK-NOT: field.square
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_tensor_ext_field_fold_inverse
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_fold_inverse() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[3, 1], [6, 6]{{\]}}> : [[T]]
+  // [a, b]⁻¹ = [a / norm, -b / norm] where norm = a² - ξ * b²
+  // [1, 2]⁻¹: norm = 1 - 6 * 4 = -23 ≡ 5 (mod 7), 5⁻¹ = 3
+  //           = [1 * 3, -2 * 3] = [3, -6] = [3, 1]
+  // [3, 4]⁻¹: norm = 9 - 6 * 16 = -87 ≡ 4 (mod 7), 4⁻¹ = 2
+  //           = [3 * 2, -4 * 2] = [6, -8] = [6, 6]
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %1 = field.inverse %0 : tensor<2x!QF>
+  // CHECK-NOT: field.inverse
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_tensor_ext_field_fold_add
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_fold_add() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[4, 6], [4, 6]{{\]}}> : [[T]]
+  // [[1, 2], [3, 4]] + [[3, 4], [1, 2]] = [[4, 6], [4, 6]]
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %1 = field.constant dense<[[3, 4], [1, 2]]> : tensor<2x!QF>
+  %2 = field.add %0, %1 : tensor<2x!QF>
+  // CHECK-NOT: field.add
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_tensor_ext_field_fold_sub
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_fold_sub() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[5, 5], [2, 2]{{\]}}> : [[T]]
+  // [[1, 2], [3, 4]] - [[3, 4], [1, 2]] = [[-2, -2], [2, 2]] mod 7 = [[5, 5], [2, 2]]
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %1 = field.constant dense<[[3, 4], [1, 2]]> : tensor<2x!QF>
+  %2 = field.sub %0, %1 : tensor<2x!QF>
+  // CHECK-NOT: field.sub
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_tensor_ext_field_fold_mul
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tensor_ext_field_fold_mul() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[2, 3], [2, 3]{{\]}}> : [[T]]
+  // [a₀, a₁] * [b₀, b₁] = [a₀b₀ + ξa₁b₁, a₀b₁ + a₁b₀] where ξ = 6
+  // [1, 2] * [3, 4] = [1*3 + 6*2*4, 1*4 + 2*3] = [51, 10] mod 7 = [2, 3]
+  // [3, 4] * [1, 2] = [3*1 + 6*4*2, 3*2 + 4*1] = [51, 10] mod 7 = [2, 3]
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %1 = field.constant dense<[[3, 4], [1, 2]]> : tensor<2x!QF>
+  %2 = field.mul %0, %1 : tensor<2x!QF>
+  // CHECK-NOT: field.mul
+  // CHECK: return %[[C]] : [[T]]
+  return %2 : tensor<2x!QF>
+}
+
+//===----------------------------------------------------------------------===//
+// Identity operation folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_add_tensor_zero_is_self
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_add_tensor_zero_is_self(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  %0 = field.constant dense<0> : tensor<2x!QF>
+  %1 = field.add %arg0, %0 : tensor<2x!QF>
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_mul_tensor_by_zero_is_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_tensor_by_zero_is_zero(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  %0 = field.constant dense<0> : tensor<2x!QF>
+  %1 = field.mul %arg0, %0 : tensor<2x!QF>
+  // CHECK: %[[C:.*]] = field.constant dense<0> : [[T]]
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_mul_tensor_by_one_is_self
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_tensor_by_one_is_self(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  // Multiplicative identity for QF is [1, 0] (1 in base field, 0 for other coefficients)
+  %0 = field.constant dense<[[1, 0], [1, 0]]> : tensor<2x!QF>
+  %1 = field.mul %arg0, %0 : tensor<2x!QF>
+  // CHECK: return %[[ARG0]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+//===----------------------------------------------------------------------===//
+// BitcastOp folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_bitcast_scalar_roundtrip
+// CHECK-SAME: (%[[ARG:.*]]: !pf7_i32) -> !pf7_i32 {
+func.func @test_bitcast_scalar_roundtrip(%arg0: !PF) -> !PF {
+  // bitcast(bitcast(x)) -> x when types match
+  // CHECK-NOT: field.bitcast
+  // CHECK: return %[[ARG]] : !pf7_i32
+  %0 = field.bitcast %arg0 : !PF -> i32
+  %1 = field.bitcast %0 : i32 -> !PF
+  return %1 : !PF
+}
+
+// CHECK-LABEL: @test_bitcast_tensor_roundtrip
+// CHECK-SAME: (%[[ARG:.*]]: tensor<2x[[T:.*]]>) -> tensor<2x[[T]]> {
+func.func @test_bitcast_tensor_roundtrip(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  // bitcast(bitcast(x)) -> x when types match
+  // CHECK-NOT: field.bitcast
+  // CHECK: return %[[ARG]] : tensor<2x[[T]]>
+  %0 = field.bitcast %arg0 : tensor<2x!QF> -> tensor<4x!PF>
+  %1 = field.bitcast %0 : tensor<4x!PF> -> tensor<2x!QF>
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_bitcast_chain_simplify
+// CHECK-SAME: (%[[ARG:.*]]: tensor<2x[[T:.*]]>) -> tensor<4x!pf7_i32> {
+func.func @test_bitcast_chain_simplify(%arg0: tensor<2x!QF>) -> tensor<4x!PF> {
+  // The intermediate tensor<4xi32> bitcast should be eliminated
+  // CHECK: %[[RES:.*]] = field.bitcast %[[ARG]] : tensor<2x[[T]]> -> tensor<4x!pf7_i32>
+  // CHECK: return %[[RES]] : tensor<4x!pf7_i32>
+  %0 = field.bitcast %arg0 : tensor<2x!QF> -> tensor<4xi32>
+  %1 = field.bitcast %0 : tensor<4xi32> -> tensor<4x!PF>
+  return %1 : tensor<4x!PF>
+}

@@ -24,7 +24,7 @@ cc_library(
     srcs = ["BufferizableOpInterfaceImpl.cpp"],
     hdrs = ["BufferizableOpInterfaceImpl.h"],
     deps = [
-        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Utils:BufferizationUtils",
     ],
 )

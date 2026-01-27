@@ -41,6 +41,26 @@ cc_library(
 )
 
 cc_library(
+    name = "BitcastOpUtils",
+    hdrs = ["BitcastOpUtils.h"],
+    deps = [
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+cc_library(
+    name = "BufferizationUtils",
+    hdrs = ["BufferizationUtils.h"],
+    deps = [
+        "@llvm-project//mlir:BufferizationDialect",
+        "@llvm-project//mlir:BufferizationTransforms",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:MemRefDialect",
+    ],
+)
+
+cc_library(
     name = "BuilderContext",
     hdrs = ["BuilderContext.h"],
     deps = [

@@ -127,3 +127,15 @@ func.func @test_lower_memref(%arg0: memref<3x2x!QF>) -> !QF {
     %1 = tensor.extract %t[%i1, %i1] : tensor<3x2x!QF>
     return %1 : !QF
 }
+
+// CHECK-LABEL: @test_lower_tensor_ext_field_constant
+// CHECK-SAME: () -> tensor<2x[[T:.*]]> {
+func.func @test_lower_tensor_ext_field_constant() -> tensor<2x!QF> {
+    // Tensor of extension field constant: [[1, 2], [3, 4]]
+    // Should lower to prime field tensor constant + bitcast
+    // CHECK: %[[FLAT:.*]] = mod_arith.constant dense<[1, 2, 3, 4]> : tensor<4x!z7_i32>
+    // CHECK: %[[RESULT:.*]] = field.bitcast %[[FLAT]] : tensor<4x!z7_i32> -> tensor<2x[[T]]>
+    %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+    // CHECK: return %[[RESULT]] : tensor<2x[[T]]>
+    return %0 : tensor<2x!QF>
+}

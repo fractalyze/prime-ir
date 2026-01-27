@@ -63,6 +63,7 @@ cc_library(
         ":types_inc_gen",
         "//prime_ir/Utils:APIntUtils",
         "//prime_ir/Utils:AssemblyFormatUtils",
+        "//prime_ir/Utils:BitcastOpUtils",
         "//prime_ir/Utils:CanonicalizationPatterns",
         "//prime_ir/Utils:ConstantFolder",
         "//prime_ir/Utils:KnownModulus",

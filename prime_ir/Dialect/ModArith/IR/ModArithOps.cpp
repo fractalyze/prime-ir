@@ -21,6 +21,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
+#include "prime_ir/Utils/BitcastOpUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
 
 // IWYU pragma: begin_keep
@@ -183,11 +184,70 @@ Type getMontgomeryFormType(Type type) {
 }
 
 bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
-  Type inputType = getElementTypeOrSelf(inputs.front());
-  Type outputType = getElementTypeOrSelf(outputs.front());
+  Type inputType = inputs.front();
+  Type outputType = outputs.front();
 
-  return getIntOrModArithBitWidth(inputType) ==
-         getIntOrModArithBitWidth(outputType);
+  Type inputElementType = getElementTypeOrSelf(inputType);
+  Type outputElementType = getElementTypeOrSelf(outputType);
+
+  // Integer to integer is not allowed (use arith.bitcast), check this first
+  if (areBothIntegerTypes(inputElementType, outputElementType)) {
+    return false;
+  }
+
+  // Same type is allowed for verification (will be folded away by folder)
+  if (isSameTypeBitcast(inputType, outputType)) {
+    return true;
+  }
+
+  // Check shape compatibility
+  if (failed(verifyCompatibleShape(inputType, outputType))) {
+    return false;
+  }
+
+  // Check bitwidth compatibility
+  return getIntOrModArithBitWidth(inputElementType) ==
+         getIntOrModArithBitWidth(outputElementType);
+}
+
+LogicalResult BitcastOp::verify() {
+  Type inputType = getInput().getType();
+  Type outputType = getOutput().getType();
+
+  if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType})) {
+    return success();
+  }
+
+  // Provide detailed error messages for all failure cases
+
+  Type inputElementType = getElementTypeOrSelf(inputType);
+  Type outputElementType = getElementTypeOrSelf(outputType);
+
+  // Check integer to integer case
+  if (areBothIntegerTypes(inputElementType, outputElementType)) {
+    return emitOpError()
+           << "integer to integer bitcast should use arith.bitcast";
+  }
+
+  // Check shape compatibility
+  if (failed(verifyCompatibleShape(inputType, outputType))) {
+    return emitOpError()
+           << "input and output shapes are incompatible for bitcast";
+  }
+
+  // Check bitwidth compatibility
+  unsigned inputBitWidth = getIntOrModArithBitWidth(inputElementType);
+  unsigned outputBitWidth = getIntOrModArithBitWidth(outputElementType);
+  if (inputBitWidth != outputBitWidth) {
+    return emitOpError()
+           << "bitcast requires matching bitwidths, but input has "
+           << inputBitWidth << " bits and output has " << outputBitWidth
+           << " bits";
+  }
+
+  return emitOpError()
+         << "internal error: operands are cast-incompatible for unknown reason "
+         << "(input: " << inputType << ", output: " << outputType << ")";
 }
 
 LogicalResult MontReduceOp::verify() {
@@ -252,11 +312,22 @@ Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
+  OpFoldResult result = foldBitcast(*this, adaptor);
+  if (result)
+    return result;
+
+  // Fold constant bitcast.
+  // Bitcasting a constant is a no-op since only the type interpretation
+  // changes, not the underlying data.
   if (isa_and_present<IntegerAttr>(adaptor.getInput()) ||
       isa_and_present<DenseIntElementsAttr>(adaptor.getInput())) {
     return adaptor.getInput();
   }
   return {};
+}
+
+LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
+  return canonicalizeBitcast(op, rewriter);
 }
 
 OpFoldResult ToMontOp::fold(FoldAdaptor adaptor) {

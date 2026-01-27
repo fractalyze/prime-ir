@@ -125,10 +125,20 @@ parseOptionalModularInteger(OpAsmParser &parser, APInt &parsedInt,
                             Type &parsedType,
                             GetModulusCallback getModulusCallback);
 
+// Optional callback for shape validation.
+// Parameters:
+// - typeShape: The shape from the parsed type (e.g., [2] for tensor<2x!EF>)
+// - parsedShape: The shape of the parsed dense constant (e.g.,
+//.               [2, 2] for dense<[[1,2],[3,4]]>)
+// Returns success if the shapes are compatible, failure otherwise.
+using ShapeValidationCallback = llvm::function_ref<ParseResult(
+    ArrayRef<int64_t> typeShape, ArrayRef<int64_t> parsedShape)>;
+
 ParseResult parseModularIntegerList(OpAsmParser &parser,
                                     SmallVector<APInt> &parsedInts,
                                     Type &parsedType,
-                                    GetModulusCallback getModulusCallback);
+                                    GetModulusCallback getModulusCallback,
+                                    ShapeValidationCallback shapeCallback = {});
 
 ParseResult parseModularOrExtendedModularInteger(
     OpAsmParser &parser, SmallVector<APInt> &parsedInts, Type &parsedType,

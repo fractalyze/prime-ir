@@ -85,17 +85,22 @@ def ModArith_BitcastOp : Op<ModArith_Dialect, "bitcast", [Pure,
     bitwidth of the output type. Integer to integer bitcast is disallowed as it
     should be handled by `arith.bitcast`.
 
+    Supports scalar, tensor, vector, and memref types.
+
     Example:
     ```
     mod_arith.bitcast %c0 : i32 -> !mod_arith.int<65537 : i32>
     mod_arith.bitcast %m1 : !mod_arith.int<65537 : i64> -> i64
     mod_arith.bitcast %m2 : !mod_arith.int<65537 : i64> -> !mod_arith.int<7 : i64>
+    mod_arith.bitcast %mr : memref<4xi32> -> memref<4x!mod_arith.int<7 : i32>>
     ```
   }];
   let arguments = (ins AnyTypeOf<[ModArithLike, SignlessIntegerLike]>:$input);
   let results = (outs AnyTypeOf<[ModArithLike, SignlessIntegerLike]>:$output);
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+  let hasVerifier = 1;
   let hasFolder = 1;
+  let hasCanonicalizeMethod = 1;
 }
 
 def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [SameTypeOperands]> {
