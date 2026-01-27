@@ -27,3 +27,17 @@ zkx_cc_library(
         "@com_google_absl//absl/types:span",
     ],
 )
+
+zkx_cc_library(
+    name = "traceme_recorder",
+    srcs = ["traceme_recorder.cc"],
+    hdrs = ["traceme_recorder.h"],
+    deps = [
+        "//xla/tsl/platform:env",
+        "//xla/tsl/profiler/utils:lock_free_queue",
+        "//xla/tsl/profiler/utils:per_thread",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log:check",
+    ],
+)
