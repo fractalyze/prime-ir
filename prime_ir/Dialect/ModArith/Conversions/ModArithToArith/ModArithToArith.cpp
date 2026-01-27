@@ -23,8 +23,6 @@ limitations under the License.
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
-#include "mlir/Dialect/Tensor/IR/Tensor.h"
-#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -1017,7 +1015,11 @@ void ModArithToArith::runOnOperation() {
       ConvertAny<tensor::ReshapeOp>,
       ConvertAny<tensor::YieldOp>,
       ConvertAny<tensor_ext::BitReverseOp>,
-      ConvertAny<vector::SplatOp>
+      ConvertAny<ub::PoisonOp>,
+      ConvertAny<vector::BroadcastOp>,
+      ConvertAny<vector::SplatOp>,
+      ConvertAny<vector::TransferReadOp>,
+      ConvertAny<vector::TransferWriteOp>
       // clang-format on
       >(typeConverter, context);
 
@@ -1070,7 +1072,11 @@ void ModArithToArith::runOnOperation() {
       tensor::ReshapeOp,
       tensor::YieldOp,
       tensor_ext::BitReverseOp,
-      vector::SplatOp
+      ub::PoisonOp,
+      vector::BroadcastOp,
+      vector::SplatOp,
+      vector::TransferReadOp,
+      vector::TransferWriteOp
       // clang-format on
       >([&](auto op) { return typeConverter.isLegal(op); });
 

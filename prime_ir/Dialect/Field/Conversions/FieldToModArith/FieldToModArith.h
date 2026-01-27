@@ -20,6 +20,8 @@ limitations under the License.
 // Headers needed for FieldToModArith.h.inc
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/UB/IR/UBOps.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Pass/Pass.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 // IWYU pragma: end_keep
