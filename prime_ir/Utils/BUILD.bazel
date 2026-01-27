@@ -199,6 +199,16 @@ cc_library(
 )
 
 cc_library(
+    name = "IntrinsicFunctionGeneratorBase",
+    hdrs = ["IntrinsicFunctionGeneratorBase.h"],
+    deps = [
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
+cc_library(
     name = "LoweringMode",
     hdrs = ["LoweringMode.h"],
     deps = [
