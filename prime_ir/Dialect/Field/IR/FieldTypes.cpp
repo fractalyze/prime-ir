@@ -106,10 +106,11 @@ Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
   TypedAttr attr;
   auto constantLike = cast<ConstantLikeInterface>(fieldType);
   if (auto efType = dyn_cast<field::ExtensionFieldType>(fieldType)) {
-    SmallVector<APInt> coeffs(
-        efType.getDegree(),
-        APInt(getIntOrPrimeFieldBitWidth(efType.getBaseField()), 0));
-    coeffs[0] = APInt(getIntOrPrimeFieldBitWidth(efType.getBaseField()), value);
+    // Use getDegreeOverPrime() and getBasePrimeField() to support tower
+    // extensions
+    unsigned bitWidth = efType.getBasePrimeField().getStorageBitWidth();
+    SmallVector<APInt> coeffs(efType.getDegreeOverPrime(), APInt(bitWidth, 0));
+    coeffs[0] = APInt(bitWidth, value);
     attr = constantLike.createConstantAttrFromValues(coeffs);
   } else {
     attr = constantLike.createConstantAttrFromValues(
@@ -197,7 +198,7 @@ TypedAttr createConstantAttrImpl(ArrayRef<APInt> coeffs,
   SmallVector<APInt> coeffsVec(coeffs.begin(), coeffs.end());
   auto sig = getTowerSignature(efType);
 #define CREATE_CONSTANT_ATTR(unused_sig, TypeName)                             \
-  TypeName efOp(coeffsVec, efType);                                            \
+  auto efOp = TypeName::fromUnchecked(coeffsVec, efType);                      \
   return efOp.getFlatDenseIntElementsAttr();
   DISPATCH_TOWER_BY_SIGNATURE(sig, CREATE_CONSTANT_ATTR,
                               ExtensionFieldOperation, Op)

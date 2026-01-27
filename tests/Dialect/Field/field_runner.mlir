@@ -22,6 +22,11 @@
 !PFm = !field.pf<7:i32, true>
 !QF = !field.ef<2x!PF, 6:i32>
 !QFm = !field.ef<2x!PFm, 6:i32>
+// Tower extension: Fp6 = (Fp2)^3 where Fp6 = Fp2[w]/(w³ - 2)
+// Note: For degree-2 tower extensions, scalar non-residues are always
+// quadratic residues in the base extension field (by Fermat's theorem).
+// So we use degree 3 instead, where 2^16 = 2 ≠ 1 in Fp2 (valid cubic non-residue).
+!Fp6 = !field.ef<3x!QF, 2:i32>
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
@@ -63,6 +68,21 @@ func.func @test_power() {
   %U4 = memref.cast %16 : memref<2xi32> to memref<*xi32>
   func.call @printMemrefI32(%U4) : (memref<*xi32>) -> ()
 
+  // Tower extension field (Fp6 = (Fp2)^3) test
+  %base_qf_0 = field.ext_from_coeffs %base, %base: (i32, i32) -> !QF
+  %base_qf_1 = field.ext_from_coeffs %base, %base: (i32, i32) -> !QF
+  %base_qf_2 = field.ext_from_coeffs %base, %base: (i32, i32) -> !QF
+  %base_fp6 = field.ext_from_coeffs %base_qf_0, %base_qf_1, %base_qf_2: (!QF, !QF, !QF) -> !Fp6
+  %res3 = field.powui %base_fp6, %exp : !Fp6, i64
+  %fp6_coeff0, %fp6_coeff1, %fp6_coeff2 = field.ext_to_coeffs %res3 : (!Fp6) -> (!QF, !QF, !QF)
+  %fp6_c0_0, %fp6_c0_1 = field.ext_to_coeffs %fp6_coeff0 : (!QF) -> (i32, i32)
+  %fp6_c1_0, %fp6_c1_1 = field.ext_to_coeffs %fp6_coeff1 : (!QF) -> (i32, i32)
+  %fp6_c2_0, %fp6_c2_1 = field.ext_to_coeffs %fp6_coeff2 : (!QF) -> (i32, i32)
+  %17 = tensor.from_elements %fp6_c0_0, %fp6_c0_1, %fp6_c1_0, %fp6_c1_1, %fp6_c2_0, %fp6_c2_1 : tensor<6xi32>
+  %18 = bufferization.to_buffer %17 : tensor<6xi32> to memref<6xi32>
+  %U5 = memref.cast %18 : memref<6xi32> to memref<*xi32>
+  func.call @printMemrefI32(%U5) : (memref<*xi32>) -> ()
+
   return
 }
 
@@ -70,3 +90,4 @@ func.func @test_power() {
 // CHECK_TEST_POWER: [6]
 // CHECK_TEST_POWER: [2, 5]
 // CHECK_TEST_POWER: [2, 5]
+// CHECK_TEST_POWER: [3, 4, 2, 5, 3, 4]

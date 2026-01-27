@@ -144,16 +144,19 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       return failure();
     }
 
+    // For tower extensions, use the underlying prime field
     auto modType = cast<mod_arith::ModArithType>(
-        typeConverter->convertType(efType.getBaseField()));
+        typeConverter->convertType(efType.getBasePrimeField()));
 
     auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
-    SmallVector<Value> coeffs;
+    SmallVector<Value> primeCoeffs;
     for (auto coeff : denseAttr.getValues<APInt>()) {
       auto coeffAttr = IntegerAttr::get(modType.getStorageType(), coeff);
-      coeffs.push_back(b.create<mod_arith::ConstantOp>(modType, coeffAttr));
+      primeCoeffs.push_back(
+          b.create<mod_arith::ConstantOp>(modType, coeffAttr));
     }
-    rewriter.replaceOp(op, fromCoeffs(b, op.getType(), coeffs));
+    // Use fromPrimeCoeffs to properly handle tower extension fields
+    rewriter.replaceOp(op, fromPrimeCoeffs(b, efType, primeCoeffs));
     return success();
   }
 };
@@ -451,9 +454,7 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
         init = b.create<ToMontOp>(montType, init);
       }
     } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      // TODO(chokobole): Support towers of extension field.
-      modulus =
-          cast<PrimeFieldType>(efType.getBaseField()).getModulus().getValue();
+      modulus = efType.getBasePrimeField().getModulus().getValue();
       init = field::createFieldOne(efType, b);
     } else {
       op.emitOpError("unsupported output type");
@@ -501,10 +502,10 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       exp = b.create<arith::RemUIOp>(
           exp, b.create<arith::ConstantIntOp>(intType, modulus - 1));
     } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      unsigned degree = efType.getDegree();
-      modulus = modulus.zext(modBitWidth * degree);
+      unsigned degreeOverPrime = efType.getDegreeOverPrime();
+      modulus = modulus.zext(modBitWidth * degreeOverPrime);
       APInt order = modulus;
-      for (unsigned i = 1; i < degree; ++i) {
+      for (unsigned i = 1; i < degreeOverPrime; ++i) {
         order = order * modulus;
       }
       order = order - 1;
