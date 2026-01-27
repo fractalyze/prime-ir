@@ -1224,7 +1224,11 @@ OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn,
     return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
                                                                      &folder);
   }
-  if (isa<ExtensionFieldType>(elemType)) {
+  if (auto efType = dyn_cast<ExtensionFieldType>(elemType)) {
+    // Skip folding for tower extensions (not yet supported)
+    if (efType.isTower()) {
+      return {};
+    }
     GenericUnaryExtFieldFolder<Func> folder(type, fn, inputType);
     return UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
         adaptor, &folder);
@@ -1243,7 +1247,11 @@ OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
     return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
                                                                       &folder);
   }
-  if (isa<ExtensionFieldType>(elemType)) {
+  if (auto efType = dyn_cast<ExtensionFieldType>(elemType)) {
+    // Skip folding for tower extensions (not yet supported)
+    if (efType.isTower()) {
+      return {};
+    }
     ExtAdditiveFolder<Op, Func> folder(op, fn);
     return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
         adaptor, &folder);
@@ -1262,7 +1270,11 @@ foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
     return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
                                                                       &folder);
   }
-  if (isa<ExtensionFieldType>(elemType)) {
+  if (auto efType = dyn_cast<ExtensionFieldType>(elemType)) {
+    // Skip folding for tower extensions (not yet supported)
+    if (efType.isTower()) {
+      return {};
+    }
     ExtMultiplicativeFolder<Op, Func> folder(op, fn);
     return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
         adaptor, &folder);

@@ -18,26 +18,25 @@ limitations under the License.
 #include "gtest/gtest.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Utils/ZkDtypes.h"
-#include "zk_dtypes/include/elliptic_curve/bn/bn254/fqx2.h"
 #include "zk_dtypes/include/field/babybear/babybearx4.h"
 #include "zk_dtypes/include/field/goldilocks/goldilocksx3.h"
+#include "zk_dtypes/include/field/mersenne31/mersenne31x2.h"
+#include "zk_dtypes/include/field/mersenne31/mersenne31x2x2.h"
 
 namespace mlir::prime_ir::field {
 
 template <typename ExtF>
 class ExtensionFieldOperationTest : public testing::Test {
 public:
-  static constexpr uint32_t N = ExtF::Config::kDegreeOverBaseField;
-  using F = typename ExtF::Config::BaseField;
+  // Use the type trait to get the correct ExtensionFieldOperation type
+  // (handles both non-tower and tower extensions)
+  using EfOp = typename detail::ZkDtypeToExtensionFieldOp<ExtF>::type;
 
   static void SetUpTestSuite() { context.loadDialect<FieldDialect>(); }
 
   void runBinaryOperationTest(
       std::function<ExtF(const ExtF &, const ExtF &)> f_operation,
-      std::function<
-          ExtensionFieldOperation<N>(const ExtensionFieldOperation<N> &,
-                                     const ExtensionFieldOperation<N> &)>
-          ef_operation,
+      std::function<EfOp(const EfOp &, const EfOp &)> ef_operation,
       bool bMustBeNonZero = false) {
     auto a = ExtF::Random();
     auto b = ExtF::Random();
@@ -51,22 +50,16 @@ public:
 
   void runBinaryOperationTest(
       std::function<ExtF(const ExtF &, const ExtF &)> f_operation,
-      std::function<
-          ExtensionFieldOperation<N>(const ExtensionFieldOperation<N> &,
-                                     const ExtensionFieldOperation<N> &)>
-          ef_operation,
+      std::function<EfOp(const EfOp &, const EfOp &)> ef_operation,
       const ExtF &a, const ExtF &b) {
-    auto efA = ExtensionFieldOperation<N>::fromZkDtype(&context, a);
-    auto efB = ExtensionFieldOperation<N>::fromZkDtype(&context, b);
-    EXPECT_EQ(
-        ExtensionFieldOperation<N>::fromZkDtype(&context, f_operation(a, b)),
-        ef_operation(efA, efB));
+    auto efA = EfOp::fromZkDtype(&context, a);
+    auto efB = EfOp::fromZkDtype(&context, b);
+    EXPECT_EQ(EfOp::fromZkDtype(&context, f_operation(a, b)),
+              ef_operation(efA, efB));
   }
 
   void runUnaryOperationTest(std::function<ExtF(const ExtF &)> f_operation,
-                             std::function<ExtensionFieldOperation<N>(
-                                 const ExtensionFieldOperation<N> &)>
-                                 ef_operation,
+                             std::function<EfOp(const EfOp &)> ef_operation,
                              bool aMustBeNonZero = false) {
     auto a = ExtF::Random();
     if (aMustBeNonZero) {
@@ -78,13 +71,10 @@ public:
   }
 
   void runUnaryOperationTest(std::function<ExtF(const ExtF &)> f_operation,
-                             std::function<ExtensionFieldOperation<N>(
-                                 const ExtensionFieldOperation<N> &)>
-                                 ef_operation,
+                             std::function<EfOp(const EfOp &)> ef_operation,
                              const ExtF &a) {
-    auto efA = ExtensionFieldOperation<N>::fromZkDtype(&context, a);
-    EXPECT_EQ(ExtensionFieldOperation<N>::fromZkDtype(&context, f_operation(a)),
-              ef_operation(efA));
+    auto efA = EfOp::fromZkDtype(&context, a);
+    EXPECT_EQ(EfOp::fromZkDtype(&context, f_operation(a)), ef_operation(efA));
   }
 
   static MLIRContext context;
@@ -94,18 +84,14 @@ template <typename F>
 MLIRContext ExtensionFieldOperationTest<F>::context;
 
 using ExtensionFieldTypes = testing::Types<
-    // modulus bits = 2³¹
-    // modulus.getBitWidth() == 32
-    // modulus.getActiveBits() == 31
-    zk_dtypes::BabybearX4Mont, zk_dtypes::BabybearX4,
-    // modulus bits = 2⁶⁴
-    // modulus.getBitWidth() == 64
-    // modulus.getActiveBits() == 64
-    zk_dtypes::GoldilocksX3Mont, zk_dtypes::GoldilocksX3,
-    // modulus bits = 2²⁵⁴
-    // modulus.getBitWidth() == 254
-    // modulus.getActiveBits() == 254
-    zk_dtypes::bn254::FqX2Mont, zk_dtypes::bn254::FqX2>;
+    // degree = 2
+    zk_dtypes::Mersenne31X2,
+    // degree = 3
+    zk_dtypes::GoldilocksX3,
+    // degree = 4
+    zk_dtypes::BabybearX4,
+    // degree = 2 x 2
+    zk_dtypes::Mersenne31X2X2>;
 TYPED_TEST_SUITE(ExtensionFieldOperationTest, ExtensionFieldTypes);
 
 //===----------------------------------------------------------------------===//
@@ -195,17 +181,17 @@ TYPED_TEST(ExtensionFieldOperationTest, Inverse) {
 
 TYPED_TEST(ExtensionFieldOperationTest, ZeroAndOne) {
   using ExtensionFieldType = TypeParam;
-  static constexpr uint32_t N =
-      ExtensionFieldType::Config::kDegreeOverBaseField;
+  using EfOp =
+      typename detail::ZkDtypeToExtensionFieldOp<ExtensionFieldType>::type;
 
   auto zero = ExtensionFieldType::Zero();
-  auto efZero = ExtensionFieldOperation<N>::fromZkDtype(&this->context, zero);
+  auto efZero = EfOp::fromZkDtype(&this->context, zero);
   EXPECT_TRUE(efZero.isZero());
   EXPECT_FALSE(efZero.isOne());
   EXPECT_EQ(efZero, efZero.getZero());
 
   auto one = ExtensionFieldType::One();
-  auto efOne = ExtensionFieldOperation<N>::fromZkDtype(&this->context, one);
+  auto efOne = EfOp::fromZkDtype(&this->context, one);
   EXPECT_FALSE(efOne.isZero());
   EXPECT_TRUE(efOne.isOne());
   EXPECT_EQ(efOne, efOne.getOne());
@@ -214,7 +200,7 @@ TYPED_TEST(ExtensionFieldOperationTest, ZeroAndOne) {
   while (rnd.IsZero() || rnd.IsOne()) {
     rnd = ExtensionFieldType::Random();
   }
-  auto efRnd = ExtensionFieldOperation<N>::fromZkDtype(&this->context, rnd);
+  auto efRnd = EfOp::fromZkDtype(&this->context, rnd);
   EXPECT_FALSE(efRnd.isZero());
   EXPECT_FALSE(efRnd.isOne());
 }

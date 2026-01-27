@@ -275,7 +275,7 @@ constexpr auto kExtDegreeSequence = makeExtDegreeSequence<kMinExtDegree>(
 LogicalResult
 ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
                            unsigned degree, Type baseField,
-                           IntegerAttr nonResidue) {
+                           Attribute nonResidue) {
   if (degree < 2 || degree > kMaxExtDegree) {
     return emitError() << "extension field degree must be between 2 and "
                        << kMaxExtDegree << ", got " << degree;
@@ -297,7 +297,8 @@ ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
   // For direct extensions over prime fields, validate that nonResidue is
   // actually a non-residue: nonResidue^((p - 1) / n) ≢ 1 (mod p)
   auto pfType = cast<PrimeFieldType>(baseField);
-  auto nrOp = PrimeFieldOperation::fromUnchecked(nonResidue, pfType);
+  auto nrOp =
+      PrimeFieldOperation::fromUnchecked(cast<IntegerAttr>(nonResidue), pfType);
   APInt p = pfType.getModulus().getValue();
   APInt exp = (p - 1).udiv(APInt(p.getBitWidth(), degree));
   if (nrOp.power(exp).isOne()) {
@@ -376,19 +377,28 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
 
 void ExtensionFieldType::print(AsmPrinter &printer) const {
   Type baseField = getBaseField();
-  auto nonResidue = getNonResidue();
+  Attribute nonResidue = getNonResidue();
 
-  // Convert non-residue from Montgomery form for printing
   if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    // Non-tower extension: nonResidue is IntegerAttr
+    auto intAttr = cast<IntegerAttr>(nonResidue);
     if (pfType.getIsMontgomery()) {
-      nonResidue =
-          mod_arith::getAttrAsStandardForm(pfType.getModulus(), nonResidue);
+      intAttr = mod_arith::getAttrAsStandardForm(pfType.getModulus(), intAttr);
     }
+    printer << "<" << getDegree() << "x" << baseField << ", " << intAttr << ">";
+  } else if (auto efType = dyn_cast<ExtensionFieldType>(baseField)) {
+    // Tower extension: nonResidue is DenseIntElementsAttr, print first coeff
+    DenseElementsAttr denseAttr = cast<DenseIntElementsAttr>(nonResidue);
+    if (efType.isMontgomery()) {
+      denseAttr = mod_arith::getAttrAsStandardForm(
+          efType.getBasePrimeField().getModulus(), denseAttr);
+    }
+    auto values = denseAttr.getValues<APInt>();
+    APInt firstCoeff = *values.begin();
+    auto intAttr = IntegerAttr::get(
+        efType.getBasePrimeField().getStorageType(), firstCoeff);
+    printer << "<" << getDegree() << "x" << baseField << ", " << intAttr << ">";
   }
-  // For tower extensions, print non-residue as-is
-
-  printer << "<" << getDegree() << "x" << baseField << ", " << nonResidue
-          << ">";
 }
 
 llvm::TypeSize ExtensionFieldType::getTypeSizeInBits(
