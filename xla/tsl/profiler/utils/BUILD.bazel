@@ -18,6 +18,16 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "lock_free_queue",
+    hdrs = ["lock_free_queue.h"],
+    deps = [
+        ":no_init",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/log:check",
+    ],
+)
+
+zkx_cc_library(
     name = "math_utils",
     hdrs = ["math_utils.h"],
 )
@@ -25,6 +35,17 @@ zkx_cc_library(
 zkx_cc_library(
     name = "no_init",
     hdrs = ["no_init.h"],
+)
+
+zkx_cc_library(
+    name = "per_thread",
+    hdrs = ["per_thread.h"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/debugging:leak_check",
+        "@com_google_absl//absl/synchronization",
+    ],
 )
 
 zkx_cc_library(
