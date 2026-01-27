@@ -56,11 +56,14 @@ ParseResult parseColonFieldType(AsmParser &parser, Type &type) {
 
   if (isa<PrimeFieldType>(type)) {
     return success();
+  } else if (isa<BinaryFieldType>(type)) {
+    return success();
   } else if (isa<ExtensionFieldType>(type)) {
     return success();
   }
-  return parser.emitError(parser.getCurrentLocation(),
-                          "expected prime field or extension field type");
+  return parser.emitError(
+      parser.getCurrentLocation(),
+      "expected prime field, binary field, or extension field type");
 }
 
 ParseResult validateAttribute(AsmParser &parser, Type type, Attribute attr,
@@ -170,6 +173,78 @@ PrimeFieldType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
 }
 
 ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
+  return type.clone(getStorageType());
+}
+
+//===----------------------------------------------------------------------===//
+// BinaryFieldType
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+BinaryFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
+                        unsigned towerLevel) {
+  if (towerLevel > kMaxTowerLevel) {
+    return emitError() << "binary field tower level must be between 0 and "
+                       << kMaxTowerLevel << ", got " << towerLevel;
+  }
+  return success();
+}
+
+// static
+Type BinaryFieldType::parse(AsmParser &parser) {
+  if (failed(parser.parseLess())) {
+    return nullptr;
+  }
+
+  unsigned towerLevel;
+  if (failed(parser.parseInteger(towerLevel))) {
+    return nullptr;
+  }
+
+  if (towerLevel > kMaxTowerLevel) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "binary field tower level must be between 0 and ")
+        << kMaxTowerLevel;
+    return nullptr;
+  }
+
+  if (failed(parser.parseGreater())) {
+    return nullptr;
+  }
+
+  return BinaryFieldType::get(parser.getContext(), towerLevel);
+}
+
+void BinaryFieldType::print(AsmPrinter &printer) const {
+  printer << "<" << getTowerLevel() << ">";
+}
+
+llvm::TypeSize BinaryFieldType::getTypeSizeInBits(
+    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return llvm::TypeSize::getFixed(getBitWidth());
+}
+
+uint64_t BinaryFieldType::getABIAlignment(
+    DataLayout const &dataLayout,
+    llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return dataLayout.getTypeABIAlignment(getStorageType());
+}
+
+TypedAttr BinaryFieldType::createConstantAttr(int64_t c) const {
+  APInt value(getBitWidth(), static_cast<uint64_t>(c));
+  // Mask to valid range
+  value = value.zextOrTrunc(getBitWidth());
+  return IntegerAttr::get(getStorageType(), value);
+}
+
+TypedAttr
+BinaryFieldType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  assert(values.size() == 1);
+  APInt value = values[0].zextOrTrunc(getBitWidth());
+  return IntegerAttr::get(getStorageType(), value);
+}
+
+ShapedType BinaryFieldType::overrideShapedType(ShapedType type) const {
   return type.clone(getStorageType());
 }
 

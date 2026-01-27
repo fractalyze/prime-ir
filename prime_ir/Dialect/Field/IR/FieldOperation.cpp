@@ -31,6 +31,9 @@ FieldOperation::operator APInt() const {
   if (auto pfOperation = std::get_if<PrimeFieldOperation>(&operation)) {
     return static_cast<APInt>(*pfOperation);
   }
+  if (auto bfOperation = std::get_if<BinaryFieldOperation>(&operation)) {
+    return static_cast<APInt>(*bfOperation);
+  }
   llvm_unreachable("Cannot convert ExtensionFieldOperation to APInt");
 }
 
@@ -38,9 +41,9 @@ FieldOperation::operator SmallVector<APInt>() const {
   return std::visit(
       [](const auto &op) -> SmallVector<APInt> {
         using T = std::decay_t<decltype(op)>;
-        if constexpr (std::is_same_v<T, PrimeFieldOperation>) {
-          llvm_unreachable(
-              "Cannot convert PrimeFieldOperation to SmallVector<APInt>");
+        if constexpr (std::is_same_v<T, PrimeFieldOperation> ||
+                      std::is_same_v<T, BinaryFieldOperation>) {
+          llvm_unreachable("Cannot convert scalar field to SmallVector<APInt>");
         } else {
           // Both non-tower and tower extension fields can be flattened
           // to SmallVector<APInt> using flattenToPrimeCoeffs()

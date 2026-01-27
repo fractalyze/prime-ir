@@ -144,13 +144,20 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
       modulus = pfType.getModulus().getValue();
       return success();
+    } else if (auto bfType = dyn_cast<BinaryFieldType>(elementType)) {
+      // Binary field: use 2^bitWidth as a "virtual modulus" for parsing
+      // The value will be masked to valid range
+      unsigned bitWidth = bfType.getBitWidth();
+      modulus = APInt::getOneBitSet(bitWidth + 1, bitWidth);
+      return success();
     } else if (auto extField = dyn_cast<ExtensionFieldType>(elementType)) {
       modulus = extField.getBasePrimeField().getModulus().getValue();
       return success();
     }
 
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected PrimeFieldType or ExtensionFieldType");
+    return parser.emitError(
+        parser.getCurrentLocation(),
+        "expected PrimeFieldType, BinaryFieldType, or ExtensionFieldType");
   };
 
   auto parseResult = parseOptionalModularOrExtendedModularInteger(
@@ -167,6 +174,16 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
       }
       auto valueAttr = IntegerAttr::get(pfType.getStorageType(), parsedInts[0]);
       result.addAttribute("value", maybeToMontgomery(pfType, valueAttr));
+    } else if (auto bfType = dyn_cast<BinaryFieldType>(parsedType)) {
+      if (parsedInts.size() != 1) {
+        return parser.emitError(parser.getCurrentLocation())
+               << "binary field constant must have a single value, but got "
+               << parsedInts.size();
+      }
+      // Mask to valid bit range
+      APInt value = parsedInts[0].zextOrTrunc(bfType.getBitWidth());
+      result.addAttribute("value",
+                          IntegerAttr::get(bfType.getStorageType(), value));
     } else if (auto efType = dyn_cast<ExtensionFieldType>(parsedType)) {
       if (parsedInts.size() != efType.getDegreeOverPrime()) {
         return parser.emitError(parser.getCurrentLocation())
@@ -238,6 +255,19 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     result.addTypes(parsedType);
     return success();
   }
+  if (auto bfType = dyn_cast<BinaryFieldType>(elementType)) {
+    // Adjust each APInt to the correct bitwidth for binary field storage
+    SmallVector<APInt> adjustedInts;
+    adjustedInts.reserve(parsedInts.size());
+    for (const APInt &val : parsedInts) {
+      adjustedInts.push_back(val.zextOrTrunc(bfType.getBitWidth()));
+    }
+    auto denseElementsAttr = DenseIntElementsAttr::get(
+        shapedType.clone(bfType.getStorageType()), adjustedInts);
+    result.addAttribute("value", denseElementsAttr);
+    result.addTypes(parsedType);
+    return success();
+  }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
     auto pfType = efType.getBasePrimeField();
     // For tensor<Nx!EF{d}>, the attribute shape is [N, d].
@@ -260,8 +290,9 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 // static
 ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
                                    Type type, Location loc) {
-  if (!isa<PrimeFieldType>(getElementTypeOrSelf(type)) &&
-      !isa<ExtensionFieldType>(getElementTypeOrSelf(type))) {
+  auto elementType = getElementTypeOrSelf(type);
+  if (!isa<PrimeFieldType>(elementType) && !isa<BinaryFieldType>(elementType) &&
+      !isa<ExtensionFieldType>(elementType)) {
     return nullptr;
   }
 
@@ -278,8 +309,8 @@ Operation *FieldDialect::materializeConstant(OpBuilder &builder,
   if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
     return builder.create<arith::ConstantOp>(loc, boolAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
-    if (!isa<PrimeFieldType>(getElementTypeOrSelf(type)) &&
-        !isa<ExtensionFieldType>(getElementTypeOrSelf(type))) {
+    if (!isa<PrimeFieldType, BinaryFieldType, ExtensionFieldType>(
+            getElementTypeOrSelf(type))) {
       // This could be a folding result of CmpOp.
       return builder.create<arith::ConstantOp>(loc, denseElementsAttr);
     }
@@ -812,6 +843,13 @@ struct ExtensionFieldConstantFolderConfig {
   using TensorAttr = DenseIntElementsAttr;
 };
 
+struct BinaryFieldConstantFolderConfig {
+  using NativeInputType = APInt;
+  using NativeOutputType = APInt;
+  using ScalarAttr = IntegerAttr;
+  using TensorAttr = DenseIntElementsAttr;
+};
+
 template <typename BaseDelegate>
 class PrimeFieldFolderMixin : public BaseDelegate {
 public:
@@ -872,6 +910,28 @@ public:
 protected:
   Type type;
   ExtensionFieldType efType;
+};
+
+template <typename BaseDelegate>
+class BinaryFieldFolderMixin : public BaseDelegate {
+public:
+  explicit BinaryFieldFolderMixin(Type type)
+      : bfType(cast<BinaryFieldType>(getElementTypeOrSelf(type))) {}
+
+  APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
+
+  OpFoldResult getScalarAttr(const APInt &value) const final {
+    return IntegerAttr::get(bfType.getStorageType(), value);
+  }
+
+  OpFoldResult getTensorAttr(ShapedType type,
+                             ArrayRef<APInt> values) const final {
+    return DenseIntElementsAttr::get(type.clone(bfType.getStorageType()),
+                                     values);
+  }
+
+protected:
+  BinaryFieldType bfType;
 };
 
 //===----------------------------------------------------------------------===//
@@ -955,6 +1015,23 @@ public:
 private:
   Func fn;
   ExtensionFieldType inputEfType;
+};
+
+template <typename Func>
+class GenericUnaryBinaryFieldFolder
+    : public BinaryFieldFolderMixin<
+          UnaryConstantFolder<BinaryFieldConstantFolderConfig>::Delegate> {
+public:
+  GenericUnaryBinaryFieldFolder(Type type, Func fn)
+      : BinaryFieldFolderMixin(type), fn(fn) {}
+
+  APInt operate(const APInt &value) const final {
+    return static_cast<APInt>(
+        fn(FieldOperation::fromUnchecked(value, this->bfType)));
+  }
+
+private:
+  Func fn;
 };
 
 template <typename BaseDelegate, typename Op, typename Func>
@@ -1051,6 +1128,26 @@ public:
   // Subclasses (Additive/Multiplicative) will override with specific logic.
   OpFoldResult foldTensor(DenseIntElementsAttr rhs) const override {
     return {};
+  }
+
+protected:
+  Op *const op;
+  Func fn;
+};
+
+template <typename BaseDelegate, typename Op, typename Func>
+class GenericBinaryBinaryFieldConstantFolder
+    : public BinaryFieldFolderMixin<BaseDelegate> {
+public:
+  GenericBinaryBinaryFieldConstantFolder(Op *op, Func fn)
+      : BinaryFieldFolderMixin<BaseDelegate>(op->getType()), op(op), fn(fn) {}
+
+  OpFoldResult getLhs() const final { return op->getLhs(); }
+
+  APInt operate(const APInt &a, const APInt &b) const final {
+    return static_cast<APInt>(
+        fn(FieldOperation::fromUnchecked(a, this->bfType),
+           FieldOperation::fromUnchecked(b, this->bfType)));
   }
 
 protected:
@@ -1196,6 +1293,39 @@ private:
   SmallVector<APInt> one;
 };
 
+template <typename Op, typename Func>
+class BinaryFieldAdditiveFolder
+    : public GenericBinaryBinaryFieldConstantFolder<
+          AdditiveConstantFolderDelegate<BinaryFieldConstantFolderConfig>, Op,
+          Func> {
+public:
+  using GenericBinaryBinaryFieldConstantFolder<
+      AdditiveConstantFolderDelegate<BinaryFieldConstantFolderConfig>, Op,
+      Func>::GenericBinaryBinaryFieldConstantFolder;
+
+  bool isZero(const APInt &value) const final { return value.isZero(); }
+};
+
+template <typename Op, typename Func>
+class BinaryFieldMultiplicativeFolder
+    : public GenericBinaryBinaryFieldConstantFolder<
+          MultiplicativeConstantFolderDelegate<BinaryFieldConstantFolderConfig>,
+          Op, Func> {
+public:
+  BinaryFieldMultiplicativeFolder(Op *op, Func fn)
+      : GenericBinaryBinaryFieldConstantFolder<
+            MultiplicativeConstantFolderDelegate<
+                BinaryFieldConstantFolderConfig>,
+            Op, Func>(op, fn) {
+    one = static_cast<APInt>(FieldOperation(uint64_t{1}, this->bfType));
+  }
+  bool isZero(const APInt &value) const final { return value.isZero(); }
+  bool isOne(const APInt &value) const final { return value == one; }
+
+private:
+  APInt one;
+};
+
 //===----------------------------------------------------------------------===//
 // Helper Functions
 //===----------------------------------------------------------------------===//
@@ -1210,6 +1340,11 @@ OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn,
       .Case<PrimeFieldType>([&](auto) {
         GenericUnaryPrimeFieldFolder<Func> folder(type, fn, inputType);
         return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      .template Case<BinaryFieldType>([&](auto) {
+        GenericUnaryBinaryFieldFolder<Func> folder(type, fn);
+        return UnaryConstantFolder<BinaryFieldConstantFolderConfig>::fold(
             adaptor, &folder);
       })
       .template Case<ExtensionFieldType>([&](auto) {
@@ -1233,6 +1368,11 @@ OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
         return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
             adaptor, &folder);
       })
+      .template Case<BinaryFieldType>([&](auto) {
+        BinaryFieldAdditiveFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<BinaryFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
       .template Case<ExtensionFieldType>([&](auto) {
         ExtAdditiveFolder<Op, Func> folder(op, fn);
         return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
@@ -1252,6 +1392,11 @@ foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
       .Case<PrimeFieldType>([&](auto) {
         PrimeMultiplicativeFolder<Op, Func> folder(op, fn);
         return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      .template Case<BinaryFieldType>([&](auto) {
+        BinaryFieldMultiplicativeFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<BinaryFieldConstantFolderConfig>::fold(
             adaptor, &folder);
       })
       .template Case<ExtensionFieldType>([&](auto) {
