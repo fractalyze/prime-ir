@@ -261,10 +261,10 @@ func.func @test_negate_fold() -> !jacobian {
   // negate((1, 2, 1)) = (1, P-2, 1) where P is the base field modulus
   // P = 21888242871839275222246405745257275088696311157297823662689037894645226208583
   // P - 2 = 21888242871839275222246405745257275088696311157297823662689037894645226208581
-  // CHECK: %[[C:.*]] = elliptic_curve.constant 1, 21888242871839275222246405745257275088696311157297823662689037894645226208581, 1 : [[JACOBIAN]]
+  // CHECK: %[[C:.*]] = elliptic_curve.constant dense<[1, 21888242871839275222246405745257275088696311157297823662689037894645226208581, 1]> : [[JACOBIAN]]
   // CHECK-NOT: elliptic_curve.negate
   // CHECK: return %[[C]] : [[JACOBIAN]]
-  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %0 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
   %1 = elliptic_curve.negate %0 : !jacobian
   return %1 : !jacobian
 }
@@ -276,7 +276,7 @@ func.func @test_double_fold() -> !jacobian {
   // CHECK: %[[C:.*]] = elliptic_curve.constant
   // CHECK-NOT: elliptic_curve.double
   // CHECK: return %[[C]] : [[JACOBIAN]]
-  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %0 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
   %1 = elliptic_curve.double %0 : !jacobian -> !jacobian
   return %1 : !jacobian
 }
@@ -288,8 +288,8 @@ func.func @test_add_fold() -> !jacobian {
   // CHECK: %[[C:.*]] = elliptic_curve.constant
   // CHECK-NOT: elliptic_curve.add
   // CHECK: return %[[C]] : [[JACOBIAN]]
-  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
-  %1 = elliptic_curve.constant 3, 4, 1 : !jacobian
+  %0 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
+  %1 = elliptic_curve.constant dense<[3, 4, 1]> : !jacobian
   %2 = elliptic_curve.add %0, %1 : !jacobian, !jacobian -> !jacobian
   return %2 : !jacobian
 }
@@ -301,8 +301,8 @@ func.func @test_sub_fold() -> !jacobian {
   // CHECK: %[[C:.*]] = elliptic_curve.constant
   // CHECK-NOT: elliptic_curve.sub
   // CHECK: return %[[C]] : [[JACOBIAN]]
-  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
-  %1 = elliptic_curve.constant 3, 4, 1 : !jacobian
+  %0 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
+  %1 = elliptic_curve.constant dense<[3, 4, 1]> : !jacobian
   %2 = elliptic_curve.sub %0, %1 : !jacobian, !jacobian -> !jacobian
   return %2 : !jacobian
 }
