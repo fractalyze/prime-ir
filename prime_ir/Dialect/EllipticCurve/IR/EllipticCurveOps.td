@@ -60,22 +60,31 @@ class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
 def EllipticCurve_ConstantOp : EllipticCurve_Op_Base<"constant", [ConstantLike]> {
   let summary = "Define a constant elliptic curve point via coordinates";
   let description = [{
-    Defines a constant elliptic curve point from integer coordinates. The number of
-    provided coordinates must match the point representation:
+    Defines a constant elliptic curve point from integer coordinates using
+    dense attribute syntax. The number of provided coordinates must match
+    the point representation:
     - 2 coordinates for Affine points
     - 3 coordinates for Jacobian points
     - 4 coordinates for XYZZ points
 
-    The resulting point must satisfy the specific curve equation (e.g., y² = x³ + ax + b).
+    For extension fields, each coordinate is an array of coefficients.
+    For tensors, provide an array of points.
 
     Example:
     ```mlir
-    // Affine point (x, y)
-    %0 = elliptic_curve.constant 1, 2 : !elliptic_curve.affine<#curve>
-    // Jacobian point (x, y, z)
-    %1 = elliptic_curve.constant 1, 2, 1 : !elliptic_curve.jacobian<#curve>
-    // XYZZ point (x, y, zz, zzz)
-    %2 = elliptic_curve.constant 1, 2, 1, 1 : !elliptic_curve.xyzz<#curve>
+    // Scalar points (prime field)
+    %0 = elliptic_curve.constant dense<[1, 2]> : !elliptic_curve.affine<#curve>
+    %1 = elliptic_curve.constant dense<[1, 2, 1]> : !elliptic_curve.jacobian<#curve>
+    %2 = elliptic_curve.constant dense<[1, 2, 1, 1]> : !elliptic_curve.xyzz<#curve>
+
+    // Tensor of points
+    %3 = elliptic_curve.constant dense<[[1, 2], [3, 4]]> : tensor<2x!elliptic_curve.affine<#curve>>
+
+    // Extension field (each coordinate is [c0, c1] for degree-2 extension)
+    %4 = elliptic_curve.constant dense<[[1, 2], [3, 4]]> : !elliptic_curve.affine<#g2curve>
+
+    // Tensor of extension field points
+    %5 = elliptic_curve.constant dense<[[[1, 2], [3, 4]], [[5, 6], [7, 8]]]> : tensor<2x!elliptic_curve.affine<#g2curve>>
     ```
   }];
   let arguments = (ins ArrayAttr:$coords);
