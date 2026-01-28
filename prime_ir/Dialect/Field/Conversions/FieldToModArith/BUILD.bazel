@@ -39,7 +39,6 @@ cc_library(
     hdrs = [
         "ExtensionFieldCodeGen.h",
         "FrobeniusCoeffs.h",
-        "VandermondeMatrix.h",
     ],
     deps = [
         ":ConversionUtils",
