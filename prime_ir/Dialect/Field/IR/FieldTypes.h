@@ -71,6 +71,25 @@ inline Value createFieldOne(Type fieldType, ImplicitLocOpBuilder &builder) {
   return createFieldConstant(fieldType, builder, 1);
 }
 
+// Create a coefficient vector with first element set to value, rest zeros.
+// Useful for embedding scalars into extension fields as [value, 0, 0, ...].
+inline SmallVector<APInt> makeScalarCoeffs(const APInt &value,
+                                           unsigned degree) {
+  SmallVector<APInt> coeffs(degree, APInt::getZero(value.getBitWidth()));
+  coeffs[0] = value;
+  return coeffs;
+}
+
+// Create a DenseIntElementsAttr representing a scalar in an extension field.
+inline DenseIntElementsAttr makeScalarExtFieldAttr(const APInt &value,
+                                                   unsigned degree,
+                                                   IntegerType storageType) {
+  auto coeffs = makeScalarCoeffs(value, degree);
+  return DenseIntElementsAttr::get(
+      RankedTensorType::get({static_cast<int64_t>(degree)}, storageType),
+      coeffs);
+}
+
 #include "prime_ir/Dialect/Field/IR/FieldTypesInterfaces.h.inc"
 
 } // namespace mlir::prime_ir::field

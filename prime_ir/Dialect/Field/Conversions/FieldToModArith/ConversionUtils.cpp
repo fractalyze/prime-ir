@@ -80,26 +80,14 @@ Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
   return fromCoeffs(b, efType, baseCoeffs);
 }
 
-Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                  int64_t n) {
-  return b.create<mod_arith::ConstantOp>(
-      convertPrimeFieldType(baseField),
-      PrimeFieldOperation(n, baseField).getIntegerAttr());
-}
-
-Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                     int64_t n) {
-  return b.create<mod_arith::ConstantOp>(
-      convertPrimeFieldType(baseField),
-      PrimeFieldOperation(n, baseField).inverse().getIntegerAttr());
-}
-
-Value createRationalConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                          int64_t num, int64_t denom) {
+Value createPrimeConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                       int64_t numerator, int64_t denominator) {
+  PrimeFieldOperation result(numerator, baseField);
+  if (denominator != 1) {
+    result = result / PrimeFieldOperation(denominator, baseField);
+  }
   return b.create<mod_arith::ConstantOp>(convertPrimeFieldType(baseField),
-                                         (PrimeFieldOperation(num, baseField) /
-                                          PrimeFieldOperation(denom, baseField))
-                                             .getIntegerAttr());
+                                         result.getIntegerAttr());
 }
 
 } // namespace mlir::prime_ir::field

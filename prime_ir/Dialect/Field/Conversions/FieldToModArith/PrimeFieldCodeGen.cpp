@@ -92,4 +92,16 @@ PrimeFieldCodeGen PrimeFieldCodeGen::CreateConst(int64_t constant) const {
           .getOutput());
 }
 
+PrimeFieldCodeGen PrimeFieldCodeGen::CreateRationalConst(int64_t num,
+                                                         int64_t denom) const {
+  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
+  auto modArithType = cast<mod_arith::ModArithType>(value.getType());
+  mod_arith::ModArithOperation result =
+      mod_arith::ModArithOperation(num, modArithType) /
+      mod_arith::ModArithOperation(denom, modArithType);
+  return PrimeFieldCodeGen(
+      b->create<mod_arith::ConstantOp>(value.getType(), result.getIntegerAttr())
+          .getOutput());
+}
+
 } // namespace mlir::prime_ir::field
