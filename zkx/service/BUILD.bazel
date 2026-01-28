@@ -271,6 +271,7 @@ zkx_cc_library(
         "//xla/tsl/platform:statusor",
         "//zkx:executable_run_options",
         "//zkx:status_macros",
+        "//zkx:util",
         "//zkx/hlo/ir:hlo",
         "@com_google_absl//absl/hash",
         "@com_google_absl//absl/status:statusor",

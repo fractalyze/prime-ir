@@ -21,6 +21,7 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/service/pattern_matcher.h"
 #include "zkx/status_macros.h"
+#include "zkx/util.h"
 
 namespace zkx {
 
@@ -267,6 +268,70 @@ absl::StatusOr<std::vector<GlobalDeviceId>> GetParticipatingDevices(
         participants.emplace_back(device_assignment(replica_id, partition_id));
       }
       return participants;
+    }
+  }
+}
+
+absl::StatusOr<std::vector<int64_t>> GetParticipantCountsForReplicaGroups(
+    int64_t num_replicas, int64_t num_partitions,
+    absl::Span<const ReplicaGroup> replica_groups,
+    CollectiveOpGroupMode group_mode) {
+  std::vector<int64_t> participant_counts;
+  std::vector<ReplicaGroup> participating_replica_groups =
+      SpanToVector(replica_groups);
+
+  // If replica groups are empty, assume a group with all replicas.
+  if (replica_groups.empty()) {
+    if (group_mode == CollectiveOpGroupMode::kFlattenedID) {
+      // replica groups contain flattened-ids and cannot be empty.
+      TF_RET_CHECK(!replica_groups.empty())
+          << "replica groups cannot be empty for kFlattenedID mode";
+    }
+
+    int total_participant_count;
+    if (group_mode == CollectiveOpGroupMode::kCrossPartition) {
+      // replica group are partition ids.
+      total_participant_count = num_partitions;
+    } else {
+      // replica group are replica ids.
+      total_participant_count = num_replicas;
+    }
+
+    ReplicaGroup replica_group = ReplicaGroup();
+    for (int id = 0; id < total_participant_count; id++) {
+      replica_group.add_replica_ids(id);
+    }
+    participating_replica_groups.push_back(replica_group);
+  }
+
+  switch (group_mode) {
+    case CollectiveOpGroupMode::kCrossReplica: {
+      for (const auto& replica_group : participating_replica_groups) {
+        for (int partition_id = 0; partition_id < num_partitions;
+             ++partition_id) {
+          participant_counts.push_back(replica_group.replica_ids().size());
+        }
+      }
+      return participant_counts;
+    }
+    case CollectiveOpGroupMode::kCrossPartition: {
+      for (const auto& replica_group : participating_replica_groups) {
+        participant_counts.push_back(replica_group.replica_ids().size());
+      }
+      return participant_counts;
+    }
+    case CollectiveOpGroupMode::kCrossReplicaAndPartition: {
+      for (const auto& replica_group : participating_replica_groups) {
+        participant_counts.push_back(replica_group.replica_ids().size() *
+                                     num_partitions);
+      }
+      return participant_counts;
+    }
+    case CollectiveOpGroupMode::kFlattenedID: {
+      for (const auto& replica_group : participating_replica_groups) {
+        participant_counts.push_back(replica_group.replica_ids().size());
+      }
+      return participant_counts;
     }
   }
 }
