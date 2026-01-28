@@ -39,12 +39,15 @@
 
 // Packed 16 x BF8 vector multiplication should use GFNI (128-bit)
 // CHECK-GFNI-LABEL: @test_packed_bf8_mul_128
+// CHECK-GFNI: builtin.unrealized_conversion_cast
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8affineqb
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8mulb
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8affineqb
+// CHECK-GFNI: builtin.unrealized_conversion_cast
 // CHECK-PCLMULQDQ-LABEL: @test_packed_bf8_mul_128
 // CHECK-PCLMULQDQ: field.mul
 // CHECK-ALL-LABEL: @test_packed_bf8_mul_128
+// CHECK-ALL: builtin.unrealized_conversion_cast
 // CHECK-ALL: llvm.inline_asm{{.*}}vgf2p8affineqb
 func.func @test_packed_bf8_mul_128(%a: vector<16x!BF8>, %b: vector<16x!BF8>) -> vector<16x!BF8> {
   %c = field.mul %a, %b : vector<16x!BF8>
@@ -53,12 +56,15 @@ func.func @test_packed_bf8_mul_128(%a: vector<16x!BF8>, %b: vector<16x!BF8>) -> 
 
 // Packed 32 x BF8 vector multiplication should use GFNI (256-bit AVX2)
 // CHECK-GFNI-LABEL: @test_packed_bf8_mul_256
+// CHECK-GFNI: builtin.unrealized_conversion_cast
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8affineqb
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8mulb
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8affineqb
+// CHECK-GFNI: builtin.unrealized_conversion_cast
 // CHECK-PCLMULQDQ-LABEL: @test_packed_bf8_mul_256
 // CHECK-PCLMULQDQ: field.mul
 // CHECK-ALL-LABEL: @test_packed_bf8_mul_256
+// CHECK-ALL: builtin.unrealized_conversion_cast
 // CHECK-ALL: llvm.inline_asm{{.*}}vgf2p8affineqb
 func.func @test_packed_bf8_mul_256(%a: vector<32x!BF8>, %b: vector<32x!BF8>) -> vector<32x!BF8> {
   %c = field.mul %a, %b : vector<32x!BF8>
@@ -67,12 +73,15 @@ func.func @test_packed_bf8_mul_256(%a: vector<32x!BF8>, %b: vector<32x!BF8>) -> 
 
 // Packed 64 x BF8 vector multiplication should use GFNI (512-bit AVX-512)
 // CHECK-GFNI-LABEL: @test_packed_bf8_mul_512
+// CHECK-GFNI: builtin.unrealized_conversion_cast
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8affineqb
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8mulb
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8affineqb
+// CHECK-GFNI: builtin.unrealized_conversion_cast
 // CHECK-PCLMULQDQ-LABEL: @test_packed_bf8_mul_512
 // CHECK-PCLMULQDQ: field.mul
 // CHECK-ALL-LABEL: @test_packed_bf8_mul_512
+// CHECK-ALL: builtin.unrealized_conversion_cast
 // CHECK-ALL: llvm.inline_asm{{.*}}vgf2p8affineqb
 func.func @test_packed_bf8_mul_512(%a: vector<64x!BF8>, %b: vector<64x!BF8>) -> vector<64x!BF8> {
   %c = field.mul %a, %b : vector<64x!BF8>
@@ -120,12 +129,15 @@ func.func @test_tensor_bf8_mul(%a: tensor<16x!BF8>, %b: tensor<16x!BF8>) -> tens
 
 // Vector square should use GFNI
 // CHECK-GFNI-LABEL: @test_packed_bf8_square_128
+// CHECK-GFNI: builtin.unrealized_conversion_cast
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8affineqb
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8mulb
 // CHECK-GFNI: llvm.inline_asm{{.*}}vgf2p8affineqb
+// CHECK-GFNI: builtin.unrealized_conversion_cast
 // CHECK-PCLMULQDQ-LABEL: @test_packed_bf8_square_128
 // CHECK-PCLMULQDQ: field.square
 // CHECK-ALL-LABEL: @test_packed_bf8_square_128
+// CHECK-ALL: builtin.unrealized_conversion_cast
 // CHECK-ALL: llvm.inline_asm{{.*}}vgf2p8affineqb
 func.func @test_packed_bf8_square_128(%a: vector<16x!BF8>) -> vector<16x!BF8> {
   %c = field.square %a : vector<16x!BF8>
