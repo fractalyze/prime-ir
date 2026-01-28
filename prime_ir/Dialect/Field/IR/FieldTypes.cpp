@@ -109,11 +109,10 @@ Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
     // Use getDegreeOverPrime() and getBasePrimeField() to support tower
     // extensions
     PrimeFieldType pfType = efType.getBasePrimeField();
-    unsigned bitWidth = pfType.getStorageBitWidth();
-    SmallVector<APInt> coeffs(efType.getDegreeOverPrime(), APInt(bitWidth, 0));
     // Use PrimeFieldOperation to handle Montgomery conversion if needed
     PrimeFieldOperation pfOp(static_cast<int64_t>(value), pfType);
-    coeffs[0] = static_cast<APInt>(pfOp);
+    SmallVector<APInt> coeffs =
+        makeScalarCoeffs(static_cast<APInt>(pfOp), efType.getDegreeOverPrime());
     attr = constantLike.createConstantAttrFromValues(coeffs);
   } else {
     attr = constantLike.createConstantAttrFromValues(
