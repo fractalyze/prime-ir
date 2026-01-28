@@ -48,6 +48,7 @@ limitations under the License.
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/path.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
 #include "zkx/service/gpu/llvm_gpu_backend/load_ir_module.h"
 #include "zkx/service/gpu/llvm_gpu_backend/utils.h"
 
@@ -220,11 +221,10 @@ absl::Status LinkAndOptimizeModule(
     const DebugOptions& debug_options, std::string_view device_bitcode_path,
     TargetModuleLinker module_linker, llvm::Triple default_target_triple,
     llvm::TargetMachine* target_machine, int inline_threshold) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::ScopedAnnotation annotation([&] {
-  //   return absl::StrFormat("ZkxOptimizeLlvmIr:#module=%s#",
-  //                          module->getName().str());
-  // });
+  tsl::profiler::ScopedAnnotation annotation([&] {
+    return absl::StrFormat("ZkxOptimizeLlvmIr:#module=%s#",
+                           module->getName().str());
+  });
   TF_RETURN_IF_ERROR(
       module_linker(module, gpu_version, debug_options, device_bitcode_path));
 

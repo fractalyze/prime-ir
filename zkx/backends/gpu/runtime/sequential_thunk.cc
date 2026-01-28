@@ -23,6 +23,8 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 
 #include "xla/tsl/platform/errors.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
+#include "zkx/backends/gpu/runtime/annotation.h"
 
 namespace zkx::gpu {
 
@@ -70,13 +72,11 @@ absl::Status SequentialThunk::Initialize(const InitializeParams& params) {
 }
 
 absl::Status SequentialThunk::ExecuteOnStream(const ExecuteParams& params) {
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // std::optional<tsl::profiler::ScopedAnnotation> seq_annotation =
-  //     GetKernelAnnotation(profile_annotation());
+  std::optional<tsl::profiler::ScopedAnnotation> seq_annotation =
+      GetKernelAnnotation(profile_annotation());
   for (const std::unique_ptr<Thunk>& thunk : thunks_) {
-    // TODO(chokobole): Uncomment this. Dependency: profiler
-    // std::optional<tsl::profiler::ScopedAnnotation> annotation =
-    //     GetKernelAnnotation(thunk->profile_annotation());
+    std::optional<tsl::profiler::ScopedAnnotation> annotation =
+        GetKernelAnnotation(thunk->profile_annotation());
     if (params.mock_collectives && thunk->IsCollective()) {
       continue;
     }

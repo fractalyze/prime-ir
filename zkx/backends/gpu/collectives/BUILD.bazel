@@ -47,6 +47,7 @@ zkx_cc_library(
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:hash",
         "//xla/tsl/platform:statusor",
+        "//xla/tsl/profiler/lib:traceme",
         "//zkx:debug_options_flags",
         "//zkx:executable_run_options",
         "//zkx/core/collectives:clique_id",

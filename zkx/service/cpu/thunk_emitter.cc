@@ -19,6 +19,7 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 
 #include "xla/tsl/platform/casts.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/backends/cpu/codegen/cpu_kernel_emitter.h"
 #include "zkx/backends/cpu/runtime/all_gather_thunk.h"
 #include "zkx/backends/cpu/runtime/all_reduce_thunk.h"
@@ -287,8 +288,7 @@ absl::StatusOr<ThunkSequence> ThunkEmitter::EmitEntryComputation(
   if (!module.has_schedule()) {
     return absl::InternalError("HLO module must be scheduled to emit thunks");
   }
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace("ThunkEmitter::EmitEntryComputation");
+  tsl::profiler::TraceMe trace("ThunkEmitter::EmitEntryComputation");
   return EmitHloComputation(module.entry_computation());
 }
 

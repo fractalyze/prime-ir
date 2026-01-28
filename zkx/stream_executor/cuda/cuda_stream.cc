@@ -27,6 +27,7 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/nvtx_utils.h"
 #include "zkx/stream_executor/activate_context.h"
 #include "zkx/stream_executor/cuda/cuda_context.h"
 #include "zkx/stream_executor/cuda/cuda_event.h"
@@ -463,9 +464,8 @@ absl::Status CudaStream::LaunchKernel(
 }
 
 void CudaStream::SetName(std::string name) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::NameStream(
-  //     absl::bit_cast<tsl::profiler::StreamHandle>(stream_handle_), name);
+  tsl::profiler::NameStream(
+      absl::bit_cast<tsl::profiler::StreamHandle>(stream_handle_), name);
   StreamCommon::SetName(std::move(name));
 }
 

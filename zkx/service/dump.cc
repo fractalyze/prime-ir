@@ -44,6 +44,7 @@ limitations under the License.
 #include "xla/tsl/lib/strings/proto_serialization.h"
 #include "xla/tsl/platform/path.h"
 #include "xla/tsl/platform/platform.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
 #include "zkx/debug_options_flags.h"
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
@@ -424,11 +425,10 @@ std::vector<std::string> DumpHloModuleImpl(const HloModule& module,
                                            std::string_view prefix,
                                            std::string_view suffix,
                                            const CanonicalDebugOptions& opts) {
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::ScopedAnnotation annotation([&] {
-  //   return absl::StrFormat("ZkxDumpHloModule:#module=%s,program_id=%d#",
-  //                          module.name(), module.unique_id());
-  // });
+  tsl::profiler::ScopedAnnotation annotation([&] {
+    return absl::StrFormat("ZkxDumpHloModule:#module=%s,program_id=%d#",
+                           module.name(), module.unique_id());
+  });
   std::string filename = FilenameFor(module, prefix, suffix);
 
   std::vector<std::optional<std::string>> file_paths;
@@ -969,11 +969,10 @@ void DumpIrIfEnabled(const HloModule& hlo_module,
   if (!DumpingEnabledForHloModule(hlo_module)) {
     return;
   }
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::ScopedAnnotation annotation([&] {
-  //   return absl::StrFormat("ZkxDumpLlvmIr:#module=%s,program_id=%d#",
-  //                          hlo_module.name(), hlo_module.unique_id());
-  // });
+  tsl::profiler::ScopedAnnotation annotation([&] {
+    return absl::StrFormat("ZkxDumpLlvmIr:#module=%s,program_id=%d#",
+                           hlo_module.name(), hlo_module.unique_id());
+  });
   // We can end up compiling different modules with the same name when using
   // ZkxJitCompiledCpuFunction::Compile. Avoid overwriting IR files previously
   // dumped from the same process in such cases.

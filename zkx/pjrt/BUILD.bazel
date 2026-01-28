@@ -313,6 +313,7 @@ zkx_cc_library(
         ":lru_cache",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:statusor",
+        "//xla/tsl/profiler/lib:traceme",
         "//zkx:compiler_macros",
         "//zkx:permutation_util",
         "//zkx:util",

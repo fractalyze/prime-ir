@@ -24,6 +24,7 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/service/cpu/xfeed_manager.h"
 
 namespace zkx::cpu {
@@ -44,8 +45,7 @@ InfeedThunk::InfeedThunk(Info info,
 
 tsl::AsyncValueRef<Thunk::ExecuteEvent> InfeedThunk::Execute(
     const ExecuteParams& params) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
+  tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
 
   VLOG(3) << absl::StreamFormat("Infeed %d buffers", infeed_buffers_.size());
 

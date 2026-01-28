@@ -18,7 +18,10 @@ limitations under the License.
 
 #include <utility>
 
+#include "absl/strings/str_format.h"
+
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
 
 namespace zkx {
 
@@ -30,11 +33,10 @@ absl::StatusOr<std::vector<std::unique_ptr<Executable>>> LlvmCompiler::Compile(
   std::vector<std::unique_ptr<HloModule>> modules =
       module_group->ConsumeModules();
   for (size_t i = 0; i < modules.size(); i++) {
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::ScopedAnnotation annotation{[&] {
-    //   return absl::StrFormat("ZlxCompile:#module=%s,program_id=%d#",
-    //                          modules[i]->name(), modules[i]->unique_id());
-    // }};
+    tsl::profiler::ScopedAnnotation annotation{[&] {
+      return absl::StrFormat("ZlxCompile:#module=%s,program_id=%d#",
+                             modules[i]->name(), modules[i]->unique_id());
+    }};
     TF_ASSIGN_OR_RETURN(modules[i], RunHloPasses(std::move(modules[i]),
                                                  executors[i][0], options));
     TF_ASSIGN_OR_RETURN(

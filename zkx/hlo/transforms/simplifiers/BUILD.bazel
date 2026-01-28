@@ -85,6 +85,7 @@ zkx_cc_library(
     deps = [
         "//xla/tsl/platform:numbers",
         "//xla/tsl/platform:statusor",
+        "//xla/tsl/profiler/lib:scoped_annotation",
         "//zkx/hlo/analysis:hlo_alias_analysis",
         "//zkx/hlo/analysis:tuple_points_to_analysis",
         "//zkx/hlo/ir:hlo",

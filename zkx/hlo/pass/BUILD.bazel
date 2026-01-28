@@ -38,6 +38,8 @@ zkx_cc_library(
     deps = [
         ":hlo_pass_interface",
         "//xla/tsl/platform:errors",
+        "//xla/tsl/profiler/lib:scoped_annotation",
+        "//xla/tsl/profiler/lib:traceme",
         "//zkx:status_macros",
         "//zkx/base:logging",
         "//zkx/service:compilation_stats",

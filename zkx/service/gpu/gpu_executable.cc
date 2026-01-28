@@ -239,10 +239,9 @@ absl::Status ExecuteThunks(
             << " additional compute streams.";
   }
 
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe hlo_module_activity(
-  //     [&] { return absl::StrCat(module_name, ":ZKX GPU module"); },
-  //     tsl::profiler::TraceMeLevel::kInfo);
+  tsl::profiler::TraceMe hlo_module_activity(
+      [&] { return absl::StrCat(module_name, ":ZKX GPU module"); },
+      tsl::profiler::TraceMeLevel::kInfo);
 
   std::unique_ptr<se::EventBasedTimer> execution_timer;
   if (ExecutionProfile* profile =
@@ -264,8 +263,7 @@ absl::Status ExecuteThunks(
   {  // Collect resource requirements from thunks.
     Thunk::PrepareParams prepare_params{&collective_params};
 
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::TraceMe trace([&] { return "Thunks::Prepare"; });
+    tsl::profiler::TraceMe trace([&] { return "Thunks::Prepare"; });
     TF_RETURN_IF_ERROR(
         thunk_sequence.Prepare(prepare_params, resource_requests));
   }
@@ -290,8 +288,7 @@ absl::Status ExecuteThunks(
         // run_options->run_options().ffi_execution_context(),
         run_options->local_device_count(), requires_exclusive_lock_on_gpu};
 
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::TraceMe trace([&] { return "Thunks::Initialize"; });
+    tsl::profiler::TraceMe trace([&] { return "Thunks::Initialize"; });
     TF_RETURN_IF_ERROR(thunk_sequence.Initialize(initialize_params));
   }
 
@@ -386,13 +383,12 @@ absl::Status RendezvousAfterInitialization(
           << num_local_participants << " local participants"
           << "; device_ordinal=" << run_options->device_ordinal();
 
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] {
-  //   return tsl::profiler::TraceMeEncode(
-  //       "RendezvousAfterInitialization",
-  //       {{"run_id", run_options->run_options().run_id().ToInt()},
-  //        {"num_local_participants", num_local_participants}});
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    return tsl::profiler::TraceMeEncode(
+        "RendezvousAfterInitialization",
+        {{"run_id", run_options->run_options().run_id().ToInt()},
+         {"num_local_participants", num_local_participants}});
+  });
 
   InitializationKey rendezvous_key{run_options->run_options().run_id()};
   std::string rendezvous_name = absl::StrFormat(
@@ -612,10 +608,9 @@ absl::StatusOr<BufferAllocations> GpuExecutable::GenerateBufferAllocations(
     VariantArguments arguments,
     const GpuExecutable::BufferAllocToDeviceMemoryMap* globals,
     se::DeviceMemoryAllocator* const memory_allocator, int device_ordinal) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe hlo_module_activity(
-  //     [&] { return std::string("Build buffer allocations"); },
-  //     tsl::profiler::TraceMeLevel::kInfo);
+  tsl::profiler::TraceMe hlo_module_activity(
+      [&] { return std::string("Build buffer allocations"); },
+      tsl::profiler::TraceMeLevel::kInfo);
 
   absl::Span<const BufferAllocation> allocations = GetAllocations();
   const int64_t num_buffers = allocations.size();
@@ -679,10 +674,9 @@ absl::StatusOr<ExecutionOutput> GpuExecutable::ExecuteAsyncOnStreamImpl(
 
   const GpuExecutable::BufferAllocToDeviceMemoryMap* globals;
   {
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::TraceMe hlo_module_activity(
-    //     [&] { return std::string("Resolve constant globals"); },
-    //     tsl::profiler::TraceMeLevel::kInfo);
+    tsl::profiler::TraceMe hlo_module_activity(
+        [&] { return std::string("Resolve constant globals"); },
+        tsl::profiler::TraceMeLevel::kInfo);
 
     TF_ASSIGN_OR_RETURN(globals, ResolveConstantGlobals(run_options->stream()));
   }

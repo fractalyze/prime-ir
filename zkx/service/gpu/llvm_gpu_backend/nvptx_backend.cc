@@ -32,6 +32,8 @@ limitations under the License.
 
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/service/gpu/llvm_gpu_backend/gpu_backend_lib.h"
 #include "zkx/service/gpu/llvm_gpu_backend/nvptx_libdevice_path.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
@@ -48,11 +50,10 @@ const int kDefaultInlineThreshold = 1100;
 // for the NVPTX target.
 std::string EmitModuleToPTX(llvm::Module* module,
                             llvm::TargetMachine* target_machine) {
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::ScopedAnnotation annotation([&] {
-  //   return absl::StrFormat("ZkxEmitGpuAsm:#module=%s#",
-  //                          module->getName().str());
-  // });
+  tsl::profiler::ScopedAnnotation annotation([&] {
+    return absl::StrFormat("ZkxEmitGpuAsm:#module=%s#",
+                           module->getName().str());
+  });
   std::string ptx;
   llvm::raw_string_ostream stream(ptx);
   llvm::buffer_ostream pstream(stream);
@@ -229,10 +230,9 @@ absl::StatusOr<std::string> CompileToPtx(
 
   std::string ptx;
   {
-    // TODO(chokobole): Uncomment this. Dependency: profiler
-    // tsl::profiler::TraceMe activity(
-    //     [&] { return absl::StrCat("Compiling IR:", module->getName().str());
-    //     }, tsl::profiler::TraceMeLevel::kInfo);
+    tsl::profiler::TraceMe activity(
+        [&] { return absl::StrCat("Compiling IR:", module->getName().str()); },
+        tsl::profiler::TraceMeLevel::kInfo);
     // TODO(chokobole): Uncomment this. Dependency: XLA_SCOPED_LOGGING_TIMER
     // XLA_SCOPED_LOGGING_TIMER("Compile module " + module->getName().str());
 

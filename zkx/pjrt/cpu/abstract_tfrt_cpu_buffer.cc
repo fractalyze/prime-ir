@@ -24,6 +24,8 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/connected_traceme.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/cpu_function_runtime.h"
 #include "zkx/layout_util.h"
 #include "zkx/pjrt/utils.h"
@@ -376,11 +378,10 @@ PjRtFuture<> AbstractTfrtCpuBuffer::DoAsyncWorkOnBuffer(
                      TrackedTfrtCpuDeviceBuffer* device_buffer) &&>
         work_on_buffer,
     bool should_do_work_sync, AsyncWorkRunner* async_work_runner) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // auto name_generator = [buffer_name = buffer_name(), method_name]() {
-  //   return absl::StrCat(buffer_name, "::", method_name);
-  // };
-  // tsl::profiler::TraceMe traceme(name_generator);
+  auto name_generator = [buffer_name = buffer_name(), method_name]() {
+    return absl::StrCat(buffer_name, "::", method_name);
+  };
+  tsl::profiler::TraceMe traceme(name_generator);
   if (IsEmptyTuple()) {
     return PjRtFuture<>(absl::InvalidArgumentError(
         absl::StrFormat("%s called on empty tuple", method_name)));
@@ -417,8 +418,7 @@ PjRtFuture<> AbstractTfrtCpuBuffer::DoAsyncWorkOnBuffer(
         [device_buffer_wait_av = std::move(device_buffer_wait_av),
          work_on_buffer = std::move(work_on_buffer), promise, device_buffer,
          device_shape, ready_on_exit = std::move(ready_on_exit)]() mutable {
-          // TODO(chokobole): Uncomment this. Dependency: Profiler
-          // tsl::profiler::TraceMe traceme("D2H Dispatch");
+          tsl::profiler::TraceMe traceme("D2H Dispatch");
           // Errors in src buffer are surfaced to user.
           if (auto* error = device_buffer_wait_av->GetErrorIfPresent()) {
             promise.Set(*error);
@@ -435,18 +435,15 @@ PjRtFuture<> AbstractTfrtCpuBuffer::DoAsyncWorkOnBuffer(
     return PjRtFuture<>(
         std::move(promise),
         /*on_block_start=*/
-        []() {
-          // TODO(chokobole): Uncomment this. Dependency: Profiler
-          // tsl::profiler::TraceMeProducer traceme(name_generator);
-          // return PjRtFutureHelpers::ProfilingKeys(
-          //     {/*traceme_context_id =*/traceme.GetContextId()});
-          return PjRtFutureHelpers::ProfilingKeys();
+        [name_generator]() {
+          tsl::profiler::TraceMeProducer traceme(name_generator);
+          return PjRtFutureHelpers::ProfilingKeys(
+              {/*traceme_context_id =*/traceme.GetContextId()});
         },
         /*on_block_end=*/
-        [](PjRtFutureHelpers::ProfilingKeys keys) {
-          // TODO(chokobole): Uncomment this. Dependency: Profiler
-          // tsl::profiler::TraceMeConsumer traceme(name_generator,
-          //                                        keys.traceme_context_id);
+        [name_generator](PjRtFutureHelpers::ProfilingKeys keys) {
+          tsl::profiler::TraceMeConsumer traceme(name_generator,
+                                                 keys.traceme_context_id);
         });
   }
 }
@@ -548,8 +545,7 @@ AbstractTfrtCpuBuffer::CopyToDeviceHelper(AsyncWorkRunner* async_work_runner) {
                     dst_buffers_copies = dst_buffers, dst_definition_events,
                     src_definition_event,
                     ready_on_exit = std::move(ready_on_exit)]() mutable {
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::TraceMe traceme("D2D Dispatch");
+    tsl::profiler::TraceMe traceme("D2D Dispatch");
     if (auto* error = src_definition_event.GetErrorIfPresent()) {
       for (int i = 0; i < num_leaf_buffers; ++i) {
         // Any error discovered in src buffer are propagated to dst buffer
@@ -622,21 +618,18 @@ PjRtFuture<> AbstractTfrtCpuBuffer::GetReadyFuture() {
     return PjRtFuture<>(
         std::move(promise),
         /*on_block_start=*/
-        []() {
-          // TODO(chokobole): Uncomment this. Dependency: Profiler
-          // std::string_view message_view(message);
-          // tsl::profiler::TraceMeProducer traceme(message_view);
-          // VLOG(1) << message_view;
-          // return PjRtFutureHelpers::ProfilingKeys(
-          //     {/*traceme_context_id=*/traceme.GetContextId()});
-          return PjRtFutureHelpers::ProfilingKeys();
+        [message]() {
+          std::string_view message_view(message);
+          tsl::profiler::TraceMeProducer traceme(message_view);
+          VLOG(1) << message_view;
+          return PjRtFutureHelpers::ProfilingKeys(
+              {/*traceme_context_id=*/traceme.GetContextId()});
         },
         /*on_block_end=*/
-        [](PjRtFutureHelpers::ProfilingKeys keys) {
-          // TODO(chokobole): Uncomment this. Dependency: Profiler
-          // std::string_view message_view(message);
-          // tsl::profiler::TraceMeConsumer traceme(message_view,
-          //                                        keys.traceme_context_id);
+        [message](PjRtFutureHelpers::ProfilingKeys keys) {
+          std::string_view message_view(message);
+          tsl::profiler::TraceMeConsumer traceme(message_view,
+                                                 keys.traceme_context_id);
         });
   }
 }
@@ -672,8 +665,7 @@ void AbstractTfrtCpuBuffer::CopyFromLiteral(
     // deleted until all the usage holds have gone away.
     async_work_runner->Schedule(
         [literal, av = (*avs)[0], device_buffer, shape]() mutable {
-          // TODO(chokobole): Uncomment this. Dependency: Profiler
-          // tsl::profiler::TraceMe traceme("H2D Dispatch");
+          tsl::profiler::TraceMe traceme("H2D Dispatch");
           const tsl::AsyncValueRef<MaybeOwningCpuMemory>& b =
               device_buffer->Buffers()[0];
           CHECK(b.IsConcrete());
@@ -688,8 +680,7 @@ void AbstractTfrtCpuBuffer::CopyFromLiteral(
       // be deleted until all the usage holds have gone away.
       async_work_runner->Schedule([i, literal, av = (*avs)[i], shape,
                                    device_buffer]() mutable {
-        // TODO(chokobole): Uncomment this. Dependency: Profiler
-        // tsl::profiler::TraceMe traceme("H2D Dispatch");
+        tsl::profiler::TraceMe traceme("H2D Dispatch");
         auto slice = LiteralSlice(literal, {i});
         const tsl::AsyncValueRef<MaybeOwningCpuMemory>& b =
             device_buffer->Buffers()[i];
@@ -867,8 +858,7 @@ AbstractTfrtCpuBuffer::BufferFromHostBufferHelper(
              byte_size, copy_event = std::move(copy_event),
              on_done_with_host_buffer =
                  std::move(on_done_with_host_buffer)]() mutable {
-              // TODO(chokobole): Uncomment this. Dependency: Profiler
-              // tsl::profiler::TraceMe traceme("H2D Dispatch");
+              tsl::profiler::TraceMe traceme("H2D Dispatch");
               std::memcpy(dst_data_ptr, data, byte_size);
               if (on_done_with_host_buffer) {
                 std::move(on_done_with_host_buffer)();

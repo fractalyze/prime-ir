@@ -31,6 +31,7 @@ limitations under the License.
 
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/numbers.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/backends/cpu/runtime/resource_use.h"
 #include "zkx/runtime/buffer_use.h"
 
@@ -370,8 +371,7 @@ void ThunkExecutor::Execute(ExecuteState* state,
                             Thunk::ExecuteSession::Lock lock) {
   DCHECK(!ready_queue.Empty()) << "Ready queue must not be empty";
 
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace("ThunkExecutor::Execute");
+  tsl::profiler::TraceMe trace("ThunkExecutor::Execute");
   bool has_runner = state->runner != nullptr;
   bool has_lock = static_cast<bool>(lock);
 

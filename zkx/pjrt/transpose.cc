@@ -86,6 +86,7 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/permutation_util.h"
 #include "zkx/pjrt/transpose_kernels.h"
 #include "zkx/util.h"
@@ -153,13 +154,12 @@ template <typename T, int inner_bs,
 void Transpose(const char* __restrict a, int outer_bs_a, char* __restrict b,
                int outer_bs_b, TransposePlan::Node const* __restrict node,
                void* __restrict scratch) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme([&]() {
-  //   return tsl::profiler::TraceMeEncode("Transpose",
-  //                                       {{"inner_bs", inner_bs},
-  //                                        {"outer_bs_a", outer_bs_a},
-  //                                        {"outer_bs_b", outer_bs_b}});
-  // });
+  tsl::profiler::TraceMe traceme([&]() {
+    return tsl::profiler::TraceMeEncode("Transpose",
+                                        {{"inner_bs", inner_bs},
+                                         {"outer_bs_a", outer_bs_a},
+                                         {"outer_bs_b", outer_bs_b}});
+  });
   DVLOG(10) << "Transpose " << outer_bs_a << " " << outer_bs_b;
   DCHECK_GT(outer_bs_a, 0);
   DCHECK_GT(outer_bs_b, 0);
@@ -371,13 +371,12 @@ void TransposeConstStride1(const char* __restrict a, char* __restrict b,
 template <typename T, TransposePlan::Transformation transformation>
 void TransposePlan::ExecuteTyped(const char* a, char* b,
                                  absl::Span<Node const> nodes) const {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme([&]() {
-  //   return tsl::profiler::TraceMeEncode(
-  //       "TransposePlan::ExecuteTyped",
-  //       {{"inner_kernel_is_memcpy", inner_kernel_is_memcpy_},
-  //        {"inner_block_elems", inner_block_elems_}});
-  // });
+  tsl::profiler::TraceMe traceme([&]() {
+    return tsl::profiler::TraceMeEncode(
+        "TransposePlan::ExecuteTyped",
+        {{"inner_kernel_is_memcpy", inner_kernel_is_memcpy_},
+         {"inner_block_elems", inner_block_elems_}});
+  });
 
   if (inner_kernel_is_memcpy_) {
     DCHECK(transformation_ == Transformation::kNone);
@@ -434,8 +433,7 @@ void TransposePlan::Execute(
   if (num_elems_ == 0) {
     return;
   }
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("Transpose::Execute", /*level=*/2);
+  tsl::profiler::TraceMe traceme("Transpose::Execute", /*level=*/2);
 
   const char* ac = static_cast<const char*>(a);
   char* bc = static_cast<char*>(b);

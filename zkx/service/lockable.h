@@ -25,6 +25,8 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 
+#include "xla/tsl/profiler/lib/traceme.h"
+
 namespace zkx {
 
 // A template that can be specialized to give a human readable name to lockable
@@ -98,11 +100,10 @@ class Lockable {
   }
 
   Lock Acquire() {
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::TraceMe trace([&] {
-    //   return tsl::profiler::TraceMeEncode("Lockable::Lock::Acquire",
-    //                                       {{"lockable", ToString()}});
-    // });
+    tsl::profiler::TraceMe trace([&] {
+      return tsl::profiler::TraceMeEncode("Lockable::Lock::Acquire",
+                                          {{"lockable", ToString()}});
+    });
 
     absl::MutexLock lock(&mutex_);
     mutex_.Await(absl::Condition(&is_unlocked_));

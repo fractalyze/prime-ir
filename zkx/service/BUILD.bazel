@@ -427,6 +427,7 @@ zkx_cc_library(
         "//xla/tsl/platform",
         "//xla/tsl/platform:env",
         "//xla/tsl/platform:path",
+        "//xla/tsl/profiler/lib:scoped_annotation",
         "//zkx:debug_options_flags",
         "//zkx:util",
         "//zkx:zkx_cc_proto",
@@ -1058,7 +1059,9 @@ zkx_cc_library(
     deps = [
         ":compiler",
         "//xla/tsl/platform:statusor",
+        "//xla/tsl/profiler/lib:scoped_annotation",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings:str_format",
         "@llvm-project//llvm:Core",
     ],
 )
@@ -1067,6 +1070,7 @@ zkx_cc_library(
     name = "lockable",
     hdrs = ["lockable.h"],
     deps = [
+        "//xla/tsl/profiler/lib:traceme",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
@@ -1203,6 +1207,7 @@ zkx_cc_library(
     srcs = ["rendezvous.cc"],
     hdrs = ["rendezvous.h"],
     deps = [
+        "//xla/tsl/profiler/lib:traceme",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log",

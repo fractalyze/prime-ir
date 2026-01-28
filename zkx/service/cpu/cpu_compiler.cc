@@ -38,6 +38,7 @@ limitations under the License.
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/thread_pool.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/backends/cpu/codegen/cpu_features.h"
 #include "zkx/backends/cpu/codegen/jit_compiler.h"
 #include "zkx/backends/cpu/codegen/object_loader.h"
@@ -327,11 +328,10 @@ void RemoveUnusedSymbols(llvm::Module& module) {
 // split, and clone it into a new LLVM context.
 llvm::orc::ThreadSafeModule CloneAsThreadSafeModule(
     int64_t part, std::unique_ptr<llvm::Module> module) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // TraceMe trace([&] {
-  //   return TraceMeEncode("CpuCompiler::CloneAsThreadSafeModule",
-  //                        {{"part", part}});
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    return tsl::profiler::TraceMeEncode("CpuCompiler::CloneAsThreadSafeModule",
+                                        {{"part", part}});
+  });
 
   // There is no way to clone a module from one context to another, so we need
   // to serialize the module to bitcode and parse it back into the new context.
@@ -443,11 +443,10 @@ absl::StatusOr<std::unique_ptr<HloModule>> CpuCompiler::RunHloPasses(
 
 absl::StatusOr<std::unique_ptr<CpuExecutable>>
 CpuCompiler::CompileCpuExecutable(std::unique_ptr<HloModule> module) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // TraceMe trace([&] {
-  //   return TraceMeEncode("CpuCompiler::CompileCpuExecutable",
-  //                        {{"name", module->name()}});
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    return tsl::profiler::TraceMeEncode("CpuCompiler::CompileCpuExecutable",
+                                        {{"name", module->name()}});
+  });
 
   ModuleHook pre_optimization_ir_hook;
   ModuleHook post_optimization_ir_hook;
@@ -584,10 +583,10 @@ CpuCompiler::CompileCpuExecutable(std::unique_ptr<HloModule> module) {
             << " parts before codegen to enable parallel compilation"
             << " (max split count: " << parallel_codegen_split_count << ")";
 
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // TraceMe trace([&] {
-    //   return TraceMeEncode("SplitModule", {{"num_parts", num_parts}});
-    // });
+    tsl::profiler::TraceMe trace([&] {
+      return tsl::profiler::TraceMeEncode("SplitModule",
+                                          {{"num_parts", num_parts}});
+    });
 
     llvm::SplitModule(
         *llvm_module, num_parts,
@@ -681,11 +680,10 @@ absl::StatusOr<std::unique_ptr<Executable>> CpuCompiler::RunBackend(
     std::unique_ptr<HloModule> module,
     [[maybe_unused]] se::StreamExecutor* executor,
     [[maybe_unused]] const CompileOptions& options) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // TraceMe trace([&] {
-  //   return TraceMeEncode("CpuCompiler::RunBackend", {{"name",
-  //   module->name()}});
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    return tsl::profiler::TraceMeEncode("CpuCompiler::RunBackend",
+                                        {{"name", module->name()}});
+  });
 
   VLOG(1) << "Compiling: " << module->name();
   // TODO(chokobole): Uncomment this. Dependency: RecordCpuCompilerStacktrace
