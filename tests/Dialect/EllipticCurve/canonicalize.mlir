@@ -306,3 +306,81 @@ func.func @test_sub_fold() -> !jacobian {
   %2 = elliptic_curve.sub %0, %1 : !jacobian, !jacobian -> !jacobian
   return %2 : !jacobian
 }
+
+//===----------------------------------------------------------------------===//
+// Tensor Constant Folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_negate_fold
+// CHECK-SAME: () -> tensor<2x[[JACOBIAN:.*]]> {
+func.func @test_tensor_negate_fold() -> tensor<2x!jacobian> {
+  // negate applied element-wise to tensor of points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant dense<{{\[}}[1, 21888242871839275222246405745257275088696311157297823662689037894645226208581, 1], [3, 21888242871839275222246405745257275088696311157297823662689037894645226208579, 1]]> : tensor<2x[[JACOBIAN]]>
+  // CHECK-NOT: elliptic_curve.negate
+  // CHECK: return %[[C]] : tensor<2x[[JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %1 = elliptic_curve.negate %0 : tensor<2x!jacobian>
+  return %1 : tensor<2x!jacobian>
+}
+
+// CHECK-LABEL: @test_tensor_double_fold
+// CHECK-SAME: () -> tensor<2x[[JACOBIAN:.*]]> {
+func.func @test_tensor_double_fold() -> tensor<2x!jacobian> {
+  // double applied element-wise to tensor of points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.double
+  // CHECK: return %[[C]] : tensor<2x[[JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %1 = elliptic_curve.double %0 : tensor<2x!jacobian> -> tensor<2x!jacobian>
+  return %1 : tensor<2x!jacobian>
+}
+
+// CHECK-LABEL: @test_tensor_add_fold
+// CHECK-SAME: () -> tensor<2x[[JACOBIAN:.*]]> {
+func.func @test_tensor_add_fold() -> tensor<2x!jacobian> {
+  // add applied element-wise to tensor of points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.add
+  // CHECK: return %[[C]] : tensor<2x[[JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %1 = elliptic_curve.constant dense<[[5, 6, 1], [7, 8, 1]]> : tensor<2x!jacobian>
+  %2 = elliptic_curve.add %0, %1 : tensor<2x!jacobian>, tensor<2x!jacobian> -> tensor<2x!jacobian>
+  return %2 : tensor<2x!jacobian>
+}
+
+// CHECK-LABEL: @test_tensor_sub_fold
+// CHECK-SAME: () -> tensor<2x[[JACOBIAN:.*]]> {
+func.func @test_tensor_sub_fold() -> tensor<2x!jacobian> {
+  // sub applied element-wise to tensor of points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.sub
+  // CHECK: return %[[C]] : tensor<2x[[JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %1 = elliptic_curve.constant dense<[[5, 6, 1], [7, 8, 1]]> : tensor<2x!jacobian>
+  %2 = elliptic_curve.sub %0, %1 : tensor<2x!jacobian>, tensor<2x!jacobian> -> tensor<2x!jacobian>
+  return %2 : tensor<2x!jacobian>
+}
+
+// CHECK-LABEL: @test_tensor_affine_negate_fold
+// CHECK-SAME: () -> tensor<2x[[AFFINE:.*]]> {
+func.func @test_tensor_affine_negate_fold() -> tensor<2x!affine> {
+  // negate applied element-wise to tensor of affine points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.negate
+  // CHECK: return %[[C]] : tensor<2x[[AFFINE]]>
+  %0 = elliptic_curve.constant dense<[[1, 2], [3, 4]]> : tensor<2x!affine>
+  %1 = elliptic_curve.negate %0 : tensor<2x!affine>
+  return %1 : tensor<2x!affine>
+}
+
+// CHECK-LABEL: @test_tensor_g2_negate_fold
+// CHECK-SAME: () -> tensor<2x[[G2JACOBIAN:.*]]> {
+func.func @test_tensor_g2_negate_fold() -> tensor<2x!g2jacobian> {
+  // negate applied element-wise to tensor of G2 (extension field) points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.negate
+  // CHECK: return %[[C]] : tensor<2x[[G2JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[[1, 1], [2, 2], [1, 0]], [[3, 3], [4, 4], [1, 0]]]> : tensor<2x!g2jacobian>
+  %1 = elliptic_curve.negate %0 : tensor<2x!g2jacobian>
+  return %1 : tensor<2x!g2jacobian>
+}

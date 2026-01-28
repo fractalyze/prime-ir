@@ -771,6 +771,21 @@ ArrayAttr toArrayAttr(MLIRContext *ctx, const PointOperation &op) {
       op.getOperation());
 }
 
+// Helper to convert PointOperations to ArrayAttr<ArrayAttr<Attr>> for tensor
+// folding.
+ArrayAttr pointOperationsToArrayAttr(MLIRContext *ctx,
+                                     ArrayRef<PointOperation> values) {
+  SmallVector<Attribute> pointAttrs;
+  for (const auto &value : values) {
+    ArrayAttr pointCoords =
+        std::visit([ctx](const auto &pointOp) -> ArrayAttr {
+          return pointCoordsToArrayAttr(ctx, pointOp);
+        }, value.getOperation());
+    pointAttrs.push_back(pointCoords);
+  }
+  return ArrayAttr::get(ctx, pointAttrs);
+}
+
 //===----------------------------------------------------------------------===//
 // Config & Mixins following ConstantFolder.h pattern
 //===----------------------------------------------------------------------===//
@@ -798,8 +813,7 @@ public:
 
   OpFoldResult getTensorAttr(ShapedType type,
                              ArrayRef<PointOperation> values) const final {
-    // EC points don't support tensor constant folding
-    return {};
+    return pointOperationsToArrayAttr(ctx, values);
   }
 
 protected:
@@ -825,6 +839,24 @@ public:
     return fn(value, outputKind);
   }
 
+  // Fold tensor of points (not a virtual override - called directly from helper)
+  OpFoldResult foldTensorPoints(ArrayAttr inputAttr,
+                                ShapedType outputType) const {
+    // Each element in inputAttr is a point's coordinates (ArrayAttr)
+    SmallVector<PointOperation, 0> results;
+    results.reserve(inputAttr.size());
+
+    for (Attribute pointAttr : inputAttr) {
+      // Wrap single point in outer ArrayAttr to match unified structure
+      ArrayAttr wrappedPoint =
+          ArrayAttr::get(this->ctx, {cast<ArrayAttr>(pointAttr)});
+      PointOperation inputOp = this->getNativeInput(wrappedPoint);
+      results.push_back(operate(inputOp));
+    }
+
+    return this->getTensorAttr(outputType, results);
+  }
+
 private:
   PointKind outputKind;
   Func fn;
@@ -839,11 +871,15 @@ class GenericEllipticCurveBinaryFolder
     : public BinaryConstantFolder<EllipticCurveConstantFolderConfig>::Delegate {
 public:
   GenericEllipticCurveBinaryFolder(Op *op, Func fn)
-      : op(op), fn(fn),
-        lhsPointType(cast<PointTypeInterface>(op->getLhs().getType())),
-        rhsPointType(cast<PointTypeInterface>(op->getRhs().getType())),
+      : op(op), fn(fn), ctx(op->getContext()),
+        lhsPointType(cast<PointTypeInterface>(
+            getElementTypeOrSelf(op->getLhs().getType()))),
+        rhsPointType(cast<PointTypeInterface>(
+            getElementTypeOrSelf(op->getRhs().getType()))),
         outputKind(static_cast<PointKind>(
-            cast<PointTypeInterface>(op->getType()).getNumCoords() - 2)) {}
+            cast<PointTypeInterface>(getElementTypeOrSelf(op->getType()))
+                .getNumCoords() -
+            2)) {}
 
   // This won't be called directly since we override foldScalar(lhs, rhs)
   PointOperation getNativeInput(ArrayAttr attr) const final {
@@ -851,12 +887,12 @@ public:
   }
 
   OpFoldResult getScalarAttr(const PointOperation &value) const final {
-    return toArrayAttr(op->getContext(), value);
+    return toArrayAttr(ctx, value);
   }
 
   OpFoldResult getTensorAttr(ShapedType type,
                              ArrayRef<PointOperation> values) const final {
-    return {};
+    return pointOperationsToArrayAttr(ctx, values);
   }
 
   PointOperation operate(const PointOperation &lhs,
@@ -877,9 +913,33 @@ public:
     return getScalarAttr(operate(lhsOp, rhsOp));
   }
 
+  // Fold tensor of points (not a virtual override - called directly from helper)
+  OpFoldResult foldTensorPoints(ArrayAttr lhsAttr, ArrayAttr rhsAttr,
+                                ShapedType outputType) const {
+    if (lhsAttr.size() != rhsAttr.size())
+      return {};
+
+    SmallVector<PointOperation, 0> results;
+    results.reserve(lhsAttr.size());
+
+    for (auto [lhsPoint, rhsPoint] : llvm::zip(lhsAttr, rhsAttr)) {
+      // Wrap single point in outer ArrayAttr to match unified structure
+      ArrayAttr wrappedLhs =
+          ArrayAttr::get(ctx, {cast<ArrayAttr>(lhsPoint)});
+      ArrayAttr wrappedRhs =
+          ArrayAttr::get(ctx, {cast<ArrayAttr>(rhsPoint)});
+      PointOperation lhsOp = createPointOp(wrappedLhs, lhsPointType);
+      PointOperation rhsOp = createPointOp(wrappedRhs, rhsPointType);
+      results.push_back(operate(lhsOp, rhsOp));
+    }
+
+    return getTensorAttr(outputType, results);
+  }
+
 private:
   Op *const op; // not owned
   Func fn;
+  MLIRContext *ctx; // not owned
   PointTypeInterface lhsPointType;
   PointTypeInterface rhsPointType;
   PointKind outputKind;
@@ -897,16 +957,25 @@ OpFoldResult foldUnaryPointOp(Op *op, typename Op::FoldAdaptor adaptor,
     return {};
 
   Type inputType = op->getInput().getType();
-  auto inputPointType = dyn_cast<PointTypeInterface>(inputType);
+  Type outputType = op->getType();
+
+  // Use getElementTypeOrSelf to handle both scalar and tensor types
+  auto inputPointType =
+      dyn_cast<PointTypeInterface>(getElementTypeOrSelf(inputType));
   if (!inputPointType)
     return {};
 
-  Type outputType = op->getType();
-  auto outputPointType = cast<PointTypeInterface>(outputType);
+  auto outputPointType =
+      cast<PointTypeInterface>(getElementTypeOrSelf(outputType));
   PointKind outputKind =
       static_cast<PointKind>(outputPointType.getNumCoords() - 2);
 
   GenericUnaryEllipticCurveFolder<Func> folder(inputPointType, outputKind, fn);
+
+  // Check if this is a tensor operation
+  if (auto shapedType = dyn_cast<ShapedType>(outputType)) {
+    return folder.foldTensorPoints(inputAttr, shapedType);
+  }
   return folder.foldScalar(inputAttr);
 }
 
@@ -919,6 +988,11 @@ OpFoldResult foldBinaryPointOp(Op *op, typename Op::FoldAdaptor adaptor,
     return {};
 
   GenericEllipticCurveBinaryFolder<Op, Func> folder(op, fn);
+
+  // Check if this is a tensor operation
+  if (auto shapedType = dyn_cast<ShapedType>(op->getType())) {
+    return folder.foldTensorPoints(lhsAttr, rhsAttr, shapedType);
+  }
   return folder.foldScalar(lhsAttr, rhsAttr);
 }
 
