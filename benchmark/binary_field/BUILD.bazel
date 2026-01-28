@@ -1,0 +1,93 @@
+# Copyright 2026 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("//benchmark:benchmark.bzl", "prime_ir_benchmark", "prime_ir_mlir_cc_import")
+
+# =============================================================================
+# BF64 (64-bit binary field)
+# =============================================================================
+
+# Baseline: Generic lowering without x86 specialization
+prime_ir_mlir_cc_import(
+    name = "bf_baseline_ciface",
+    mlir_src = "bf_baseline.mlir",
+    prime_ir_opt_flags = [
+        "-field-to-llvm",
+    ],
+)
+
+# x86: PCLMULQDQ/GFNI specialization
+# Uses unrealized_conversion_cast to avoid type conversion conflicts
+prime_ir_mlir_cc_import(
+    name = "bf_x86_ciface",
+    mlir_src = "bf_x86.mlir",
+    prime_ir_opt_flags = [
+        "-specialize-binary-field-to-x86",
+        "-reconcile-unrealized-casts",
+        "-field-to-llvm",
+    ],
+    target_compatible_with = ["@platforms//cpu:x86_64"],
+)
+
+# =============================================================================
+# BF8 (8-bit binary field, packed vectors)
+# =============================================================================
+
+# BF8 Baseline: Scalar Karatsuba
+prime_ir_mlir_cc_import(
+    name = "bf8_baseline_ciface",
+    mlir_src = "bf8_baseline.mlir",
+    prime_ir_opt_flags = [
+        "-field-to-llvm",
+    ],
+)
+
+# BF8 x86: Packed 32x GFNI specialization
+prime_ir_mlir_cc_import(
+    name = "bf8_x86_ciface",
+    mlir_src = "bf8_x86.mlir",
+    prime_ir_opt_flags = [
+        "-specialize-binary-field-to-x86",
+        "-reconcile-unrealized-casts",
+        "-field-to-llvm",
+    ],
+    target_compatible_with = ["@platforms//cpu:x86_64"],
+)
+
+# =============================================================================
+# Benchmark executable
+# =============================================================================
+
+prime_ir_benchmark(
+    name = "binary_field_benchmark",
+    srcs = ["binary_field_benchmark.cc"],
+    local_defines = select({
+        "@platforms//cpu:x86_64": ["PRIME_IR_X86"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":bf8_baseline_ciface",
+        ":bf_baseline_ciface",
+        "@llvm-project//mlir:ExecutionEngine",
+        "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:binary_field",
+    ] + select({
+        "@platforms//cpu:x86_64": [
+            ":bf8_x86_ciface",
+            ":bf_x86_ciface",
+        ],
+        "//conditions:default": [],
+    }),
+)
