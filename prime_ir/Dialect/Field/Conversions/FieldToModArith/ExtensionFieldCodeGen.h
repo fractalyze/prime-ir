@@ -133,6 +133,18 @@ public:
     return FromCoeffs(coeffs);
   }
 
+  // Create a rational constant (num/denom) in this extension field.
+  // Returns [num/denom, 0, 0, ...] with the rational computed at compile-time.
+  ExtensionFieldCodeGen CreateRationalConst(int64_t num, int64_t denom) const {
+    BaseFieldT baseConst = createRationalConstBaseField(num, denom);
+    std::array<BaseFieldT, N> coeffs;
+    coeffs[0] = baseConst;
+    for (size_t i = 1; i < N; ++i) {
+      coeffs[i] = createConstBaseField(0);
+    }
+    return FromCoeffs(coeffs);
+  }
+
   // zk_dtypes ExtensionFieldOperation methods
   std::array<BaseFieldT, N> ToCoeffs() const {
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
@@ -171,69 +183,21 @@ public:
     return kDefaultAlgorithm;
   }
 
+  // Create an integer constant in the base field.
+  // Delegates to BaseFieldT::CreateConst() which handles the type-specific
+  // logic.
   BaseFieldT createConstBaseField(int64_t x) const {
-    ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    auto extField = cast<ExtensionFieldType>(value.getType());
-    Type baseFieldType = extField.getBaseField();
-
-    if constexpr (std::is_same_v<BaseFieldT, PrimeFieldCodeGen>) {
-      auto baseField = cast<PrimeFieldType>(baseFieldType);
-      return PrimeFieldCodeGen(createConst(*b, baseField, x));
-    } else {
-      auto baseEfType = cast<ExtensionFieldType>(baseFieldType);
-      auto primeField = baseEfType.getBasePrimeField();
-      APInt constValue(primeField.getStorageType().getWidth(), x);
-      return createBaseExtFieldConstant(*b, baseEfType, constValue);
-    }
+    return NonResidue().CreateConst(x);
   }
 
   // Create a rational constant (numerator/denominator) in the base field.
-  // For prime base: computes num * denom^(-1) mod p directly.
-  // For extension base: embeds the prime field rational as [num/denom, 0, ...].
+  // Delegates to BaseFieldT::CreateRationalConst() which computes num/denom
+  // at compile-time and creates a single constant op.
   BaseFieldT createRationalConstBaseField(int64_t num, int64_t denom) const {
-    ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    auto extField = cast<ExtensionFieldType>(value.getType());
-    Type baseFieldType = extField.getBaseField();
-
-    if constexpr (std::is_same_v<BaseFieldT, PrimeFieldCodeGen>) {
-      auto baseField = cast<PrimeFieldType>(baseFieldType);
-      return PrimeFieldCodeGen(createRationalConst(*b, baseField, num, denom));
-    } else {
-      auto baseEfType = cast<ExtensionFieldType>(baseFieldType);
-      auto primeField = baseEfType.getBasePrimeField();
-      // Compute num/denom in the prime field
-      PrimeFieldOperation rational = PrimeFieldOperation(num, primeField) /
-                                     PrimeFieldOperation(denom, primeField);
-      APInt rationalValue = static_cast<APInt>(rational);
-      return createBaseExtFieldConstant(*b, baseEfType, rationalValue);
-    }
+    return NonResidue().CreateRationalConst(num, denom);
   }
 
 private:
-  // Helper to create a constant in the base extension field from an APInt.
-  // The APInt value is embedded as [value, 0, 0, ...] in the base extension.
-  // Only enabled for tower extensions (BaseFieldT != PrimeFieldCodeGen).
-  template <typename T = BaseFieldT,
-            std::enable_if_t<!std::is_same_v<T, PrimeFieldCodeGen>, int> = 0>
-  T createBaseExtFieldConstant(ImplicitLocOpBuilder &b,
-                               ExtensionFieldType baseEfType,
-                               const APInt &constValue) const {
-    unsigned baseDegree = baseEfType.getDegreeOverPrime();
-    auto storageType = baseEfType.getBasePrimeField().getStorageType();
-
-    SmallVector<APInt> coeffs(baseDegree,
-                              APInt::getZero(storageType.getWidth()));
-    coeffs[0] = constValue;
-    auto denseAttr = DenseIntElementsAttr::get(
-        RankedTensorType::get({static_cast<int64_t>(baseDegree)}, storageType),
-        coeffs);
-    Value constVal =
-        ConstantOp::materialize(b, denseAttr, baseEfType, b.getLoc());
-
-    Value baseNonResidue = getBaseFieldNonResidue(b, baseEfType);
-    return T(constVal, baseNonResidue);
-  }
-
   BaseFieldT createBaseFieldCodeGen(Value v) const {
     if constexpr (std::is_same_v<BaseFieldT, PrimeFieldCodeGen>) {
       return PrimeFieldCodeGen(v);

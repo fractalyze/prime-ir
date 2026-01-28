@@ -247,10 +247,9 @@ public:
 
   static ExtensionFieldOperation fromUnchecked(const APInt &coeff,
                                                ExtensionFieldType efType) {
-    SmallVector<APInt> coeffs(
-        N, APInt::getZero(detail::BaseFieldBitWidth<BaseFieldT>::get(efType)));
-    coeffs[0] = coeff;
-    return fromUnchecked(coeffs, efType);
+    unsigned bitWidth = detail::BaseFieldBitWidth<BaseFieldT>::get(efType);
+    return fromUnchecked(makeScalarCoeffs(coeff.zextOrTrunc(bitWidth), N),
+                         efType);
   }
 
   static ExtensionFieldOperation fromUnchecked(const SmallVector<APInt> &coeffs,

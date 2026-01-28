@@ -45,16 +45,9 @@ Value createNonResidueConstant(ImplicitLocOpBuilder &b,
   // If non-residue is a simple integer, convert it to extension field constant
   if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
     unsigned baseDegree = baseEfType.getDegreeOverPrime();
-    auto primeField = baseEfType.getBasePrimeField();
-    auto storageType = primeField.getStorageType();
-
-    // Create [val, 0, 0, ...] coefficient array
-    SmallVector<APInt> coeffs(baseDegree,
-                              APInt::getZero(storageType.getWidth()));
-    coeffs[0] = intAttr.getValue();
-    nonResidueAttr = DenseIntElementsAttr::get(
-        RankedTensorType::get({static_cast<int64_t>(baseDegree)}, storageType),
-        coeffs);
+    auto storageType = baseEfType.getBasePrimeField().getStorageType();
+    nonResidueAttr =
+        makeScalarExtFieldAttr(intAttr.getValue(), baseDegree, storageType);
   }
 
   return ConstantOp::materialize(b, nonResidueAttr, baseEfType, b.getLoc());
