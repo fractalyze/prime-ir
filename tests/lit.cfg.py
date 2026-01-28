@@ -14,6 +14,8 @@
 # ==============================================================================
 
 import os
+import platform
+import subprocess
 from pathlib import Path
 
 from lit.formats import ShTest
@@ -66,3 +68,41 @@ substitutions = {
 }
 
 config.substitutions.extend(substitutions.items())
+
+
+# CPU feature detection for platform-specific tests
+def get_cpu_features():
+  """Detect CPU features for conditional test execution."""
+  features = set()
+  system = platform.system()
+  machine = platform.machine()
+
+  if system == "Linux":
+    if machine in ("x86_64", "i686", "i386"):
+      # x86: read from /proc/cpuinfo
+      try:
+        with open("/proc/cpuinfo", "r") as f:
+          for line in f:
+            if line.startswith("flags"):
+              flags = line.split(":")[1].strip().split()
+              if "pclmulqdq" in flags:
+                features.add("pclmulqdq")
+              if "gfni" in flags:
+                features.add("gfni")
+              if "avx512f" in flags:
+                features.add("avx512")
+              break
+      except (IOError, IndexError):
+        pass
+
+  # Add architecture features
+  if machine in ("x86_64", "i686", "i386"):
+    features.add("x86")
+
+  return features
+
+
+# Add detected features to lit config
+cpu_features = get_cpu_features()
+for feature in cpu_features:
+  config.available_features.add(feature)
