@@ -45,6 +45,7 @@ cc_binary(
         "//prime_ir/Dialect/Field/Conversions/BinaryFieldToArith",
         "//prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM",
         "//prime_ir/Dialect/Field/Conversions/FieldToModArith",
+        "//prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToARM",
         "//prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToX86",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/Field/Pipelines:Passes",

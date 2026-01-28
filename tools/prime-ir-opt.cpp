@@ -28,6 +28,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldToArith.h"
 #include "prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
+#include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToARM/SpecializeBinaryFieldToARM.h"
 #include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToX86/SpecializeBinaryFieldToX86.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/Pipelines/Passes.h"
@@ -67,6 +68,7 @@ int main(int argc, char **argv) {
   // Dialect conversion passes
   mlir::prime_ir::mod_arith::registerModArithToArithPasses();
   mlir::prime_ir::field::registerBinaryFieldToArithPasses();
+  mlir::prime_ir::field::registerSpecializeBinaryFieldToARMPasses();
   mlir::prime_ir::field::registerSpecializeBinaryFieldToX86Passes();
   mlir::prime_ir::field::registerFieldToModArithPasses();
   mlir::prime_ir::field::registerExtFieldToLLVMPasses();

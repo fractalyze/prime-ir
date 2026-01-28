@@ -67,6 +67,36 @@ prime_ir_mlir_cc_import(
 )
 
 # =============================================================================
+# ARM: PMULL specialization
+# =============================================================================
+
+# ARM: PMULL specialization for BF64/BF128
+prime_ir_mlir_cc_import(
+    name = "bf_arm_ciface",
+    llc_flags = ["-mattr=+neon,+crypto"],
+    mlir_src = "bf_arm.mlir",
+    prime_ir_opt_flags = [
+        "-specialize-binary-field-to-arm",
+        "-reconcile-unrealized-casts",
+        "-field-to-llvm",
+    ],
+    target_compatible_with = ["@platforms//cpu:aarch64"],
+)
+
+# BF8 ARM: Packed 16x PMULL specialization
+prime_ir_mlir_cc_import(
+    name = "bf8_arm_ciface",
+    llc_flags = ["-mattr=+neon,+crypto"],
+    mlir_src = "bf8_arm.mlir",
+    prime_ir_opt_flags = [
+        "-specialize-binary-field-to-arm",
+        "-reconcile-unrealized-casts",
+        "-field-to-llvm",
+    ],
+    target_compatible_with = ["@platforms//cpu:aarch64"],
+)
+
+# =============================================================================
 # Benchmark executable
 # =============================================================================
 
@@ -75,6 +105,7 @@ prime_ir_benchmark(
     srcs = ["binary_field_benchmark.cc"],
     local_defines = select({
         "@platforms//cpu:x86_64": ["PRIME_IR_X86"],
+        "@platforms//cpu:aarch64": ["PRIME_IR_ARM"],
         "//conditions:default": [],
     }),
     deps = [
@@ -87,6 +118,10 @@ prime_ir_benchmark(
         "@platforms//cpu:x86_64": [
             ":bf8_x86_ciface",
             ":bf_x86_ciface",
+        ],
+        "@platforms//cpu:aarch64": [
+            ":bf8_arm_ciface",
+            ":bf_arm_ciface",
         ],
         "//conditions:default": [],
     }),

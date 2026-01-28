@@ -36,6 +36,7 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldToArith.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
+#include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToARM/SpecializeBinaryFieldToARM.h"
 #include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToX86/SpecializeBinaryFieldToX86.h"
 #include "prime_ir/Dialect/Field/Transforms/FoldFieldLinalgContraction.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
@@ -54,12 +55,18 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   // If we convert elementwise to linalg, tensor folding in ModArithDialect will
   // not work.
   pm.addPass(createFieldToModArith());
-  // Specialize binary field operations to GFNI/PCLMULQDQ if enabled
+  // Specialize binary field operations to GFNI/PCLMULQDQ if enabled (x86)
   if (options.specializeGFNI || options.specializePCLMULQDQ) {
     SpecializeBinaryFieldToX86Options gfniOpts;
     gfniOpts.useGFNI = options.specializeGFNI;
     gfniOpts.usePCLMULQDQ = options.specializePCLMULQDQ;
     pm.addPass(createSpecializeBinaryFieldToX86(gfniOpts));
+  }
+  // Specialize binary field operations to PMULL if enabled (ARM)
+  if (options.specializePMULL) {
+    SpecializeBinaryFieldToARMOptions armOpts;
+    armOpts.usePMULL = options.specializePMULL;
+    pm.addPass(createSpecializeBinaryFieldToARM(armOpts));
   }
   // Binary fields lower directly to arith (not through mod_arith)
   pm.addPass(createBinaryFieldToArith());

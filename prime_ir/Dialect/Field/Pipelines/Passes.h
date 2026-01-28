@@ -47,6 +47,12 @@ struct FieldToLLVMOptions : public PassPipelineOptions<FieldToLLVMOptions> {
           "Specialize binary field operations to PCLMULQDQ instructions"),
       llvm::cl::init(false)};
 
+  PassOptions::Option<bool> specializePMULL{
+      *this, "specialize-pmull",
+      llvm::cl::desc(
+          "Specialize binary field operations to ARM PMULL instructions"),
+      llvm::cl::init(false)};
+
   PassOptions::Option<bool> bufferizeFunctionBoundaries{
       *this, "bufferize-function-boundaries",
       llvm::cl::desc("Bufferize function boundaries"), llvm::cl::init(false)};
