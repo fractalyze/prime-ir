@@ -121,10 +121,8 @@ public:
     return *this;
   }
 
-  // Create a constant in this extension field (needed when used as BaseField)
-  ExtensionFieldCodeGen CreateConst(int64_t x) const {
-    // Create [x, 0, 0, ...] - a constant from the underlying prime field
-    BaseFieldT baseConst = createConstBaseField(x);
+  // Create [baseConst, 0, 0, ...] - embed base field element as scalar
+  ExtensionFieldCodeGen fromScalarBaseField(const BaseFieldT &baseConst) const {
     std::array<BaseFieldT, N> coeffs;
     coeffs[0] = baseConst;
     for (size_t i = 1; i < N; ++i) {
@@ -133,16 +131,15 @@ public:
     return FromCoeffs(coeffs);
   }
 
+  // Create a constant in this extension field (needed when used as BaseField)
+  ExtensionFieldCodeGen CreateConst(int64_t x) const {
+    return fromScalarBaseField(createConstBaseField(x));
+  }
+
   // Create a rational constant (num/denom) in this extension field.
   // Returns [num/denom, 0, 0, ...] with the rational computed at compile-time.
   ExtensionFieldCodeGen CreateRationalConst(int64_t num, int64_t denom) const {
-    BaseFieldT baseConst = createRationalConstBaseField(num, denom);
-    std::array<BaseFieldT, N> coeffs;
-    coeffs[0] = baseConst;
-    for (size_t i = 1; i < N; ++i) {
-      coeffs[i] = createConstBaseField(0);
-    }
-    return FromCoeffs(coeffs);
+    return fromScalarBaseField(createRationalConstBaseField(num, denom));
   }
 
   // zk_dtypes ExtensionFieldOperation methods
