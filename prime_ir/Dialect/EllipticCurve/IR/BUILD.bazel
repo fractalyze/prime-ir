@@ -68,6 +68,7 @@ cc_library(
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Dialect/Poly/IR:Poly",
+        "//prime_ir/Utils:AssemblyFormatUtils",
         "//prime_ir/Utils:CanonicalizationPatterns",
         "//prime_ir/Utils:ConstantFolder",
         "//prime_ir/Utils:KnownModulus",

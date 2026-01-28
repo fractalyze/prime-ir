@@ -56,8 +56,13 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
             .getBaseField();
 
     // Convert coordinate attributes to field constants
+    // Unified structure: ArrayAttr<ArrayAttr<Attr>> where outer array contains
+    // points and inner array contains coordinates per point
+    ArrayAttr coordsAttr = op.getCoords();
+    ArrayAttr pointCoords = cast<ArrayAttr>(coordsAttr[0]);
+
     SmallVector<Value> coordValues;
-    for (auto coordAttr : op.getCoords()) {
+    for (auto coordAttr : pointCoords) {
       Value coordValue;
       if (auto intAttr = dyn_cast<IntegerAttr>(coordAttr)) {
         // Prime field coordinate

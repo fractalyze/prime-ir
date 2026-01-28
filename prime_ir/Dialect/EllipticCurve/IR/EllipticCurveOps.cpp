@@ -28,6 +28,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "prime_ir/Utils/AssemblyFormatUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
 
 // IWYU pragma: begin_keep
@@ -344,114 +345,207 @@ LogicalResult ConvertPointTypeOp::verify() {
 
 //////////////// PARSE AND PRINT CONSTANT ////////////////
 
-ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
-                                       OperationState &result) {
-  // TODO(chokobole): Support nested towers of extension fields.
-  SmallVector<SmallVector<APInt>> parsedCoordArrays;
+namespace {
 
-  auto coordinateParser = [&]() -> ParseResult {
-    SmallVector<APInt> coordValues;
+// Helper to get extension field degree if the base field is an extension field.
+// Returns std::nullopt for prime fields.
+std::optional<unsigned> getExtensionDegree(Type baseFieldType) {
+  if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType))
+    return efType.getDegreeOverPrime();
+  return std::nullopt;
+}
 
-    // Check if the coordinate is an extension field element [coeff0, coeff1,
-    // ...] or a single base field integer.
-    if (succeeded(parser.parseOptionalLSquare())) {
-      auto elementParser = [&]() -> ParseResult {
-        APInt val;
-        if (failed(parser.parseInteger(val)))
+// Helper to create a coordinate attribute from APInt coefficients.
+// For prime fields: creates IntegerAttr
+// For extension fields: creates DenseIntElementsAttr
+Attribute createCoordAttr(Type baseFieldType, ArrayRef<APInt> coeffs) {
+  if (auto pfType = dyn_cast<field::PrimeFieldType>(baseFieldType)) {
+    assert(coeffs.size() == 1 && "prime field should have single coefficient");
+    return IntegerAttr::get(pfType.getStorageType(), coeffs[0]);
+  }
+  auto efType = cast<field::ExtensionFieldType>(baseFieldType);
+  auto tensorType =
+      RankedTensorType::get({static_cast<int64_t>(coeffs.size())},
+                            efType.getBasePrimeField().getStorageType());
+  return DenseIntElementsAttr::get(tensorType, coeffs);
+}
+
+// Helper to reconstruct ArrayAttr structure from flat parsed values.
+// Converts flat values [x0, y0, z0, x1, y1, z1, ...] into
+// ArrayAttr<ArrayAttr<Attr>> where each inner ArrayAttr represents one point.
+FailureOr<ArrayAttr> reconstructCoordsAttr(MLIRContext *ctx,
+                                           ArrayRef<APInt> flatValues,
+                                           PointTypeInterface pointType,
+                                           int64_t numPoints) {
+  Type baseFieldType = pointType.getBaseFieldType();
+  unsigned numCoords = pointType.getNumCoords();
+  unsigned extDegree = getExtensionDegree(baseFieldType).value_or(1);
+  unsigned valuesPerPoint = numCoords * extDegree;
+
+  if (flatValues.size() != static_cast<size_t>(numPoints) * valuesPerPoint)
+    return failure();
+
+  SmallVector<Attribute> pointAttrs;
+  size_t idx = 0;
+
+  for (int64_t p = 0; p < numPoints; ++p) {
+    SmallVector<Attribute> coordAttrs;
+    for (unsigned c = 0; c < numCoords; ++c) {
+      ArrayRef<APInt> coeffs(flatValues.begin() + idx, extDegree);
+      coordAttrs.push_back(createCoordAttr(baseFieldType, coeffs));
+      idx += extDegree;
+    }
+    pointAttrs.push_back(ArrayAttr::get(ctx, coordAttrs));
+  }
+
+  return ArrayAttr::get(ctx, pointAttrs);
+}
+
+// Helper: recursively parse dense<[...]> values and track shape.
+// Returns flat list of APInt values and the parsed shape.
+ParseResult parseDenseValues(OpAsmParser &parser,
+                             SmallVector<APInt> &parsedInts,
+                             SmallVector<int64_t> &parsedShape) {
+  auto parseNested = [&](auto &&self, int level = 0) -> ParseResult {
+    int64_t count = 0;
+    auto checkpoint = parser.getCurrentLocation();
+    do {
+      APInt val;
+      if (parser.parseOptionalInteger(val).has_value()) {
+        parsedInts.push_back(std::move(val));
+        ++count;
+      } else if (succeeded(parser.parseOptionalLSquare())) {
+        if (failed(self(self, level + 1)))
           return failure();
-        coordValues.push_back(val);
-        return success();
-      };
-
-      if (failed(parser.parseCommaSeparatedList(elementParser)) ||
-          failed(parser.parseRSquare())) {
+        ++count;
+      } else {
         return failure();
       }
-    } else {
-      // Parse as a single base field integer literal.
-      APInt val;
-      if (failed(parser.parseInteger(val)))
-        return failure();
-      coordValues.push_back(val);
-    }
+    } while (succeeded(parser.parseOptionalComma()));
 
-    parsedCoordArrays.push_back(std::move(coordValues));
-    return success();
+    if (static_cast<int64_t>(parsedShape.size()) <= level)
+      parsedShape.resize(level + 1);
+    if (parsedShape[level] == 0)
+      parsedShape[level] = count;
+    else if (parsedShape[level] != count)
+      return parser.emitError(checkpoint, "non-uniform array at dimension ")
+             << level;
+    return parser.parseRSquare();
   };
 
-  if (failed(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::None,
-                                            coordinateParser))) {
-    return parser.emitError(parser.getNameLoc(),
-                            "expected comma-separated coordinates (e.g., x, y "
-                            "or [x0, x1], [y0, y1])");
-  }
-  // Parse type
-  Type parsedType;
-  if (failed(parser.parseColon()) || failed(parser.parseType(parsedType))) {
+  if (failed(parser.parseLSquare()) || failed(parseNested(parseNested)))
     return failure();
+  return success();
+}
+
+// Helper to get modulus from base field type
+FailureOr<APInt> getModulusFromBaseField(OpAsmParser &parser,
+                                         Type baseFieldType) {
+  if (auto pfType = dyn_cast<field::PrimeFieldType>(baseFieldType)) {
+    return pfType.getModulus().getValue();
+  }
+  if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType)) {
+    return efType.getBasePrimeField().getModulus().getValue();
+  }
+  parser.emitError(parser.getCurrentLocation(), "unsupported base field type");
+  return failure();
+}
+
+} // namespace
+
+// Unified parsing for EC constants in dense<...> format.
+// Supports both scalar (!jacobian) and tensor (tensor<Nx!jacobian>) types.
+// Format:
+//   Scalar prime field: dense<[x, y, z]> : !jacobian
+//   Scalar ext field:   dense<[[x0, x1], [y0, y1]]> : !affine_ext2
+//   Tensor prime field: dense<[[x0, y0], [x1, y1]]> : tensor<2x!affine>
+//   Tensor ext field:   dense<[[[a0,a1],[b0,b1]], ...]> :
+//   tensor<Nx!affine_ext2>
+ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
+                                       OperationState &result) {
+  // 1. Parse dense<[...]> format
+  if (failed(parser.parseKeyword("dense")) || failed(parser.parseLess()))
+    return failure();
+
+  SmallVector<APInt> parsedInts;
+  SmallVector<int64_t> parsedShape;
+  if (failed(parseDenseValues(parser, parsedInts, parsedShape)))
+    return failure();
+
+  // 2. Parse type
+  Type parsedType;
+  if (failed(parser.parseGreater()) ||
+      failed(parser.parseColonType(parsedType)))
+    return failure();
+
+  // 3. Determine scalar vs tensor and extract point type
+  bool isTensor = isa<ShapedType>(parsedType);
+  int64_t numPoints = 1;
+  PointTypeInterface pointType;
+
+  if (isTensor) {
+    auto shapedType = cast<ShapedType>(parsedType);
+    numPoints = shapedType.getNumElements();
+    pointType = dyn_cast<PointTypeInterface>(shapedType.getElementType());
+    if (!pointType)
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected point type element");
+  } else {
+    pointType = dyn_cast<PointTypeInterface>(parsedType);
+    if (!pointType)
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected point type");
   }
 
-  Type pointType = getElementTypeOrSelf(parsedType);
-  auto pointTypeInterface = cast<PointTypeInterface>(pointType);
-  if (!pointTypeInterface) {
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected point type, but got ")
-           << parsedType;
+  // 4. Validate shape
+  // Expected shapes:
+  //   Scalar prime field: [numCoords]
+  //   Scalar ext field:   [numCoords, degree]
+  //   Tensor prime field: [numPoints, numCoords]
+  //   Tensor ext field:   [numPoints, numCoords, degree]
+  unsigned numCoords = pointType.getNumCoords();
+  Type baseFieldType = pointType.getBaseFieldType();
+  auto extDegree = getExtensionDegree(baseFieldType);
+
+  SmallVector<int64_t> expectedShape;
+  if (isTensor) {
+    auto shapedType = cast<ShapedType>(parsedType);
+    expectedShape.append(shapedType.getShape().begin(),
+                         shapedType.getShape().end());
   }
+  expectedShape.push_back(static_cast<int64_t>(numCoords));
+  if (extDegree)
+    expectedShape.push_back(static_cast<int64_t>(*extDegree));
 
-  // Get base field from curve
-  ShortWeierstrassAttr curveAttr =
-      cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr());
-  Type baseFieldType = curveAttr.getBaseField();
-
-  unsigned numCoords = pointTypeInterface.getNumCoords();
-
-  if (parsedCoordArrays.size() != numCoords) {
+  if (expectedShape.size() != parsedShape.size() ||
+      !std::equal(expectedShape.begin(), expectedShape.end(),
+                  parsedShape.begin())) {
     return parser.emitError(parser.getCurrentLocation())
-           << "expected " << numCoords << " coordinates for " << parsedType
-           << " but got " << parsedCoordArrays.size();
+           << "shape mismatch: expected ["
+           << llvm::make_range(expectedShape.begin(), expectedShape.end())
+           << "] but got ["
+           << llvm::make_range(parsedShape.begin(), parsedShape.end()) << "]";
   }
 
-  // Determine if base field is an extension field
-  bool isExtensionField = isa<field::ExtensionFieldType>(baseFieldType);
-  unsigned extensionDegree = 1;
-  if (isExtensionField) {
-    extensionDegree =
-        cast<field::ExtensionFieldType>(baseFieldType).getDegreeOverPrime();
-  }
+  // 5. Validate modular values
+  auto modulusOrErr = getModulusFromBaseField(parser, baseFieldType);
+  if (failed(modulusOrErr))
+    return failure();
+  APInt modulus = *modulusOrErr;
 
-  // Validate and create field attributes
-  SmallVector<Attribute> coordAttrs;
-  for (unsigned i = 0; i < numCoords; ++i) {
-    const auto &coordValues = parsedCoordArrays[i];
-
-    // Validate coordinate format matches base field type
-    if (isExtensionField) {
-      if (coordValues.size() != extensionDegree) {
-        return parser.emitError(parser.getCurrentLocation())
-               << "coordinate " << i << " must have " << extensionDegree
-               << " values for extension field, but got " << coordValues.size();
-      }
-    } else {
-      if (coordValues.size() != 1) {
-        return parser.emitError(parser.getCurrentLocation())
-               << "coordinate " << i
-               << " must be a single integer for prime field, but got "
-               << coordValues.size() << " values";
-      }
-    }
-
-    auto attrOrErr = field::validateAndCreateFieldAttribute(
-        parser, baseFieldType, coordValues);
-
-    if (failed(attrOrErr)) {
+  for (APInt &val : parsedInts) {
+    if (failed(validateModularInteger(parser, modulus, val)))
       return failure();
-    }
-    coordAttrs.push_back(field::maybeToMontgomery(baseFieldType, *attrOrErr));
   }
 
-  result.addAttribute("coords",
-                      ArrayAttr::get(parser.getContext(), coordAttrs));
+  // 6. Reconstruct attribute (always ArrayAttr<ArrayAttr<Attr>>)
+  auto coordsAttr = reconstructCoordsAttr(parser.getContext(), parsedInts,
+                                          pointType, numPoints);
+  if (failed(coordsAttr))
+    return parser.emitError(parser.getCurrentLocation(),
+                            "failed to reconstruct coords attribute");
+
+  result.addAttribute("coords", *coordsAttr);
   result.addTypes(parsedType);
   return success();
 }
@@ -461,24 +555,37 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void ConstantOp::print(OpAsmPrinter &p) {
-  p << " ";
-
-  // Get base field type for Montgomery conversion
-  Type pointType = getElementTypeOrSelf(getType());
-  auto pointTypeInterface = cast<PointTypeInterface>(pointType);
-  ShortWeierstrassAttr curveAttr =
-      cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr());
-  Type baseFieldType = curveAttr.getBaseField();
-
+  p << " dense<";
+  Type type = getType();
   auto coords = getCoords();
+  bool isTensor = isa<ShapedType>(type);
+
+  // Unified structure: ArrayAttr<ArrayAttr<Attr>>
+  // - Scalar: [[x, y, z]] -> print as [x, y, z]
+  // - Tensor: [[x0, y0], [x1, y1]] -> print as [[x0, y0], [x1, y1]]
+  if (isTensor) {
+    p << "[";
+  }
+
   for (size_t i = 0; i < coords.size(); ++i) {
     if (i > 0)
       p << ", ";
-    p.printAttributeWithoutType(
-        field::maybeToStandard(baseFieldType, coords[i]));
+    auto pointCoords = cast<ArrayAttr>(coords[i]);
+    p << "[";
+    for (size_t j = 0; j < pointCoords.size(); ++j) {
+      if (j > 0)
+        p << ", ";
+      p.printAttributeWithoutType(pointCoords[j]);
+    }
+    p << "]";
   }
-  p << " : ";
-  p.printType(getType());
+
+  if (isTensor) {
+    p << "]";
+  }
+
+  p << "> : ";
+  p.printType(type);
 }
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
@@ -598,49 +705,58 @@ PointOperationBase<Kind> pointOpFromArrayAttr(ArrayAttr coordsAttr,
   return PointOperationBase<Kind>::fromUnchecked(coords, pointType);
 }
 
-// Convert PointOperation to ArrayAttr
+// Convert a single point's coords to ArrayAttr (inner array)
 template <PointKind Kind>
-ArrayAttr pointOpToArrayAttr(MLIRContext *ctx,
-                             const PointOperationBase<Kind> &op) {
-  SmallVector<Attribute> attrs;
+ArrayAttr pointCoordsToArrayAttr(MLIRContext *ctx,
+                                 const PointOperationBase<Kind> &op) {
   Type baseFieldType = op.getPointType().getBaseFieldType();
+  SmallVector<Attribute> attrs;
 
   for (const auto &coord : op.getCoords()) {
+    // PrimeFieldOperation converts to APInt, ExtensionFieldOperation to
+    // SmallVector<APInt>
     Attribute attr =
         TypeSwitch<Type, Attribute>(baseFieldType)
-            .template Case<field::PrimeFieldType>(
-                [&](field::PrimeFieldType pfType) {
-                  return IntegerAttr::get(pfType.getStorageType(),
-                                          static_cast<APInt>(coord));
-                })
-            .template Case<field::ExtensionFieldType>(
-                [&](field::ExtensionFieldType efType) {
-                  auto pfType =
-                      cast<field::PrimeFieldType>(efType.getBaseField());
-                  SmallVector<APInt> coeffs =
-                      static_cast<SmallVector<APInt>>(coord);
-                  auto tensorType = RankedTensorType::get(
-                      {static_cast<int64_t>(coeffs.size())},
-                      pfType.getStorageType());
-                  return DenseIntElementsAttr::get(tensorType, coeffs);
-                });
+            .template Case<field::PrimeFieldType>([&](auto pfType) {
+              return IntegerAttr::get(pfType.getStorageType(),
+                                      static_cast<APInt>(coord));
+            })
+            .template Case<field::ExtensionFieldType>([&](auto efType) {
+              SmallVector<APInt> coeffs =
+                  static_cast<SmallVector<APInt>>(coord);
+              return createCoordAttr(baseFieldType, coeffs);
+            });
     attrs.push_back(attr);
   }
 
   return ArrayAttr::get(ctx, attrs);
 }
 
-// Create a PointOperation from ArrayAttr based on PointKind
+// Convert PointOperation to unified ArrayAttr<ArrayAttr<Attr>> structure
+// Returns ArrayAttr containing single inner ArrayAttr of coordinate attributes
+template <PointKind Kind>
+ArrayAttr pointOpToArrayAttr(MLIRContext *ctx,
+                             const PointOperationBase<Kind> &op) {
+  ArrayAttr pointCoords = pointCoordsToArrayAttr(ctx, op);
+  return ArrayAttr::get(ctx, {pointCoords});
+}
+
+// Create a PointOperation from ArrayAttr based on PointKind.
+// Unified structure: ArrayAttr<ArrayAttr<Attr>> where outer array contains
+// points and inner array contains coordinates per point.
 PointOperation createPointOp(ArrayAttr coordsAttr,
                              PointTypeInterface pointType) {
+  // Extract the inner array (single point) from unified structure
+  ArrayAttr pointCoords = cast<ArrayAttr>(coordsAttr[0]);
+
   unsigned numCoords = pointType.getNumCoords();
   switch (numCoords) {
   case 2:
-    return pointOpFromArrayAttr<PointKind::kAffine>(coordsAttr, pointType);
+    return pointOpFromArrayAttr<PointKind::kAffine>(pointCoords, pointType);
   case 3:
-    return pointOpFromArrayAttr<PointKind::kJacobian>(coordsAttr, pointType);
+    return pointOpFromArrayAttr<PointKind::kJacobian>(pointCoords, pointType);
   case 4:
-    return pointOpFromArrayAttr<PointKind::kXYZZ>(coordsAttr, pointType);
+    return pointOpFromArrayAttr<PointKind::kXYZZ>(pointCoords, pointType);
   default:
     llvm_unreachable("invalid number of coordinates for point type");
   }
