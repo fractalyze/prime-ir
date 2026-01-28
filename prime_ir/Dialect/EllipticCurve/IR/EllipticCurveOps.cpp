@@ -566,14 +566,16 @@ namespace {
 
 // Extract a FieldOperation from an attribute (IntegerAttr or DenseElementsAttr)
 field::FieldOperation getFieldOpFromAttr(Attribute attr, Type fieldType) {
-  if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
-    return field::FieldOperation::fromUnchecked(intAttr.getValue(), fieldType);
-  }
-  auto denseAttr = cast<DenseIntElementsAttr>(attr);
-  // Use the non-template overload for SmallVector<APInt>
-  auto values = denseAttr.getValues<APInt>();
-  const SmallVector<APInt> coeffs(values.begin(), values.end());
-  return field::FieldOperation::fromUnchecked(coeffs, fieldType);
+  return TypeSwitch<Attribute, field::FieldOperation>(attr)
+      .Case<IntegerAttr>([&](auto intAttr) {
+        return field::FieldOperation::fromUnchecked(intAttr.getValue(),
+                                                    fieldType);
+      })
+      .Case<DenseIntElementsAttr>([&](auto denseAttr) {
+        auto values = denseAttr.template getValues<APInt>();
+        const SmallVector<APInt> coeffs(values.begin(), values.end());
+        return field::FieldOperation::fromUnchecked(coeffs, fieldType);
+      });
 }
 
 // Convert ArrayAttr (coordinates) to PointOperation
@@ -604,18 +606,25 @@ ArrayAttr pointOpToArrayAttr(MLIRContext *ctx,
   Type baseFieldType = op.getPointType().getBaseFieldType();
 
   for (const auto &coord : op.getCoords()) {
-    if (isa<field::PrimeFieldType>(baseFieldType)) {
-      auto pfType = cast<field::PrimeFieldType>(baseFieldType);
-      attrs.push_back(
-          IntegerAttr::get(pfType.getStorageType(), static_cast<APInt>(coord)));
-    } else if (isa<field::ExtensionFieldType>(baseFieldType)) {
-      auto efType = cast<field::ExtensionFieldType>(baseFieldType);
-      auto pfType = cast<field::PrimeFieldType>(efType.getBaseField());
-      SmallVector<APInt> coeffs = static_cast<SmallVector<APInt>>(coord);
-      auto tensorType = RankedTensorType::get(
-          {static_cast<int64_t>(coeffs.size())}, pfType.getStorageType());
-      attrs.push_back(DenseIntElementsAttr::get(tensorType, coeffs));
-    }
+    Attribute attr =
+        TypeSwitch<Type, Attribute>(baseFieldType)
+            .template Case<field::PrimeFieldType>(
+                [&](field::PrimeFieldType pfType) {
+                  return IntegerAttr::get(pfType.getStorageType(),
+                                          static_cast<APInt>(coord));
+                })
+            .template Case<field::ExtensionFieldType>(
+                [&](field::ExtensionFieldType efType) {
+                  auto pfType =
+                      cast<field::PrimeFieldType>(efType.getBaseField());
+                  SmallVector<APInt> coeffs =
+                      static_cast<SmallVector<APInt>>(coord);
+                  auto tensorType = RankedTensorType::get(
+                      {static_cast<int64_t>(coeffs.size())},
+                      pfType.getStorageType());
+                  return DenseIntElementsAttr::get(tensorType, coeffs);
+                });
+    attrs.push_back(attr);
   }
 
   return ArrayAttr::get(ctx, attrs);
