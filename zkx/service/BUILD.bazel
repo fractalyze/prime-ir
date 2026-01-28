@@ -627,8 +627,26 @@ zkx_cc_library(
 
 zkx_cc_library(
     name = "hlo_cost_analysis",
+    srcs = ["hlo_cost_analysis.cc"],
     hdrs = ["hlo_cost_analysis.h"],
-    deps = ["//zkx:shape_util"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:status_macros",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/base:bits",
+        "//zkx/hlo/ir:hlo",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
 )
 
 zkx_cc_library(
@@ -1486,6 +1504,7 @@ zkx_cc_unittest(
         # TODO(chokobole): Add unittest. Dependency: HloTestBase
         # "dynamic_dimension_inference_unittest.cc",
         "elemental_ir_emitter_unittest.cc",
+        "hlo_cost_analysis_unittest.cc",
         "hlo_creation_utils_unittest.cc",
         "hlo_graph_dumper_unittest.cc",
         "hlo_module_config_unittest.cc",
@@ -1525,6 +1544,7 @@ zkx_cc_unittest(
         ":custom_call_target_registry",
         ":dump",
         ":elemental_ir_emitter",
+        ":hlo_cost_analysis",
         ":hlo_creation_utils",
         ":hlo_graph_dumper",
         ":hlo_module_config",
