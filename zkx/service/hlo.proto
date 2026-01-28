@@ -37,10 +37,79 @@ import "zkx/zkx_data.proto";
 
 option cc_enable_arenas = true;
 
+// Specifies the desired schedule for the custom-call.
 enum CustomCallSchedule {
   SCHEDULE_NONE = 0;
   SCHEDULE_LATEST = 1;
   SCHEDULE_EARLIEST = 2;
+}
+
+// The version of the API used by the custom call function. The signatures for
+// each version are given below.
+// TODO(b/189822916): Remove this enum when all clients are migrated to the
+// status-returning API.
+enum CustomCallApiVersion {
+  API_VERSION_UNSPECIFIED = 0;
+
+  // The first version of the API, with the following signatures:
+  //
+  // CPU:
+  //   void do_custom_call(void* out, const void** in);
+  //
+  // GPU:
+  //   void do_custom_call(CUstream stream, void** buffers,
+  //                       const char* opaque, size_t opaque_len);
+  API_VERSION_ORIGINAL = 1;
+
+  // When the ability to return success/failure status was added:
+  //
+  // CPU:
+  //   void do_custom_call(void* out, const void** in,
+  //                       ZkxCustomCallStatus* status);
+  //
+  // GPU:
+  //   void do_custom_call(CUstream stream, void** buffers,
+  //                       const char* opaque, size_t opaque_len,
+  //                       ZkxCustomCallStatus* status);
+  API_VERSION_STATUS_RETURNING = 2;
+
+  // Fixes the API signatures on the CPU side of the version STATUS_RETURNING by
+  // adding the opaque string so that the custom call API is consistent across
+  // CPUs and GPUs. For GPUs, the behaviors invoked by
+  // API_VERSION_STATUS_RETURNING and API_VERSION_STATUS_RETURNING_UNIFIED are
+  // the same.
+  //
+  // CPU:
+  //   void do_custom_call(void* out, const void** in,
+  //                       const char* opaque, size_t opaque_len,
+  //                       ZkxCustomCallStatus* status);
+  //
+  // GPU:
+  //   void do_custom_call(CUstream stream, void** buffers,
+  //                       const char* opaque, size_t opaque_len,
+  //                       ZkxCustomCallStatus* status);
+  API_VERSION_STATUS_RETURNING_UNIFIED = 3;
+
+  // API version implementing ZKX runtime custom call calling convention. These
+  // custom calls can be registered as a ZKX runtime custom call (1) or as ZKX
+  // runtime FFI binding (2).
+  //
+  // This type of custom call uses custom ABI to pass type information along
+  // with custom call arguments. Also it passes buffer arguments together with
+  // data type, sizes and strides.
+  //
+  // Example: (ZKX runtime custom call)
+  //
+  //   absl::Status DoCustomCall(StridedMemrefView arg, float attr);
+  //
+  //   CustomCall::Bind("custom_call")
+  //     .Arg<StridedMemrefView>()
+  //     .Attr<float>("attr")
+  //     .To(DoCustomCall);
+  //
+  // (1) zkx/runtime/custom_call.h
+  // (2) zkx/runtime/ffi/ffi.h
+  API_VERSION_TYPED_FFI = 4;
 }
 
 // Serialization of HloInstruction.
@@ -113,6 +182,10 @@ message HloInstructionProto {
 
   // The string representation of the infeed configuration.
   bytes infeed_config = 27;
+
+  // Name of a external target (eg, global symbol) to call, only present for
+  // kCustomCall.
+  string custom_call_target = 28;
 
   // Shape of outfeed request.
   ShapeProto outfeed_shape = 29;
@@ -211,12 +284,22 @@ message HloInstructionProto {
   // caller.
   bool indices_are_sorted = 67;
 
-  // Frontend attributes to pass to the XLA backend.
+  // Frontend attributes to pass to the ZKX backend.
   FrontendAttributes frontend_attributes = 68;
 
   // Specifies if all elements updated are guaranteed to be unique by
   // the caller.
   bool unique_indices = 69;
+
+  // Specifies the desired schedule for the custom-call. The field is only
+  // present for custom-call.
+  CustomCallSchedule custom_call_schedule = 76;
+
+  // The API version used by the custom call function. This field is only
+  // present for custom-call.
+  // TODO(b/189822916): Remove this field when all clients are migrated to the
+  // status-returning API.
+  CustomCallApiVersion custom_call_api_version = 77;
 
   // The primitive type used for kCompare.
   optional PrimitiveType comparison_primitive_type = 72;
@@ -492,7 +575,7 @@ message HloModuleProto {
   // Stack frames index.
   StackFrameIndexProto stack_frame_index = 17;
 
-  // Frontend attributes to pass to the XLA backend.
+  // Frontend attributes to pass to the ZKX backend.
   FrontendAttributes frontend_attributes = 19;
 
   reserved 9;

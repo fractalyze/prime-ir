@@ -1311,6 +1311,127 @@ class HloCallableInstruction : public HloInstruction {
       output_to_operand_aliasing_;
 };
 
+class HloCustomCallInstruction : public HloCallableInstruction {
+ public:
+  HloCustomCallInstruction(const Shape& shape,
+                           absl::Span<HloInstruction* const> operands,
+                           std::string_view custom_call_target,
+                           std::string opaque,
+                           CustomCallApiVersion api_version);
+
+  // Constructor for a custom call with a to_apply computation.
+  HloCustomCallInstruction(const Shape& shape,
+                           absl::Span<HloInstruction* const> operands,
+                           HloComputation* to_apply,
+                           std::string_view custom_call_target,
+                           std::string opaque,
+                           CustomCallApiVersion api_version);
+
+  // Constructor for a custom call with multiple computations.
+  HloCustomCallInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      absl::Span<HloComputation* const> called_computations,
+      std::string_view custom_call_target, std::string opaque,
+      CustomCallApiVersion api_version);
+
+  // Constructor for a custom call with constrained layout. 'shape' and
+  // 'operand_shapes_with_layout' must all have layouts.
+  HloCustomCallInstruction(const Shape& shape,
+                           absl::Span<HloInstruction* const> operands,
+                           std::string_view custom_call_target,
+                           std::string opaque,
+                           absl::Span<const Shape> operand_shapes_with_layout,
+                           CustomCallApiVersion api_version);
+
+  // TODO(jpienaar): Remove this accessor in the follow up.
+  const std::string& opaque() const { return raw_backend_config_string(); }
+  const std::string& custom_call_target() const { return custom_call_target_; }
+  void set_custom_call_target(std::string_view target) {
+    custom_call_target_ = std::string(target);
+  }
+  // Sets whether this custom call has a side-effect - by default a custom call
+  // has no side-effects.
+  void set_custom_call_has_side_effect(bool custom_call_has_side_effect) {
+    custom_call_has_side_effect_ = custom_call_has_side_effect;
+  }
+  bool custom_call_has_side_effect() const {
+    return custom_call_has_side_effect_;
+  }
+
+  // Returns the literal associated with this instruction.
+  const Literal& literal() const { return *literal_; }
+  // Set the value of literal to a new one.
+  void set_literal(Literal&& literal) { literal_.emplace(std::move(literal)); }
+  // Returns whether there is literal associated with this instruction.
+  bool HasLiteral() const { return literal_.has_value(); }
+
+  // Returns a serialized representation of this instruction.
+  HloInstructionProto ToProto() const override;
+
+  // Returns whether the result and operand layouts are constrained.
+  bool layout_constrained() const { return layout_constrained_; }
+
+  // Returns the shapes (with layout) of the operands. CHECKs if this custom
+  // call does not have constrained layouts.
+  const std::vector<Shape>& operand_shapes_with_layout() const {
+    CHECK(layout_constrained());
+    return operand_shapes_with_layout_;
+  }
+  void set_operand_shapes_with_layout(
+      std::vector<Shape> operand_shapes_with_layout) {
+    CHECK(layout_constrained());
+    operand_shapes_with_layout_ = std::move(operand_shapes_with_layout);
+  }
+  void set_custom_call_schedule(CustomCallSchedule custom_call_schedule) {
+    custom_call_schedule_ = custom_call_schedule;
+  }
+  CustomCallSchedule custom_call_schedule() const {
+    return custom_call_schedule_;
+  }
+  void set_api_version(CustomCallApiVersion api_version) {
+    api_version_ = api_version;
+  }
+  CustomCallApiVersion api_version() const { return api_version_; }
+
+  static bool ClassOf(const HloInstruction* hlo) {
+    return hlo->opcode() == HloOpcode::kCustomCall;
+  }
+
+ protected:
+  std::string default_called_computation_name() const override {
+    return "custom_call_computation";
+  }
+
+ private:
+  void PrintExtraAttributesImpl(AttributePrinter& printer,
+                                const HloPrintOptions& options) const override;
+  bool IdenticalSlowPath(
+      const HloInstruction& other,
+      absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
+          eq_computations) const override;
+  // Implementation for non-common logic of CloneWithNewOperands.
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+      HloCloneContext* context) const override;
+
+  // Name of a global symbol to call.
+  std::string custom_call_target_;
+  // Whether the result and operand layouts are constrained.
+  bool layout_constrained_;
+  // For layout-constrained custom calls, this vector holds the shape with
+  // layout for each operand.
+  std::vector<Shape> operand_shapes_with_layout_;
+  // Whether this custom call has a side-effect.
+  bool custom_call_has_side_effect_;
+  std::optional<Literal> literal_;
+  // A custom-call schedule hint.
+  CustomCallSchedule custom_call_schedule_;
+  // The version of the API used by the custom call function.
+  // TODO(b/189822916): Remove this field when all clients are migrated to the
+  // status-returning API.
+  CustomCallApiVersion api_version_;
+};
+
 class HloFusionInstruction : public HloCallableInstruction {
  public:
   explicit HloFusionInstruction(const Shape& shape, FusionKind fusion_kind,

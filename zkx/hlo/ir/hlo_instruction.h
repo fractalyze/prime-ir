@@ -882,6 +882,37 @@ class HloInstruction {
       HloComputation* decomposition, const std::string& name,
       const std::string& attributes, int64_t version);
 
+  static std::unique_ptr<HloInstruction> CreateCustomCall(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      std::string_view custom_call_target, std::string opaque = "",
+      CustomCallApiVersion api_version = API_VERSION_ORIGINAL);
+
+  // Overload with a to_apply computation.
+  static std::unique_ptr<HloInstruction> CreateCustomCall(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      HloComputation* to_apply, std::string_view custom_call_target,
+      std::string opaque = "",
+      CustomCallApiVersion api_version = API_VERSION_ORIGINAL);
+
+  // Overload with multiple computations. The called computations can have
+  // different function signatures.
+  static std::unique_ptr<HloInstruction> CreateCustomCall(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      absl::Span<HloComputation* const> called_computations,
+      std::string_view custom_call_target, std::string opaque = "",
+      CustomCallApiVersion api_version = API_VERSION_ORIGINAL);
+
+  // Overload which constrains the layouts of the operand and result. 'shape'
+  // and 'operand_shapes_with_layout' must have layouts.
+  // 'operand_shapes_with_layout' must have a compatible element for each
+  // operand.
+  static std::unique_ptr<HloInstruction> CreateCustomCall(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      std::string_view custom_call_target,
+      absl::Span<const Shape> operand_shapes_with_layout,
+      std::string opaque = "",
+      CustomCallApiVersion api_version = API_VERSION_ORIGINAL);
+
   // Creates a tuple instruction with the given elements. This is a convenience
   // wrapper around CreateVariadic.
   static std::unique_ptr<HloInstruction> CreateTuple(
@@ -1348,6 +1379,9 @@ class HloInstruction {
   // Returns true if this instruction can be legally fused into a fusion
   // instruction.
   bool IsFusible() const;
+
+  bool IsCustomCall(std::string_view target) const;
+  bool IsCustomCall(absl::Span<const std::string_view> targets) const;
 
   // Returns the sharding applied to this operator.
   // REQUIRES: has_sharding() is true.
@@ -1895,6 +1929,13 @@ class HloInstruction {
       std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
           aliasing);
 
+  // Delegates to HloCustomCallInstruction::custom_call_target.
+  const std::string& custom_call_target() const;
+  void set_custom_call_target(std::string_view target);
+
+  // Returns whether the instruction has a constant operand.
+  bool HasConstantOperand() const;
+
   // Appends operand(s) to the list of operands and adds this instruction as a
   // user of the operand.
   void AppendOperand(HloInstruction* operand);
@@ -2228,6 +2269,10 @@ extern template absl::Status HloInstruction::Visit(ConstDfsHloVisitor* visitor);
 std::string_view ToString(HloInstruction::FusionKind kind);
 absl::StatusOr<HloInstruction::FusionKind> StringToFusionKind(
     std::string_view kind_name);
+absl::StatusOr<CustomCallSchedule> StringToCustomCallSchedule(
+    std::string_view name);
+absl::StatusOr<CustomCallApiVersion> StringToCustomCallApiVersion(
+    std::string_view name);
 
 // Custom (de)stringification functions for protos that live inside
 // HloInstruction.

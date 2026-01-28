@@ -2566,6 +2566,245 @@ std::unique_ptr<HloInstruction> HloOutfeedInstruction::CloneWithNewOperandsImpl(
       outfeed_shape(), new_operands[0], new_operands[1], outfeed_config());
 }
 
+HloCustomCallInstruction::HloCustomCallInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    std::string_view custom_call_target, std::string opaque,
+    CustomCallApiVersion api_version)
+    : HloCallableInstruction(HloOpcode::kCustomCall, shape, operands),
+      custom_call_target_(custom_call_target),
+      layout_constrained_(false),
+      custom_call_has_side_effect_(false),
+      custom_call_schedule_(SCHEDULE_NONE),
+      api_version_(api_version) {
+  set_raw_backend_config_string(std::move(opaque));
+}
+
+HloCustomCallInstruction::HloCustomCallInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloComputation* to_apply, std::string_view custom_call_target,
+    std::string opaque, CustomCallApiVersion api_version)
+    : HloCallableInstruction(HloOpcode::kCustomCall, shape, operands, to_apply),
+      custom_call_target_(custom_call_target),
+      layout_constrained_(false),
+      custom_call_has_side_effect_(false),
+      custom_call_schedule_(SCHEDULE_NONE),
+      api_version_(api_version) {
+  set_raw_backend_config_string(std::move(opaque));
+  to_apply->SetCustomCallInstruction(this);
+}
+
+HloCustomCallInstruction::HloCustomCallInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    absl::Span<HloComputation* const> called_computations,
+    std::string_view custom_call_target, std::string opaque,
+    CustomCallApiVersion api_version)
+    : HloCallableInstruction(HloOpcode::kCustomCall, shape, operands,
+                             called_computations),
+      custom_call_target_(custom_call_target),
+      layout_constrained_(false),
+      custom_call_has_side_effect_(false),
+      custom_call_schedule_(SCHEDULE_NONE),
+      api_version_(api_version) {
+  set_raw_backend_config_string(std::move(opaque));
+  for (auto comp : called_computations) {
+    comp->SetCustomCallInstruction(this);
+  }
+}
+
+HloCustomCallInstruction::HloCustomCallInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    std::string_view custom_call_target, std::string opaque,
+    absl::Span<const Shape> operand_shapes_with_layout,
+    CustomCallApiVersion api_version)
+    : HloCallableInstruction(HloOpcode::kCustomCall, shape, operands),
+      custom_call_target_(custom_call_target),
+      layout_constrained_(true),
+      operand_shapes_with_layout_(operand_shapes_with_layout.begin(),
+                                  operand_shapes_with_layout.end()),
+      custom_call_has_side_effect_(false),
+      custom_call_schedule_(SCHEDULE_NONE),
+      api_version_(api_version) {
+  set_raw_backend_config_string(std::move(opaque));
+}
+
+HloInstructionProto HloCustomCallInstruction::ToProto() const {
+  HloInstructionProto proto = HloInstruction::ToProto();
+  // Note: window_, convolution_dimension_numbers_, feature_group_count_,
+  // batch_group_count_, precision_config_, and padding_type_ are omitted
+  // as ZKX does not support convolution operations.
+  proto.set_custom_call_target(custom_call_target_);
+  if (layout_constrained()) {
+    proto.set_constrain_layout(true);
+    for (const Shape& shape : operand_shapes_with_layout_) {
+      *proto.add_operand_shapes_with_layout() = shape.ToProto();
+    }
+  }
+  proto.set_custom_call_has_side_effect(custom_call_has_side_effect_);
+  if (literal_) {
+    *proto.mutable_literal() = literal_->ToProto();
+  }
+  for (const auto& pair : output_to_operand_aliasing()) {
+    auto* aliasing = proto.add_output_operand_aliasing();
+    aliasing->set_operand_index(pair.second.first);
+    for (int64_t index : pair.first) {
+      aliasing->add_output_shape_index(index);
+    }
+    for (int64_t index : pair.second.second) {
+      aliasing->add_operand_shape_index(index);
+    }
+  }
+  proto.set_custom_call_schedule(custom_call_schedule_);
+  proto.set_custom_call_api_version(api_version_);
+  return proto;
+}
+
+void HloCustomCallInstruction::PrintExtraAttributesImpl(
+    AttributePrinter& printer, const HloPrintOptions& options) const {
+  // Note: window_, convolution_dimension_numbers_, feature_group_count_,
+  // batch_group_count_, precision_config_, and padding_type_ printing
+  // are omitted as ZKX does not support convolution operations.
+
+  // By contract, we print the custom call target even if
+  // options.print_subcomputation_mode() == kOff, because the call target is
+  // not an HloComputation.
+  printer.Next([this](Printer* printer) {
+    AppendCat(printer, "custom_call_target=\"",
+              absl::CEscape(custom_call_target_), "\"");
+  });
+
+  if (layout_constrained()) {
+    printer.Next([this](Printer* printer) {
+      printer->Append("operand_layout_constraints={");
+      if (!operand_shapes_with_layout_.empty()) {
+        ShapeUtil::PrintHumanStringWithLayout(printer,
+                                              operand_shapes_with_layout_[0]);
+        for (const Shape& shape :
+             absl::MakeSpan(operand_shapes_with_layout_).subspan(1)) {
+          printer->Append(", ");
+          ShapeUtil::PrintHumanStringWithLayout(printer, shape);
+        }
+      }
+      printer->Append("}");
+    });
+  }
+
+  if (custom_call_has_side_effect_) {
+    printer.Next([](Printer* printer) {
+      printer->Append("custom_call_has_side_effect=true");
+    });
+  }
+
+  if (literal_) {
+    printer.Next([this](Printer* printer) {
+      printer->Append("literal=");
+      literal_->PrintWithLayoutOneline(printer);
+    });
+  }
+
+  if (!output_to_operand_aliasing().empty()) {
+    printer.Next([this](Printer* printer) {
+      printer->Append("output_to_operand_aliasing={");
+      AppendJoin(printer, output_to_operand_aliasing(), ", ",
+                 [](Printer* printer, auto& pair) {
+                   AppendCat(printer, pair.first.ToString(), ": (",
+                             pair.second.first, ", ");
+                   AppendCat(printer, pair.second.second.ToString(), ")");
+                 });
+      printer->Append("}");
+    });
+  }
+
+  if (custom_call_schedule_ != SCHEDULE_NONE) {
+    printer.Next([this](Printer* printer) {
+      AppendCat(printer,
+                "schedule=", CustomCallSchedule_Name(custom_call_schedule_));
+    });
+  }
+
+  if (api_version_ != API_VERSION_ORIGINAL) {
+    printer.Next([this](Printer* printer) {
+      AppendCat(printer,
+                "api_version=", CustomCallApiVersion_Name(api_version_));
+    });
+  }
+}
+
+bool HloCustomCallInstruction::IdenticalSlowPath(
+    const HloInstruction& other,
+    absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
+        eq_computations) const {
+  const auto& casted_other =
+      static_cast<const HloCustomCallInstruction&>(other);
+  if (layout_constrained() != casted_other.layout_constrained()) {
+    return false;
+  }
+  if (layout_constrained()) {
+    for (int64_t i = 0; i < operand_shapes_with_layout_.size(); ++i) {
+      if (!ShapeUtil::Equal(operand_shapes_with_layout_[i],
+                            casted_other.operand_shapes_with_layout_[i])) {
+        return false;
+      }
+    }
+  }
+  if (custom_call_has_side_effect_ !=
+      casted_other.custom_call_has_side_effect()) {
+    return false;
+  }
+  if (output_to_operand_aliasing() !=
+      casted_other.output_to_operand_aliasing()) {
+    return false;
+  }
+  if (called_computations().size() != other.called_computations().size()) {
+    return false;
+  }
+  for (int64_t i = 0; i < called_computations().size(); ++i) {
+    if (!eq_computations(called_computations()[i],
+                         other.called_computations()[i])) {
+      return false;
+    }
+  }
+  if (custom_call_schedule_ != casted_other.custom_call_schedule()) {
+    return false;
+  }
+  if (HasLiteral() != casted_other.HasLiteral()) {
+    return false;
+  }
+  if (HasLiteral() && literal() != casted_other.literal()) {
+    return false;
+  }
+  if (api_version_ != casted_other.api_version_) {
+    return false;
+  }
+  // Note: backend_config comparison is done in Identical, which is the
+  // intended/exposed way to compare computations, and so not repeated here.
+  return custom_call_target_ == casted_other.custom_call_target_;
+}
+
+std::unique_ptr<HloInstruction>
+HloCustomCallInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext* context) const {
+  absl::InlinedVector<HloComputation*, 1> new_called_computations =
+      GetOrCloneCalledComputations(context);
+
+  auto cloned = std::make_unique<HloCustomCallInstruction>(
+      shape, new_operands, new_called_computations, custom_call_target(),
+      opaque(), api_version_);
+  if (layout_constrained()) {
+    cloned->layout_constrained_ = true;
+    cloned->operand_shapes_with_layout_ = operand_shapes_with_layout();
+  }
+  // Note: window_, convolution_dimension_numbers_, feature_group_count_,
+  // batch_group_count_, padding_type_, and precision_config_ are omitted
+  // as ZKX does not support convolution operations.
+  if (HasLiteral()) {
+    cloned->set_literal(literal().Clone());
+  }
+  cloned->set_custom_call_has_side_effect(custom_call_has_side_effect_);
+  cloned->set_output_to_operand_aliasing(output_to_operand_aliasing());
+  cloned->set_custom_call_schedule(custom_call_schedule_);
+  return std::move(cloned);
+}
 HloPadInstruction::HloPadInstruction(const Shape& shape,
                                      HloInstruction* operand,
                                      HloInstruction* padding_value,

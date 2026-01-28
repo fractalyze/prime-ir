@@ -236,6 +236,8 @@ class HloParserImpl : public HloParser {
     kStringOrJsonDict,
     kCollectiveDeviceList,
     kOriginalValue,
+    kCustomCallSchedule,
+    kCustomCallApiVersion,
   };
 
   struct AttrConfig {
@@ -500,6 +502,8 @@ class HloParserImpl : public HloParser {
   bool ParseComparisonDirection(ComparisonDirection* result);
   bool ParseComparisonOrder(ComparisonOrder* result);
   bool ParseFusionKind(HloInstruction::FusionKind* result);
+  bool ParseCustomCallSchedule(CustomCallSchedule* result);
+  bool ParseCustomCallApiVersion(CustomCallApiVersion* result);
   template <typename T>
   bool ParseG1Affine(PrimitiveType type, T* result) {
     using BaseField = typename T::BaseField;
@@ -2907,10 +2911,127 @@ HloInstruction* HloParserImpl::CreateInstruction(  // NOLINT
           absl::MakeSpan(operands).subspan(1)));
     }
     case HloOpcode::kCustomCall: {
-      // clang-format off
-       // TODO(chokobole): Implement this. Dependency: HloInstruction::CreateCustomCall
-      // clang-format on
-      return nullptr;
+      // Note: window, convolution_dimension_numbers, feature_group_count,
+      // batch_group_count, padding_type, and operand_precision are omitted
+      // as ZKX does not support convolution operations.
+      std::optional<std::string> custom_call_target;
+      std::optional<std::vector<Shape>> operand_layout_constraints;
+      std::optional<bool> custom_call_has_side_effect;
+      std::optional<HloComputation*> to_apply;
+      std::optional<
+          std::vector<std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>>
+          output_to_operand_aliasing;
+      std::optional<std::vector<HloComputation*>> called_computations;
+      std::optional<CustomCallSchedule> custom_call_schedule;
+      std::optional<CustomCallApiVersion> api_version;
+      attrs["custom_call_target"] = {/*required=*/true, AttrTy::kString,
+                                     &custom_call_target};
+      attrs["operand_layout_constraints"] = {
+          /*required=*/false, AttrTy::kShapeList, &operand_layout_constraints};
+      attrs["custom_call_has_side_effect"] = {/*required=*/false, AttrTy::kBool,
+                                              &custom_call_has_side_effect};
+      attrs["to_apply"] = {/*required=*/false, AttrTy::kHloComputation,
+                           &to_apply};
+      attrs["called_computations"] = {/*required=*/false,
+                                      AttrTy::kBracedHloComputationList,
+                                      &called_computations};
+      attrs["output_to_operand_aliasing"] = {/*required=*/false,
+                                             AttrTy::kInstructionAliasing,
+                                             &output_to_operand_aliasing};
+
+      std::optional<Literal> literal;
+      attrs["literal"] = {/*required=*/false, AttrTy::kLiteral, &literal};
+      HloInstruction* instruction;
+      if (called_computations.has_value() && to_apply.has_value()) {
+        TokenError(
+            "A single instruction can't have both to_apply and "
+            "calls field");
+        return nullptr;
+      }
+      attrs["schedule"] = {/*required=*/false, AttrTy::kCustomCallSchedule,
+                           &custom_call_schedule};
+      attrs["api_version"] = {/*required=*/false, AttrTy::kCustomCallApiVersion,
+                              &api_version};
+      if ((!preset_operands && !ParseOperands(&operands, builder)) ||
+          !ParseAttributes(attrs, allow_attributes, shape)) {
+        return nullptr;
+      }
+
+      if (api_version.has_value() &&
+          *api_version == CustomCallApiVersion::API_VERSION_UNSPECIFIED) {
+        TokenError(absl::StrCat("Invalid API version: ",
+                                CustomCallApiVersion_Name(*api_version)));
+        return nullptr;
+      }
+      if (operand_layout_constraints.has_value()) {
+        if (!LayoutUtil::HasLayout(*shape)) {
+          TokenError("Layout must be set on layout-constrained custom call");
+          return nullptr;
+        }
+        if (operands.size() != operand_layout_constraints->size()) {
+          TokenError(absl::StrCat(
+              "Expected ", operands.size(), " operand layout constraints, ",
+              operand_layout_constraints->size(), " given"));
+          return nullptr;
+        }
+        for (int64_t i = 0; i < operands.size(); ++i) {
+          const Shape& operand_shape_with_layout =
+              (*operand_layout_constraints)[i];
+          if (!LayoutUtil::HasLayout(operand_shape_with_layout)) {
+            TokenError(absl::StrCat(
+                "Operand layout constraint shape ",
+                ShapeUtil::HumanStringWithLayout(operand_shape_with_layout),
+                " for operand ", i, " does not have a layout"));
+            return nullptr;
+          }
+          if (!ShapeUtil::Compatible(operand_shape_with_layout,
+                                     operands[i]->shape())) {
+            TokenError(absl::StrCat(
+                "Operand layout constraint shape ",
+                ShapeUtil::HumanStringWithLayout(operand_shape_with_layout),
+                " for operand ", i, " is not compatible with operand shape ",
+                ShapeUtil::HumanStringWithLayout(operands[i]->shape())));
+            return nullptr;
+          }
+        }
+        instruction = builder->AddInstruction(HloInstruction::CreateCustomCall(
+            *shape, operands, *custom_call_target, *operand_layout_constraints,
+            ""));
+      } else {
+        if (to_apply.has_value()) {
+          instruction =
+              builder->AddInstruction(HloInstruction::CreateCustomCall(
+                  *shape, operands, *to_apply, *custom_call_target, ""));
+        } else if (called_computations.has_value()) {
+          instruction =
+              builder->AddInstruction(HloInstruction::CreateCustomCall(
+                  *shape, operands, *called_computations, *custom_call_target,
+                  ""));
+        } else {
+          instruction =
+              builder->AddInstruction(HloInstruction::CreateCustomCall(
+                  *shape, operands, *custom_call_target, ""));
+        }
+      }
+      auto custom_call_instr = Cast<HloCustomCallInstruction>(instruction);
+      if (custom_call_has_side_effect.has_value()) {
+        custom_call_instr->set_custom_call_has_side_effect(
+            *custom_call_has_side_effect);
+      }
+      if (custom_call_schedule.has_value()) {
+        custom_call_instr->set_custom_call_schedule(*custom_call_schedule);
+      }
+      if (api_version.has_value()) {
+        custom_call_instr->set_api_version(*api_version);
+      }
+      if (output_to_operand_aliasing.has_value()) {
+        custom_call_instr->set_output_to_operand_aliasing(
+            std::move(*output_to_operand_aliasing));
+      }
+      if (literal.has_value()) {
+        custom_call_instr->set_literal(std::move(*literal));
+      }
+      return instruction;
     }
     case HloOpcode::kDot: {
       std::optional<std::vector<int64_t>> lhs_contracting_dims;
@@ -4585,6 +4706,24 @@ bool HloParserImpl::ParseAttributeHelper(
             ->emplace(result);
         return true;
       }
+      case AttrTy::kCustomCallSchedule: {
+        CustomCallSchedule result;
+        if (!ParseCustomCallSchedule(&result)) {
+          return false;
+        }
+        static_cast<std::optional<CustomCallSchedule>*>(attr_out_ptr)
+            ->emplace(result);
+        return true;
+      }
+      case AttrTy::kCustomCallApiVersion: {
+        CustomCallApiVersion result;
+        if (!ParseCustomCallApiVersion(&result)) {
+          return false;
+        }
+        static_cast<std::optional<CustomCallApiVersion>*>(attr_out_ptr)
+            ->emplace(result);
+        return true;
+      }
       case AttrTy::kBracedInt64List: {
         std::vector<int64_t> result;
         if (!ParseInt64List(TokKind::kLbrace, TokKind::kRbrace, TokKind::kComma,
@@ -5951,6 +6090,40 @@ bool HloParserImpl::ParseFusionKind(HloInstruction::FusionKind* result) {
     return TokenError(
         absl::StrFormat("expects fusion kind but sees: %s, error: %s", val,
                         status_or_result.status().message()));
+  }
+  *result = status_or_result.value();
+  lexer_.Lex();
+  return true;
+}
+
+bool HloParserImpl::ParseCustomCallSchedule(CustomCallSchedule* result) {
+  VLOG(kDebugLevel) << "ParseCustomCallSchedule";
+  if (lexer_.GetKind() != TokKind::kIdent) {
+    return TokenError("expects custom-call schedule");
+  }
+  std::string val = lexer_.GetStrVal();
+  auto status_or_result = StringToCustomCallSchedule(val);
+  if (!status_or_result.ok()) {
+    return TokenError(
+        absl::StrFormat("expects custom-call schedule but sees: %s, error: %s",
+                        val, status_or_result.status().message()));
+  }
+  *result = status_or_result.value();
+  lexer_.Lex();
+  return true;
+}
+
+bool HloParserImpl::ParseCustomCallApiVersion(CustomCallApiVersion* result) {
+  VLOG(kDebugLevel) << "ParseCustomCallApiVersion";
+  if (lexer_.GetKind() != TokKind::kIdent) {
+    return TokenError("expects custom-call API version");
+  }
+  std::string val = lexer_.GetStrVal();
+  auto status_or_result = StringToCustomCallApiVersion(val);
+  if (!status_or_result.ok()) {
+    return TokenError(absl::StrFormat(
+        "expects custom-call API version but sees: %s, error: %s", val,
+        status_or_result.status().message()));
   }
   *result = status_or_result.value();
   lexer_.Lex();
