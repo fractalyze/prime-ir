@@ -411,7 +411,10 @@ ParseResult parseDenseValues(OpAsmParser &parser,
     auto checkpoint = parser.getCurrentLocation();
     do {
       APInt val;
-      if (parser.parseOptionalInteger(val).has_value()) {
+      OptionalParseResult res = parser.parseOptionalInteger(val);
+      if (res.has_value()) {
+        if (failed(*res))
+          return failure();
         parsedInts.push_back(std::move(val));
         ++count;
       } else if (succeeded(parser.parseOptionalLSquare())) {
