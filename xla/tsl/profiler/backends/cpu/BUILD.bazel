@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//bazel:zkx_cc.bzl", "zkx_cc_library")
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -39,5 +39,20 @@ zkx_cc_library(
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/log:check",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "cpu_unittests",
+    srcs = ["traceme_recorder_unittest.cc"],
+    deps = [
+        ":traceme_recorder",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/profiler/utils:math_utils",
+        "//xla/tsl/profiler/utils:time_utils",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
     ],
 )
