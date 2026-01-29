@@ -54,14 +54,27 @@ func.func @test_initialization_and_conversion() {
 func.func @test_constant() {
   // CHECK-NOT: elliptic_curve.constant
   // G1 constants (prime field - single integers)
-  %affine1 = elliptic_curve.constant 1, 2 : !affine
-  %jacobian1 = elliptic_curve.constant 1, 2, 1 : !jacobian
-  %xyzz1 = elliptic_curve.constant 1, 2, 1, 1 : !xyzz
+  %affine1 = elliptic_curve.constant dense<[1, 2]> : !affine
+  %jacobian1 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
+  %xyzz1 = elliptic_curve.constant dense<[1, 2, 1, 1]> : !xyzz
   // G2 constants (extension field - integer arrays)
-  %g2_affine1 = elliptic_curve.constant [1, 1], [2, 3] : !g2affine
-  %g2_jacobian1 = elliptic_curve.constant [1, 1], [2, 3], [1, 0] : !g2jacobian
-  %g2_xyzz1 = elliptic_curve.constant [1, 1], [2, 3], [1, 0], [1, 0] : !g2xyzz
+  %g2_affine1 = elliptic_curve.constant dense<[[1, 1], [2, 3]]> : !g2affine
+  %g2_jacobian1 = elliptic_curve.constant dense<[[1, 1], [2, 3], [1, 0]]> : !g2jacobian
+  %g2_xyzz1 = elliptic_curve.constant dense<[[1, 1], [2, 3], [1, 0], [1, 0]]> : !g2xyzz
   return
+}
+
+// CHECK-LABEL: @test_tensor_constant
+func.func @test_tensor_constant() -> (tensor<2x!jacobian>, tensor<2x!g2jacobian>) {
+  // CHECK-NOT: elliptic_curve.constant
+  // CHECK: arith.constant
+  // CHECK: field.bitcast
+  // CHECK: elliptic_curve.bitcast
+  // G1 tensor constants (prime field)
+  %tensor_jacobian = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  // G2 tensor constants (extension field)
+  %tensor_g2_jacobian = elliptic_curve.constant dense<[[[1, 1], [2, 2], [1, 0]], [[3, 3], [4, 4], [1, 0]]]> : tensor<2x!g2jacobian>
+  return %tensor_jacobian, %tensor_g2_jacobian : tensor<2x!jacobian>, tensor<2x!g2jacobian>
 }
 
 // CHECK-LABEL: @test_addition

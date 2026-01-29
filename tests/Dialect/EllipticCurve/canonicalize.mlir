@@ -22,7 +22,7 @@
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @test_add_self_is_double
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN]] {
 func.func @test_add_self_is_double(%point: !jacobian) -> !jacobian {
   // CHECK: %[[DOUBLE:.*]] = elliptic_curve.double %[[ARG0]] : [[JACOBIAN]] -> [[JACOBIAN]]
   // CHECK-NOT: elliptic_curve.add
@@ -32,7 +32,7 @@ func.func @test_add_self_is_double(%point: !jacobian) -> !jacobian {
 }
 
 // CHECK-LABEL: @test_add_after_sub
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_add_after_sub(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // CHECK-NOT: elliptic_curve.sub
   // CHECK-NOT: elliptic_curve.add
@@ -43,7 +43,7 @@ func.func @test_add_after_sub(%point1: !jacobian, %point2: !jacobian) -> !jacobi
 }
 
 // CHECK-LABEL: @test_add_after_neg_lhs
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_add_after_neg_lhs(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // CHECK: %[[SUB:.*]] = elliptic_curve.sub %[[ARG1]], %[[ARG0]] : [[JACOBIAN]], [[JACOBIAN]] -> [[JACOBIAN]]
   // CHECK-NOT: elliptic_curve.add
@@ -55,7 +55,7 @@ func.func @test_add_after_neg_lhs(%point1: !jacobian, %point2: !jacobian) -> !ja
 }
 
 // CHECK-LABEL: @test_add_after_neg_rhs
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_add_after_neg_rhs(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // CHECK: %[[SUB:.*]] = elliptic_curve.sub %[[ARG0]], %[[ARG1]] : [[JACOBIAN]], [[JACOBIAN]] -> [[JACOBIAN]]
   // CHECK-NOT: elliptic_curve.add
@@ -67,7 +67,7 @@ func.func @test_add_after_neg_rhs(%point1: !jacobian, %point2: !jacobian) -> !ja
 }
 
 // CHECK-LABEL: @test_sub_after_neg_rhs
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_sub_after_neg_rhs(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // CHECK: %[[ADD:.*]] = elliptic_curve.add %[[ARG0]], %[[ARG1]] : [[JACOBIAN]], [[JACOBIAN]] -> [[JACOBIAN]]
   // CHECK-NOT: elliptic_curve.sub
@@ -79,7 +79,7 @@ func.func @test_sub_after_neg_rhs(%point1: !jacobian, %point2: !jacobian) -> !ja
 }
 
 // CHECK-LABEL: @test_sub_both_negated
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_sub_both_negated(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // CHECK: %[[SUB:.*]] = elliptic_curve.sub %[[ARG1]], %[[ARG0]] : [[JACOBIAN]], [[JACOBIAN]] -> [[JACOBIAN]]
   // CHECK-NOT: elliptic_curve.negate
@@ -91,7 +91,7 @@ func.func @test_sub_both_negated(%point1: !jacobian, %point2: !jacobian) -> !jac
 }
 
 // CHECK-LABEL: @test_add_both_negated
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_add_both_negated(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // CHECK: %[[ADD:.*]] = elliptic_curve.add %[[ARG0]], %[[ARG1]] : [[JACOBIAN]], [[JACOBIAN]] -> [[JACOBIAN]]
   // CHECK: %[[NEG_RESULT:.*]] = elliptic_curve.negate %[[ADD]] : [[JACOBIAN]]
@@ -108,7 +108,7 @@ func.func @test_add_both_negated(%point1: !jacobian, %point2: !jacobian) -> !jac
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @test_sub_lhs_after_add
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_sub_lhs_after_add(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // (P + Q) - P -> Q
   // CHECK-NOT: elliptic_curve.add
@@ -120,7 +120,7 @@ func.func @test_sub_lhs_after_add(%point1: !jacobian, %point2: !jacobian) -> !ja
 }
 
 // CHECK-LABEL: @test_sub_rhs_after_add
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_sub_rhs_after_add(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // (P + Q) - Q -> P
   // CHECK-NOT: elliptic_curve.add
@@ -132,7 +132,7 @@ func.func @test_sub_rhs_after_add(%point1: !jacobian, %point2: !jacobian) -> !ja
 }
 
 // CHECK-LABEL: @test_sub_lhs_after_sub
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_sub_lhs_after_sub(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // (P - Q) - P -> -Q
   // CHECK: %[[NEG:.*]] = elliptic_curve.negate %[[ARG1]] : [[JACOBIAN]]
@@ -144,7 +144,7 @@ func.func @test_sub_lhs_after_sub(%point1: !jacobian, %point2: !jacobian) -> !ja
 }
 
 // CHECK-LABEL: @test_sub_after_neg_lhs
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]], %[[ARG1:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_sub_after_neg_lhs(%point1: !jacobian, %point2: !jacobian) -> !jacobian {
   // (-P) - Q -> -(P + Q)
   // CHECK: %[[ADD:.*]] = elliptic_curve.add %[[ARG0]], %[[ARG1]] : [[JACOBIAN]], [[JACOBIAN]] -> [[JACOBIAN]]
@@ -161,7 +161,7 @@ func.func @test_sub_after_neg_lhs(%point1: !jacobian, %point2: !jacobian) -> !ja
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @test_scalar_mul_by_one
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN]] {
 func.func @test_scalar_mul_by_one(%point: !jacobian) -> !jacobian {
   // 1 * P -> P
   // TODO(chokobole): This pattern requires isScalarEqualTo to be implemented.
@@ -172,7 +172,7 @@ func.func @test_scalar_mul_by_one(%point: !jacobian) -> !jacobian {
 }
 
 // CHECK-LABEL: @test_scalar_mul_by_zero
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN]] {
 func.func @test_scalar_mul_by_zero(%point: !jacobian) -> !jacobian {
   // 0 * P -> zero point (created via from_coords with identity coords)
   // TODO(chokobole): This pattern requires isScalarEqualTo to be implemented.
@@ -183,7 +183,7 @@ func.func @test_scalar_mul_by_zero(%point: !jacobian) -> !jacobian {
 }
 
 // CHECK-LABEL: @test_scalar_mul_by_two
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN]] {
 func.func @test_scalar_mul_by_two(%point: !jacobian) -> !jacobian {
   // 2 * P -> double(P)
   // TODO(chokobole): This pattern requires isScalarEqualTo to be implemented.
@@ -194,7 +194,7 @@ func.func @test_scalar_mul_by_two(%point: !jacobian) -> !jacobian {
 }
 
 // CHECK-LABEL: @test_scalar_mul_by_neg_one
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN]] {
 func.func @test_scalar_mul_by_neg_one(%point: !jacobian) -> !jacobian {
   // (-1) * P -> -P
   // -1 mod SF = 21888242871839275222246405745257275088548364400416034343698204186575808495616
@@ -210,7 +210,7 @@ func.func @test_scalar_mul_by_neg_one(%point: !jacobian) -> !jacobian {
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @test_factor_scalar_mul_add
-// CHECK-SAME: (%[[S:.*]]: [[SF:.*]], %[[P:.*]]: [[JACOBIAN:.*]], %[[Q:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[S:.*]]: [[SF:.*]], %[[P:.*]]: [[JACOBIAN:.*]], %[[Q:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_factor_scalar_mul_add(%s: !SF, %p: !jacobian, %q: !jacobian) -> !jacobian {
   // s*P + s*Q -> s * (P + Q)
   // CHECK: %[[ADD:.*]] = elliptic_curve.add %[[P]], %[[Q]] : [[JACOBIAN]], [[JACOBIAN]] -> [[JACOBIAN]]
@@ -223,7 +223,7 @@ func.func @test_factor_scalar_mul_add(%s: !SF, %p: !jacobian, %q: !jacobian) -> 
 }
 
 // CHECK-LABEL: @test_factor_scalar_mul_sub
-// CHECK-SAME: (%[[S:.*]]: [[SF:.*]], %[[P:.*]]: [[JACOBIAN:.*]], %[[Q:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[S:.*]]: [[SF:.*]], %[[P:.*]]: [[JACOBIAN:.*]], %[[Q:.*]]: [[JACOBIAN]]) -> [[JACOBIAN]] {
 func.func @test_factor_scalar_mul_sub(%s: !SF, %p: !jacobian, %q: !jacobian) -> !jacobian {
   // s*P - s*Q -> s * (P - Q)
   // CHECK: %[[SUB:.*]] = elliptic_curve.sub %[[P]], %[[Q]] : [[JACOBIAN]], [[JACOBIAN]] -> [[JACOBIAN]]
@@ -240,7 +240,7 @@ func.func @test_factor_scalar_mul_sub(%s: !SF, %p: !jacobian, %q: !jacobian) -> 
 //===----------------------------------------------------------------------===//
 
 // CHECK-LABEL: @test_scalar_mul_assoc_left
-// CHECK-SAME: (%[[S:.*]]: [[SF:.*]], %[[T:.*]]: [[SF:.*]], %[[P:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+// CHECK-SAME: (%[[S:.*]]: [[SF:.*]], %[[T:.*]]: [[SF]], %[[P:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN]] {
 func.func @test_scalar_mul_assoc_left(%s: !SF, %t: !SF, %p: !jacobian) -> !jacobian {
   // s * (t * P) -> (s * t) * P
   // CHECK: %[[PROD:.*]] = field.mul %[[S]], %[[T]] : [[SF]]
@@ -261,10 +261,10 @@ func.func @test_negate_fold() -> !jacobian {
   // negate((1, 2, 1)) = (1, P-2, 1) where P is the base field modulus
   // P = 21888242871839275222246405745257275088696311157297823662689037894645226208583
   // P - 2 = 21888242871839275222246405745257275088696311157297823662689037894645226208581
-  // CHECK: %[[C:.*]] = elliptic_curve.constant 1, 21888242871839275222246405745257275088696311157297823662689037894645226208581, 1 : [[JACOBIAN]]
+  // CHECK: %[[C:.*]] = elliptic_curve.constant dense<[1, 21888242871839275222246405745257275088696311157297823662689037894645226208581, 1]> : [[JACOBIAN]]
   // CHECK-NOT: elliptic_curve.negate
   // CHECK: return %[[C]] : [[JACOBIAN]]
-  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %0 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
   %1 = elliptic_curve.negate %0 : !jacobian
   return %1 : !jacobian
 }
@@ -276,7 +276,7 @@ func.func @test_double_fold() -> !jacobian {
   // CHECK: %[[C:.*]] = elliptic_curve.constant
   // CHECK-NOT: elliptic_curve.double
   // CHECK: return %[[C]] : [[JACOBIAN]]
-  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
+  %0 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
   %1 = elliptic_curve.double %0 : !jacobian -> !jacobian
   return %1 : !jacobian
 }
@@ -288,8 +288,8 @@ func.func @test_add_fold() -> !jacobian {
   // CHECK: %[[C:.*]] = elliptic_curve.constant
   // CHECK-NOT: elliptic_curve.add
   // CHECK: return %[[C]] : [[JACOBIAN]]
-  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
-  %1 = elliptic_curve.constant 3, 4, 1 : !jacobian
+  %0 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
+  %1 = elliptic_curve.constant dense<[3, 4, 1]> : !jacobian
   %2 = elliptic_curve.add %0, %1 : !jacobian, !jacobian -> !jacobian
   return %2 : !jacobian
 }
@@ -301,8 +301,86 @@ func.func @test_sub_fold() -> !jacobian {
   // CHECK: %[[C:.*]] = elliptic_curve.constant
   // CHECK-NOT: elliptic_curve.sub
   // CHECK: return %[[C]] : [[JACOBIAN]]
-  %0 = elliptic_curve.constant 1, 2, 1 : !jacobian
-  %1 = elliptic_curve.constant 3, 4, 1 : !jacobian
+  %0 = elliptic_curve.constant dense<[1, 2, 1]> : !jacobian
+  %1 = elliptic_curve.constant dense<[3, 4, 1]> : !jacobian
   %2 = elliptic_curve.sub %0, %1 : !jacobian, !jacobian -> !jacobian
   return %2 : !jacobian
+}
+
+//===----------------------------------------------------------------------===//
+// Tensor Constant Folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_negate_fold
+// CHECK-SAME: () -> tensor<2x[[JACOBIAN:.*]]> {
+func.func @test_tensor_negate_fold() -> tensor<2x!jacobian> {
+  // negate applied element-wise to tensor of points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant dense<{{\[}}[1, 21888242871839275222246405745257275088696311157297823662689037894645226208581, 1], [3, 21888242871839275222246405745257275088696311157297823662689037894645226208579, 1]]> : tensor<2x[[JACOBIAN]]>
+  // CHECK-NOT: elliptic_curve.negate
+  // CHECK: return %[[C]] : tensor<2x[[JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %1 = elliptic_curve.negate %0 : tensor<2x!jacobian>
+  return %1 : tensor<2x!jacobian>
+}
+
+// CHECK-LABEL: @test_tensor_double_fold
+// CHECK-SAME: () -> tensor<2x[[JACOBIAN:.*]]> {
+func.func @test_tensor_double_fold() -> tensor<2x!jacobian> {
+  // double applied element-wise to tensor of points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.double
+  // CHECK: return %[[C]] : tensor<2x[[JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %1 = elliptic_curve.double %0 : tensor<2x!jacobian> -> tensor<2x!jacobian>
+  return %1 : tensor<2x!jacobian>
+}
+
+// CHECK-LABEL: @test_tensor_add_fold
+// CHECK-SAME: () -> tensor<2x[[JACOBIAN:.*]]> {
+func.func @test_tensor_add_fold() -> tensor<2x!jacobian> {
+  // add applied element-wise to tensor of points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.add
+  // CHECK: return %[[C]] : tensor<2x[[JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %1 = elliptic_curve.constant dense<[[5, 6, 1], [7, 8, 1]]> : tensor<2x!jacobian>
+  %2 = elliptic_curve.add %0, %1 : tensor<2x!jacobian>, tensor<2x!jacobian> -> tensor<2x!jacobian>
+  return %2 : tensor<2x!jacobian>
+}
+
+// CHECK-LABEL: @test_tensor_sub_fold
+// CHECK-SAME: () -> tensor<2x[[JACOBIAN:.*]]> {
+func.func @test_tensor_sub_fold() -> tensor<2x!jacobian> {
+  // sub applied element-wise to tensor of points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.sub
+  // CHECK: return %[[C]] : tensor<2x[[JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %1 = elliptic_curve.constant dense<[[5, 6, 1], [7, 8, 1]]> : tensor<2x!jacobian>
+  %2 = elliptic_curve.sub %0, %1 : tensor<2x!jacobian>, tensor<2x!jacobian> -> tensor<2x!jacobian>
+  return %2 : tensor<2x!jacobian>
+}
+
+// CHECK-LABEL: @test_tensor_affine_negate_fold
+// CHECK-SAME: () -> tensor<2x[[AFFINE:.*]]> {
+func.func @test_tensor_affine_negate_fold() -> tensor<2x!affine> {
+  // negate applied element-wise to tensor of affine points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.negate
+  // CHECK: return %[[C]] : tensor<2x[[AFFINE]]>
+  %0 = elliptic_curve.constant dense<[[1, 2], [3, 4]]> : tensor<2x!affine>
+  %1 = elliptic_curve.negate %0 : tensor<2x!affine>
+  return %1 : tensor<2x!affine>
+}
+
+// CHECK-LABEL: @test_tensor_g2_negate_fold
+// CHECK-SAME: () -> tensor<2x[[G2JACOBIAN:.*]]> {
+func.func @test_tensor_g2_negate_fold() -> tensor<2x!g2jacobian> {
+  // negate applied element-wise to tensor of G2 (extension field) points
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.negate
+  // CHECK: return %[[C]] : tensor<2x[[G2JACOBIAN]]>
+  %0 = elliptic_curve.constant dense<[[[1, 1], [2, 2], [1, 0]], [[3, 3], [4, 4], [1, 0]]]> : tensor<2x!g2jacobian>
+  %1 = elliptic_curve.negate %0 : tensor<2x!g2jacobian>
+  return %1 : tensor<2x!g2jacobian>
 }

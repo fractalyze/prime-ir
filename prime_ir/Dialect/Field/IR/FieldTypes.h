@@ -97,4 +97,24 @@ inline DenseIntElementsAttr makeScalarExtFieldAttr(const APInt &value,
 #define GET_TYPEDEF_CLASSES
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h.inc"
 
+namespace mlir::prime_ir::field {
+
+// Returns extension degree (1 for prime field, degree for extension field).
+// Note: Defined after FieldTypes.h.inc to access ExtensionFieldType definition.
+inline unsigned getExtensionDegree(Type fieldType) {
+  if (auto efType = dyn_cast<ExtensionFieldType>(fieldType))
+    return efType.getDegreeOverPrime();
+  return 1;
+}
+
+// Returns the underlying prime field type.
+// Note: Defined after FieldTypes.h.inc to access ExtensionFieldType definition.
+inline PrimeFieldType getBasePrimeField(Type fieldType) {
+  if (auto efType = dyn_cast<ExtensionFieldType>(fieldType))
+    return efType.getBasePrimeField();
+  return cast<PrimeFieldType>(fieldType);
+}
+
+} // namespace mlir::prime_ir::field
+
 #endif // PRIME_IR_DIALECT_FIELD_IR_FIELDTYPES_H_
