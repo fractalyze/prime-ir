@@ -348,6 +348,113 @@ LogicalResult ConvertPointTypeOp::verify() {
   return success();
 }
 
+//////////////// VERIFY AND CAST BITCAST ////////////////
+
+namespace {
+// Type check helpers for bitcast verification
+// Accepts field types and their lower-level representations (mod_arith and
+// integers) to support lowering pipelines.
+static bool isFieldType(Type t) {
+  return isa<field::PrimeFieldType, field::ExtensionFieldType,
+             mod_arith::ModArithType, IntegerType>(t);
+}
+
+static bool isPointType(Type t) { return isa<PointTypeInterface>(t); }
+
+static unsigned getExtDegree(Type baseFieldType) {
+  if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType))
+    return efType.getDegreeOverPrime();
+  return 1;
+}
+} // namespace
+
+// Check if types are compatible for bitcast between field tensor and EC point
+// tensor.
+bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+  if (inputs.size() != 1 || outputs.size() != 1)
+    return false;
+
+  Type inputType = inputs[0];
+  Type outputType = outputs[0];
+
+  // Both must be shaped types (tensors)
+  auto inputShaped = dyn_cast<ShapedType>(inputType);
+  auto outputShaped = dyn_cast<ShapedType>(outputType);
+  if (!inputShaped || !outputShaped)
+    return false;
+
+  // One must be a field type tensor, the other a point type tensor
+  Type inputElemType = inputShaped.getElementType();
+  Type outputElemType = outputShaped.getElementType();
+
+  PointTypeInterface pointType;
+  ShapedType fieldTensor;
+  ShapedType pointTensor;
+
+  if (isFieldType(inputElemType) && isPointType(outputElemType)) {
+    fieldTensor = inputShaped;
+    pointTensor = outputShaped;
+    pointType = cast<PointTypeInterface>(outputElemType);
+  } else if (isPointType(inputElemType) && isFieldType(outputElemType)) {
+    fieldTensor = outputShaped;
+    pointTensor = inputShaped;
+    pointType = cast<PointTypeInterface>(inputElemType);
+  } else {
+    return false;
+  }
+
+  // Verify shapes are static
+  if (!fieldTensor.hasStaticShape() || !pointTensor.hasStaticShape())
+    return false;
+
+  // Verify element counts match: N*K field elements = N points with K coords
+  unsigned numCoords = pointType.getNumCoords();
+  int64_t fieldCount = fieldTensor.getNumElements();
+  int64_t pointCount = pointTensor.getNumElements();
+
+  // Account for extension field degree
+  Type baseFieldType = pointType.getBaseFieldType();
+  unsigned extDegree = getExtDegree(baseFieldType);
+
+  // Total field elements = numPoints * numCoords * extDegree
+  return fieldCount == pointCount * numCoords * extDegree;
+}
+
+LogicalResult BitcastOp::verify() {
+  Type inputType = getInput().getType();
+  Type outputType = getOutput().getType();
+
+  if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType}))
+    return success();
+
+  // Provide detailed error messages
+  auto inputShaped = dyn_cast<ShapedType>(inputType);
+  auto outputShaped = dyn_cast<ShapedType>(outputType);
+
+  if (!inputShaped || !outputShaped) {
+    return emitOpError()
+           << "bitcast requires tensor types; got " << inputType << " and "
+           << outputType;
+  }
+
+  Type inputElemType = inputShaped.getElementType();
+  Type outputElemType = outputShaped.getElementType();
+
+  if (!((isFieldType(inputElemType) && isPointType(outputElemType)) ||
+        (isPointType(inputElemType) && isFieldType(outputElemType)))) {
+    return emitOpError() << "bitcast requires one field tensor and one point "
+                            "tensor; got "
+                         << inputType << " and " << outputType;
+  }
+
+  if (!inputShaped.hasStaticShape() || !outputShaped.hasStaticShape()) {
+    return emitOpError() << "bitcast requires static shapes";
+  }
+
+  return emitOpError() << "element count mismatch between " << inputType
+                       << " and " << outputType;
+}
+
 //////////////// PARSE AND PRINT CONSTANT ////////////////
 
 namespace {
