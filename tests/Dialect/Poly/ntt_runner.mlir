@@ -41,9 +41,7 @@
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
 func.func @test_poly_ntt() {
-  %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.bitcast %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
-  %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
+  %coeffs_mont = field.constant dense<[1, 2, 3, 4]> : tensor<4x!coeff_ty_mont>
   %res = poly.ntt %coeffs_mont into %coeffs_mont {root=#root_of_unity} : tensor<4x!coeff_ty_mont>
 
   %res_standard = field.from_mont %res : tensor<4x!coeff_ty>
@@ -66,9 +64,7 @@ func.func @test_poly_ntt() {
 // CHECK_TEST_POLY_NTT: [1, 2, 3, 4]
 
 func.func @test_poly_ntt_with_twiddles() {
-  %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.bitcast %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
-  %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
+  %coeffs_mont = field.constant dense<[1, 2, 3, 4]> : tensor<4x!coeff_ty_mont>
   %twiddles_raw = arith.constant dense<[5569, 6115, 2112, 1566]> : tensor<4xi32>
   %twiddles = field.bitcast %twiddles_raw : tensor<4xi32> -> tensor<4x!coeff_ty_mont>
   %res = poly.ntt %coeffs_mont into %coeffs_mont with %twiddles : tensor<4x!coeff_ty_mont>
@@ -96,9 +92,7 @@ func.func @test_poly_ntt_with_twiddles() {
 // CHECK_TEST_POLY_NTT_WITH_TWIDDLES: [1, 2, 3, 4]
 
 func.func @test_poly_ntt_out_of_place() {
-  %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.bitcast %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
-  %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
+  %coeffs_mont = field.constant dense<[1, 2, 3, 4]> : tensor<4x!coeff_ty_mont>
   %tmp = bufferization.alloc_tensor() : tensor<4x!coeff_ty_mont>
   %res = poly.ntt %coeffs_mont into %tmp {root=#root_of_unity} : tensor<4x!coeff_ty_mont>
 
@@ -124,9 +118,7 @@ func.func @test_poly_ntt_out_of_place() {
 // CHECK_TEST_POLY_NTT_OUT_OF_PLACE: [1, 2, 3, 4]
 
 func.func @test_poly_ntt_out_of_place_no_bit_reversal() {
-  %coeffs_raw = arith.constant dense<[1,2,3,4]> : tensor<4xi32>
-  %coeffs = field.bitcast %coeffs_raw : tensor<4xi32> -> tensor<4x!coeff_ty>
-  %coeffs_mont = field.to_mont %coeffs : tensor<4x!coeff_ty_mont>
+  %coeffs_mont = field.constant dense<[1, 2, 3, 4]> : tensor<4x!coeff_ty_mont>
   %tmp = bufferization.alloc_tensor() : tensor<4x!coeff_ty_mont>
   %res = poly.ntt %coeffs_mont into %tmp {root=#root_of_unity} bit_reverse=false : tensor<4x!coeff_ty_mont>
 

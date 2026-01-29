@@ -452,7 +452,7 @@ ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
     if (failed(attrOrErr)) {
       return failure();
     }
-    coordAttrs.push_back(*attrOrErr);
+    coordAttrs.push_back(field::maybeToMontgomery(baseFieldType, *attrOrErr));
   }
 
   result.addAttribute("coords",
@@ -467,11 +467,20 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
+
+  // Get base field type for Montgomery conversion
+  Type pointType = getElementTypeOrSelf(getType());
+  auto pointTypeInterface = cast<PointTypeInterface>(pointType);
+  ShortWeierstrassAttr curveAttr =
+      cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr());
+  Type baseFieldType = curveAttr.getBaseField();
+
   auto coords = getCoords();
   for (size_t i = 0; i < coords.size(); ++i) {
     if (i > 0)
       p << ", ";
-    p.printAttributeWithoutType(coords[i]);
+    p.printAttributeWithoutType(
+        field::maybeToStandard(baseFieldType, coords[i]));
   }
   p << " : ";
   p.printType(getType());

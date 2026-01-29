@@ -173,6 +173,26 @@ Type convertFormType(Type type, bool toMontgomery) {
   return newElementType;
 }
 
+Attribute maybeToMontgomery(ModArithType type, Attribute attr) {
+  if (!type.isMontgomery())
+    return attr;
+
+  auto modulus = type.getModulus();
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr))
+    return getAttrAsMontgomeryForm(modulus, intAttr);
+  return getAttrAsMontgomeryForm(modulus, cast<DenseElementsAttr>(attr));
+}
+
+Attribute maybeToStandard(ModArithType type, Attribute attr) {
+  if (!type.isMontgomery())
+    return attr;
+
+  auto modulus = type.getModulus();
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr))
+    return getAttrAsStandardForm(modulus, intAttr);
+  return getAttrAsStandardForm(modulus, cast<DenseElementsAttr>(attr));
+}
+
 } // namespace
 
 Type getStandardFormType(Type type) {
@@ -486,10 +506,10 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
     if (failed(parseResult.value())) {
       return failure();
     }
-    result.addAttribute(
-        "value",
-        IntegerAttr::get(cast<ModArithType>(parsedType).getStorageType(),
-                         parsedInts[0]));
+    auto modArithType = cast<ModArithType>(parsedType);
+    auto valueAttr =
+        IntegerAttr::get(modArithType.getStorageType(), parsedInts[0]);
+    result.addAttribute("value", maybeToMontgomery(modArithType, valueAttr));
     result.addTypes(parsedType);
     return success();
   }
@@ -501,20 +521,25 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   }
 
   auto shapedType = cast<ShapedType>(parsedType);
+  auto modArithType = cast<ModArithType>(shapedType.getElementType());
   auto denseElementsAttr = DenseIntElementsAttr::get(
-      shapedType.clone(
-          cast<ModArithType>(shapedType.getElementType()).getStorageType()),
-      parsedInts);
-  result.addAttribute("value", denseElementsAttr);
+      shapedType.clone(modArithType.getStorageType()), parsedInts);
+  result.addAttribute("value",
+                      maybeToMontgomery(modArithType, denseElementsAttr));
   result.addTypes(parsedType);
   return success();
 }
 
 void ConstantOp::print(OpAsmPrinter &p) {
   p << " ";
-  p.printAttributeWithoutType(getValue());
+
+  Type type = getType();
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
+  Attribute value = maybeToStandard(modArithType, getValue());
+
+  p.printAttributeWithoutType(value);
   p << " : ";
-  p.printType(getType());
+  p.printType(type);
 }
 
 namespace {

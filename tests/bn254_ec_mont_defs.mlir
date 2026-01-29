@@ -50,10 +50,8 @@ func.func private @printMemrefG1Xyzz(%xyzz: memref<*x!xyzz>) {
 
 // assumes standard form scalar input and outputs affine with standard form coordinates
 func.func @getG1GeneratorMultiple(%k: !SF) -> !affine {
-  %one_std = field.constant 1 : !PF
-  %two_std = field.constant 2 : !PF
-  %one = field.to_mont %one_std : !PFm
-  %two = field.to_mont %two_std : !PFm
+  %one = field.constant 1 : !PFm
+  %two = field.constant 2 : !PFm
   %g = elliptic_curve.from_coords %one, %two : (!PFm, !PFm) -> !affine
   %g_multiple = elliptic_curve.scalar_mul %k, %g : !SF, !affine -> !jacobian
   %g_multiple_affine = elliptic_curve.convert_point_type %g_multiple : !jacobian -> !affine

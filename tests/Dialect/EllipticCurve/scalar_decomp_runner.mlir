@@ -26,13 +26,9 @@
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_SCALAR_DECOMP < %t
 
 func.func @test_scalar_decomp() {
-  %c3 = field.constant 3 : !SF
-  %c5 = field.constant 5 : !SF
-  %c7 = field.constant 7 : !SF
-
-  %mont3 = field.to_mont %c3 : !SFm
-  %mont5 = field.to_mont %c5 : !SFm
-  %mont7 = field.to_mont %c7 : !SFm
+  %mont3 = field.constant 3 : !SFm
+  %mont5 = field.constant 5 : !SFm
+  %mont7 = field.constant 7 : !SFm
 
   %scalars_mont = tensor.from_elements %mont3, %mont5, %mont7 : tensor<3x!SFm>
 

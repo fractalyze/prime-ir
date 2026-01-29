@@ -80,24 +80,24 @@ ParseResult validateAttribute(AsmParser &parser, Type type, Attribute attr,
 }
 
 Attribute maybeToMontgomery(Type type, Attribute attr) {
+  IntegerAttr modulus;
+  bool isMont = false;
+
   if (auto pfType = dyn_cast<field::PrimeFieldType>(type)) {
-    auto intAttr = cast<IntegerAttr>(attr);
-    if (pfType.isMontgomery()) {
-      return mod_arith::getAttrAsMontgomeryForm(pfType.getModulus(), intAttr);
-    } else {
-      return intAttr;
-    }
+    modulus = pfType.getModulus();
+    isMont = pfType.isMontgomery();
+  } else if (auto efType = dyn_cast<field::ExtensionFieldType>(type)) {
+    modulus = efType.getBaseField().getModulus();
+    isMont = efType.isMontgomery();
   }
 
-  auto efType = cast<field::ExtensionFieldType>(type);
-  auto denseElementsAttr = cast<DenseElementsAttr>(attr);
-  if (efType.isMontgomery()) {
-    return mod_arith::getAttrAsMontgomeryForm(
-        cast<field::PrimeFieldType>(efType.getBaseField()).getModulus(),
-        denseElementsAttr);
-  } else {
-    return denseElementsAttr;
-  }
+  if (!isMont)
+    return attr;
+
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr))
+    return mod_arith::getAttrAsMontgomeryForm(modulus, intAttr);
+  return mod_arith::getAttrAsMontgomeryForm(modulus,
+                                            cast<DenseElementsAttr>(attr));
 }
 
 Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
@@ -118,24 +118,24 @@ Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
 }
 
 Attribute maybeToStandard(Type type, Attribute attr) {
+  IntegerAttr modulus;
+  bool isMont = false;
+
   if (auto pfType = dyn_cast<field::PrimeFieldType>(type)) {
-    auto intAttr = cast<IntegerAttr>(attr);
-    if (pfType.isMontgomery()) {
-      return mod_arith::getAttrAsStandardForm(pfType.getModulus(), intAttr);
-    } else {
-      return intAttr;
-    }
+    modulus = pfType.getModulus();
+    isMont = pfType.isMontgomery();
+  } else if (auto efType = dyn_cast<field::ExtensionFieldType>(type)) {
+    modulus = efType.getBaseField().getModulus();
+    isMont = efType.isMontgomery();
   }
 
-  auto efType = cast<field::ExtensionFieldType>(type);
-  auto denseElementsAttr = cast<DenseElementsAttr>(attr);
-  if (efType.isMontgomery()) {
-    return mod_arith::getAttrAsStandardForm(
-        cast<field::PrimeFieldType>(efType.getBaseField()).getModulus(),
-        denseElementsAttr);
-  } else {
-    return denseElementsAttr;
-  }
+  if (!isMont)
+    return attr;
+
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr))
+    return mod_arith::getAttrAsStandardForm(modulus, intAttr);
+  return mod_arith::getAttrAsStandardForm(modulus,
+                                          cast<DenseElementsAttr>(attr));
 }
 
 //===----------------------------------------------------------------------===//
