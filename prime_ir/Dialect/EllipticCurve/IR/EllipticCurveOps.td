@@ -23,6 +23,7 @@ include "mlir/Dialect/Arith/IR/ArithBase.td"
 include "mlir/Dialect/LLVMIR/LLVMTypes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "prime_ir/Dialect/Field/IR/FieldAttributes.td"
@@ -520,6 +521,37 @@ def EllipticCurve_ConvertPointTypeOp : EllipticCurve_UnaryOp<"convert_point_type
   }];
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+}
+
+def EllipticCurve_BitcastOp : EllipticCurve_Op_Base<"bitcast", [
+    DeclareOpInterfaceMethods<CastOpInterface>]> {
+  let summary = "Bitcast between field tensor and elliptic curve point tensor";
+  let description = [{
+    Reinterprets a flat tensor of field elements as a tensor of elliptic curve
+    points, or vice versa. The underlying memory layout is reinterpreted without
+    data movement.
+
+    For a point type with K coordinates over a field type F:
+    - `tensor<N*K x !F>` can be cast to `tensor<N x !PointType>` and vice versa
+    - Coordinates are stored contiguously: [x0, y0, z0, x1, y1, z1, ...]
+
+    Example:
+    ```
+    !PF = !field.pf<p:i256>
+    #curve = #elliptic_curve.sw<...> : !PF
+    !jacobian = !elliptic_curve.jacobian<#curve>
+
+    // Field tensor to point tensor (3 coords per jacobian point)
+    %points = elliptic_curve.bitcast %fields : tensor<6x!PF> -> tensor<2x!jacobian>
+
+    // Point tensor to field tensor
+    %fields = elliptic_curve.bitcast %points : tensor<2x!jacobian> -> tensor<6x!PF>
+    ```
+  }];
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+  let hasVerifier = 1;
 }
 
 #endif  // PRIME_IR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEOPS_TD_
