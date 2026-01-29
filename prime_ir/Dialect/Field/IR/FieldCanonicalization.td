@@ -27,10 +27,22 @@ include "prime_ir/Dialect/Field/IR/FieldOps.td"
 def IsZero : Constraint<CPred<"isEqualTo($0, $1, 0)">>;
 def IsOne : Constraint<CPred<"isEqualTo($0, $1, 1)">>;
 def IsTwo : Constraint<CPred<"isEqualTo($0, $1, 2)">>;
+def IsThree : Constraint<CPred<"isEqualTo($0, $1, 3)">>;
+def IsFour : Constraint<CPred<"isEqualTo($0, $1, 4)">>;
+def IsFive : Constraint<CPred<"isEqualTo($0, $1, 5)">>;
+def IsSix : Constraint<CPred<"isEqualTo($0, $1, 6)">>;
+def IsSeven : Constraint<CPred<"isEqualTo($0, $1, 7)">>;
+def IsEight : Constraint<CPred<"isEqualTo($0, $1, 8)">>;
+def IsNine : Constraint<CPred<"isEqualTo($0, $1, 9)">>;
 def IsNegativeOne : Constraint<CPred<"isNegativeOf($0, $1, 1)">>;
 def IsNegativeTwo : Constraint<CPred<"isNegativeOf($0, $1, 2)">>;
 def IsNegativeThree : Constraint<CPred<"isNegativeOf($0, $1, 3)">>;
 def IsNegativeFour : Constraint<CPred<"isNegativeOf($0, $1, 4)">>;
+def IsNegativeFive : Constraint<CPred<"isNegativeOf($0, $1, 5)">>;
+def IsNegativeSix : Constraint<CPred<"isNegativeOf($0, $1, 6)">>;
+def IsNegativeSeven : Constraint<CPred<"isNegativeOf($0, $1, 7)">>;
+def IsNegativeEight : Constraint<CPred<"isNegativeOf($0, $1, 8)">>;
+def IsNegativeNine : Constraint<CPred<"isNegativeOf($0, $1, 9)">>;
 
 // Constant materialization
 def GetAsConstant : NativeCodeCall<"$_builder.create<ConstantOp>(odsLoc, $0.getType(), cast<TypedAttr>($1))">;
