@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//bazel:zkx_cc.bzl", "zkx_cc_library")
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -80,5 +80,14 @@ zkx_cc_library(
     deps = [
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "convert_unittests",
+    srcs = ["trace_container_unittest.cc"],
+    deps = [
+        ":trace_container",
+        "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
     ],
 )
