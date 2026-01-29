@@ -63,3 +63,12 @@ zkx_cc_library(
         "@com_google_absl//absl/time",
     ],
 )
+
+zkx_cc_library(
+    name = "timespan",
+    hdrs = ["timespan.h"],
+    deps = [
+        ":math_utils",
+        "@com_google_absl//absl/strings",
+    ],
+)
