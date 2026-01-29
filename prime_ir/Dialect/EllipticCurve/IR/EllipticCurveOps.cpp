@@ -529,7 +529,8 @@ ParseResult parseDenseValues(OpAsmParser &parser, SmallVector<APInt> &parsedInts
           return failure();
         ++count;
       } else {
-        return failure();
+        // Neither integer nor nested list - could be empty list or end of list
+        break;
       }
     } while (succeeded(parser.parseOptionalComma()));
 
