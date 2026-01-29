@@ -16,14 +16,11 @@
 
 """Provides the repository macro to import LLVM."""
 
-load("@prime_ir//third_party/llvm-project:workspace.bzl", "LLVM_PATCHES")
+load("@prime_ir//third_party/llvm-project:workspace.bzl", "LLVM_COMMIT", "LLVM_PATCHES", "LLVM_SHA256")
 load("//third_party:repo.bzl", "tf_http_archive")
 
 def repo(name):
     """Imports LLVM."""
-    LLVM_COMMIT = "5ed852f7f72855710eeff53179e6a6f2271a3c2a"
-    LLVM_SHA256 = "95792e50d5f84847721545b645a6ca2c2b3b7610d02e3de07d65a6148e68508c"
-
     tf_http_archive(
         name = name,
         sha256 = LLVM_SHA256,
