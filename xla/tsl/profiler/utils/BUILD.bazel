@@ -89,3 +89,19 @@ zkx_cc_library(
     hdrs = ["trace_utils.h"],
     deps = ["@com_google_absl//absl/strings"],
 )
+
+zkx_cc_library(
+    name = "xplane_schema",
+    srcs = ["xplane_schema.cc"],
+    hdrs = ["xplane_schema.h"],
+    deps = [
+        ":tf_op_utils",
+        "//xla/tsl/lib/gtl:map_util",
+        "//xla/tsl/profiler/lib:context_types",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+    ],
+)
