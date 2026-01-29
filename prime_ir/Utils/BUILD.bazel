@@ -197,3 +197,22 @@ cc_library(
         "@zk_dtypes//zk_dtypes:big_int",
     ],
 )
+
+cc_library(
+    name = "LoweringMode",
+    hdrs = ["LoweringMode.h"],
+    deps = [
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+cc_library(
+    name = "BitSerialAlgorithm",
+    srcs = ["BitSerialAlgorithm.cpp"],
+    hdrs = ["BitSerialAlgorithm.h"],
+    deps = [
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:SCFDialect",
+    ],
+)
