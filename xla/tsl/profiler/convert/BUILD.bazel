@@ -87,11 +87,14 @@ zkx_cc_unittest(
     name = "convert_unittests",
     srcs = [
         "trace_container_unittest.cc",
+        "trace_events_to_json_unittest.cc",
         "zkx_op_utils_unittest.cc",
     ],
     deps = [
         ":trace_container",
+        ":trace_events_to_json",
         ":zkx_op_utils",
         "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
+        "@jsoncpp",
     ],
 )
