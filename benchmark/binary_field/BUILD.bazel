@@ -96,6 +96,19 @@ prime_ir_mlir_cc_import(
     target_compatible_with = ["@platforms//cpu:aarch64"],
 )
 
+# ARM: Polyval specialization for BF128 (faster Montgomery reduction)
+prime_ir_mlir_cc_import(
+    name = "bf_arm_polyval_ciface",
+    llc_flags = ["-mattr=+neon,+crypto"],
+    mlir_src = "bf_arm_polyval.mlir",
+    prime_ir_opt_flags = [
+        "-specialize-binary-field-to-arm=use-polyval=true",
+        "-reconcile-unrealized-casts",
+        "-field-to-llvm",
+    ],
+    target_compatible_with = ["@platforms//cpu:aarch64"],
+)
+
 # =============================================================================
 # Benchmark executable
 # =============================================================================
@@ -122,6 +135,7 @@ prime_ir_benchmark(
         "@platforms//cpu:aarch64": [
             ":bf8_arm_ciface",
             ":bf_arm_ciface",
+            ":bf_arm_polyval_ciface",
         ],
         "//conditions:default": [],
     }),

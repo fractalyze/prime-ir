@@ -73,6 +73,10 @@ extern "C" uint128_t _mlir_ciface_bf128_mul_arm(uint128_t a, uint128_t b);
 extern "C" void _mlir_ciface_bf8x16_mul_pmull(MemRef1D16xi8 *a,
                                               MemRef1D16xi8 *b,
                                               MemRef1D16xi8 *c);
+
+// BF128 Polyval Montgomery reduction (faster than Tower polynomial)
+extern "C" uint128_t _mlir_ciface_bf128_mul_arm_polyval(uint128_t a,
+                                                        uint128_t b);
 #endif
 
 // =============================================================================
@@ -166,6 +170,19 @@ void BM_bf128_mul_arm(::benchmark::State &state) {
   }
   state.SetItemsProcessed(state.iterations());
 }
+
+void BM_bf128_mul_arm_polyval(::benchmark::State &state) {
+  auto a = BinaryFieldT7::Random();
+  auto b = BinaryFieldT7::Random();
+  BinaryFieldT7 result;
+
+  for (auto _ : state) {
+    result = _mlir_ciface_bf128_mul_arm_polyval(a.value(), b.value());
+    ::benchmark::DoNotOptimize(result);
+    a += result;
+  }
+  state.SetItemsProcessed(state.iterations());
+}
 #endif
 
 // =============================================================================
@@ -254,6 +271,7 @@ BENCHMARK(BM_bf128_mul_x86);
 #endif
 #if defined(PRIME_IR_ARM)
 BENCHMARK(BM_bf128_mul_arm);
+BENCHMARK(BM_bf128_mul_arm_polyval);
 #endif
 
 BENCHMARK(BM_bf8_mul_baseline);
@@ -288,20 +306,21 @@ BENCHMARK(BM_bf8x16_mul_pmull);
 // clang-format on
 
 // clang-format off
-// 2026-01-28T15:34:01+00:00
+// 2026-01-29T04:30:47+00:00
 // Run on (14 X 24 MHz CPU s)
 // CPU Caches:
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
 //   L2 Unified 4096 KiB (x14)
-// Load Average: 3.41, 3.18, 3.26
-// ----------------------------------------------------------------
-// Benchmark                      Time             CPU   Iterations
-// ----------------------------------------------------------------
-// BM_bf64_mul_baseline         184 ns          180 ns      3857026
-// BM_bf64_mul_arm             5.84 ns         5.83 ns    118151436
-// BM_bf128_mul_baseline        567 ns          565 ns      1250156
-// BM_bf128_mul_arm            7.57 ns         7.56 ns     91668631
-// BM_bf8_mul_baseline         7.41 ns         7.41 ns     94597151
-// BM_bf8x16_mul_pmull         4.02 ns         4.01 ns    172203417
+// Load Average: 3.92, 3.12, 3.04
+// -------------------------------------------------------------------
+// Benchmark                         Time             CPU   Iterations
+// -------------------------------------------------------------------
+// BM_bf64_mul_baseline            194 ns          192 ns      3685918
+// BM_bf64_mul_arm                6.27 ns         6.25 ns    110277900
+// BM_bf128_mul_baseline           617 ns          616 ns      1135074
+// BM_bf128_mul_arm               8.34 ns         8.32 ns     86956522
+// BM_bf128_mul_arm_polyval       13.1 ns         13.1 ns     52914052
+// BM_bf8_mul_baseline            8.32 ns         8.17 ns     87314457
+// BM_bf8x16_mul_pmull            4.30 ns         4.29 ns    160872943
 // clang-format on
