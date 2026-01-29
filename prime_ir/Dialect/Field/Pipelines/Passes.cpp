@@ -35,6 +35,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
+#include "prime_ir/Dialect/ModArith/Conversions/IntrReduceToArith/IntrReduceToArith.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
 
@@ -56,6 +57,7 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
 
   pm.addPass(mod_arith::createModArithToArith());
+  pm.addPass(mod_arith::createIntrReduceToArith());
   pm.addPass(createCanonicalizerPass());
 
   pm.addPass(tensor_ext::createTensorExtToTensor());
@@ -105,6 +107,7 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   pm.addPass(createCanonicalizerPass());
 
   pm.addPass(mod_arith::createModArithToArith());
+  pm.addPass(mod_arith::createIntrReduceToArith());
   pm.addPass(createCanonicalizerPass());
 
   pm.addPass(tensor_ext::createTensorExtToTensor());

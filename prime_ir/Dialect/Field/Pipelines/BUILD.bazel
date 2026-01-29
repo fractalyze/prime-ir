@@ -27,6 +27,7 @@ cc_library(
         "//prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM",
         "//prime_ir/Dialect/Field/Conversions/FieldToModArith",
+        "//prime_ir/Dialect/ModArith/Conversions/IntrReduceToArith",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith",
         "//prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor",
         "@llvm-project//mlir:AffineToStandard",

@@ -30,9 +30,11 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/Pipelines/Passes.h"
 #include "prime_ir/Dialect/Field/Transforms/BufferizableOpInterfaceImpl.h"
+#include "prime_ir/Dialect/ModArith/Conversions/IntrReduceToArith/IntrReduceToArith.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/Transforms/BufferizableOpInterfaceImpl.h"
+#include "prime_ir/Dialect/ModArith/Transforms/ReduceOptimization/ReduceOptimization.h"
 #include "prime_ir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
 #include "prime_ir/Dialect/Poly/IR/PolyDialect.h"
 #include "prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
@@ -63,6 +65,8 @@ int main(int argc, char **argv) {
 
   // Dialect conversion passes
   mlir::prime_ir::mod_arith::registerModArithToArithPasses();
+  mlir::prime_ir::mod_arith::registerIntrReduceToArithPasses();
+  mlir::prime_ir::mod_arith::registerReduceOptimizationPasses();
   mlir::prime_ir::field::registerFieldToModArithPasses();
   mlir::prime_ir::field::registerExtFieldToLLVMPasses();
   mlir::prime_ir::poly::registerPolyToFieldPasses();
