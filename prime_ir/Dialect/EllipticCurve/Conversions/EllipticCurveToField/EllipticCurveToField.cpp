@@ -88,16 +88,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       unsigned numCoords = pointTypeInterface.getNumCoords();
       int64_t numPoints = shapedType.getNumElements();
 
-      // Determine extension field degree
-      unsigned extDegree = 1;
-      if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType))
-        extDegree = efType.getDegreeOverPrime();
-
-      // Get the base prime field for storage type
-      auto primeFieldType = isa<field::PrimeFieldType>(baseFieldType)
-                                ? cast<field::PrimeFieldType>(baseFieldType)
-                                : cast<field::ExtensionFieldType>(baseFieldType)
-                                      .getBasePrimeField();
+      // Determine extension field degree and get base prime field
+      unsigned extDegree = field::getExtensionDegree(baseFieldType);
+      auto primeFieldType = field::getBasePrimeField(baseFieldType);
 
       // Collect all coordinate values into a flat vector
       SmallVector<APInt> flatValues;

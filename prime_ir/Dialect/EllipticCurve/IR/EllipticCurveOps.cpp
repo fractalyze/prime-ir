@@ -355,12 +355,6 @@ static bool isFieldType(Type t) {
 }
 
 static bool isPointType(Type t) { return isa<PointTypeInterface>(t); }
-
-static unsigned getExtDegree(Type baseFieldType) {
-  if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType))
-    return efType.getDegreeOverPrime();
-  return 1;
-}
 } // namespace
 
 // Check if types are compatible for bitcast between field tensor and EC point
@@ -409,7 +403,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 
   // Account for extension field degree
   Type baseFieldType = pointType.getBaseFieldType();
-  unsigned extDegree = getExtDegree(baseFieldType);
+  unsigned extDegree = field::getExtensionDegree(baseFieldType);
 
   // Total field elements = numPoints * numCoords * extDegree
   return fieldCount == pointCount * numCoords * extDegree;
