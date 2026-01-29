@@ -26,7 +26,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FrobeniusCoeffs.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/PrimeFieldCodeGen.h"
-#include "prime_ir/Dialect/Field/Conversions/FieldToModArith/VandermondeMatrix.h"
+#include "prime_ir/Dialect/Field/IR/VandermondeMatrix.h"
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperationSelector.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"

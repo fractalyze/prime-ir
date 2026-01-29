@@ -66,6 +66,7 @@ cc_library(
         "FieldTypes.h",
         "PrimeFieldOperation.h",
         "TowerFieldConfig.h",
+        "VandermondeMatrix.h",
     ],
     deps = [
         ":ExtensionFieldOperationSelector",
@@ -92,6 +93,7 @@ cc_library(
         "@llvm-project//mlir:InferTypeOpInterface",
         "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:extension_field_operation_traits_forward",
         "@zk_dtypes//zk_dtypes:point_declarations",
     ],
 )
