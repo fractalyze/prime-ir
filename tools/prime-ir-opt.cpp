@@ -30,6 +30,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/Pipelines/Passes.h"
 #include "prime_ir/Dialect/Field/Transforms/BufferizableOpInterfaceImpl.h"
+#include "prime_ir/Dialect/Field/Transforms/FoldFieldLinalgContraction.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/Transforms/BufferizableOpInterfaceImpl.h"
@@ -69,6 +70,7 @@ int main(int argc, char **argv) {
   mlir::prime_ir::elliptic_curve::registerEllipticCurveToFieldPasses();
   mlir::prime_ir::elliptic_curve::registerEllipticCurveToLLVMPasses();
   mlir::prime_ir::tensor_ext::registerTensorExtToTensorPasses();
+  mlir::prime_ir::field::registerFoldFieldLinalgContractionPasses();
 
   mlir::prime_ir::field::registerFieldPipelines();
 

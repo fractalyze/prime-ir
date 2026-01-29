@@ -47,6 +47,7 @@ cc_binary(
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/Field/Pipelines:Passes",
         "//prime_ir/Dialect/Field/Transforms:BufferizableOpInterfaceImpl",
+        "//prime_ir/Dialect/Field/Transforms:FoldFieldLinalgContraction",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Dialect/ModArith/Transforms:BufferizableOpInterfaceImpl",
