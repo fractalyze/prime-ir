@@ -21,8 +21,9 @@
 // CHECK-LABEL: @test_mul
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]]
 func.func @test_mul(%a: !QF, %b: !QF) -> !QF {
-  // Karatsuba multiplication with canonicalization (β = 6 ≡ -1 mod 7):
-  // c0 = v0 + β * v1 = v0 - v1, c1 = (a0 + a1)(b0 + b1) - v0 - v1
+  // Karatsuba multiplication with strength reduction (β = 6):
+  // c0 = v0 + β * v1, c1 = (a0 + a1)(b0 + b1) - v0 - v1
+  // β * v1 = 6 * v1 -> double(v1 + double(v1)) via strength reduction
   // CHECK: %[[LHS:.*]]:2 = field.ext_to_coeffs %[[ARG0]] : ([[T]]) -> (!z7_i32, !z7_i32)
   // CHECK: %[[RHS:.*]]:2 = field.ext_to_coeffs %[[ARG1]] : ([[T]]) -> (!z7_i32, !z7_i32)
   // CHECK: %[[V0:.*]] = mod_arith.mul %[[LHS]]#0, %[[RHS]]#0 : !z7_i32
@@ -32,7 +33,11 @@ func.func @test_mul(%a: !QF, %b: !QF) -> !QF {
   // CHECK: %[[SUMPRODUCT:.*]] = mod_arith.mul %[[SUMLHS]], %[[SUMRHS]] : !z7_i32
   // CHECK: %[[TMP:.*]] = mod_arith.sub %[[SUMPRODUCT]], %[[V0]] : !z7_i32
   // CHECK: %[[C1:.*]] = mod_arith.sub %[[TMP]], %[[V1]] : !z7_i32
-  // CHECK: %[[C0:.*]] = mod_arith.sub %[[V0]], %[[V1]] : !z7_i32
+  // 6 * v1 = double(v1 + double(v1))
+  // CHECK: %[[D1:.*]] = mod_arith.double %[[V1]] : !z7_i32
+  // CHECK: %[[T1:.*]] = mod_arith.add %[[V1]], %[[D1]] : !z7_i32
+  // CHECK: %[[BETA_V1:.*]] = mod_arith.double %[[T1]] : !z7_i32
+  // CHECK: %[[C0:.*]] = mod_arith.add %[[V0]], %[[BETA_V1]] : !z7_i32
   // CHECK: %[[RESULT:.*]] = field.ext_from_coeffs %[[C0]], %[[C1]] : (!z7_i32, !z7_i32) -> [[T]]
   %mul = field.mul %a, %b : !QF
   // CHECK: return %[[RESULT]] : [[T]]
@@ -42,14 +47,20 @@ func.func @test_mul(%a: !QF, %b: !QF) -> !QF {
 // CHECK-LABEL: @test_square
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_square(%a: !QF) -> !QF {
-  // Custom square algorithm: c0 = (x0 - x1)(x0 + x1), c1 = 2 * x0 * x1
+  // Square algorithm with strength reduction:
+  // c0 = x0² + β*x1², c1 = 2*x0*x1
+  // β*x1² = 6*x1² -> double(x1² + double(x1²)) via strength reduction
   // CHECK: %[[COEFFS:.*]]:2 = field.ext_to_coeffs %[[ARG0]] : ([[T]]) -> (!z7_i32, !z7_i32)
+  // CHECK: %[[SQ0:.*]] = mod_arith.square %[[COEFFS]]#0 : !z7_i32
+  // CHECK: %[[SQ1:.*]] = mod_arith.square %[[COEFFS]]#1 : !z7_i32
   // CHECK: %[[MUL:.*]] = mod_arith.mul %[[COEFFS]]#0, %[[COEFFS]]#1 : !z7_i32
-  // CHECK: %[[DOUBLE:.*]] = mod_arith.double %[[MUL]] : !z7_i32
-  // CHECK: %[[SUB:.*]] = mod_arith.sub %[[COEFFS]]#0, %[[COEFFS]]#1 : !z7_i32
-  // CHECK: %[[ADD:.*]] = mod_arith.add %[[COEFFS]]#0, %[[COEFFS]]#1 : !z7_i32
-  // CHECK: %[[MUL2:.*]] = mod_arith.mul %[[SUB]], %[[ADD]] : !z7_i32
-  // CHECK: %[[RESULT:.*]] = field.ext_from_coeffs %[[MUL2]], %[[DOUBLE]] : (!z7_i32, !z7_i32) -> [[T]]
+  // CHECK: %[[C1:.*]] = mod_arith.double %[[MUL]] : !z7_i32
+  // 6 * x1² = double(x1² + double(x1²))
+  // CHECK: %[[D1:.*]] = mod_arith.double %[[SQ1]] : !z7_i32
+  // CHECK: %[[T1:.*]] = mod_arith.add %[[SQ1]], %[[D1]] : !z7_i32
+  // CHECK: %[[BETA_SQ1:.*]] = mod_arith.double %[[T1]] : !z7_i32
+  // CHECK: %[[C0:.*]] = mod_arith.add %[[SQ0]], %[[BETA_SQ1]] : !z7_i32
+  // CHECK: %[[RESULT:.*]] = field.ext_from_coeffs %[[C0]], %[[C1]] : (!z7_i32, !z7_i32) -> [[T]]
   %square = field.square %a : !QF
   // CHECK: return %[[RESULT]] : [[T]]
   return %square: !QF
@@ -58,15 +69,22 @@ func.func @test_square(%a: !QF) -> !QF {
 // CHECK-LABEL: @test_inverse
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_inverse(%a: !QF) -> !QF {
+  // Inverse with strength reduction:
+  // det = x0² - β*x1² = x0² - 6*x1²
+  // β*x1² = 6*x1² -> double(x1² + double(x1²)) via strength reduction
   // CHECK: %[[COEFFS:.*]]:2 = field.ext_to_coeffs %[[ARG0]] : ([[T]]) -> (!z7_i32, !z7_i32)
-  // CHECK: %[[SQUARE:.*]] = mod_arith.square %[[COEFFS]]#1 : !z7_i32
-  // CHECK: %[[SQUARE2:.*]] = mod_arith.square %[[COEFFS]]#0 : !z7_i32
-  // CHECK: %[[ADD:.*]] = mod_arith.add %[[SQUARE2]], %[[SQUARE]] : !z7_i32
-  // CHECK: %[[INV:.*]] = mod_arith.inverse %[[ADD]] : !z7_i32
-  // CHECK: %[[MUL:.*]] = mod_arith.mul %[[COEFFS]]#0, %[[INV]] : !z7_i32
+  // CHECK: %[[SQ1:.*]] = mod_arith.square %[[COEFFS]]#1 : !z7_i32
+  // CHECK: %[[SQ0:.*]] = mod_arith.square %[[COEFFS]]#0 : !z7_i32
+  // 6 * x1² = double(x1² + double(x1²))
+  // CHECK: %[[D1:.*]] = mod_arith.double %[[SQ1]] : !z7_i32
+  // CHECK: %[[T1:.*]] = mod_arith.add %[[SQ1]], %[[D1]] : !z7_i32
+  // CHECK: %[[BETA_SQ1:.*]] = mod_arith.double %[[T1]] : !z7_i32
+  // CHECK: %[[DET:.*]] = mod_arith.sub %[[SQ0]], %[[BETA_SQ1]] : !z7_i32
+  // CHECK: %[[INV:.*]] = mod_arith.inverse %[[DET]] : !z7_i32
+  // CHECK: %[[C0:.*]] = mod_arith.mul %[[COEFFS]]#0, %[[INV]] : !z7_i32
   // CHECK: %[[NEG:.*]] = mod_arith.negate %[[COEFFS]]#1 : !z7_i32
-  // CHECK: %[[MUL2:.*]] = mod_arith.mul %[[NEG]], %[[INV]] : !z7_i32
-  // CHECK: %[[RESULT:.*]] = field.ext_from_coeffs %[[MUL]], %[[MUL2]] : (!z7_i32, !z7_i32) -> [[T]]
+  // CHECK: %[[C1:.*]] = mod_arith.mul %[[NEG]], %[[INV]] : !z7_i32
+  // CHECK: %[[RESULT:.*]] = field.ext_from_coeffs %[[C0]], %[[C1]] : (!z7_i32, !z7_i32) -> [[T]]
   %inverse = field.inverse %a : !QF
   // CHECK: return %[[RESULT]] : [[T]]
   return %inverse: !QF
