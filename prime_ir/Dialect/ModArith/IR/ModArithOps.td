@@ -21,6 +21,7 @@ include "prime_ir/Dialect/ModArith/IR/ModArithDialect.td"
 include "prime_ir/Dialect/ModArith/IR/ModArithTypes.td"
 include "prime_ir/Utils/CommonTraits.td"
 include "mlir/Dialect/Arith/IR/ArithBase.td"
+include "mlir/Dialect/LLVMIR/LLVMAttrDefs.td"
 include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonTypeConstraints.td"
@@ -323,6 +324,105 @@ def ModArith_MontMulOp : ModArith_BinaryOp<"mont_mul", [Commutative]> {
     ```
   }];
   let hasFolder = 1;
+}
+
+//===----------------------------------------------------------------------===//
+// Intrinsic Operations
+//===----------------------------------------------------------------------===//
+
+// Base class for intrinsic ops - operate on integer types, not ModArithType.
+// These ops have modulus as an attribute since the type information is stripped.
+class ModArith_IntrOp<string mnemonic, list<Trait> traits = []> :
+  Op<ModArith_Dialect, "intr." # mnemonic, traits # [Pure] # ElementwiseMappable.traits>;
+
+def ModArith_IntrReduceOp : ModArith_IntrOp<"reduce"> {
+  let summary = "Reduce single value to canonical range [0, modulus)";
+  let description = [{
+    Reduces a single input value to the canonical range [0, modulus) based on
+    the input_range attribute. The range tells the lowering pass what kind of
+    reduction is needed:
+
+    - Range [0, 2*mod): conditional subtract (after addition or doubling)
+    - Range [-mod+1, mod): conditional add (after subtraction)
+
+    Examples:
+    ```mlir
+    // After addition: range [0, 2*mod) -> [0, mod)
+    %sum = arith.add %a, %b
+    %r = mod_arith.intr.reduce %sum {modulus = 65537 : i32,
+         input_range = #llvm.constant_range<i32, 0, 131074>} : i32 -> i32
+
+    // After subtraction: range [-mod+1, mod) -> [0, mod)
+    %diff = arith.sub %a, %b
+    %r = mod_arith.intr.reduce %diff {modulus = 65537 : i32,
+         input_range = #llvm.constant_range<i32, -65536, 65537>} : i32 -> i32
+
+    // Canonicalizing Montgomery output: [0, 2*mod) -> [0, mod)
+    %canon = mod_arith.intr.reduce %mont {modulus = 65537 : i32,
+         input_range = #llvm.constant_range<i32, 0, 131074>} : i32 -> i32
+    ```
+  }];
+  let arguments = (ins
+    SignlessIntegerLike:$input,
+    APIntAttr:$modulus,
+    LLVM_ConstantRangeAttr:$input_range
+  );
+  let results = (outs SignlessIntegerLike:$output);
+  let assemblyFormat = [{
+    $input attr-dict `:` type($input) `->` type($output)
+  }];
+  let hasVerifier = 1;
+}
+
+def ModArith_IntrMontReduceOp : ModArith_IntrOp<"mont_reduce"> {
+  let summary = "Montgomery reduction of extended multiplication result";
+  let description = [{
+    Performs Montgomery reduction on the result of an extended multiplication.
+    Takes low and high parts (each of width w) representing a 2w-bit value,
+    and outputs a value in [0, 2*modulus).
+
+    To get a canonical result in [0, modulus), chain with `mod_arith.intr.reduce`.
+
+    Requires either:
+    - n_inv attribute (single-limb case, when 2^w > modulus)
+    - n_prime + b_inv attributes (multi-limb case)
+
+    Examples:
+    ```mlir
+    // Single-limb Montgomery reduction, outputs [0, 2*mod)
+    %mont = mod_arith.intr.mont_reduce %low, %high {
+         modulus = 65537 : i32,
+         n_inv = -65535 : i32} : (i32, i32) -> i32
+
+    // Multi-limb Montgomery reduction
+    %mont = mod_arith.intr.mont_reduce %low, %high {
+         modulus = 0x73eda753... : i256,
+         n_prime = 0x... : i64,
+         b_inv = 0x... : i256} : (i256, i256) -> i256
+
+    // Full Montgomery with canonicalization (two-stage)
+    %mont = mod_arith.intr.mont_reduce %low, %high {
+         modulus = 65537 : i32, n_inv = -65535 : i32} : (i32, i32) -> i32
+    %canon = mod_arith.intr.reduce %mont {modulus = 65537 : i32,
+         input_range = #llvm.constant_range<i32, 0, 131074>} : i32 -> i32
+    ```
+  }];
+  let arguments = (ins
+    SignlessIntegerLike:$low,
+    SignlessIntegerLike:$high,
+    APIntAttr:$modulus,
+    // Montgomery parameters - exactly one of these combinations required:
+    // Single-limb: n_inv only
+    // Multi-limb: n_prime + b_inv
+    OptionalAttr<APIntAttr>:$n_inv,    // -n^-1 mod 2^w (single limb)
+    OptionalAttr<APIntAttr>:$n_prime,  // -n^-1 mod b (multi-limb)
+    OptionalAttr<APIntAttr>:$b_inv     // b^-1 mod n (multi-limb)
+  );
+  let results = (outs SignlessIntegerLike:$output);
+  let assemblyFormat = [{
+    $low `,` $high attr-dict `:` `(` type($low) `,` type($high) `)` `->` type($output)
+  }];
+  let hasVerifier = 1;
 }
 
 #endif  // PRIME_IR_DIALECT_MODARITH_IR_MODARITHOPS_TD_

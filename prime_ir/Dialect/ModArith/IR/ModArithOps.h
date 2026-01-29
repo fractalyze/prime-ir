@@ -21,6 +21,7 @@ limitations under the License.
 // IWYU pragma: begin_keep
 // Headers needed for ModArithOps.h.inc
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 // IWYU pragma: end_keep

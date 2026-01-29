@@ -298,6 +298,60 @@ LogicalResult FromMontOp::verify() {
   return success();
 }
 
+LogicalResult IntrReduceOp::verify() {
+  auto inputType =
+      cast<IntegerType>(getElementTypeOrSelf(getInput().getType()));
+  auto outputType =
+      cast<IntegerType>(getElementTypeOrSelf(getOutput().getType()));
+  auto rangeWidth = getInputRange().getLower().getBitWidth();
+
+  // Input range width should match input type width
+  if (rangeWidth != inputType.getWidth())
+    return emitOpError() << "input_range bitwidth must match input type width";
+
+  // Output type should match input type
+  if (outputType.getWidth() != inputType.getWidth())
+    return emitOpError() << "output type width must match input type width";
+
+  return success();
+}
+
+LogicalResult IntrMontReduceOp::verify() {
+  auto lowType = cast<IntegerType>(getElementTypeOrSelf(getLow().getType()));
+  auto highType = cast<IntegerType>(getElementTypeOrSelf(getHigh().getType()));
+  auto outputType =
+      cast<IntegerType>(getElementTypeOrSelf(getOutput().getType()));
+
+  // Low and high must have the same width
+  if (lowType.getWidth() != highType.getWidth())
+    return emitOpError() << "low and high operands must have the same width";
+
+  // Output type should match operand types
+  if (outputType.getWidth() != lowType.getWidth())
+    return emitOpError() << "output type width must match operand width";
+
+  // Montgomery reduction requires either n_inv (single-limb) or
+  // n_prime + b_inv (multi-limb)
+  bool hasNInv = getNInv().has_value();
+  bool hasNPrime = getNPrime().has_value();
+  bool hasBInv = getBInv().has_value();
+
+  if (!hasNInv && !(hasNPrime && hasBInv)) {
+    return emitOpError()
+           << "Montgomery reduction requires either n_inv attribute "
+              "(single-limb) or both n_prime and b_inv attributes "
+              "(multi-limb)";
+  }
+
+  if (hasNInv && (hasNPrime || hasBInv)) {
+    return emitOpError()
+           << "Montgomery reduction should use either n_inv (single-limb) "
+              "or n_prime + b_inv (multi-limb), not both";
+  }
+
+  return success();
+}
+
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
   return adaptor.getValue();
 }
