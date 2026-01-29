@@ -85,9 +85,13 @@ zkx_cc_library(
 
 zkx_cc_unittest(
     name = "convert_unittests",
-    srcs = ["trace_container_unittest.cc"],
+    srcs = [
+        "trace_container_unittest.cc",
+        "zkx_op_utils_unittest.cc",
+    ],
     deps = [
         ":trace_container",
+        ":zkx_op_utils",
         "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
     ],
 )
