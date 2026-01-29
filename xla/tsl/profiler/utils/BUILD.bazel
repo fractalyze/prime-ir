@@ -138,6 +138,18 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "tpu_xplane_utils",
+    srcs = ["tpu_xplane_utils.cc"],
+    hdrs = ["tpu_xplane_utils.h"],
+    deps = [
+        ":xplane_schema",
+        ":xplane_utils",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+zkx_cc_library(
     name = "trace_utils",
     hdrs = ["trace_utils.h"],
     deps = ["@com_google_absl//absl/strings"],
@@ -226,6 +238,7 @@ zkx_cc_test(
         "tf_op_utils_unittest.cc",
         "timespan_unittest.cc",
         "timestamp_utils_unittest.cc",
+        "tpu_xplane_utils_unittest.cc",
         "xplane_builder_unittest.cc",
         "xplane_utils_unittest.cc",
     ],
@@ -239,6 +252,7 @@ zkx_cc_test(
         ":tf_xplane_visitor",
         ":timespan",
         ":timestamp_utils",
+        ":tpu_xplane_utils",
         ":trace_utils",
         ":xplane_builder",
         ":xplane_utils",
