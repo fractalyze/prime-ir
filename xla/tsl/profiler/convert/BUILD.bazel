@@ -88,13 +88,19 @@ zkx_cc_unittest(
     srcs = [
         "trace_container_unittest.cc",
         "trace_events_to_json_unittest.cc",
+        "xplane_to_trace_events_unittest.cc",
         "zkx_op_utils_unittest.cc",
     ],
     deps = [
         ":trace_container",
         ":trace_events_to_json",
+        ":xplane_to_trace_events",
         ":zkx_op_utils",
         "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "//xla/tsl/profiler/utils:trace_utils",
+        "//xla/tsl/profiler/utils:xplane_builder",
+        "//xla/tsl/profiler/utils:xplane_schema",
         "@jsoncpp",
     ],
 )
