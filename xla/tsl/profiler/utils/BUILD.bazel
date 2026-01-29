@@ -18,6 +18,18 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_test")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "buffer_pool",
+    srcs = ["buffer_pool.cc"],
+    hdrs = ["buffer_pool.h"],
+    deps = [
+        "//xla/tsl/platform:mem",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_library(
     name = "format_utils",
     hdrs = ["format_utils.h"],
     deps = ["@com_google_absl//absl/log:check"],
@@ -188,6 +200,7 @@ zkx_cc_library(
 zkx_cc_test(
     name = "utils_unittests",
     srcs = [
+        "buffer_pool_unittest.cc",
         "lock_free_queue_unittest.cc",
         "per_thread_unittest.cc",
         "tf_op_utils_unittest.cc",
@@ -197,6 +210,7 @@ zkx_cc_test(
         "xplane_utils_unittest.cc",
     ],
     deps = [
+        ":buffer_pool",
         ":lock_free_queue",
         ":per_thread",
         ":tf_op_utils",
