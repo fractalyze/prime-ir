@@ -187,6 +187,14 @@ zkx_cc_library(
 
 zkx_cc_test(
     name = "utils_unittests",
-    srcs = ["timespan_unittest.cc"],
-    deps = [":timespan"],
+    srcs = [
+        "lock_free_queue_unittest.cc",
+        "timespan_unittest.cc",
+    ],
+    deps = [
+        ":lock_free_queue",
+        ":timespan",
+        "//xla/tsl/platform:env",
+        "@com_google_absl//absl/synchronization",
+    ],
 )
