@@ -1,0 +1,16 @@
+name: Extract Knowledge from PR
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  extract-knowledge:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: fractalyze/github-actions/knowledge-extractor@main
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          knowledge_repo_token: ${{ secrets.KNOWLEDGE_REPO_TOKEN }}
