@@ -47,6 +47,7 @@ extern "C" uint128_t _mlir_ciface_bf128_mul_baseline(uint128_t a, uint128_t b);
 // BF8 Baseline implementations (generic Karatsuba)
 // =============================================================================
 extern "C" uint8_t _mlir_ciface_bf8_mul_baseline(uint8_t a, uint8_t b);
+extern "C" uint8_t _mlir_ciface_bf8_inverse_baseline(uint8_t a);
 
 // =============================================================================
 // x86 PCLMULQDQ specialized implementations
@@ -255,6 +256,26 @@ void BM_bf8x16_mul_pmull(::benchmark::State &state) {
 #endif
 
 // =============================================================================
+// BF8 Inverse Benchmarks
+// =============================================================================
+void BM_bf8_inverse_baseline(::benchmark::State &state) {
+  auto a = BinaryFieldT3::Random();
+  // Ensure non-zero input (inverse of 0 is undefined)
+  if (a.IsZero())
+    a = BinaryFieldT3::One();
+
+  for (auto _ : state) {
+    auto result = _mlir_ciface_bf8_inverse_baseline(a.value());
+    ::benchmark::DoNotOptimize(result);
+    // Chain results to prevent optimization, but keep non-zero
+    a = BinaryFieldT3(result);
+    if (a.IsZero())
+      a = BinaryFieldT3::One();
+  }
+  state.SetItemsProcessed(state.iterations());
+}
+
+// =============================================================================
 // Register benchmarks
 // =============================================================================
 BENCHMARK(BM_bf64_mul_baseline);
@@ -282,6 +303,8 @@ BENCHMARK(BM_bf8x16_mul_gfni);
 BENCHMARK(BM_bf8x16_mul_pmull);
 #endif
 
+BENCHMARK(BM_bf8_inverse_baseline);
+
 } // namespace
 } // namespace mlir::prime_ir::benchmark
 
@@ -306,21 +329,22 @@ BENCHMARK(BM_bf8x16_mul_pmull);
 // clang-format on
 
 // clang-format off
-// 2026-01-29T04:30:47+00:00
+// 2026-01-29T04:34:45+00:00
 // Run on (14 X 24 MHz CPU s)
 // CPU Caches:
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
 //   L2 Unified 4096 KiB (x14)
-// Load Average: 3.92, 3.12, 3.04
+// Load Average: 4.17, 3.98, 3.48
 // -------------------------------------------------------------------
 // Benchmark                         Time             CPU   Iterations
 // -------------------------------------------------------------------
-// BM_bf64_mul_baseline            194 ns          192 ns      3685918
-// BM_bf64_mul_arm                6.27 ns         6.25 ns    110277900
-// BM_bf128_mul_baseline           617 ns          616 ns      1135074
-// BM_bf128_mul_arm               8.34 ns         8.32 ns     86956522
-// BM_bf128_mul_arm_polyval       13.1 ns         13.1 ns     52914052
-// BM_bf8_mul_baseline            8.32 ns         8.17 ns     87314457
-// BM_bf8x16_mul_pmull            4.30 ns         4.29 ns    160872943
+// BM_bf64_mul_baseline            190 ns          189 ns      3562069
+// BM_bf64_mul_arm                6.04 ns         6.03 ns    116569525
+// BM_bf128_mul_baseline           597 ns          596 ns      1137287
+// BM_bf128_mul_arm               8.01 ns         7.96 ns     88449729
+// BM_bf128_mul_arm_polyval       12.5 ns         12.5 ns     53314242
+// BM_bf8_mul_baseline            7.75 ns         7.74 ns     89303940
+// BM_bf8x16_mul_pmull            4.12 ns         4.12 ns    165464293
+// BM_bf8_inverse_baseline        3.18 ns         3.18 ns    600415144
 // clang-format on

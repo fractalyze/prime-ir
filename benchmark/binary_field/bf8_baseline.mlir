@@ -22,3 +22,10 @@ func.func @bf8_mul_baseline(%a: !BF8, %b: !BF8) -> !BF8 attributes { llvm.emit_c
   %c = field.mul %a, %b : !BF8
   return %c : !BF8
 }
+
+// BF8 scalar inverse - After lowering: func(i8) -> i8
+// Uses lookup table for O(1) computation (256 entries)
+func.func @bf8_inverse_baseline(%a: !BF8) -> !BF8 attributes { llvm.emit_c_interface } {
+  %c = field.inverse %a : !BF8
+  return %c : !BF8
+}
