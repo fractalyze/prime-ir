@@ -421,9 +421,8 @@ LogicalResult BitcastOp::verify() {
   auto outputShaped = dyn_cast<ShapedType>(outputType);
 
   if (!inputShaped || !outputShaped) {
-    return emitOpError()
-           << "bitcast requires tensor types; got " << inputType << " and "
-           << outputType;
+    return emitOpError() << "bitcast requires tensor types; got " << inputType
+                         << " and " << outputType;
   }
 
   Type inputElemType = inputShaped.getElementType();
@@ -450,7 +449,9 @@ namespace {
 
 // Helper to get extension field degree if the base field is an extension field.
 // Returns std::nullopt for prime fields.
-std::optional<unsigned> getExtensionDegree(Type baseFieldType) {
+// Note: Named differently from field::getExtensionDegree which returns unsigned
+// with a default of 1.
+std::optional<unsigned> getOptionalExtensionDegree(Type baseFieldType) {
   if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType))
     return efType.getDegreeOverPrime();
   return std::nullopt;
@@ -480,7 +481,7 @@ FailureOr<ArrayAttr> reconstructCoordsAttr(MLIRContext *ctx,
                                            int64_t numPoints) {
   Type baseFieldType = pointType.getBaseFieldType();
   unsigned numCoords = pointType.getNumCoords();
-  unsigned extDegree = getExtensionDegree(baseFieldType).value_or(1);
+  unsigned extDegree = getOptionalExtensionDegree(baseFieldType).value_or(1);
   unsigned valuesPerPoint = numCoords * extDegree;
 
   if (flatValues.size() != static_cast<size_t>(numPoints) * valuesPerPoint)
@@ -609,7 +610,7 @@ ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
   //   Tensor ext field:   [numPoints, numCoords, degree]
   unsigned numCoords = pointType.getNumCoords();
   Type baseFieldType = pointType.getBaseFieldType();
-  auto extDegree = getExtensionDegree(baseFieldType);
+  auto extDegree = getOptionalExtensionDegree(baseFieldType);
 
   SmallVector<int64_t> expectedShape;
   if (isTensor) {
@@ -828,7 +829,10 @@ ArrayAttr pointCoordsToArrayAttr(MLIRContext *ctx,
             .template Case<field::ExtensionFieldType>([&](auto efType) {
               SmallVector<APInt> coeffs =
                   static_cast<SmallVector<APInt>>(coord);
-              return createCoordAttr(baseFieldType, coeffs);
+              auto tensorType = RankedTensorType::get(
+                  {static_cast<int64_t>(coeffs.size())},
+                  efType.getBasePrimeField().getStorageType());
+              return DenseIntElementsAttr::get(tensorType, coeffs);
             });
     attrs.push_back(attr);
   }
@@ -881,10 +885,11 @@ ArrayAttr pointOperationsToArrayAttr(MLIRContext *ctx,
                                      ArrayRef<PointOperation> values) {
   SmallVector<Attribute> pointAttrs;
   for (const auto &value : values) {
-    ArrayAttr pointCoords =
-        std::visit([ctx](const auto &pointOp) -> ArrayAttr {
+    ArrayAttr pointCoords = std::visit(
+        [ctx](const auto &pointOp) -> ArrayAttr {
           return pointCoordsToArrayAttr(ctx, pointOp);
-        }, value.getOperation());
+        },
+        value.getOperation());
     pointAttrs.push_back(pointCoords);
   }
   return ArrayAttr::get(ctx, pointAttrs);
@@ -943,7 +948,8 @@ public:
     return fn(value, outputKind);
   }
 
-  // Fold tensor of points (not a virtual override - called directly from helper)
+  // Fold tensor of points (not a virtual override - called directly from
+  // helper)
   OpFoldResult foldTensorPoints(ArrayAttr inputAttr,
                                 ShapedType outputType) const {
     // Each element in inputAttr is a point's coordinates (ArrayAttr)
@@ -1017,7 +1023,8 @@ public:
     return getScalarAttr(operate(lhsOp, rhsOp));
   }
 
-  // Fold tensor of points (not a virtual override - called directly from helper)
+  // Fold tensor of points (not a virtual override - called directly from
+  // helper)
   OpFoldResult foldTensorPoints(ArrayAttr lhsAttr, ArrayAttr rhsAttr,
                                 ShapedType outputType) const {
     if (lhsAttr.size() != rhsAttr.size())
@@ -1028,10 +1035,8 @@ public:
 
     for (auto [lhsPoint, rhsPoint] : llvm::zip(lhsAttr, rhsAttr)) {
       // Wrap single point in outer ArrayAttr to match unified structure
-      ArrayAttr wrappedLhs =
-          ArrayAttr::get(ctx, {cast<ArrayAttr>(lhsPoint)});
-      ArrayAttr wrappedRhs =
-          ArrayAttr::get(ctx, {cast<ArrayAttr>(rhsPoint)});
+      ArrayAttr wrappedLhs = ArrayAttr::get(ctx, {cast<ArrayAttr>(lhsPoint)});
+      ArrayAttr wrappedRhs = ArrayAttr::get(ctx, {cast<ArrayAttr>(rhsPoint)});
       PointOperation lhsOp = createPointOp(wrappedLhs, lhsPointType);
       PointOperation rhsOp = createPointOp(wrappedRhs, rhsPointType);
       results.push_back(operate(lhsOp, rhsOp));
