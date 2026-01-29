@@ -68,6 +68,8 @@ extern "C" void _mlir_ciface_bf8x16_mul_gfni(MemRef1D16xi8 *a, MemRef1D16xi8 *b,
 #if defined(PRIME_IR_ARM)
 extern "C" uint64_t _mlir_ciface_bf64_mul_arm(uint64_t a, uint64_t b);
 extern "C" uint128_t _mlir_ciface_bf128_mul_arm(uint128_t a, uint128_t b);
+extern "C" uint64_t _mlir_ciface_bf64_square_arm(uint64_t a);
+extern "C" uint128_t _mlir_ciface_bf128_square_arm(uint128_t a);
 
 // BF8 packed 16x PMULL multiplication
 // Uses memref interface for SIMD vectors
@@ -184,6 +186,30 @@ void BM_bf128_mul_arm_polyval(::benchmark::State &state) {
   }
   state.SetItemsProcessed(state.iterations());
 }
+
+void BM_bf64_square_arm(::benchmark::State &state) {
+  auto a = BinaryFieldT6::Random();
+  BinaryFieldT6 result;
+
+  for (auto _ : state) {
+    result = _mlir_ciface_bf64_square_arm(a.value());
+    ::benchmark::DoNotOptimize(result);
+    a += result;
+  }
+  state.SetItemsProcessed(state.iterations());
+}
+
+void BM_bf128_square_arm(::benchmark::State &state) {
+  auto a = BinaryFieldT7::Random();
+  BinaryFieldT7 result;
+
+  for (auto _ : state) {
+    result = _mlir_ciface_bf128_square_arm(a.value());
+    ::benchmark::DoNotOptimize(result);
+    a += result;
+  }
+  state.SetItemsProcessed(state.iterations());
+}
 #endif
 
 // =============================================================================
@@ -293,6 +319,8 @@ BENCHMARK(BM_bf128_mul_x86);
 #if defined(PRIME_IR_ARM)
 BENCHMARK(BM_bf128_mul_arm);
 BENCHMARK(BM_bf128_mul_arm_polyval);
+BENCHMARK(BM_bf64_square_arm);
+BENCHMARK(BM_bf128_square_arm);
 #endif
 
 BENCHMARK(BM_bf8_mul_baseline);
@@ -329,22 +357,24 @@ BENCHMARK(BM_bf8_inverse_baseline);
 // clang-format on
 
 // clang-format off
-// 2026-01-29T04:34:45+00:00
+// 2026-01-29T05:20:58+00:00
 // Run on (14 X 24 MHz CPU s)
 // CPU Caches:
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
 //   L2 Unified 4096 KiB (x14)
-// Load Average: 4.17, 3.98, 3.48
+// Load Average: 22.48, 11.89, 7.08
 // -------------------------------------------------------------------
 // Benchmark                         Time             CPU   Iterations
 // -------------------------------------------------------------------
-// BM_bf64_mul_baseline            190 ns          189 ns      3562069
-// BM_bf64_mul_arm                6.04 ns         6.03 ns    116569525
-// BM_bf128_mul_baseline           597 ns          596 ns      1137287
-// BM_bf128_mul_arm               8.01 ns         7.96 ns     88449729
-// BM_bf128_mul_arm_polyval       12.5 ns         12.5 ns     53314242
-// BM_bf8_mul_baseline            7.75 ns         7.74 ns     89303940
-// BM_bf8x16_mul_pmull            4.12 ns         4.12 ns    165464293
-// BM_bf8_inverse_baseline        3.18 ns         3.18 ns    600415144
+// BM_bf64_mul_baseline            192 ns          191 ns      3607225
+// BM_bf64_mul_arm                6.01 ns         6.00 ns    113719438
+// BM_bf128_mul_baseline           613 ns          604 ns      1065676
+// BM_bf128_mul_arm               8.51 ns         8.50 ns     91708263
+// BM_bf128_mul_arm_polyval       12.6 ns         12.5 ns     53374406
+// BM_bf64_square_arm             5.90 ns         5.89 ns    115364965
+// BM_bf128_square_arm            7.89 ns         7.86 ns     88692920
+// BM_bf8_mul_baseline            8.04 ns         8.00 ns     87628156
+// BM_bf8x16_mul_pmull            4.44 ns         4.41 ns    163183857
+// BM_bf8_inverse_baseline        3.44 ns         3.42 ns    566985258
 // clang-format on

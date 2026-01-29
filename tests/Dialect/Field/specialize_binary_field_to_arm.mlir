@@ -50,6 +50,21 @@ func.func @test_bf64_mul(%a: !BF64, %b: !BF64) -> !BF64 {
   return %c : !BF64
 }
 
+// BF64 scalar squaring should use PMULL
+// CHECK-TOWER-LABEL: @test_bf64_square
+// CHECK-TOWER: builtin.unrealized_conversion_cast
+// CHECK-TOWER: llvm.inline_asm{{.*}}pmull
+// CHECK-TOWER: builtin.unrealized_conversion_cast
+// CHECK-POLYVAL-LABEL: @test_bf64_square
+// CHECK-POLYVAL: llvm.inline_asm{{.*}}pmull
+// CHECK-DISABLED-LABEL: @test_bf64_square
+// CHECK-DISABLED: field.square
+// CHECK-DISABLED-NOT: llvm.inline_asm
+func.func @test_bf64_square(%a: !BF64) -> !BF64 {
+  %c = field.square %a : !BF64
+  return %c : !BF64
+}
+
 //===----------------------------------------------------------------------===//
 // BF128 Tests (128-bit binary field)
 //===----------------------------------------------------------------------===//
@@ -84,6 +99,35 @@ func.func @test_bf64_mul(%a: !BF64, %b: !BF64) -> !BF64 {
 // CHECK-DISABLED-NOT: llvm.inline_asm
 func.func @test_bf128_mul(%a: !BF128, %b: !BF128) -> !BF128 {
   %c = field.mul %a, %b : !BF128
+  return %c : !BF128
+}
+
+// BF128 scalar squaring: Tower uses Karatsuba + shift/XOR reduction
+// Polyval uses Montgomery reduction with 2 PMULL + ext
+// CHECK-TOWER-LABEL: @test_bf128_square
+// CHECK-TOWER: builtin.unrealized_conversion_cast
+// CHECK-TOWER: llvm.bitcast
+// CHECK-TOWER: llvm.inline_asm{{.*}}pmull
+// CHECK-TOWER: llvm.inline_asm{{.*}}pmull2
+// CHECK-TOWER: arith.shrui
+// CHECK-TOWER: arith.shli
+// CHECK-TOWER: arith.xori
+// CHECK-TOWER: builtin.unrealized_conversion_cast
+// CHECK-POLYVAL-LABEL: @test_bf128_square
+// CHECK-POLYVAL: builtin.unrealized_conversion_cast
+// CHECK-POLYVAL: llvm.bitcast
+// CHECK-POLYVAL: llvm.inline_asm{{.*}}ext{{.*}}#8
+// CHECK-POLYVAL: llvm.inline_asm{{.*}}pmull
+// CHECK-POLYVAL: llvm.inline_asm{{.*}}pmull2
+// CHECK-POLYVAL: llvm.inline_asm{{.*}}pmull
+// CHECK-POLYVAL: llvm.inline_asm{{.*}}ext{{.*}}#8
+// CHECK-POLYVAL: llvm.inline_asm{{.*}}pmull2
+// CHECK-POLYVAL: builtin.unrealized_conversion_cast
+// CHECK-DISABLED-LABEL: @test_bf128_square
+// CHECK-DISABLED: field.square
+// CHECK-DISABLED-NOT: llvm.inline_asm
+func.func @test_bf128_square(%a: !BF128) -> !BF128 {
+  %c = field.square %a : !BF128
   return %c : !BF128
 }
 

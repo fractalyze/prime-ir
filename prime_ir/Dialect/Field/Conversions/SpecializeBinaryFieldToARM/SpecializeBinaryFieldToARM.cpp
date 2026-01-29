@@ -493,11 +493,21 @@ Value mulBF8PackedPMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs,
 // Conversion Patterns
 //===----------------------------------------------------------------------===//
 
-// Pattern for 64-bit binary field multiplication using PMULL
-struct ConvertBF64MulToPMULL : public OpRewritePattern<MulOp> {
-  using OpRewritePattern<MulOp>::OpRewritePattern;
+// Extract operands from MulOp (lhs, rhs) or SquareOp (input, input).
+template <typename OpTy>
+std::pair<Value, Value> getMulOperands(OpTy op) {
+  if constexpr (std::is_same_v<OpTy, MulOp>)
+    return {op.getLhs(), op.getRhs()};
+  else
+    return {op.getInput(), op.getInput()};
+}
 
-  LogicalResult matchAndRewrite(MulOp op,
+// Pattern for 64-bit binary field mul/square using PMULL.
+template <typename OpTy>
+struct ConvertBF64ToPMULL : public OpRewritePattern<OpTy> {
+  using OpRewritePattern<OpTy>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(OpTy op,
                                 PatternRewriter &rewriter) const override {
     Type resultType = op.getResult().getType();
 
@@ -512,8 +522,7 @@ struct ConvertBF64MulToPMULL : public OpRewritePattern<MulOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     // Get original operands (still BinaryFieldType)
-    Value lhs = op.getLhs();
-    Value rhs = op.getRhs();
+    auto [lhs, rhs] = getMulOperands(op);
 
     // Use unrealized_conversion_cast from bf<6> to i64
     auto i64Type = b.getI64Type();
@@ -524,7 +533,6 @@ struct ConvertBF64MulToPMULL : public OpRewritePattern<MulOp> {
 
     Value result = mulBF64PMULL(b, lhsI64, rhsI64);
 
-    // Cast back to bf<6>
     Value resultBF =
         b.create<UnrealizedConversionCastOp>(bfType, result).getResult(0);
     rewriter.replaceOp(op, resultBF);
@@ -532,49 +540,41 @@ struct ConvertBF64MulToPMULL : public OpRewritePattern<MulOp> {
   }
 };
 
-// Pattern for 128-bit binary field multiplication using PMULL
-struct ConvertBF128MulToPMULL : public OpRewritePattern<MulOp> {
-  using OpRewritePattern<MulOp>::OpRewritePattern;
+// Pattern for 128-bit binary field mul/square using PMULL.
+// Parameterized on the multiplication function (Tower vs Polyval reduction).
+using BF128MulFn = Value (*)(ImplicitLocOpBuilder &, Value, Value);
 
-  LogicalResult matchAndRewrite(MulOp op,
+template <typename OpTy, BF128MulFn mulFn>
+struct ConvertBF128ToARM : public OpRewritePattern<OpTy> {
+  using OpRewritePattern<OpTy>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(OpTy op,
                                 PatternRewriter &rewriter) const override {
     Type resultType = op.getResult().getType();
 
-    // Check if this is bf<7> (128-bit binary field)
     auto bfType = dyn_cast<BinaryFieldType>(resultType);
     if (!bfType || bfType.getTowerLevel() != 7)
       return failure();
 
-    // Add ARM crypto target features to parent function
     addARMCryptoTargetFeatures(op);
-
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // Get original operands (still BinaryFieldType)
-    Value lhs = op.getLhs();
-    Value rhs = op.getRhs();
-
+    auto [lhs, rhs] = getMulOperands(op);
     auto i64Type = b.getI64Type();
     auto i128Type = b.getIntegerType(128);
     auto vec2i64Type = VectorType::get(2, i64Type);
 
-    // Cast bf<7> -> i128 (matches BinaryFieldToArith type converter target)
-    // After BinaryFieldToArith runs, these become i128 -> i128 no-ops
     Value lhsI128 =
         b.create<UnrealizedConversionCastOp>(i128Type, lhs).getResult(0);
     Value rhsI128 =
         b.create<UnrealizedConversionCastOp>(i128Type, rhs).getResult(0);
 
-    // LLVM bitcast i128 -> vector<2xi64> for PMULL operations
     Value lhsVec = b.create<LLVM::BitcastOp>(vec2i64Type, lhsI128);
     Value rhsVec = b.create<LLVM::BitcastOp>(vec2i64Type, rhsI128);
 
-    Value resultVec = mulBF128PMULL(b, lhsVec, rhsVec);
+    Value resultVec = mulFn(b, lhsVec, rhsVec);
 
-    // LLVM bitcast vector<2xi64> -> i128
     Value resultI128 = b.create<LLVM::BitcastOp>(i128Type, resultVec);
-
-    // Cast i128 -> bf<7>
     Value resultBF =
         b.create<UnrealizedConversionCastOp>(bfType, resultI128).getResult(0);
     rewriter.replaceOp(op, resultBF);
@@ -582,111 +582,12 @@ struct ConvertBF128MulToPMULL : public OpRewritePattern<MulOp> {
   }
 };
 
-// Pattern for 128-bit binary field multiplication using Polyval polynomial.
-// Uses Montgomery reduction which is faster than Tower polynomial reduction.
-// WARNING: Produces different field representation than Tower!
-struct ConvertBF128MulToPolyval : public OpRewritePattern<MulOp> {
-  using OpRewritePattern<MulOp>::OpRewritePattern;
+// Pattern for packed 8-bit binary field mul/square using PMULL.
+template <typename OpTy>
+struct ConvertPackedBF8ToPMULL : public OpRewritePattern<OpTy> {
+  using OpRewritePattern<OpTy>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(MulOp op,
-                                PatternRewriter &rewriter) const override {
-    Type resultType = op.getResult().getType();
-
-    // Check if this is bf<7> (128-bit binary field)
-    auto bfType = dyn_cast<BinaryFieldType>(resultType);
-    if (!bfType || bfType.getTowerLevel() != 7)
-      return failure();
-
-    // Add ARM crypto target features to parent function
-    addARMCryptoTargetFeatures(op);
-
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    // Get original operands (still BinaryFieldType)
-    Value lhs = op.getLhs();
-    Value rhs = op.getRhs();
-
-    auto i64Type = b.getI64Type();
-    auto i128Type = b.getIntegerType(128);
-    auto vec2i64Type = VectorType::get(2, i64Type);
-
-    // Cast bf<7> -> i128
-    Value lhsI128 =
-        b.create<UnrealizedConversionCastOp>(i128Type, lhs).getResult(0);
-    Value rhsI128 =
-        b.create<UnrealizedConversionCastOp>(i128Type, rhs).getResult(0);
-
-    // LLVM bitcast i128 -> vector<2xi64> for PMULL operations
-    Value lhsVec = b.create<LLVM::BitcastOp>(vec2i64Type, lhsI128);
-    Value rhsVec = b.create<LLVM::BitcastOp>(vec2i64Type, rhsI128);
-
-    // Use Polyval multiplication with Montgomery reduction
-    Value resultVec = mulBF128Polyval(b, lhsVec, rhsVec);
-
-    // LLVM bitcast vector<2xi64> -> i128
-    Value resultI128 = b.create<LLVM::BitcastOp>(i128Type, resultVec);
-
-    // Cast i128 -> bf<7>
-    Value resultBF =
-        b.create<UnrealizedConversionCastOp>(bfType, resultI128).getResult(0);
-    rewriter.replaceOp(op, resultBF);
-    return success();
-  }
-};
-
-// Pattern for packed 8-bit binary field multiplication using PMULL
-struct ConvertPackedBF8MulToPMULL : public OpRewritePattern<MulOp> {
-  using OpRewritePattern<MulOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(MulOp op,
-                                PatternRewriter &rewriter) const override {
-    Type resultType = op.getResult().getType();
-
-    // Only handle vector types (not tensors)
-    auto vecType = dyn_cast<VectorType>(resultType);
-    if (!vecType)
-      return failure();
-
-    auto bfType = dyn_cast<BinaryFieldType>(vecType.getElementType());
-    if (!bfType || bfType.getTowerLevel() != 3)
-      return failure();
-
-    // Only support 16 elements (128-bit) for now
-    int64_t numElements = vecType.getNumElements();
-    if (numElements != 16)
-      return failure();
-
-    // Add ARM crypto target features to parent function
-    addARMCryptoTargetFeatures(op);
-
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    // Convert bf<3> vectors to i8 vectors for SIMD operation
-    auto vecI8Type = VectorType::get(numElements, b.getI8Type());
-
-    // Use unrealized_conversion_cast for type conversion
-    Value lhs = b.create<UnrealizedConversionCastOp>(vecI8Type, op.getLhs())
-                    .getResult(0);
-    Value rhs = b.create<UnrealizedConversionCastOp>(vecI8Type, op.getRhs())
-                    .getResult(0);
-
-    // Perform PMULL multiplication
-    Value result = mulBF8PackedPMULL(b, lhs, rhs, numElements);
-
-    // Cast result back to bf<3> vector
-    Value resultCast =
-        b.create<UnrealizedConversionCastOp>(vecType, result).getResult(0);
-
-    rewriter.replaceOp(op, resultCast);
-    return success();
-  }
-};
-
-// Pattern for packed 8-bit binary field squaring using PMULL
-struct ConvertPackedBF8SquareToPMULL : public OpRewritePattern<SquareOp> {
-  using OpRewritePattern<SquareOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(SquareOp op,
+  LogicalResult matchAndRewrite(OpTy op,
                                 PatternRewriter &rewriter) const override {
     Type resultType = op.getResult().getType();
 
@@ -708,17 +609,18 @@ struct ConvertPackedBF8SquareToPMULL : public OpRewritePattern<SquareOp> {
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    auto [lhs, rhs] = getMulOperands(op);
     auto vecI8Type = VectorType::get(numElements, b.getI8Type());
-    Value input = b.create<UnrealizedConversionCastOp>(vecI8Type, op.getInput())
-                      .getResult(0);
+    Value lhsI8 =
+        b.create<UnrealizedConversionCastOp>(vecI8Type, lhs).getResult(0);
+    Value rhsI8 =
+        b.create<UnrealizedConversionCastOp>(vecI8Type, rhs).getResult(0);
 
-    // Square = multiply by itself
-    Value result = mulBF8PackedPMULL(b, input, input, numElements);
+    Value result = mulBF8PackedPMULL(b, lhsI8, rhsI8, numElements);
 
     // Cast result back
     Value resultCast =
         b.create<UnrealizedConversionCastOp>(vecType, result).getResult(0);
-
     rewriter.replaceOp(op, resultCast);
     return success();
   }
@@ -740,19 +642,23 @@ struct SpecializeBinaryFieldToARM
 
     if (usePMULL) {
       // Always add bf<64> and packed bf<8> patterns
-      patterns.add<ConvertBF64MulToPMULL, ConvertPackedBF8MulToPMULL,
-                   ConvertPackedBF8SquareToPMULL>(context);
+      patterns.add<ConvertBF64ToPMULL<MulOp>, ConvertBF64ToPMULL<SquareOp>>(
+          context);
+      patterns.add<ConvertPackedBF8ToPMULL<MulOp>,
+                   ConvertPackedBF8ToPMULL<SquareOp>>(context);
 
       // For bf<128>, choose between Tower and Polyval polynomial
       if (usePolyval) {
         // Polyval: X¹²⁸ + X¹²⁷ + X¹²⁶ + X¹²¹ + 1
         // Faster due to Montgomery reduction with only 2 PMULL instructions
         // WARNING: Different field representation than Tower!
-        patterns.add<ConvertBF128MulToPolyval>(context);
+        patterns.add<ConvertBF128ToARM<MulOp, mulBF128Polyval>,
+                     ConvertBF128ToARM<SquareOp, mulBF128Polyval>>(context);
       } else {
         // Tower: X¹²⁸ + X⁷ + X² + X + 1
         // Standard tower field polynomial
-        patterns.add<ConvertBF128MulToPMULL>(context);
+        patterns.add<ConvertBF128ToARM<MulOp, mulBF128PMULL>,
+                     ConvertBF128ToARM<SquareOp, mulBF128PMULL>>(context);
       }
     }
 
