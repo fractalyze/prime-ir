@@ -18,6 +18,12 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "format_utils",
+    hdrs = ["format_utils.h"],
+    deps = ["@com_google_absl//absl/log:check"],
+)
+
+zkx_cc_library(
     name = "lock_free_queue",
     hdrs = ["lock_free_queue.h"],
     deps = [
