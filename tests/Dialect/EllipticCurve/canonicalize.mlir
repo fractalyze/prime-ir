@@ -157,28 +157,31 @@ func.func @test_sub_after_neg_lhs(%point1: !jacobian, %point2: !jacobian) -> !ja
 }
 
 //===----------------------------------------------------------------------===//
-// ScalarMul strength reduction patterns
+// ScalarMul small constant optimization patterns
 //===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_scalar_mul_by_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_by_zero(%point: !jacobian) -> !jacobian {
+  // 0 * P -> zero point (from_coords with identity)
+  // The zero point for Jacobian is (1, 1, 0)
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: %[[ZERO:.*]] = field.constant 0
+  // CHECK: %[[ONE:.*]] = field.constant 1
+  // CHECK: elliptic_curve.from_coords %[[ONE]], %[[ONE]], %[[ZERO]]
+  %zero = field.constant 0 : !SF
+  %result = elliptic_curve.scalar_mul %zero, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
 
 // CHECK-LABEL: @test_scalar_mul_by_one
 // CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
 func.func @test_scalar_mul_by_one(%point: !jacobian) -> !jacobian {
   // 1 * P -> P
-  // TODO(chokobole): This pattern requires isScalarEqualTo to be implemented.
-  // CHECK: elliptic_curve.scalar_mul
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[ARG0]] : [[JACOBIAN]]
   %one = field.constant 1 : !SF
   %result = elliptic_curve.scalar_mul %one, %point : !SF, !jacobian -> !jacobian
-  return %result : !jacobian
-}
-
-// CHECK-LABEL: @test_scalar_mul_by_zero
-// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
-func.func @test_scalar_mul_by_zero(%point: !jacobian) -> !jacobian {
-  // 0 * P -> zero point (created via from_coords with identity coords)
-  // TODO(chokobole): This pattern requires isScalarEqualTo to be implemented.
-  // CHECK: elliptic_curve.scalar_mul
-  %zero = field.constant 0 : !SF
-  %result = elliptic_curve.scalar_mul %zero, %point : !SF, !jacobian -> !jacobian
   return %result : !jacobian
 }
 
@@ -186,10 +189,94 @@ func.func @test_scalar_mul_by_zero(%point: !jacobian) -> !jacobian {
 // CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
 func.func @test_scalar_mul_by_two(%point: !jacobian) -> !jacobian {
   // 2 * P -> double(P)
-  // TODO(chokobole): This pattern requires isScalarEqualTo to be implemented.
-  // CHECK: elliptic_curve.scalar_mul
+  // CHECK: %[[DBL:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[DBL]]
   %two = field.constant 2 : !SF
   %result = elliptic_curve.scalar_mul %two, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+// CHECK-LABEL: @test_scalar_mul_by_three
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_by_three(%point: !jacobian) -> !jacobian {
+  // 3 * P -> P + double(P)
+  // CHECK: %[[DBL:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK: %[[ADD:.*]] = elliptic_curve.add %[[ARG0]], %[[DBL]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[ADD]]
+  %three = field.constant 3 : !SF
+  %result = elliptic_curve.scalar_mul %three, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+// CHECK-LABEL: @test_scalar_mul_by_four
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_by_four(%point: !jacobian) -> !jacobian {
+  // 4 * P -> double(double(P))
+  // CHECK: %[[DBL1:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK: %[[DBL2:.*]] = elliptic_curve.double %[[DBL1]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[DBL2]]
+  %four = field.constant 4 : !SF
+  %result = elliptic_curve.scalar_mul %four, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+// CHECK-LABEL: @test_scalar_mul_by_five
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_by_five(%point: !jacobian) -> !jacobian {
+  // 5 * P -> P + double(double(P))
+  // CHECK: %[[DBL1:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK: %[[DBL2:.*]] = elliptic_curve.double %[[DBL1]]
+  // CHECK: %[[ADD:.*]] = elliptic_curve.add %[[ARG0]], %[[DBL2]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[ADD]]
+  %five = field.constant 5 : !SF
+  %result = elliptic_curve.scalar_mul %five, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+// CHECK-LABEL: @test_scalar_mul_by_six
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_by_six(%point: !jacobian) -> !jacobian {
+  // 6 * P -> double(P + double(P))
+  // CHECK: %[[DBL1:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK: %[[ADD:.*]] = elliptic_curve.add %[[ARG0]], %[[DBL1]]
+  // CHECK: %[[DBL2:.*]] = elliptic_curve.double %[[ADD]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[DBL2]]
+  %six = field.constant 6 : !SF
+  %result = elliptic_curve.scalar_mul %six, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+// CHECK-LABEL: @test_scalar_mul_by_seven
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_by_seven(%point: !jacobian) -> !jacobian {
+  // 7 * P -> P + double(P + double(P))
+  // CHECK: %[[DBL1:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK: %[[ADD1:.*]] = elliptic_curve.add %[[ARG0]], %[[DBL1]]
+  // CHECK: %[[DBL2:.*]] = elliptic_curve.double %[[ADD1]]
+  // CHECK: %[[ADD2:.*]] = elliptic_curve.add %[[ARG0]], %[[DBL2]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[ADD2]]
+  %seven = field.constant 7 : !SF
+  %result = elliptic_curve.scalar_mul %seven, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+// CHECK-LABEL: @test_scalar_mul_by_eight
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_by_eight(%point: !jacobian) -> !jacobian {
+  // 8 * P -> double(double(double(P)))
+  // CHECK: %[[DBL1:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK: %[[DBL2:.*]] = elliptic_curve.double %[[DBL1]]
+  // CHECK: %[[DBL3:.*]] = elliptic_curve.double %[[DBL2]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[DBL3]]
+  %eight = field.constant 8 : !SF
+  %result = elliptic_curve.scalar_mul %eight, %point : !SF, !jacobian -> !jacobian
   return %result : !jacobian
 }
 
@@ -198,10 +285,50 @@ func.func @test_scalar_mul_by_two(%point: !jacobian) -> !jacobian {
 func.func @test_scalar_mul_by_neg_one(%point: !jacobian) -> !jacobian {
   // (-1) * P -> -P
   // -1 mod SF = 21888242871839275222246405745257275088548364400416034343698204186575808495616
-  // TODO(chokobole): This pattern requires isScalarNegativeOf to be implemented.
-  // CHECK: elliptic_curve.scalar_mul
+  // CHECK: %[[NEG:.*]] = elliptic_curve.negate %[[ARG0]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[NEG]]
   %neg_one = field.constant 21888242871839275222246405745257275088548364400416034343698204186575808495616 : !SF
   %result = elliptic_curve.scalar_mul %neg_one, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+// CHECK-LABEL: @test_scalar_mul_large_not_optimized
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_large_not_optimized(%point: !jacobian) -> !jacobian {
+  // 9 * P should NOT be optimized (beyond the threshold)
+  // CHECK: elliptic_curve.scalar_mul
+  %nine = field.constant 9 : !SF
+  %result = elliptic_curve.scalar_mul %nine, %point : !SF, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+//===----------------------------------------------------------------------===//
+// ScalarMul with Montgomery scalar field
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_scalar_mul_montgomery_by_two
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_montgomery_by_two(%point: !jacobian) -> !jacobian {
+  // 2 * P -> double(P) (with Montgomery scalar field)
+  // CHECK: %[[DBL:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[DBL]]
+  %two = field.constant 2 : !SFm
+  %result = elliptic_curve.scalar_mul %two, %point : !SFm, !jacobian -> !jacobian
+  return %result : !jacobian
+}
+
+// CHECK-LABEL: @test_scalar_mul_montgomery_by_three
+// CHECK-SAME: (%[[ARG0:.*]]: [[JACOBIAN:.*]]) -> [[JACOBIAN:.*]] {
+func.func @test_scalar_mul_montgomery_by_three(%point: !jacobian) -> !jacobian {
+  // 3 * P -> P + double(P) (with Montgomery scalar field)
+  // CHECK: %[[DBL:.*]] = elliptic_curve.double %[[ARG0]]
+  // CHECK: %[[ADD:.*]] = elliptic_curve.add %[[ARG0]], %[[DBL]]
+  // CHECK-NOT: elliptic_curve.scalar_mul
+  // CHECK: return %[[ADD]]
+  %three = field.constant 3 : !SFm
+  %result = elliptic_curve.scalar_mul %three, %point : !SFm, !jacobian -> !jacobian
   return %result : !jacobian
 }
 

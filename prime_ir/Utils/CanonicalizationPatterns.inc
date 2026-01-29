@@ -59,11 +59,8 @@
   PRIME_IR_ADDITIVE_GROUP_SUB_DISTRIBUTIVITY_PATTERN_LIST(X)
 
 // ScalarMulOp patterns
-#define PRIME_IR_SCALARMUL_STRENGTH_REDUCTION_PATTERN_LIST(X) \
-  X(ScalarMulByOne)                                           \
-  X(ScalarMulByZero)                                          \
-  X(ScalarMulByTwo)                                           \
-  X(ScalarMulByNegOne)
+// Note: Strength reduction patterns (0*P, 1*P, 2*P, (-1)*P) are implemented
+// in C++ (ScalarMulSmallConstant) for proper scalar field constant matching.
 
 #define PRIME_IR_SCALARMUL_DISTRIBUTIVITY_PATTERN_LIST(X) \
   X(FactorScalarMulAdd)                                   \
@@ -73,7 +70,6 @@
   X(ScalarMulAssocLeft)
 
 #define PRIME_IR_ADDITIVE_GROUP_SCALARMUL_PATTERN_LIST(X) \
-  PRIME_IR_SCALARMUL_STRENGTH_REDUCTION_PATTERN_LIST(X)   \
   PRIME_IR_SCALARMUL_ASSOCIATIVITY_PATTERN_LIST(X)
 
 //===----------------------------------------------------------------------===//

@@ -1311,6 +1311,16 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
       [](const FieldOperation &a, const FieldOperation &b) { return a * b; });
 }
 
+OpFoldResult PowUIOp::fold(FoldAdaptor adaptor) {
+  // x^1 -> x
+  if (auto expAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getExp())) {
+    if (expAttr.getValue().isOne()) {
+      return getBase();
+    }
+  }
+  return {};
+}
+
 namespace {
 
 bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
@@ -1388,6 +1398,93 @@ void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 #define PRIME_IR_MUL_PATTERN(Name) patterns.add<Field##Name>(context);
   PRIME_IR_FIELD_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
 #undef PRIME_IR_MUL_PATTERN
+}
+
+namespace {
+
+// Optimizes small constant exponents using optimal addition chains.
+// This avoids the overhead of the generic square-and-multiply loop for common
+// cases like x², x³, x⁴, etc.
+struct PowUISmallExponent : public OpRewritePattern<PowUIOp> {
+  using OpRewritePattern<PowUIOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(PowUIOp op,
+                                PatternRewriter &rewriter) const override {
+    // Check if exponent is a constant
+    IntegerAttr expAttr;
+    if (!matchPattern(op.getExp(), m_Constant(&expAttr))) {
+      return failure();
+    }
+
+    uint64_t exp = expAttr.getValue().getZExtValue();
+    if (exp > 8) {
+      return failure();
+    }
+
+    Location loc = op.getLoc();
+    Value base = op.getBase();
+    Type resultType = op.getType();
+    Value result;
+
+    auto square = [&](Value v) -> Value {
+      return rewriter.create<SquareOp>(loc, v);
+    };
+    auto mul = [&](Value a, Value b) -> Value {
+      return rewriter.create<MulOp>(loc, a, b);
+    };
+
+    switch (exp) {
+    case 0: {
+      // x⁰ = 1
+      result = rewriter.create<ConstantOp>(loc, resultType, uint64_t{1});
+      break;
+    }
+    case 1:
+      // x¹ = x (handled by fold, but included for completeness)
+      result = base;
+      break;
+    case 2:
+      // x² = square(x)
+      result = square(base);
+      break;
+    case 3:
+      // x³ = x * square(x)
+      result = mul(base, square(base));
+      break;
+    case 4:
+      // x⁴ = square(square(x))
+      result = square(square(base));
+      break;
+    case 5:
+      // x⁵ = x * square(square(x))
+      result = mul(base, square(square(base)));
+      break;
+    case 6:
+      // x⁶ = square(x * square(x))
+      result = square(mul(base, square(base)));
+      break;
+    case 7:
+      // x⁷ = x * square(x * square(x))
+      result = mul(base, square(mul(base, square(base))));
+      break;
+    case 8:
+      // x⁸ = square(square(square(x)))
+      result = square(square(square(base)));
+      break;
+    default:
+      return failure();
+    }
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+} // namespace
+
+void PowUIOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                          MLIRContext *context) {
+  patterns.add<PowUISmallExponent>(context);
 }
 
 namespace {
