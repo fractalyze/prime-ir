@@ -30,6 +30,17 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "device_utils",
+    srcs = ["device_utils.cc"],
+    hdrs = ["device_utils.h"],
+    deps = [
+        ":xplane_schema",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
     name = "format_utils",
     hdrs = ["format_utils.h"],
     deps = ["@com_google_absl//absl/log:check"],
@@ -201,6 +212,7 @@ zkx_cc_test(
     name = "utils_unittests",
     srcs = [
         "buffer_pool_unittest.cc",
+        "device_utils_unittest.cc",
         "lock_free_queue_unittest.cc",
         "per_thread_unittest.cc",
         "tf_op_utils_unittest.cc",
@@ -211,6 +223,7 @@ zkx_cc_test(
     ],
     deps = [
         ":buffer_pool",
+        ":device_utils",
         ":lock_free_queue",
         ":per_thread",
         ":tf_op_utils",
