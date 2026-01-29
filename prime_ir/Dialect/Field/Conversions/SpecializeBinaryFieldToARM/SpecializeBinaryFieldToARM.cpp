@@ -722,6 +722,91 @@ struct ConvertPackedBF8SquareToPMULL : public OpRewritePattern<SquareOp> {
   }
 };
 
+// Pattern for 64-bit binary field squaring using PMULL
+// square(a) = mul(a, a)
+struct ConvertBF64SquareToPMULL : public OpRewritePattern<SquareOp> {
+  using OpRewritePattern<SquareOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(SquareOp op,
+                                PatternRewriter &rewriter) const override {
+    Type resultType = op.getResult().getType();
+
+    // Check if this is bf<6> (64-bit binary field)
+    auto bfType = dyn_cast<BinaryFieldType>(resultType);
+    if (!bfType || bfType.getTowerLevel() != 6)
+      return failure();
+
+    // Add ARM crypto target features to parent function
+    addARMCryptoTargetFeatures(op);
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // Get original operand (still BinaryFieldType)
+    Value input = op.getInput();
+
+    // Use unrealized_conversion_cast from bf<6> to i64
+    auto i64Type = b.getI64Type();
+    Value inputI64 =
+        b.create<UnrealizedConversionCastOp>(i64Type, input).getResult(0);
+
+    // square(a) = mul(a, a)
+    Value result = mulBF64PMULL(b, inputI64, inputI64);
+
+    // Cast back to bf<6>
+    Value resultBF =
+        b.create<UnrealizedConversionCastOp>(bfType, result).getResult(0);
+    rewriter.replaceOp(op, resultBF);
+    return success();
+  }
+};
+
+// Pattern for 128-bit binary field squaring using PMULL
+// square(a) = mul(a, a)
+struct ConvertBF128SquareToPMULL : public OpRewritePattern<SquareOp> {
+  using OpRewritePattern<SquareOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(SquareOp op,
+                                PatternRewriter &rewriter) const override {
+    Type resultType = op.getResult().getType();
+
+    // Check if this is bf<7> (128-bit binary field)
+    auto bfType = dyn_cast<BinaryFieldType>(resultType);
+    if (!bfType || bfType.getTowerLevel() != 7)
+      return failure();
+
+    // Add ARM crypto target features to parent function
+    addARMCryptoTargetFeatures(op);
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // Get original operand (still BinaryFieldType)
+    Value input = op.getInput();
+
+    auto i64Type = b.getI64Type();
+    auto i128Type = b.getIntegerType(128);
+    auto vec2i64Type = VectorType::get(2, i64Type);
+
+    // Cast bf<7> -> i128
+    Value inputI128 =
+        b.create<UnrealizedConversionCastOp>(i128Type, input).getResult(0);
+
+    // LLVM bitcast i128 -> vector<2xi64> for PMULL operations
+    Value inputVec = b.create<LLVM::BitcastOp>(vec2i64Type, inputI128);
+
+    // square(a) = mul(a, a)
+    Value resultVec = mulBF128PMULL(b, inputVec, inputVec);
+
+    // LLVM bitcast vector<2xi64> -> i128
+    Value resultI128 = b.create<LLVM::BitcastOp>(i128Type, resultVec);
+
+    // Cast i128 -> bf<7>
+    Value resultBF =
+        b.create<UnrealizedConversionCastOp>(bfType, resultI128).getResult(0);
+    rewriter.replaceOp(op, resultBF);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -737,9 +822,12 @@ struct SpecializeBinaryFieldToARM
     RewritePatternSet patterns(context);
 
     if (usePMULL) {
-      // Always add bf<64> and packed bf<8> patterns
-      patterns.add<ConvertBF64MulToPMULL, ConvertPackedBF8MulToPMULL,
-                   ConvertPackedBF8SquareToPMULL>(context);
+      // bf<64> mul/square patterns
+      patterns.add<ConvertBF64MulToPMULL, ConvertBF64SquareToPMULL>(context);
+
+      // Packed bf<8> mul/square patterns
+      patterns.add<ConvertPackedBF8MulToPMULL, ConvertPackedBF8SquareToPMULL>(
+          context);
 
       // For bf<128>, choose between Tower and Polyval polynomial
       if (usePolyval) {
@@ -750,7 +838,7 @@ struct SpecializeBinaryFieldToARM
       } else {
         // Tower: X^128 + X^7 + X^2 + X + 1
         // Standard tower field polynomial
-        patterns.add<ConvertBF128MulToPMULL>(context);
+        patterns.add<ConvertBF128MulToPMULL, ConvertBF128SquareToPMULL>(context);
       }
     }
 
