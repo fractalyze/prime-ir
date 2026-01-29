@@ -134,6 +134,32 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "xplane_utils",
+    srcs = ["xplane_utils.cc"],
+    hdrs = ["xplane_utils.h"],
+    deps = [
+        ":math_utils",
+        ":tf_xplane_visitor",
+        ":timespan",
+        ":trace_utils",
+        ":xplane_builder",
+        ":xplane_schema",
+        ":xplane_visitor",
+        "//xla/tsl/platform:fingerprint",
+        "//xla/tsl/profiler/lib:context_types",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "//xla/tsl/util:stats_calculator",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
+
+zkx_cc_library(
     name = "xplane_visitor",
     srcs = ["xplane_visitor.cc"],
     hdrs = ["xplane_visitor.h"],
