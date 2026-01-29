@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//bazel:zkx_cc.bzl", "zkx_cc_library")
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -183,4 +183,10 @@ zkx_cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
     ],
+)
+
+zkx_cc_test(
+    name = "utils_unittests",
+    srcs = ["timespan_unittest.cc"],
+    deps = [":timespan"],
 )
