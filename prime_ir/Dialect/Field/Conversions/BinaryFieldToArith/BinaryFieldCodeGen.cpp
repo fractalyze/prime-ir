@@ -63,22 +63,84 @@ BinaryFieldCodeGen BinaryFieldCodeGen::square() const {
 }
 
 BinaryFieldCodeGen BinaryFieldCodeGen::inverse() const {
+  unsigned towerLevel = bfType_.getTowerLevel();
+
+  // For bf<8> (tower level 3), use lookup table for O(1) inverse
+  if (towerLevel == 3) {
+    return inverseLookupTable();
+  }
+
   // Use Fermat's little theorem: a⁻¹ = a^(2ⁿ - 2) in GF(2ⁿ)
   // where n = 2^towerLevel
   unsigned bitWidth = bfType_.getBitWidth();
 
   // Start with a²
-  Value result = squareTower(value_, bfType_.getTowerLevel());
+  Value result = squareTower(value_, towerLevel);
   Value power = result;
 
   // Compute a^(2ⁿ - 2) using repeated squaring
   // a^(2ⁿ - 2) = a^(2 + 4 + 8 + ... + 2ⁿ⁻¹)
   for (unsigned i = 2; i < bitWidth; ++i) {
-    power = squareTower(power, bfType_.getTowerLevel());
-    result = mulTower(result, power, bfType_.getTowerLevel());
+    power = squareTower(power, towerLevel);
+    result = mulTower(result, power, towerLevel);
   }
 
   return BinaryFieldCodeGen(bfType_, result, builder_);
+}
+
+BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
+  // Generate lookup table as a global constant memref and use it
+  // For now, generate inline switch-case style code using arith ops
+  // Future optimization: use LLVM global constant + load
+
+  // Create the lookup table as a series of constants
+  // We'll use a branchless approach with masking for each possible value
+
+  // For SIMD friendliness, we could use vector shuffles, but for scalar
+  // bf<8>, we'll generate a direct index into the table using arith ops.
+
+  // Simple approach: create constant array and index into it
+  // Use LLVM's constant array with memref.global + memref.load
+
+  // For simplicity in this baseline implementation, use scf.index_switch
+  // which will be lowered to an efficient jump table
+
+  auto indexValue =
+      builder_.create<arith::IndexCastOp>(builder_.getIndexType(), value_);
+
+  // Create switch with all 256 cases
+  SmallVector<int64_t> caseValues;
+  SmallVector<Value> caseResults;
+
+  for (int i = 0; i < 256; ++i) {
+    caseValues.push_back(i);
+  }
+
+  // Generate scf.index_switch
+  auto switchOp = builder_.create<scf::IndexSwitchOp>(
+      TypeRange{builder_.getI8Type()}, indexValue, caseValues, caseValues.size());
+
+  // Generate case regions
+  for (int i = 0; i < 256; ++i) {
+    Region &caseRegion = switchOp.getCaseRegions()[i];
+    Block *caseBlock = builder_.createBlock(&caseRegion);
+    builder_.setInsertionPointToStart(caseBlock);
+    Value inverseVal = builder_.create<arith::ConstantIntOp>(
+        kBinaryTower8bInverseTable[i], 8);
+    builder_.create<scf::YieldOp>(inverseVal);
+  }
+
+  // Generate default region (return 0 for safety, should never be reached)
+  Region &defaultRegion = switchOp.getDefaultRegion();
+  Block *defaultBlock = builder_.createBlock(&defaultRegion);
+  builder_.setInsertionPointToStart(defaultBlock);
+  Value defaultVal = builder_.create<arith::ConstantIntOp>(0, 8);
+  builder_.create<scf::YieldOp>(defaultVal);
+
+  // Move insertion point back after switch
+  builder_.setInsertionPointAfter(switchOp);
+
+  return BinaryFieldCodeGen(bfType_, switchOp.getResult(0), builder_);
 }
 
 BinaryFieldCodeGen BinaryFieldCodeGen::constant(BinaryFieldType bfType,
