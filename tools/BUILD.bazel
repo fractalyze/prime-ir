@@ -42,6 +42,7 @@ cc_binary(
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM",
         "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//prime_ir/Dialect/EllipticCurve/Transforms:BufferizableOpInterfaceImpl",
         "//prime_ir/Dialect/Field/Conversions/BinaryFieldToArith",
         "//prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM",
         "//prime_ir/Dialect/Field/Conversions/FieldToModArith",
