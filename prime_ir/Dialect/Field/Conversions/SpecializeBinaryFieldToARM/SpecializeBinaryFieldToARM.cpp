@@ -124,10 +124,121 @@ Value emitPMULL2_8(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 }
 
 //===----------------------------------------------------------------------===//
+// Polyval Montgomery Reduction Helpers
+// Polyval uses polynomial: X¹²⁸ + X¹²⁷ + X¹²⁶ + X¹²¹ + 1
+// Montgomery reduction uses only 2 PMULL instructions for 256->128 bit
+// reduction
+//===----------------------------------------------------------------------===//
+
+// Emit ARM ext instruction to swap halves of a 128-bit register.
+// ext Vd.16b, Vn.16b, Vm.16b, #8 - extracts bytes from concatenation
+Value emitVEXT8(ImplicitLocOpBuilder &b, Value a) {
+  auto vecType = VectorType::get(2, b.getI64Type());
+  return b
+      .create<LLVM::InlineAsmOp>(
+          vecType, ValueRange{a}, "ext $0.16b, $1.16b, $1.16b, #8", "=w,w",
+          /*has_side_effects=*/false,
+          /*is_align_stack=*/false, LLVM::TailCallKind::None,
+          LLVM::AsmDialectAttr{},
+          /*operand_attrs=*/ArrayAttr())
+      .getResult(0);
+}
+
+// Get Polyval polynomial constant packed as vector<2xi64>.
+// The constant represents bits for Montgomery reduction:
+// Low 64: (1 << 63) | (1 << 62) | (1 << 57) = 0xE200000000000000
+// High 64: same pattern (for pmull2)
+Value getPolyvalConstant(ImplicitLocOpBuilder &b) {
+  auto i64Type = b.getI64Type();
+  auto vec2i64Type = VectorType::get(2, i64Type);
+  // 0xE200000000000000 = (1ULL << 63) | (1ULL << 62) | (1ULL << 57)
+  Value polyVal = b.create<arith::ConstantOp>(
+      i64Type, b.getI64IntegerAttr(0xE200000000000000ULL));
+  return b.create<vector::FromElementsOp>(vec2i64Type,
+                                          ValueRange{polyVal, polyVal});
+}
+
+// Montgomery reduction for Polyval field.
+// Reduces 256-bit product (x23=high, x01=low) to 128-bit result.
+// Algorithm from binius (RFC 8452):
+//   [A1:A0] = X01 • poly (pmull low halves)
+//   [B1:B0] = [X01_lo ⊕ A1 : X01_hi ⊕ A0] (swap and xor)
+//   [C1:C0] = B • poly (pmull2 high halves)
+//   Output: X23 ⊕ C ⊕ B
+Value polyvalMontgomeryReduce(ImplicitLocOpBuilder &b, Value x23, Value x01) {
+  // Get polyval constant
+  Value poly = getPolyvalConstant(b);
+
+  // A = pmull(x01, poly) - multiply low halves
+  Value a = emitPMULL(b, x01, poly);
+
+  // B = x01 XOR ext(a, 8) - swap halves of a and XOR with x01
+  Value aSwapped = emitVEXT8(b, a);
+  Value bVal = b.create<arith::XOrIOp>(x01, aSwapped);
+
+  // C = pmull2(b, poly) - multiply high halves
+  Value c = emitPMULL2(b, bVal, poly);
+
+  // Result = x23 XOR c XOR b
+  Value cXorB = b.create<arith::XOrIOp>(c, bVal);
+  return b.create<arith::XOrIOp>(x23, cXorB);
+}
+
+// Multiply two 128-bit Polyval field elements using PMULL with Montgomery.
+// This is faster than Tower reduction due to the sparse Polyval polynomial.
+// Note: Polyval uses different polynomial than Tower, producing different
+// results!
+Value mulBF128Polyval(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
+  auto i64Type = b.getI64Type();
+  auto vec2i64Type = VectorType::get(2, i64Type);
+
+  // Karatsuba step 1: decompose into h, m, l products
+  // m = (x.hi ^ x.lo) * (y.hi ^ y.lo)
+  Value lhsSwapped = emitVEXT8(b, lhs);
+  Value rhsSwapped = emitVEXT8(b, rhs);
+  Value lhsXor = b.create<arith::XOrIOp>(lhs, lhsSwapped);
+  Value rhsXor = b.create<arith::XOrIOp>(rhs, rhsSwapped);
+  Value m = emitPMULL(b, lhsXor, rhsXor);
+
+  // h = x.hi * y.hi (pmull2)
+  Value h = emitPMULL2(b, lhs, rhs);
+
+  // l = x.lo * y.lo (pmull)
+  Value l = emitPMULL(b, lhs, rhs);
+
+  // Karatsuba step 2: combine into 256-bit (x23, x01)
+  // Extract 64-bit components (only those needed)
+  Value lLow = b.create<vector::ExtractOp>(l, ArrayRef<int64_t>{0});
+  Value lHigh = b.create<vector::ExtractOp>(l, ArrayRef<int64_t>{1});
+  Value hLow = b.create<vector::ExtractOp>(h, ArrayRef<int64_t>{0});
+  Value hHigh = b.create<vector::ExtractOp>(h, ArrayRef<int64_t>{1});
+
+  // Combine middle term with h and l using vector ops
+  // t = m ^ h ^ l
+  Value mXorH = b.create<arith::XOrIOp>(m, h);
+  Value t = b.create<arith::XOrIOp>(mXorH, l);
+  Value tLow = b.create<vector::ExtractOp>(t, ArrayRef<int64_t>{0});
+  Value tHigh = b.create<vector::ExtractOp>(t, ArrayRef<int64_t>{1});
+
+  // Build x01 = {lLow, lHigh ^ tLow}
+  Value x01High = b.create<arith::XOrIOp>(lHigh, tLow);
+  Value x01 =
+      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{lLow, x01High});
+
+  // Build x23 = {hLow ^ tHigh, hHigh}
+  Value x23Low = b.create<arith::XOrIOp>(hLow, tHigh);
+  Value x23 =
+      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{x23Low, hHigh});
+
+  // Montgomery reduction: 256-bit -> 128-bit
+  return polyvalMontgomeryReduce(b, x23, x01);
+}
+
+//===----------------------------------------------------------------------===//
 // Tower Polynomial Reduction Helpers
 //===----------------------------------------------------------------------===//
 
-// Compute tower level 7 reduction: high * (x^7 + x^2 + x + 1)
+// Compute tower level 7 reduction: high * (x⁷ + x² + x + 1)
 // Returns the value to XOR with the low 64 bits.
 // Also computes overflow bits that need to be XORed with higher positions.
 std::pair<Value, Value> reduceTowerLevel7(ImplicitLocOpBuilder &b, Value high) {
@@ -167,7 +278,7 @@ std::pair<Value, Value> reduceTowerLevel7(ImplicitLocOpBuilder &b, Value high) {
   return {reduction, overflow};
 }
 
-// Compute tower level 6 reduction: high * (x^4 + x^3 + x + 1)
+// Compute tower level 6 reduction: high * (x⁴ + x³ + x + 1)
 Value reduceTowerLevel6(ImplicitLocOpBuilder &b, Value high) {
   auto i64Type = b.getI64Type();
 
@@ -224,8 +335,8 @@ Value mulBF128PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   auto vec2i64Type = VectorType::get(2, i64Type);
 
   // Karatsuba multiplication for 128-bit values
-  // Let a = a_h * x^64 + a_l, b = b_h * x^64 + b_l
-  // a * b = a_h*b_h * x^128 + (a_h*b_l + a_l*b_h) * x^64 + a_l*b_l
+  // Let a = a_h * x⁶⁴ + a_l, b = b_h * x⁶⁴ + b_l
+  // a * b = a_h*b_h * x¹²⁸ + (a_h*b_l + a_l*b_h) * x⁶⁴ + a_l*b_l
 
   // Low-low product using pmull (low 64-bit halves)
   Value ll = emitPMULL(b, lhs, rhs);
@@ -275,12 +386,12 @@ Value mulBF128PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   Value r3 = hhHigh;
 
   // Reduce 256-bit to 128-bit using tower polynomial for level 7
-  // First reduce r3 (bits 192-255): r3 * x^64 * (x^7 + x^2 + x + 1)
+  // First reduce r3 (bits 192-255): r3 * x⁶⁴ * (x⁷ + x² + x + 1)
   auto [r3_red, r3_overflow] = reduceTowerLevel7(b, r3);
   r1 = b.create<arith::XOrIOp>(r1, r3_red);
   r2 = b.create<arith::XOrIOp>(r2, r3_overflow);
 
-  // Now reduce r2 (bits 128-191): r2 * (x^7 + x^2 + x + 1)
+  // Now reduce r2 (bits 128-191): r2 * (x⁷ + x² + x + 1)
   auto [r2_red, r2_overflow] = reduceTowerLevel7(b, r2);
   r0 = b.create<arith::XOrIOp>(r0, r2_red);
   r1 = b.create<arith::XOrIOp>(r1, r2_overflow);
@@ -294,7 +405,7 @@ Value mulBF128PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 //===----------------------------------------------------------------------===//
 
 // Reduce 16-bit polynomial product to 8-bit using tower reduction for level 3.
-// Tower level 3 reduction polynomial: x^8 + x^4 + x^3 + x + 1
+// Tower level 3 reduction polynomial: x⁸ + x⁴ + x³ + x + 1
 Value reduceTowerLevel3Packed(ImplicitLocOpBuilder &b, Value highBits) {
   auto vecType = mlir::cast<VectorType>(highBits.getType());
 
@@ -471,6 +582,58 @@ struct ConvertBF128MulToPMULL : public OpRewritePattern<MulOp> {
   }
 };
 
+// Pattern for 128-bit binary field multiplication using Polyval polynomial.
+// Uses Montgomery reduction which is faster than Tower polynomial reduction.
+// WARNING: Produces different field representation than Tower!
+struct ConvertBF128MulToPolyval : public OpRewritePattern<MulOp> {
+  using OpRewritePattern<MulOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MulOp op,
+                                PatternRewriter &rewriter) const override {
+    Type resultType = op.getResult().getType();
+
+    // Check if this is bf<7> (128-bit binary field)
+    auto bfType = dyn_cast<BinaryFieldType>(resultType);
+    if (!bfType || bfType.getTowerLevel() != 7)
+      return failure();
+
+    // Add ARM crypto target features to parent function
+    addARMCryptoTargetFeatures(op);
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    // Get original operands (still BinaryFieldType)
+    Value lhs = op.getLhs();
+    Value rhs = op.getRhs();
+
+    auto i64Type = b.getI64Type();
+    auto i128Type = b.getIntegerType(128);
+    auto vec2i64Type = VectorType::get(2, i64Type);
+
+    // Cast bf<7> -> i128
+    Value lhsI128 =
+        b.create<UnrealizedConversionCastOp>(i128Type, lhs).getResult(0);
+    Value rhsI128 =
+        b.create<UnrealizedConversionCastOp>(i128Type, rhs).getResult(0);
+
+    // LLVM bitcast i128 -> vector<2xi64> for PMULL operations
+    Value lhsVec = b.create<LLVM::BitcastOp>(vec2i64Type, lhsI128);
+    Value rhsVec = b.create<LLVM::BitcastOp>(vec2i64Type, rhsI128);
+
+    // Use Polyval multiplication with Montgomery reduction
+    Value resultVec = mulBF128Polyval(b, lhsVec, rhsVec);
+
+    // LLVM bitcast vector<2xi64> -> i128
+    Value resultI128 = b.create<LLVM::BitcastOp>(i128Type, resultVec);
+
+    // Cast i128 -> bf<7>
+    Value resultBF =
+        b.create<UnrealizedConversionCastOp>(bfType, resultI128).getResult(0);
+    rewriter.replaceOp(op, resultBF);
+    return success();
+  }
+};
+
 // Pattern for packed 8-bit binary field multiplication using PMULL
 struct ConvertPackedBF8MulToPMULL : public OpRewritePattern<MulOp> {
   using OpRewritePattern<MulOp>::OpRewritePattern;
@@ -576,9 +739,21 @@ struct SpecializeBinaryFieldToARM
     RewritePatternSet patterns(context);
 
     if (usePMULL) {
-      patterns.add<ConvertBF64MulToPMULL, ConvertBF128MulToPMULL,
-                   ConvertPackedBF8MulToPMULL, ConvertPackedBF8SquareToPMULL>(
-          context);
+      // Always add bf<64> and packed bf<8> patterns
+      patterns.add<ConvertBF64MulToPMULL, ConvertPackedBF8MulToPMULL,
+                   ConvertPackedBF8SquareToPMULL>(context);
+
+      // For bf<128>, choose between Tower and Polyval polynomial
+      if (usePolyval) {
+        // Polyval: X¹²⁸ + X¹²⁷ + X¹²⁶ + X¹²¹ + 1
+        // Faster due to Montgomery reduction with only 2 PMULL instructions
+        // WARNING: Different field representation than Tower!
+        patterns.add<ConvertBF128MulToPolyval>(context);
+      } else {
+        // Tower: X¹²⁸ + X⁷ + X² + X + 1
+        // Standard tower field polynomial
+        patterns.add<ConvertBF128MulToPMULL>(context);
+      }
     }
 
     // Use greedy pattern rewriting (not partial conversion)
