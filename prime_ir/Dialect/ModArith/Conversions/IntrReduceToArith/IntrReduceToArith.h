@@ -13,7 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+// NOLINTNEXTLINE(whitespace/line_length)
 #ifndef PRIME_IR_DIALECT_MODARITH_CONVERSIONS_INTRREDUCETOARITH_INTRREDUCETOARITH_H_
+// NOLINTNEXTLINE(whitespace/line_length)
 #define PRIME_IR_DIALECT_MODARITH_CONVERSIONS_INTRREDUCETOARITH_INTRREDUCETOARITH_H_
 
 #include "mlir/Pass/Pass.h"
@@ -26,4 +28,5 @@ namespace mlir::prime_ir::mod_arith {
 
 } // namespace mlir::prime_ir::mod_arith
 
+// NOLINTNEXTLINE(whitespace/line_length)
 #endif // PRIME_IR_DIALECT_MODARITH_CONVERSIONS_INTRREDUCETOARITH_INTRREDUCETOARITH_H_

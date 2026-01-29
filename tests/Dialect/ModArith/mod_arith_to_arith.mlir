@@ -97,11 +97,9 @@ func.func @test_lower_inverse_tensor(%input : !Zpv) -> !Zpv {
 func.func @test_lower_add(%lhs : !Zp, %rhs : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.add
   // CHECK: %[[ADD:.*]] = arith.addi %[[LHS]], %[[RHS]] overflow<nsw, nuw> : [[T]]
-  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
-  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: %[[SUB:.*]] = arith.subi %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.select %[[IFLT]], %[[ADD]], %[[SUB]] : [[T]]
-  // CHECK: return %[[REM]] : [[T]]
+  // CHECK: mod_arith.intr.reduce %[[ADD]]
+  // CHECK-SAME: input_range = #llvm.constant_range<i32, 0, 131074>
+  // CHECK-SAME: modulus = 65537 : i32
   %res = mod_arith.add %lhs, %rhs : !Zp
   return %res : !Zp
 }
@@ -111,11 +109,9 @@ func.func @test_lower_add(%lhs : !Zp, %rhs : !Zp) -> !Zp {
 func.func @test_lower_add_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   // CHECK-NOT: mod_arith.add
   // CHECK: %[[ADD:.*]] = arith.addi %[[LHS]], %[[RHS]] overflow<nsw, nuw> : [[T]]
-  // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[T]]
-  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: %[[SUB:.*]] = arith.subi %[[ADD]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.select %[[IFLT]], %[[ADD]], %[[SUB]] : tensor<4xi1>, [[T]]
-  // CHECK: return %[[REM]] : [[T]]
+  // CHECK: mod_arith.intr.reduce %[[ADD]]
+  // CHECK-SAME: input_range = #llvm.constant_range<i32, 0, 131074>
+  // CHECK-SAME: modulus = 65537 : i32
   %res = mod_arith.add %lhs, %rhs : !Zpv
   return %res : !Zpv
 }
@@ -126,11 +122,9 @@ func.func @test_lower_double(%input : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.double
   // CHECK: %[[ONE:.*]] = arith.constant 1 : [[T]]
   // CHECK: %[[SHL:.*]] = arith.shli %[[INPUT]], %[[ONE]] overflow<nsw, nuw> : [[T]]
-  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
-  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[SHL]], %[[CMOD]] : [[T]]
-  // CHECK: %[[SUB:.*]] = arith.subi %[[SHL]], %[[CMOD]] : [[T]]
-  // CHECK: %[[REM:.*]] = arith.select %[[IFLT]], %[[SHL]], %[[SUB]] : [[T]]
-  // CHECK: return %[[REM]] : [[T]]
+  // CHECK: mod_arith.intr.reduce %[[SHL]]
+  // CHECK-SAME: input_range = #llvm.constant_range<i32, 0, 131074>
+  // CHECK-SAME: modulus = 65537 : i32
   %res = mod_arith.double %input : !Zp
   return %res : !Zp
 }
@@ -139,12 +133,10 @@ func.func @test_lower_double(%input : !Zp) -> !Zp {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_sub(%lhs : !Zp, %rhs : !Zp) -> !Zp {
   // CHECK-NOT: mod_arith.sub
-  // CHECK: %[[CMOD:.*]] = arith.constant 65537 : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: %[[ADD:.*]] = arith.addi %[[SUB]], %[[CMOD]] : [[T]]
-  // CHECK: %[[SELECT:.*]] = arith.select %[[IFLT]], %[[ADD]], %[[SUB]] : [[T]]
-  // CHECK: return %[[SELECT]] : [[T]]
+  // CHECK: mod_arith.intr.reduce %[[SUB]]
+  // CHECK-SAME: input_range = #llvm.constant_range<i32, -65536, 65537>
+  // CHECK-SAME: modulus = 65537 : i32
   %res = mod_arith.sub %lhs, %rhs : !Zp
   return %res : !Zp
 }
@@ -153,12 +145,10 @@ func.func @test_lower_sub(%lhs : !Zp, %rhs : !Zp) -> !Zp {
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_sub_vec(%lhs : !Zpv, %rhs : !Zpv) -> !Zpv {
   // CHECK-NOT: mod_arith.sub
-  // CHECK: %[[CMOD:.*]] = arith.constant dense<65537> : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: %[[IFLT:.*]] = arith.cmpi ult, %[[LHS]], %[[RHS]] : [[T]]
-  // CHECK: %[[ADD:.*]] = arith.addi %[[SUB]], %[[CMOD]] : [[T]]
-  // CHECK: %[[SELECT:.*]] = arith.select %[[IFLT]], %[[ADD]], %[[SUB]] : tensor<4xi1>, [[T]]
-  // CHECK: return %[[SELECT]] : [[T]]
+  // CHECK: mod_arith.intr.reduce %[[SUB]]
+  // CHECK-SAME: input_range = #llvm.constant_range<i32, -65536, 65537>
+  // CHECK-SAME: modulus = 65537 : i32
   %res = mod_arith.sub %lhs, %rhs : !Zpv
   return %res : !Zpv
 }
@@ -258,4 +248,177 @@ func.func @test_double_wide_headroom(%input : !Zp30) -> !Zp30 {
   // CHECK: %[[SHL:.*]] = arith.shli %[[INPUT]], %[[ONE]] overflow<nsw, nuw> : [[T]]
   %res = mod_arith.double %input : !Zp30
   return %res : !Zp30
+}
+
+// -----
+
+// Test Montgomery operations emit intrinsic reduce ops
+!ZpMont = !mod_arith.int<65537 : i32>
+!ZpMontM = !mod_arith.int<65537 : i32, true>
+!ZpMontMv = tensor<4x!mod_arith.int<65537 : i32, true>>
+
+// CHECK-LABEL: @test_lower_mont_mul
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_lower_mont_mul(%lhs : !ZpMontM, %rhs : !ZpMontM) -> !ZpMontM {
+  // CHECK-NOT: mod_arith.mont_mul
+  // CHECK: arith.mului_extended
+  // IntrMontReduceOp already produces canonical output [0, modulus)
+  // CHECK: mod_arith.intr.mont_reduce
+  // CHECK-NEXT: return
+  %res = mod_arith.mont_mul %lhs, %rhs : !ZpMontM
+  return %res : !ZpMontM
+}
+
+// CHECK-LABEL: @test_lower_mont_mul_vec
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_lower_mont_mul_vec(%lhs : !ZpMontMv, %rhs : !ZpMontMv) -> !ZpMontMv {
+  // CHECK-NOT: mod_arith.mont_mul
+  // CHECK: arith.mului_extended
+  // IntrMontReduceOp already produces canonical output [0, modulus)
+  // CHECK: mod_arith.intr.mont_reduce
+  // CHECK-NEXT: return
+  %res = mod_arith.mont_mul %lhs, %rhs : !ZpMontMv
+  return %res : !ZpMontMv
+}
+
+// CHECK-LABEL: @test_lower_mont_square
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_mont_square(%input : !ZpMontM) -> !ZpMontM {
+  // CHECK-NOT: mod_arith.mont_square
+  // CHECK: arith.mului_extended
+  // IntrMontReduceOp already produces canonical output [0, modulus)
+  // CHECK: mod_arith.intr.mont_reduce
+  // CHECK-NEXT: return
+  %res = mod_arith.mont_square %input : !ZpMontM
+  return %res : !ZpMontM
+}
+
+// CHECK-LABEL: @test_lower_to_mont
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_to_mont(%input : !ZpMont) -> !ZpMontM {
+  // CHECK-NOT: mod_arith.to_mont
+  // to_mont multiplies by R^2 then reduces
+  // CHECK: arith.mului_extended
+  // IntrMontReduceOp already produces canonical output [0, modulus)
+  // CHECK: mod_arith.intr.mont_reduce
+  // CHECK-NEXT: return
+  %res = mod_arith.to_mont %input : !ZpMontM
+  return %res : !ZpMontM
+}
+
+// CHECK-LABEL: @test_lower_from_mont
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_from_mont(%input : !ZpMontM) -> !ZpMont {
+  // CHECK-NOT: mod_arith.from_mont
+  // from_mont does Montgomery reduction with high=0
+  // IntrMontReduceOp already produces canonical output [0, modulus)
+  // CHECK: mod_arith.intr.mont_reduce
+  // CHECK-NEXT: return
+  %res = mod_arith.from_mont %input : !ZpMont
+  return %res : !ZpMont
+}
+
+// -----
+
+// Test full two-stage pipeline: mod-arith-to-arith then intr-reduce-to-arith
+
+// RUN: prime-ir-opt -mod-arith-to-arith -intr-reduce-to-arith %s | FileCheck %s --check-prefix=FULL
+
+!Zp2 = !mod_arith.int<65537 : i32>
+
+// FULL-LABEL: @test_full_pipeline_add
+// FULL-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_full_pipeline_add(%lhs : !Zp2, %rhs : !Zp2) -> !Zp2 {
+  // FULL-NOT: mod_arith
+  // FULL: arith.addi
+  // FULL: arith.cmpi ult
+  // FULL: arith.subi
+  // FULL: arith.select
+  %res = mod_arith.add %lhs, %rhs : !Zp2
+  return %res : !Zp2
+}
+
+// FULL-LABEL: @test_full_pipeline_sub
+// FULL-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_full_pipeline_sub(%lhs : !Zp2, %rhs : !Zp2) -> !Zp2 {
+  // FULL-NOT: mod_arith
+  // FULL: arith.subi
+  // FULL: arith.cmpi slt
+  // FULL: arith.addi
+  // FULL: arith.select
+  %res = mod_arith.sub %lhs, %rhs : !Zp2
+  return %res : !Zp2
+}
+
+// FULL-LABEL: @test_full_pipeline_chain
+// FULL-SAME: (%[[A:.*]]: [[T:.*]], %[[B:.*]]: [[T]], %[[C:.*]]: [[T]]) -> [[T]] {
+func.func @test_full_pipeline_chain(%a : !Zp2, %b : !Zp2, %c : !Zp2) -> !Zp2 {
+  // Test: (a + b) - c
+  // FULL-NOT: mod_arith
+  // FULL: arith.addi
+  // FULL: arith.cmpi ult
+  // FULL: arith.subi
+  // FULL: arith.select
+  // FULL: arith.subi
+  // FULL: arith.cmpi slt
+  // FULL: arith.addi
+  // FULL: arith.select
+  %sum = mod_arith.add %a, %b : !Zp2
+  %res = mod_arith.sub %sum, %c : !Zp2
+  return %res : !Zp2
+}
+
+// -----
+
+// Test 64-bit modulus lowering
+!Zp64 = !mod_arith.int<4611686018427387903 : i64>
+
+// CHECK-LABEL: @test_lower_add_i64
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_lower_add_i64(%lhs : !Zp64, %rhs : !Zp64) -> !Zp64 {
+  // CHECK-NOT: mod_arith.add
+  // CHECK: arith.addi
+  // CHECK: mod_arith.intr.reduce
+  %res = mod_arith.add %lhs, %rhs : !Zp64
+  return %res : !Zp64
+}
+
+// CHECK-LABEL: @test_lower_sub_i64
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_lower_sub_i64(%lhs : !Zp64, %rhs : !Zp64) -> !Zp64 {
+  // CHECK-NOT: mod_arith.sub
+  // CHECK: arith.subi
+  // CHECK: mod_arith.intr.reduce
+  %res = mod_arith.sub %lhs, %rhs : !Zp64
+  return %res : !Zp64
+}
+
+// -----
+
+// Test square operation
+!ZpSq = !mod_arith.int<65537 : i32>
+
+// CHECK-LABEL: @test_lower_square
+// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_lower_square(%input : !ZpSq) -> !ZpSq {
+  // CHECK-NOT: mod_arith.square
+  %res = mod_arith.square %input : !ZpSq
+  return %res : !ZpSq
+}
+
+// -----
+
+// Test modWidth == storageWidth edge case (minimal headroom)
+!ZpFull = !mod_arith.int<2147483647 : i32>
+
+// CHECK-LABEL: @test_lower_add_no_headroom
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_lower_add_no_headroom(%lhs : !ZpFull, %rhs : !ZpFull) -> !ZpFull {
+  // When modWidth == storageWidth, only nuw is safe (no nsw)
+  // CHECK-NOT: mod_arith.add
+  // CHECK: arith.addi %[[LHS]], %[[RHS]] overflow<nuw> : [[T]]
+  // CHECK-NOT: nsw
+  // CHECK: mod_arith.intr.reduce
+  %res = mod_arith.add %lhs, %rhs : !ZpFull
+  return %res : !ZpFull
 }

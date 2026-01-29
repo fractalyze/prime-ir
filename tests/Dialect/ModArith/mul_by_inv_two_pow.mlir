@@ -15,7 +15,7 @@
 
 // RUN: prime-ir-opt -canonicalize -mod-arith-to-arith  -split-input-file %s | FileCheck %s --check-prefix=CHECK-LOWERING
 
-// RUN: prime-ir-opt %s -canonicalize -mod-arith-to-arith -convert-to-llvm \
+// RUN: prime-ir-opt %s -canonicalize -mod-arith-to-arith -intr-reduce-to-arith -convert-to-llvm \
 // RUN:   | mlir-runner -e main -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s < %t
