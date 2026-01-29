@@ -25,9 +25,16 @@ namespace {
 
 SmallVector<Type> coeffsTypeRange(Type type) {
   auto extField = cast<ExtensionFieldType>(type);
-  auto baseField = cast<PrimeFieldType>(extField.getBaseField());
-  return SmallVector<Type>(extField.getDegree(),
-                           convertPrimeFieldType(baseField));
+  Type baseField = extField.getBaseField();
+
+  // For tower extensions, the coefficients are extension field elements
+  if (isa<ExtensionFieldType>(baseField)) {
+    return SmallVector<Type>(extField.getDegree(), baseField);
+  }
+
+  // For direct extensions over prime field, convert to mod_arith type
+  auto pfType = cast<PrimeFieldType>(baseField);
+  return SmallVector<Type>(extField.getDegree(), convertPrimeFieldType(pfType));
 }
 
 } // namespace
@@ -44,26 +51,69 @@ Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs) {
   return b.create<ExtFromCoeffsOp>(type, coeffs);
 }
 
-Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                  int64_t n) {
-  return b.create<mod_arith::ConstantOp>(
-      convertPrimeFieldType(baseField),
-      PrimeFieldOperation(n, baseField).getIntegerAttr());
+Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
+                      ArrayRef<Value> primeCoeffs) {
+  Type baseField = efType.getBaseField();
+  unsigned degree = efType.getDegree();
+
+  // Non-tower: primeCoeffs should have exactly `degree` elements
+  if (isa<PrimeFieldType>(baseField)) {
+    assert(primeCoeffs.size() == degree &&
+           "Expected degree prime coefficients for non-tower extension");
+    return fromCoeffs(b, efType, primeCoeffs);
+  }
+
+  // Tower extension: recursively build nested structure
+  auto baseEf = cast<ExtensionFieldType>(baseField);
+  unsigned baseDegreeOverPrime = baseEf.getDegreeOverPrime();
+
+  assert(primeCoeffs.size() == degree * baseDegreeOverPrime &&
+         "Expected degreeOverPrime prime coefficients for tower extension");
+
+  SmallVector<Value> baseCoeffs;
+  for (unsigned i = 0; i < degree; ++i) {
+    ArrayRef<Value> baseCoeffSlice =
+        primeCoeffs.slice(i * baseDegreeOverPrime, baseDegreeOverPrime);
+    baseCoeffs.push_back(fromPrimeCoeffs(b, baseEf, baseCoeffSlice));
+  }
+
+  return fromCoeffs(b, efType, baseCoeffs);
 }
 
-Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                     int64_t n) {
-  return b.create<mod_arith::ConstantOp>(
-      convertPrimeFieldType(baseField),
-      PrimeFieldOperation(n, baseField).inverse().getIntegerAttr());
-}
-
-Value createRationalConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                          int64_t num, int64_t denom) {
+Value createPrimeConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                       int64_t numerator, int64_t denominator) {
+  PrimeFieldOperation result(numerator, baseField);
+  if (denominator != 1) {
+    result = result / PrimeFieldOperation(denominator, baseField);
+  }
   return b.create<mod_arith::ConstantOp>(convertPrimeFieldType(baseField),
-                                         (PrimeFieldOperation(num, baseField) /
-                                          PrimeFieldOperation(denom, baseField))
-                                             .getIntegerAttr());
+                                         result.getIntegerAttr());
+}
+
+Value createNonResidueConstant(ImplicitLocOpBuilder &b,
+                               ExtensionFieldType efType) {
+  Type baseFieldType = efType.getBaseField();
+  Attribute nonResidueAttr = efType.getNonResidue();
+
+  // Prime field base: return mod_arith constant directly.
+  // The non-residue attribute is already in the correct form (standard or
+  // Montgomery), so we use it directly without conversion.
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseFieldType)) {
+    auto intAttr = cast<IntegerAttr>(nonResidueAttr);
+    return b.create<mod_arith::ConstantOp>(convertPrimeFieldType(pfType),
+                                           intAttr);
+  }
+
+  // Extension field base: use ConstantLikeInterface for proper embedding
+  auto baseEfType = cast<ExtensionFieldType>(baseFieldType);
+  auto constantLike = cast<ConstantLikeInterface>(baseEfType);
+
+  // If integer attr, embed as [value, 0, 0, ...] in the extension field
+  if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
+    nonResidueAttr = constantLike.createConstantAttr(intAttr.getInt());
+  }
+
+  return ConstantOp::materialize(b, nonResidueAttr, baseEfType, b.getLoc());
 }
 
 } // namespace mlir::prime_ir::field

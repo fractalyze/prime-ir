@@ -18,36 +18,34 @@ limitations under the License.
 
 #include <array>
 
-#include "prime_ir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
-#include "prime_ir/Dialect/Field/Conversions/FieldToModArith/PrimeFieldCodeGen.h"
-#include "prime_ir/Utils/BuilderContext.h"
+#include "zk_dtypes/include/field/extension_field_operation_traits_forward.h"
 
 namespace mlir::prime_ir::field {
 
 // Mixin providing Vandermonde inverse matrix for Toom-Cook multiplication.
 //
 // Derived class must provide:
-//   - getBuilder(): returns ImplicitLocOpBuilder&
-//   - getType(): returns Type (extension field type)
+//   - CreateConstBaseField(int64_t): creates a constant in the base field
+//   - CreateRationalConstBaseField(int64_t, int64_t): creates a rational
+//   constant
 template <typename Derived>
 class VandermondeMatrix {
 public:
-  std::array<std::array<PrimeFieldCodeGen, 7>, 7>
-  GetVandermondeInverseMatrix() const {
-    const auto &self = static_cast<const Derived &>(*this);
-    auto extField = cast<ExtensionFieldType>(self.getType());
-    auto baseField = cast<PrimeFieldType>(extField.getBaseField());
-    ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
+  auto GetVandermondeInverseMatrix() const {
+    using Traits = zk_dtypes::ExtensionFieldOperationTraits<Derived>;
+    using BaseFieldT = typename Traits::BaseField;
 
-    auto C = [&](int64_t x) {
-      return PrimeFieldCodeGen(createConst(*b, baseField, x));
+    const auto &self = static_cast<const Derived &>(*this);
+
+    auto C = [&](int64_t x) -> BaseFieldT {
+      return self.createConstBaseField(x);
     };
-    auto C2 = [&](int64_t x, int64_t y) {
-      return PrimeFieldCodeGen(createRationalConst(*b, baseField, x, y));
+    auto C2 = [&](int64_t x, int64_t y) -> BaseFieldT {
+      return self.createRationalConstBaseField(x, y);
     };
 
     // clang-format off
-    return {{
+    return std::array<std::array<BaseFieldT, 7>, 7>{{
         // NOLINTNEXTLINE(whitespace/line_length)
         {C(1),       C(0),       C(0),       C(0),       C(0),        C(0),       C(0)},
         // NOLINTNEXTLINE(whitespace/line_length)

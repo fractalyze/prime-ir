@@ -30,16 +30,37 @@ Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
 
 Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs);
 
-// Create a mod_arith constant with value n.
-Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField, int64_t n);
-
-// Create a mod_arith constant with the multiplicative inverse of n.
-Value createInvConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                     int64_t n);
+// Build an extension field value from prime field coefficients.
+// For non-tower extensions: expects getDegree() prime field values.
+// For tower extensions: recursively builds nested structure from
+// getDegreeOverPrime() prime field values.
+Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
+                      ArrayRef<Value> primeCoeffs);
 
 // Create a mod_arith constant with value numerator / denominator.
-Value createRationalConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
-                          int64_t numerator, int64_t denominator);
+// When denominator is 1 (default), this creates a simple integer constant.
+Value createPrimeConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                       int64_t numerator, int64_t denominator = 1);
+
+// Convenience wrapper for integer constants (denom=1).
+inline Value createConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
+                         int64_t n) {
+  return createPrimeConst(b, baseField, n);
+}
+
+// Convenience wrapper for rational constants.
+inline Value createRationalConst(ImplicitLocOpBuilder &b,
+                                 PrimeFieldType baseField, int64_t numerator,
+                                 int64_t denominator) {
+  return createPrimeConst(b, baseField, numerator, denominator);
+}
+
+// Create a non-residue constant for an extension field.
+// Returns a field::ConstantOp Value representing the non-residue in the base
+// field. Uses ConstantLikeInterface to properly embed integer non-residues
+// into extension fields when the base field is itself an extension field.
+Value createNonResidueConstant(ImplicitLocOpBuilder &b,
+                               ExtensionFieldType efType);
 
 } // namespace mlir::prime_ir::field
 
