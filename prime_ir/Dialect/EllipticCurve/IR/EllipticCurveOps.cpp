@@ -449,7 +449,9 @@ namespace {
 
 // Helper to get extension field degree if the base field is an extension field.
 // Returns std::nullopt for prime fields.
-std::optional<unsigned> getExtensionDegree(Type baseFieldType) {
+// Note: Named differently from field::getExtensionDegree which returns unsigned
+// with a default of 1.
+std::optional<unsigned> getOptionalExtensionDegree(Type baseFieldType) {
   if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType))
     return efType.getDegreeOverPrime();
   return std::nullopt;
@@ -479,7 +481,7 @@ FailureOr<ArrayAttr> reconstructCoordsAttr(MLIRContext *ctx,
                                            int64_t numPoints) {
   Type baseFieldType = pointType.getBaseFieldType();
   unsigned numCoords = pointType.getNumCoords();
-  unsigned extDegree = getExtensionDegree(baseFieldType).value_or(1);
+  unsigned extDegree = getOptionalExtensionDegree(baseFieldType).value_or(1);
   unsigned valuesPerPoint = numCoords * extDegree;
 
   if (flatValues.size() != static_cast<size_t>(numPoints) * valuesPerPoint)
@@ -608,7 +610,7 @@ ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
   //   Tensor ext field:   [numPoints, numCoords, degree]
   unsigned numCoords = pointType.getNumCoords();
   Type baseFieldType = pointType.getBaseFieldType();
-  auto extDegree = getExtensionDegree(baseFieldType);
+  auto extDegree = getOptionalExtensionDegree(baseFieldType);
 
   SmallVector<int64_t> expectedShape;
   if (isTensor) {
@@ -827,7 +829,10 @@ ArrayAttr pointCoordsToArrayAttr(MLIRContext *ctx,
             .template Case<field::ExtensionFieldType>([&](auto efType) {
               SmallVector<APInt> coeffs =
                   static_cast<SmallVector<APInt>>(coord);
-              return createCoordAttr(baseFieldType, coeffs);
+              auto tensorType = RankedTensorType::get(
+                  {static_cast<int64_t>(coeffs.size())},
+                  efType.getBasePrimeField().getStorageType());
+              return DenseIntElementsAttr::get(tensorType, coeffs);
             });
     attrs.push_back(attr);
   }
