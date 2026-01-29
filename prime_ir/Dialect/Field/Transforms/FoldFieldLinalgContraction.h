@@ -18,6 +18,7 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for FoldFieldLinalgContraction.h.inc
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"

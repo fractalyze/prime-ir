@@ -89,8 +89,8 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
       bool hasTerms = false;
 
       for (int64_t j = 0; j < numCols; ++j) {
-        APInt coeff = coeffValues[{static_cast<uint64_t>(i),
-                                   static_cast<uint64_t>(j)}];
+        APInt coeff =
+            coeffValues[{static_cast<uint64_t>(i), static_cast<uint64_t>(j)}];
 
         // Skip zero coefficients
         if (coeff.isZero())
@@ -121,8 +121,8 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
       if (!hasTerms) {
         sum = rewriter.create<ConstantOp>(
             loc, elementType,
-            IntegerAttr::get(
-                cast<PrimeFieldType>(elementType).getStorageType(), 0));
+            IntegerAttr::get(cast<PrimeFieldType>(elementType).getStorageType(),
+                             0));
       }
 
       resultElements.push_back(sum);
@@ -130,8 +130,8 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
 
     // Build result tensor using tensor.from_elements
     auto resultType = cast<RankedTensorType>(output.getType());
-    Value result =
-        rewriter.create<tensor::FromElementsOp>(loc, resultType, resultElements);
+    Value result = rewriter.create<tensor::FromElementsOp>(loc, resultType,
+                                                           resultElements);
 
     rewriter.replaceOp(op, result);
     return success();
@@ -146,8 +146,8 @@ private:
 // Into: result = c₀ * x[0] + c₁ * x[1] + ...
 struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
   FoldDotWithConstantVector(MLIRContext *context, unsigned maxUnrollSize)
-      : OpRewritePattern<linalg::DotOp>(context),
-        maxUnrollSize(maxUnrollSize) {}
+      : OpRewritePattern<linalg::DotOp>(context), maxUnrollSize(maxUnrollSize) {
+  }
 
   LogicalResult matchAndRewrite(linalg::DotOp op,
                                 PatternRewriter &rewriter) const override {
@@ -215,8 +215,8 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
         // Create constant for coefficient
         Value coeffVal = rewriter.create<ConstantOp>(
             loc, elementType,
-            IntegerAttr::get(
-                cast<PrimeFieldType>(elementType).getStorageType(), coeff));
+            IntegerAttr::get(cast<PrimeFieldType>(elementType).getStorageType(),
+                             coeff));
         term = rewriter.create<MulOp>(loc, coeffVal, varElem);
       }
 
@@ -232,8 +232,8 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
     if (!hasTerms) {
       sum = rewriter.create<ConstantOp>(
           loc, elementType,
-          IntegerAttr::get(
-              cast<PrimeFieldType>(elementType).getStorageType(), 0));
+          IntegerAttr::get(cast<PrimeFieldType>(elementType).getStorageType(),
+                           0));
     }
 
     // Wrap the scalar result in a 0-D tensor

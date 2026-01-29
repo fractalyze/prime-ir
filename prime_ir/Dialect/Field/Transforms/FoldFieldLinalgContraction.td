@@ -36,8 +36,8 @@ def FoldFieldLinalgContraction
     value directly for one coefficient terms.
   }];
   let dependentDialects = [
+    "arith::ArithDialect",
     "tensor::TensorDialect",
-    "linalg::LinalgDialect",
     "prime_ir::field::FieldDialect",
   ];
   let options = [
