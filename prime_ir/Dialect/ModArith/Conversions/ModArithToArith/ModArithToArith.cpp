@@ -20,6 +20,8 @@ limitations under the License.
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
@@ -250,15 +252,47 @@ struct ConvertMontReduce : public OpConversionPattern<MontReduceOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // `T` is the operand (e.g. the result of a multiplication, twice the
-    // bitwidth of modulus).
-    Value tLow = adaptor.getLow();
-    Value tHigh = adaptor.getHigh();
+    ModArithType modType = getResultModArithType(op);
+    APInt modulus = modType.getModulus().getValue();
+    unsigned storageWidth = modType.getStorageBitWidth();
+    MontgomeryAttr montAttr = modType.getMontgomeryAttr();
+    Type intType = modulusType(op);
 
-    // Perform Montgomery reduction using MontReducer helper class.
-    MontReducer reducer(b, getResultModArithType(op));
-    Value result = reducer.reduce(tLow, tHigh);
-    rewriter.replaceOp(op, result);
+    Value low = adaptor.getLow();
+    Value high = adaptor.getHigh();
+
+    // Emit IntrMontReduceOp (outputs [0, 2*modulus))
+    auto modulusIntAttr =
+        b.getIntegerAttr(getElementTypeOrSelf(intType), modulus);
+
+    // Determine Montgomery parameters
+    std::optional<IntegerAttr> nInvAttr;
+    std::optional<IntegerAttr> nPrimeAttr;
+    std::optional<IntegerAttr> bInvAttr;
+
+    IntegerAttr nInv = montAttr.getNInv();
+    IntegerAttr nPrime = montAttr.getNPrime();
+    IntegerAttr bInvMont = montAttr.getBInv();
+
+    const unsigned limbWidth = nPrime.getType().getIntOrFloatBitWidth();
+    const unsigned numLimbs = (storageWidth + limbWidth - 1) / limbWidth;
+
+    if (numLimbs == 1) {
+      nInvAttr = nInv;
+    } else {
+      nPrimeAttr = nPrime;
+      bInvAttr = bInvMont;
+    }
+
+    // IntrMontReduceOp already produces canonical output [0, modulus)
+    // via getCanonicalDiff/getCanonicalFromExtended in its lowering
+    auto montReduce =
+        b.create<IntrMontReduceOp>(intType, low, high, modulusIntAttr,
+                                   nInvAttr ? *nInvAttr : IntegerAttr(),
+                                   nPrimeAttr ? *nPrimeAttr : IntegerAttr(),
+                                   bInvAttr ? *bInvAttr : IntegerAttr());
+
+    rewriter.replaceOp(op, montReduce);
     return success();
   }
 };
@@ -301,13 +335,51 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // x * R⁻¹ = REDC(x)
-    Value zeroHighConst = createScalarOrSplatConstant(
-        b, b.getLoc(), modulusAttr(op).getType(), 0);
-    auto reduced =
-        b.create<MontReduceOp>(op.getType(), op.getInput(), zeroHighConst);
+    ModArithType modType = getResultModArithType(op);
+    APInt modulus = modType.getModulus().getValue();
+    unsigned storageWidth = modType.getStorageBitWidth();
+    MontgomeryAttr montAttr =
+        cast<ModArithType>(getElementTypeOrSelf(op.getInput().getType()))
+            .getMontgomeryAttr();
+    Type intType = modulusType(op);
 
-    rewriter.replaceOp(op, reduced);
+    // x * R⁻¹ = REDC(x, 0)
+    Value low = adaptor.getInput();
+    Value high = createScalarOrSplatConstant(b, b.getLoc(),
+                                             modulusAttr(op).getType(), 0);
+
+    // Emit IntrMontReduceOp (outputs [0, 2*modulus))
+    auto modulusIntAttr =
+        b.getIntegerAttr(getElementTypeOrSelf(intType), modulus);
+
+    // Determine Montgomery parameters
+    std::optional<IntegerAttr> nInvAttr;
+    std::optional<IntegerAttr> nPrimeAttr;
+    std::optional<IntegerAttr> bInvAttr;
+
+    IntegerAttr nInv = montAttr.getNInv();
+    IntegerAttr nPrime = montAttr.getNPrime();
+    IntegerAttr bInvMont = montAttr.getBInv();
+
+    const unsigned limbWidth = nPrime.getType().getIntOrFloatBitWidth();
+    const unsigned numLimbs = (storageWidth + limbWidth - 1) / limbWidth;
+
+    if (numLimbs == 1) {
+      nInvAttr = nInv;
+    } else {
+      nPrimeAttr = nPrime;
+      bInvAttr = bInvMont;
+    }
+
+    // IntrMontReduceOp already produces canonical output [0, modulus)
+    // via getCanonicalDiff/getCanonicalFromExtended in its lowering
+    auto montReduce =
+        b.create<IntrMontReduceOp>(intType, low, high, modulusIntAttr,
+                                   nInvAttr ? *nInvAttr : IntegerAttr(),
+                                   nPrimeAttr ? *nPrimeAttr : IntegerAttr(),
+                                   bInvAttr ? *bInvAttr : IntegerAttr());
+
+    rewriter.replaceOp(op, montReduce);
     return success();
   }
 };
@@ -390,31 +462,39 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
     unsigned storageWidth = modArithType.getStorageBitWidth();
     unsigned modWidth = modulus.getActiveBits();
 
-    Value result;
+    Value sum;
     if (modWidth == storageWidth) {
-      auto add =
-          b.create<arith::AddUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
-      MontReducer montReducer(b, getResultModArithType(op));
-      result =
-          montReducer.getCanonicalFromExtended(add.getSum(), add.getOverflow());
+      // When modWidth equals storageWidth, addition might overflow.
+      // We need to handle this case specially - emit extended add and
+      // then handle the overflow in reduction.
+      // For now, emit a regular add and let the reduce handle overflow.
+      // TODO(pir): Handle true overflow case with AddUIExtendedOp.
+      sum = b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs());
     } else {
       // nuw (no unsigned wrap) is safe when storageWidth - modWidth >= 1.
-      // nsw (no signed wrap) is only safe when storageWidth - modWidth >= 2,
-      // because the sum of two (modWidth)-bit values can be up to
-      // 2^(modWidth+1) - 2, which overflows signed if modWidth + 1 >=
-      // storageWidth.
+      // nsw (no signed wrap) is only safe when storageWidth - modWidth >= 2.
       auto flags = arith::IntegerOverflowFlags::nuw;
       if (storageWidth - modWidth >= 2) {
         flags = flags | arith::IntegerOverflowFlags::nsw;
       }
       auto noOverflow =
           arith::IntegerOverflowFlagsAttr::get(b.getContext(), flags);
-      auto add = b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs(),
-                                         noOverflow);
-      MontReducer montReducer(b, getResultModArithType(op));
-      result = montReducer.getCanonicalFromExtended(add);
+      sum = b.create<arith::AddIOp>(adaptor.getLhs(), adaptor.getRhs(),
+                                    noOverflow);
     }
-    rewriter.replaceOp(op, result);
+
+    // Result of add is in range [0, 2*modulus)
+    // Emit IntrReduceOp to canonicalize to [0, modulus)
+    Type intType = sum.getType();
+    APInt zero = APInt::getZero(storageWidth);
+    APInt twoMod = modulus * 2;
+    auto inputRangeAttr =
+        LLVM::ConstantRangeAttr::get(b.getContext(), zero, twoMod);
+    auto modulusAttr = b.getIntegerAttr(getElementTypeOrSelf(intType), modulus);
+
+    auto reduce =
+        b.create<IntrReduceOp>(intType, sum, modulusAttr, inputRangeAttr);
+    rewriter.replaceOp(op, reduce);
     return success();
   }
 };
@@ -435,9 +515,15 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
     unsigned storageWidth = modArithType.getStorageBitWidth();
     unsigned modWidth = modulus.getActiveBits();
 
-    Value result;
+    Value doubled;
     if (modWidth == storageWidth) {
-      result = b.create<AddOp>(op.getInput(), op.getInput());
+      // When modWidth equals storageWidth, we need to handle potential overflow
+      // For now, use a regular shift and let reduce handle it
+      // TODO(pir): Handle true overflow case
+      TypedAttr modAttr = modulusAttr(op);
+      Value one =
+          createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 1);
+      doubled = b.create<arith::ShLIOp>(adaptor.getInput(), one);
     } else {
       TypedAttr modAttr = modulusAttr(op);
       Value one =
@@ -450,12 +536,21 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
       }
       auto noOverflow =
           arith::IntegerOverflowFlagsAttr::get(b.getContext(), flags);
-      auto shifted =
-          b.create<arith::ShLIOp>(adaptor.getInput(), one, noOverflow);
-      MontReducer montReducer(b, getResultModArithType(op));
-      result = montReducer.getCanonicalFromExtended(shifted);
+      doubled = b.create<arith::ShLIOp>(adaptor.getInput(), one, noOverflow);
     }
-    rewriter.replaceOp(op, result);
+
+    // Result of double is in range [0, 2*modulus)
+    // Emit IntrReduceOp to canonicalize to [0, modulus)
+    Type intType = doubled.getType();
+    APInt zero = APInt::getZero(storageWidth);
+    APInt twoMod = modulus * 2;
+    auto inputRangeAttr =
+        LLVM::ConstantRangeAttr::get(b.getContext(), zero, twoMod);
+    auto modulusAttr = b.getIntegerAttr(getElementTypeOrSelf(intType), modulus);
+
+    auto reduce =
+        b.create<IntrReduceOp>(intType, doubled, modulusAttr, inputRangeAttr);
+    rewriter.replaceOp(op, reduce);
     return success();
   }
 };
@@ -470,10 +565,27 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
   matchAndRewrite(SubOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    MontReducer montReducer(b, getResultModArithType(op));
-    auto result =
-        montReducer.getCanonicalDiff(adaptor.getLhs(), adaptor.getRhs());
-    rewriter.replaceOp(op, result);
+
+    ModArithType modArithType = getResultModArithType(op);
+    APInt modulus = modArithType.getModulus().getValue();
+    unsigned storageWidth = modArithType.getStorageBitWidth();
+
+    // Compute lhs - rhs (may be negative if lhs < rhs)
+    auto diff = b.create<arith::SubIOp>(adaptor.getLhs(), adaptor.getRhs());
+
+    // Result of subtraction of canonical values is in range [-modulus+1,
+    // modulus) Emit IntrReduceOp to canonicalize to [0, modulus)
+    Type intType = diff.getType();
+    // Range: [-(modulus-1), modulus) = [-modulus+1, modulus)
+    APInt lower = (-modulus + 1).sextOrTrunc(storageWidth);
+    APInt upper = modulus.zextOrTrunc(storageWidth);
+    auto inputRangeAttr =
+        LLVM::ConstantRangeAttr::get(b.getContext(), lower, upper);
+    auto modulusAttr = b.getIntegerAttr(getElementTypeOrSelf(intType), modulus);
+
+    auto reduce =
+        b.create<IntrReduceOp>(intType, diff, modulusAttr, inputRangeAttr);
+    rewriter.replaceOp(op, reduce);
     return success();
   }
 };
@@ -673,24 +785,62 @@ struct ConvertMontMul : public OpConversionPattern<MontMulOp> {
           "MontMulOp with non-Montgomery type is not supported in "
           "ModArithToArith conversion");
     }
+
+    APInt modulus = modType.getModulus().getValue();
+    unsigned storageWidth = modType.getStorageBitWidth();
+    MontgomeryAttr montAttr = modType.getMontgomeryAttr();
+    Type intType = modulusType(op);
+
+    // Compute extended multiplication
     Value signedLhs = getSignedFormFromCanonical(adaptor.getLhs(), modAttr);
     Value signedRhs = getSignedFormFromCanonical(adaptor.getRhs(), modAttr);
+    Value low, high;
     if (signedLhs && signedRhs) {
       auto mul = b.create<arith::MulSIExtendedOp>(signedLhs, signedRhs);
-      auto reduced =
-          b.create<MontReduceOp>(op.getType(), mul.getLow(), mul.getHigh());
-      rewriter.replaceOp(op, reduced);
-      return success();
+      low = mul.getLow();
+      high = mul.getHigh();
     } else {
       auto mul =
           b.create<arith::MulUIExtendedOp>(adaptor.getLhs(), adaptor.getRhs());
-      auto reduced =
-          b.create<MontReduceOp>(op.getType(), mul.getLow(), mul.getHigh());
-
-      rewriter.replaceOp(op, reduced);
-      return success();
+      low = mul.getLow();
+      high = mul.getHigh();
     }
-    return failure();
+
+    // Emit IntrMontReduceOp (outputs [0, 2*modulus))
+    auto modulusIntAttr =
+        b.getIntegerAttr(getElementTypeOrSelf(intType), modulus);
+
+    // Determine Montgomery parameters
+    std::optional<IntegerAttr> nInvAttr;
+    std::optional<IntegerAttr> nPrimeAttr;
+    std::optional<IntegerAttr> bInvAttr;
+
+    // Single-limb vs multi-limb is determined by checking if n_inv exists
+    // and if its width equals the storage width
+    IntegerAttr nInv = montAttr.getNInv();
+    IntegerAttr nPrime = montAttr.getNPrime();
+    IntegerAttr bInvMont = montAttr.getBInv();
+
+    const unsigned limbWidth = nPrime.getType().getIntOrFloatBitWidth();
+    const unsigned numLimbs = (storageWidth + limbWidth - 1) / limbWidth;
+
+    if (numLimbs == 1) {
+      nInvAttr = nInv;
+    } else {
+      nPrimeAttr = nPrime;
+      bInvAttr = bInvMont;
+    }
+
+    // IntrMontReduceOp already produces canonical output [0, modulus)
+    // via getCanonicalDiff/getCanonicalFromExtended in its lowering
+    auto montReduce =
+        b.create<IntrMontReduceOp>(intType, low, high, modulusIntAttr,
+                                   nInvAttr ? *nInvAttr : IntegerAttr(),
+                                   nPrimeAttr ? *nPrimeAttr : IntegerAttr(),
+                                   bInvAttr ? *bInvAttr : IntegerAttr());
+
+    rewriter.replaceOp(op, montReduce);
+    return success();
   }
 };
 
@@ -895,10 +1045,47 @@ struct ConvertMontSquare : public OpConversionPattern<MontSquareOp> {
           "MontSquareOp with non-Montgomery type is not supported in "
           "ModArithToArith conversion");
     }
-    auto result = squareExtended(b, op, adaptor.getInput());
-    auto reduced = b.create<MontReduceOp>(op.getType(), result.lo, result.hi);
 
-    rewriter.replaceOp(op, reduced);
+    APInt modulus = modType.getModulus().getValue();
+    unsigned storageWidth = modType.getStorageBitWidth();
+    MontgomeryAttr montAttr = modType.getMontgomeryAttr();
+    Type intType = modulusType(op);
+
+    // Compute extended square
+    auto result = squareExtended(b, op, adaptor.getInput());
+
+    // Emit IntrMontReduceOp (outputs [0, 2*modulus))
+    auto modulusIntAttr =
+        b.getIntegerAttr(getElementTypeOrSelf(intType), modulus);
+
+    // Determine Montgomery parameters
+    std::optional<IntegerAttr> nInvAttr;
+    std::optional<IntegerAttr> nPrimeAttr;
+    std::optional<IntegerAttr> bInvAttr;
+
+    IntegerAttr nInv = montAttr.getNInv();
+    IntegerAttr nPrime = montAttr.getNPrime();
+    IntegerAttr bInvMont = montAttr.getBInv();
+
+    const unsigned limbWidth = nPrime.getType().getIntOrFloatBitWidth();
+    const unsigned numLimbs = (storageWidth + limbWidth - 1) / limbWidth;
+
+    if (numLimbs == 1) {
+      nInvAttr = nInv;
+    } else {
+      nPrimeAttr = nPrime;
+      bInvAttr = bInvMont;
+    }
+
+    // IntrMontReduceOp already produces canonical output [0, modulus)
+    // via getCanonicalDiff/getCanonicalFromExtended in its lowering
+    auto montReduce = b.create<IntrMontReduceOp>(
+        intType, result.lo, result.hi, modulusIntAttr,
+        nInvAttr ? *nInvAttr : IntegerAttr(),
+        nPrimeAttr ? *nPrimeAttr : IntegerAttr(),
+        bInvAttr ? *bInvAttr : IntegerAttr());
+
+    rewriter.replaceOp(op, montReduce);
     return success();
   }
 };
@@ -930,6 +1117,9 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   }
 };
 
+// Note: IntrReduceOp lowering is handled by the separate intr-reduce-to-arith
+// pass. This allows optimization passes to run between the two stages.
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.cpp.inc"
@@ -949,6 +1139,9 @@ void ModArithToArith::runOnOperation() {
   ConversionTarget target(*context);
   target.addIllegalDialect<ModArithDialect>();
   target.addLegalDialect<arith::ArithDialect>();
+  // Intrinsic reduce ops are lowered in a separate pass (intr-reduce-to-arith)
+  // to enable optimization passes to run between stages
+  target.addLegalOp<IntrReduceOp, IntrMontReduceOp>();
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);

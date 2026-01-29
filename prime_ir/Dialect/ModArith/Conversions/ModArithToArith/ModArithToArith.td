@@ -25,9 +25,12 @@ def ModArithToArith : Pass<"mod-arith-to-arith", "ModuleOp"> {
   let summary = "Lower `mod_arith` to standard `arith`.";
   let description = [{
     This pass lowers the `mod_arith` dialect to their `arith` equivalents.
+    IntrReduceOp and IntrMontReduceOp are emitted and kept legal for further
+    optimization and lowering by the intr-reduce-to-arith pass.
   }];
   let dependentDialects = [
     "arith::ArithDialect",
+    "LLVM::LLVMDialect",
     "math::MathDialect",
     "scf::SCFDialect",
     "tensor::TensorDialect",
