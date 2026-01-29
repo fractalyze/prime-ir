@@ -39,6 +39,24 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "optimize_input_output_buffer_alias",
+    srcs = ["optimize_input_output_buffer_alias.cc"],
+    hdrs = ["optimize_input_output_buffer_alias.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "hlo_dce",
     srcs = ["hlo_dce.cc"],
     hdrs = ["hlo_dce.h"],
@@ -118,6 +136,7 @@ zkx_cc_unittest(
         "flatten_call_graph_unittest.cc",
         "hlo_dce_unittest.cc",
         "hlo_memory_scheduler_unittest.cc",
+        "optimize_input_output_buffer_alias_unittest.cc",
         "sub_byte_normalization_unittest.cc",
         "tuple_simplifier_unittest.cc",
     ],
@@ -125,6 +144,7 @@ zkx_cc_unittest(
         ":flatten_call_graph",
         ":hlo_dce",
         ":hlo_memory_scheduler",
+        ":optimize_input_output_buffer_alias",
         ":sub_byte_normalization",
         ":tuple_simplifier",
         "//xla/tsl/platform:status",
