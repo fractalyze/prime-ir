@@ -1012,3 +1012,115 @@ func.func @test_cmp_splat_tensor_fold() -> tensor<2xi1> {
   // CHECK: return %[[C]] : [[T]]
   return %2 : tensor<2xi1>
 }
+
+//===----------------------------------------------------------------------===//
+// PowUI Small Exponent Optimization
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_powui_zero
+func.func @test_powui_zero(%x: !PF17) -> !PF17 {
+  %c0 = arith.constant 0 : i32
+  // CHECK: %[[ONE:.*]] = field.constant 1
+  // CHECK-NOT: field.powui
+  // CHECK: return %[[ONE]]
+  %r = field.powui %x, %c0 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_one
+func.func @test_powui_one(%x: !PF17) -> !PF17 {
+  %c1 = arith.constant 1 : i32
+  // CHECK-NOT: field.powui
+  // CHECK: return %arg0
+  %r = field.powui %x, %c1 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_two
+func.func @test_powui_two(%x: !PF17) -> !PF17 {
+  %c2 = arith.constant 2 : i32
+  // CHECK: %[[SQ:.*]] = field.square %arg0
+  // CHECK-NOT: field.powui
+  // CHECK: return %[[SQ]]
+  %r = field.powui %x, %c2 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_three
+func.func @test_powui_three(%x: !PF17) -> !PF17 {
+  %c3 = arith.constant 3 : i32
+  // CHECK: %[[SQ:.*]] = field.square %arg0
+  // CHECK: %[[MUL:.*]] = field.mul %arg0, %[[SQ]]
+  // CHECK-NOT: field.powui
+  // CHECK: return %[[MUL]]
+  %r = field.powui %x, %c3 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_four
+func.func @test_powui_four(%x: !PF17) -> !PF17 {
+  %c4 = arith.constant 4 : i32
+  // CHECK: %[[SQ1:.*]] = field.square %arg0
+  // CHECK: %[[SQ2:.*]] = field.square %[[SQ1]]
+  // CHECK-NOT: field.powui
+  // CHECK: return %[[SQ2]]
+  %r = field.powui %x, %c4 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_five
+func.func @test_powui_five(%x: !PF17) -> !PF17 {
+  %c5 = arith.constant 5 : i32
+  // CHECK: %[[SQ1:.*]] = field.square %arg0
+  // CHECK: %[[SQ2:.*]] = field.square %[[SQ1]]
+  // CHECK: %[[MUL:.*]] = field.mul %arg0, %[[SQ2]]
+  // CHECK-NOT: field.powui
+  // CHECK: return %[[MUL]]
+  %r = field.powui %x, %c5 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_six
+func.func @test_powui_six(%x: !PF17) -> !PF17 {
+  %c6 = arith.constant 6 : i32
+  // CHECK: %[[SQ1:.*]] = field.square %arg0
+  // CHECK: %[[MUL:.*]] = field.mul %arg0, %[[SQ1]]
+  // CHECK: %[[SQ2:.*]] = field.square %[[MUL]]
+  // CHECK-NOT: field.powui
+  // CHECK: return %[[SQ2]]
+  %r = field.powui %x, %c6 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_seven
+func.func @test_powui_seven(%x: !PF17) -> !PF17 {
+  %c7 = arith.constant 7 : i32
+  // CHECK: %[[SQ1:.*]] = field.square %arg0
+  // CHECK: %[[MUL1:.*]] = field.mul %arg0, %[[SQ1]]
+  // CHECK: %[[SQ2:.*]] = field.square %[[MUL1]]
+  // CHECK: %[[MUL2:.*]] = field.mul %arg0, %[[SQ2]]
+  // CHECK-NOT: field.powui
+  // CHECK: return %[[MUL2]]
+  %r = field.powui %x, %c7 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_eight
+func.func @test_powui_eight(%x: !PF17) -> !PF17 {
+  %c8 = arith.constant 8 : i32
+  // CHECK: %[[SQ1:.*]] = field.square %arg0
+  // CHECK: %[[SQ2:.*]] = field.square %[[SQ1]]
+  // CHECK: %[[SQ3:.*]] = field.square %[[SQ2]]
+  // CHECK-NOT: field.powui
+  // CHECK: return %[[SQ3]]
+  %r = field.powui %x, %c8 : !PF17, i32
+  return %r : !PF17
+}
+
+// CHECK-LABEL: @test_powui_large_not_optimized
+func.func @test_powui_large_not_optimized(%x: !PF17) -> !PF17 {
+  %c9 = arith.constant 9 : i32
+  // CHECK: field.powui
+  %r = field.powui %x, %c9 : !PF17, i32
+  return %r : !PF17
+}

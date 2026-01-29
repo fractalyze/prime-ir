@@ -340,6 +340,8 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
   let arguments = (ins FieldLike:$base, SignlessIntegerLike:$exp);
   let results = (outs FieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($base) `,` type($exp)";
+  let hasFolder = 1;
+  let hasCanonicalizer = 1;
 }
 
 def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
