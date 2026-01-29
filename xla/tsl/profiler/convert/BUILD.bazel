@@ -28,6 +28,22 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "trace_events_to_json",
+    srcs = ["trace_events_to_json.cc"],
+    hdrs = ["trace_events_to_json.h"],
+    deps = [
+        ":trace_container",
+        "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
+        "//xla/tsl/profiler/utils:format_utils",
+        "//xla/tsl/profiler/utils:math_utils",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
+        "@jsoncpp",
+    ],
+)
+
+zkx_cc_library(
     name = "zkx_op_utils",
     srcs = ["zkx_op_utils.cc"],
     hdrs = ["zkx_op_utils.h"],
