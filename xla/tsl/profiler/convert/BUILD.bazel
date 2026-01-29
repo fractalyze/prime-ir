@@ -18,6 +18,19 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "post_process_single_host_xplane",
+    srcs = ["post_process_single_host_xplane.cc"],
+    hdrs = ["post_process_single_host_xplane.h"],
+    deps = [
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "//xla/tsl/profiler/utils:timestamp_utils",
+        "//xla/tsl/profiler/utils:xplane_schema",
+        "//xla/tsl/profiler/utils:xplane_utils",
+        "@com_google_absl//absl/log",
+    ],
+)
+
+zkx_cc_library(
     name = "trace_container",
     srcs = ["trace_container.cc"],
     hdrs = ["trace_container.h"],
