@@ -26,3 +26,13 @@ zkx_cc_library(
         "@com_google_protobuf//:protobuf",
     ],
 )
+
+zkx_cc_library(
+    name = "zkx_op_utils",
+    srcs = ["zkx_op_utils.cc"],
+    hdrs = ["zkx_op_utils.h"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/strings",
+    ],
+)
