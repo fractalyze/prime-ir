@@ -55,3 +55,18 @@ symlink_inputs(
     }},
     deps = [":mlir"],
 )
+
+symlink_inputs(
+    name = "elliptic_curve",
+    rule = py_library,
+    symlinked_inputs = {"srcs": {
+        "dialects": ["//prime_ir/Dialect/EllipticCurve/Python:EllipticCurvePyFiles"],
+    }},
+    deps = [
+        ":core",
+        ":field",
+        ":ir",
+        ":mlir",
+        "//prime_ir/mlir/_mlir_libs:_elliptic_curve",
+    ],
+)

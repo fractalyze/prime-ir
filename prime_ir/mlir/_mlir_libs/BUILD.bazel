@@ -63,3 +63,22 @@ nanobind_pywrap_extension(
         "//conditions:default": [],
     }),
 )
+
+########################################################
+# EllipticCurve
+########################################################
+
+nanobind_pywrap_extension(
+    name = "_elliptic_curve",
+    srcs = ["//prime_ir/Dialect/EllipticCurve/Python:EllipticCurvePyApiFiles"],
+    deps = [
+        "//prime_ir/Dialect/EllipticCurve/C:CAPI",
+        "//prime_ir/Dialect/EllipticCurve/Python:EllipticCurveAttributesAndTypes",
+        "@llvm-project//mlir:CAPIIR",
+        "@llvm-project//mlir:MLIRBindingsPythonNanobindHeaders",
+        "@nanobind",
+    ] + select({
+        "@platforms//os:macos": ["@rules_python//python/cc:current_py_cc_libs"],
+        "//conditions:default": [],
+    }),
+)

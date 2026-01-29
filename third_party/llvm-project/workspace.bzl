@@ -41,4 +41,5 @@ LLVM_PATCHES = [
     "@prime_ir//third_party/llvm-project:elementwise_op_fusion_constant_support.patch",
     "@prime_ir//third_party/llvm-project:constant_like_interface.patch",
     "@prime_ir//third_party/llvm-project:expose_py_integer_attribute.patch",
+    "@prime_ir//third_party/llvm-project:large_integer_attribute.patch",
 ]
