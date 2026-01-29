@@ -73,6 +73,11 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "stat_summarizer_options",
+    hdrs = ["stat_summarizer_options.h"],
+)
+
 zkx_cc_unittest(
     name = "util_unittests",
     srcs = [
