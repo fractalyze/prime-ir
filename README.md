@@ -88,6 +88,7 @@ longer-form discussions take place in the
 | conditional            | ✅                      | ⚪  |
 | constant               | ✅                      | ✅  |
 | convert                | ✅                      | ✅  |
+| custom-call            | ✅                      | ⚪  |
 | divide                 | ✅                      | ✅  |
 | dot                    | ✅ (SpMV with CSR only) | ⚪  |
 | dynamic-reshape        | ⚪                      | ⚪  |
