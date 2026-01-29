@@ -115,41 +115,6 @@ multiclass AdditiveGroupCorePatterns<Op AddOp, Op SubOp, Op NegOp> {
 }
 
 //===----------------------------------------------------------------------===//
-// ScalarMulStrengthReductionPatterns
-//===----------------------------------------------------------------------===//
-//
-// Patterns that reduce scalar multiplication to cheaper point operations
-// when the scalar is a special constant value.
-//
-//===----------------------------------------------------------------------===//
-multiclass ScalarMulStrengthReductionPatterns<Op ScalarMulOp> {
-
-    // 1 * P -> P
-    def ScalarMulByOne :
-        Pat<(ScalarMulOp (ConstantLikeMatcher TypedAttrInterface:$c1), $P),
-            (replaceWithValue $P),
-            [(IsScalarOne $c1)]>;
-
-    // 0 * P -> zero point
-    def ScalarMulByZero :
-        Pat<(ScalarMulOp (ConstantLikeMatcher TypedAttrInterface:$c0), $P),
-            (GetZeroPoint $P),
-            [(IsScalarZero $c0)]>;
-
-    // 2 * P -> double(P)
-    def ScalarMulByTwo :
-        Pat<(ScalarMulOp (ConstantLikeMatcher TypedAttrInterface:$c2), $P),
-            (CreateDoubleOp $P),
-            [(IsScalarTwo $c2)]>;
-
-    // (-1) * P -> -P
-    def ScalarMulByNegOne :
-        Pat<(ScalarMulOp (ConstantLikeMatcher TypedAttrInterface:$cNeg1), $P),
-            (CreateNegOp $P),
-            [(IsScalarNegOne $cNeg1)]>;
-}
-
-//===----------------------------------------------------------------------===//
 // ScalarMulDistributivityPatterns
 //===----------------------------------------------------------------------===//
 //

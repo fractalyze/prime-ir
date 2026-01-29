@@ -793,25 +793,6 @@ OpFoldResult foldBinaryPointOp(Op *op, typename Op::FoldAdaptor adaptor,
   return folder.foldScalar(lhsAttr, rhsAttr);
 }
 
-//===----------------------------------------------------------------------===//
-// Helper functions for scalar constant matching (used by canonicalization)
-//===----------------------------------------------------------------------===//
-
-// Check if a scalar field constant attribute equals the given value.
-bool isScalarEqualTo(Attribute attr, uint64_t value) {
-  // TODO(chokobole): Implement scalar check once the Scalar Field
-  // modulus is accessible via the Curve Attribute.
-  return false;
-}
-
-// Check if a scalar field constant attribute equals the negation of the given
-// value (i.e., modulus - value).
-bool isScalarNegativeOf(Attribute attr, uint64_t value) {
-  // TODO(chokobole): Implement scalar negation check once the Scalar Field
-  // modulus is accessible via the Curve Attribute.
-  return false;
-}
-
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveCanonicalization.cpp.inc"
 } // namespace
 
@@ -847,7 +828,152 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
          PointKind outputKind) { return lhs.sub(rhs, outputKind); });
 }
 
+OpFoldResult ScalarMulOp::fold(FoldAdaptor adaptor) {
+  // 1 * P -> P (only when output type matches point type)
+  auto scalarAttr = dyn_cast_if_present<IntegerAttr>(adaptor.getScalar());
+  if (scalarAttr && scalarAttr.getValue().isOne()) {
+    // Can only fold if the output type matches the point type
+    if (getPoint().getType() == getType()) {
+      return getPoint();
+    }
+  }
+  return {};
+}
+
 #include "prime_ir/Utils/CanonicalizationPatterns.inc"
+
+namespace {
+
+// Optimizes scalar multiplication with small constant scalars using optimal
+// addition chains. This avoids the overhead of the generic double-and-add
+// loop for common cases like 2*P, 3*P, 4*P, etc.
+struct ScalarMulSmallConstant : public OpRewritePattern<ScalarMulOp> {
+  using OpRewritePattern<ScalarMulOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ScalarMulOp op,
+                                PatternRewriter &rewriter) const override {
+    // Get the scalar field type to access modulus
+    auto scalarType =
+        dyn_cast<field::PrimeFieldType>(getElementTypeOrSelf(op.getScalar()));
+    if (!scalarType) {
+      return failure();
+    }
+
+    // Try to get scalar as constant
+    IntegerAttr scalarAttr;
+    if (!matchPattern(op.getScalar(), m_Constant(&scalarAttr))) {
+      return failure();
+    }
+
+    APInt scalarVal = scalarAttr.getValue();
+    APInt modulus = scalarType.getModulus().getValue();
+
+    // Check for 0, 1, 2, ..., 8 and -1 (= modulus - 1)
+    std::optional<int64_t> smallScalar;
+
+    if (scalarVal.isZero()) {
+      smallScalar = 0;
+    } else if (scalarVal.isOne()) {
+      smallScalar = 1;
+    } else if (scalarVal == 2) {
+      smallScalar = 2;
+    } else if (scalarVal == 3) {
+      smallScalar = 3;
+    } else if (scalarVal == 4) {
+      smallScalar = 4;
+    } else if (scalarVal == 5) {
+      smallScalar = 5;
+    } else if (scalarVal == 6) {
+      smallScalar = 6;
+    } else if (scalarVal == 7) {
+      smallScalar = 7;
+    } else if (scalarVal == 8) {
+      smallScalar = 8;
+    } else if (scalarVal == modulus - 1) {
+      smallScalar = -1;
+    }
+
+    if (!smallScalar) {
+      return failure();
+    }
+
+    Location loc = op.getLoc();
+    Value point = op.getPoint();
+    Type resultType = op.getType();
+    Value result;
+
+    auto dbl = [&](Value p) -> Value {
+      return rewriter.create<DoubleOp>(loc, resultType, p);
+    };
+    auto add = [&](Value p, Value q) -> Value {
+      return rewriter.create<AddOp>(loc, resultType, p, q);
+    };
+    auto neg = [&](Value p) -> Value {
+      return rewriter.create<NegateOp>(loc, resultType, p);
+    };
+
+    switch (*smallScalar) {
+    case 0: {
+      // 0 * P -> zero point
+      ImplicitLocOpBuilder b(loc, rewriter);
+      result = createZeroPoint(b, resultType);
+      break;
+    }
+    case 1:
+      // 1 * P -> P (may need type conversion)
+      if (point.getType() == resultType) {
+        result = point;
+      } else {
+        result = rewriter.create<ConvertPointTypeOp>(loc, resultType, point);
+      }
+      break;
+    case 2:
+      // 2 * P -> double(P)
+      result = dbl(point);
+      break;
+    case 3:
+      // 3 * P -> P + double(P)
+      result = add(point, dbl(point));
+      break;
+    case 4:
+      // 4 * P -> double(double(P))
+      result = dbl(dbl(point));
+      break;
+    case 5:
+      // 5 * P -> P + double(double(P))
+      result = add(point, dbl(dbl(point)));
+      break;
+    case 6:
+      // 6 * P -> double(P + double(P))
+      result = dbl(add(point, dbl(point)));
+      break;
+    case 7:
+      // 7 * P -> P + double(P + double(P))
+      result = add(point, dbl(add(point, dbl(point))));
+      break;
+    case 8:
+      // 8 * P -> double(double(double(P)))
+      result = dbl(dbl(dbl(point)));
+      break;
+    case -1:
+      // (-1) * P -> -P (may need type conversion)
+      if (point.getType() == resultType) {
+        result = neg(point);
+      } else {
+        result =
+            neg(rewriter.create<ConvertPointTypeOp>(loc, resultType, point));
+      }
+      break;
+    default:
+      return failure();
+    }
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+} // namespace
 
 void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
@@ -865,6 +991,8 @@ void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 
 void ScalarMulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                               MLIRContext *context) {
+  // Small constant optimization (0*P, 1*P, 2*P, ..., 8*P, (-1)*P)
+  patterns.add<ScalarMulSmallConstant>(context);
 #define PRIME_IR_SCALARMUL_PATTERN(Name)                                       \
   patterns.add<EllipticCurve##Name>(context);
   PRIME_IR_ADDITIVE_GROUP_SCALARMUL_PATTERN_LIST(PRIME_IR_SCALARMUL_PATTERN)

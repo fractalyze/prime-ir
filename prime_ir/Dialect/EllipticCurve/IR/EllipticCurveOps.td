@@ -263,6 +263,7 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [ElementwiseMappa
   let arguments = (ins PrimeFieldLike:$scalar, PointLike:$point);
   let results = (outs PointLike:$output);
   let hasVerifier = 1;
+  let hasFolder = 1;
   let hasCanonicalizer = 1;
   let assemblyFormat = "operands attr-dict `:` type($scalar) `,` type($point) `->` type($output)";
 }

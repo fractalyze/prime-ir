@@ -54,22 +54,6 @@ def CreateDoubleOp : NativeCodeCall<"[&]{ "
     "}()">;
 
 //===----------------------------------------------------------------------===//
-// Helper Definitions for Scalar Constants
-//===----------------------------------------------------------------------===//
-
-// Scalar constant matchers (for scalar field values)
-def IsScalarZero : Constraint<CPred<"isScalarEqualTo($0, 0)">>;
-def IsScalarOne : Constraint<CPred<"isScalarEqualTo($0, 1)">>;
-def IsScalarTwo : Constraint<CPred<"isScalarEqualTo($0, 2)">>;
-def IsScalarNegOne : Constraint<CPred<"isScalarNegativeOf($0, 1)">>;
-
-// Create zero point (identity element in the additive group)
-def GetZeroPoint : NativeCodeCall<"[&]{ "
-    "ImplicitLocOpBuilder b(odsLoc, $_builder); "
-    "return createZeroPoint(b, $0.getType()); "
-    "}()">;
-
-//===----------------------------------------------------------------------===//
 // Include Canonicalization Pattern Files
 //===----------------------------------------------------------------------===//
 
@@ -85,17 +69,12 @@ include "prime_ir/Utils/AdditiveGroupCanonicalization.td"
 defm EllipticCurve : AdditiveGroupCorePatterns<
     EllipticCurve_AddOp, EllipticCurve_SubOp, EllipticCurve_NegateOp>;
 
-// 2. Scalar Multiplication Strength Reduction
-//    1*P -> P, 0*P -> zero, 2*P -> double(P), (-1)*P -> -P
-defm EllipticCurve : ScalarMulStrengthReductionPatterns<
-    EllipticCurve_ScalarMulOp>;
-
-// 3. Scalar Multiplication Distributivity (factoring)
+// 2. Scalar Multiplication Distributivity (factoring)
 //    s*P + s*Q -> s*(P + Q), s*P - s*Q -> s*(P - Q)
 defm EllipticCurve : ScalarMulDistributivityPatterns<
     EllipticCurve_ScalarMulOp, EllipticCurve_AddOp, EllipticCurve_SubOp>;
 
-// 4. Scalar Multiplication Associativity
+// 3. Scalar Multiplication Associativity
 //    s * (t * P) -> (s * t) * P
 defm EllipticCurve : ScalarMulAssociativityPatterns<
     EllipticCurve_ScalarMulOp, Field_MulOp>;
