@@ -230,11 +230,9 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
 
   if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
     return builder.create<ConstantOp>(loc, type, intAttr);
-  } else {
-    return builder.create<ConstantOp>(loc, type,
-                                      cast<DenseIntElementsAttr>(value));
   }
-  return nullptr;
+  return builder.create<ConstantOp>(loc, type,
+                                    cast<DenseIntElementsAttr>(value));
 }
 
 Operation *FieldDialect::materializeConstant(OpBuilder &builder,
