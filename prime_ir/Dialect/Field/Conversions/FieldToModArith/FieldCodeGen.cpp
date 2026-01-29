@@ -15,45 +15,11 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldCodeGen.h"
 
-#include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/BuiltinTypes.h"
-#include "prime_ir/Dialect/Field/IR/FieldOps.h"
+#include "prime_ir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/BuilderContext.h"
 
 namespace mlir::prime_ir::field {
-
-namespace {
-
-// Helper to create non-residue constant for extension fields
-Value createNonResidueConstant(ImplicitLocOpBuilder &b,
-                               ExtensionFieldType efType,
-                               const TypeConverter *converter) {
-  Type baseFieldType = efType.getBaseField();
-  Attribute nonResidueAttr = efType.getNonResidue();
-
-  if (isa<PrimeFieldType>(baseFieldType)) {
-    // Non-tower: non-residue is in the prime field
-    return b.create<mod_arith::ConstantOp>(
-        converter->convertType(baseFieldType),
-        cast<IntegerAttr>(nonResidueAttr));
-  }
-
-  // Tower: non-residue is in the base extension field
-  auto baseEfType = cast<ExtensionFieldType>(baseFieldType);
-
-  // If non-residue is a simple integer, convert it to extension field constant
-  if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
-    unsigned baseDegree = baseEfType.getDegreeOverPrime();
-    auto storageType = baseEfType.getBasePrimeField().getStorageType();
-    nonResidueAttr =
-        makeScalarExtFieldAttr(intAttr.getValue(), baseDegree, storageType);
-  }
-
-  return ConstantOp::materialize(b, nonResidueAttr, baseEfType, b.getLoc());
-}
-
-} // namespace
 
 FieldCodeGen::FieldCodeGen(Type type, Value value,
                            const TypeConverter *converter) {
@@ -64,7 +30,7 @@ FieldCodeGen::FieldCodeGen(Type type, Value value,
 
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   auto efType = cast<ExtensionFieldType>(type);
-  Value nonResidue = createNonResidueConstant(*b, efType, converter);
+  Value nonResidue = createNonResidueConstant(*b, efType);
 
   auto sig = getTowerSignature(efType);
 #define CREATE_CODEGEN(unused_sig, TypeName)                                   \
