@@ -67,6 +67,13 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "parse_annotation",
+    srcs = ["parse_annotation.cc"],
+    hdrs = ["parse_annotation.h"],
+    deps = ["@com_google_absl//absl/strings"],
+)
+
+zkx_cc_library(
     name = "per_thread",
     hdrs = ["per_thread.h"],
     deps = [
@@ -214,6 +221,7 @@ zkx_cc_test(
         "buffer_pool_unittest.cc",
         "device_utils_unittest.cc",
         "lock_free_queue_unittest.cc",
+        "parse_annotation_unittest.cc",
         "per_thread_unittest.cc",
         "tf_op_utils_unittest.cc",
         "timespan_unittest.cc",
@@ -225,6 +233,7 @@ zkx_cc_test(
         ":buffer_pool",
         ":device_utils",
         ":lock_free_queue",
+        ":parse_annotation",
         ":per_thread",
         ":tf_op_utils",
         ":tf_xplane_visitor",
