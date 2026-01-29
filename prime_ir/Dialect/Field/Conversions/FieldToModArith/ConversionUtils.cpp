@@ -90,4 +90,30 @@ Value createPrimeConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
                                          result.getIntegerAttr());
 }
 
+Value createNonResidueConstant(ImplicitLocOpBuilder &b,
+                               ExtensionFieldType efType) {
+  Type baseFieldType = efType.getBaseField();
+  Attribute nonResidueAttr = efType.getNonResidue();
+
+  // Prime field base: return mod_arith constant directly.
+  // The non-residue attribute is already in the correct form (standard or
+  // Montgomery), so we use it directly without conversion.
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseFieldType)) {
+    auto intAttr = cast<IntegerAttr>(nonResidueAttr);
+    return b.create<mod_arith::ConstantOp>(convertPrimeFieldType(pfType),
+                                           intAttr);
+  }
+
+  // Extension field base: use ConstantLikeInterface for proper embedding
+  auto baseEfType = cast<ExtensionFieldType>(baseFieldType);
+  auto constantLike = cast<ConstantLikeInterface>(baseEfType);
+
+  // If integer attr, embed as [value, 0, 0, ...] in the extension field
+  if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
+    nonResidueAttr = constantLike.createConstantAttr(intAttr.getInt());
+  }
+
+  return ConstantOp::materialize(b, nonResidueAttr, baseEfType, b.getLoc());
+}
+
 } // namespace mlir::prime_ir::field

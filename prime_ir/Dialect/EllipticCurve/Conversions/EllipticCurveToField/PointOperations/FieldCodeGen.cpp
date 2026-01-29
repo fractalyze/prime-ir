@@ -82,41 +82,10 @@ Value FieldCodeGen::IsZero() const {
   return b->create<field::CmpOp>(arith::CmpIPredicate::eq, value, zero);
 }
 
-namespace {
-
-// Creates a constant in the given field type.
-// For tower extensions, this recursively creates constants at each level.
-Value createFieldConstant(ImplicitLocOpBuilder &b, Type fieldType,
-                          int64_t constant) {
-  if (auto pfType = dyn_cast<field::PrimeFieldType>(fieldType)) {
-    return b.create<field::ConstantOp>(
-        fieldType,
-        field::PrimeFieldOperation(constant, pfType).getIntegerAttr());
-  }
-
-  auto efType = cast<field::ExtensionFieldType>(fieldType);
-  Type baseFieldType = efType.getBaseField();
-  unsigned degree = efType.getDegree();
-
-  // Recursively create constant in base field (handles tower extensions)
-  Value baseConstant = createFieldConstant(b, baseFieldType, constant);
-
-  // Create [baseConstant, 0, 0, ...] with 'degree' coefficients
-  SmallVector<Value> coeffs(degree);
-  coeffs[0] = baseConstant;
-  Value zero = createFieldConstant(b, baseFieldType, 0);
-  for (unsigned i = 1; i < degree; ++i) {
-    coeffs[i] = zero;
-  }
-
-  return b.create<field::ExtFromCoeffsOp>(efType, coeffs);
-}
-
-} // namespace
-
 FieldCodeGen FieldCodeGen::CreateConst(int64_t constant) const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return FieldCodeGen(createFieldConstant(*b, value.getType(), constant));
+  return FieldCodeGen(
+      field::createFieldConstant(value.getType(), *b, constant));
 }
 
 } // namespace mlir::prime_ir::elliptic_curve

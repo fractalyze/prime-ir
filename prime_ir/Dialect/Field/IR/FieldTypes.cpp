@@ -103,21 +103,8 @@ Attribute maybeToMontgomery(Type type, Attribute attr) {
 
 Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
                           uint64_t value) {
-  TypedAttr attr;
   auto constantLike = cast<ConstantLikeInterface>(fieldType);
-  if (auto efType = dyn_cast<field::ExtensionFieldType>(fieldType)) {
-    // Use getDegreeOverPrime() and getBasePrimeField() to support tower
-    // extensions
-    PrimeFieldType pfType = efType.getBasePrimeField();
-    // Use PrimeFieldOperation to handle Montgomery conversion if needed
-    PrimeFieldOperation pfOp(static_cast<int64_t>(value), pfType);
-    SmallVector<APInt> coeffs =
-        makeScalarCoeffs(static_cast<APInt>(pfOp), efType.getDegreeOverPrime());
-    attr = constantLike.createConstantAttrFromValues(coeffs);
-  } else {
-    attr = constantLike.createConstantAttrFromValues(
-        ArrayRef<APInt>{APInt(getIntOrPrimeFieldBitWidth(fieldType), value)});
-  }
+  TypedAttr attr = constantLike.createConstantAttr(static_cast<int64_t>(value));
   return builder.create<ConstantOp>(fieldType, attr)->getResult(0);
 }
 
@@ -475,8 +462,14 @@ bool ExtensionFieldType::isMontgomery() const {
 }
 
 TypedAttr ExtensionFieldType::createConstantAttr(int64_t c) const {
-  APInt baseCoeff = APInt(getIntOrPrimeFieldBitWidth(getBaseField()), c);
-  return createConstantAttrFromValues(ArrayRef<APInt>{baseCoeff});
+  PrimeFieldType pfType = getBasePrimeField();
+  PrimeFieldOperation pfOp(c, pfType); // Handles Montgomery conversion
+  unsigned degreeOverPrime = getDegreeOverPrime();
+  unsigned bitWidth = pfType.getStorageBitWidth();
+
+  SmallVector<APInt> coeffs(degreeOverPrime, APInt::getZero(bitWidth));
+  coeffs[0] = static_cast<APInt>(pfOp);
+  return createConstantAttrFromValues(coeffs);
 }
 
 TypedAttr
