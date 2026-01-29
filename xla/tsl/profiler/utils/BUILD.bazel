@@ -189,12 +189,16 @@ zkx_cc_test(
     name = "utils_unittests",
     srcs = [
         "lock_free_queue_unittest.cc",
+        "per_thread_unittest.cc",
         "timespan_unittest.cc",
     ],
     deps = [
         ":lock_free_queue",
+        ":per_thread",
         ":timespan",
         "//xla/tsl/platform:env",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
     ],
 )
