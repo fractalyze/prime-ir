@@ -126,7 +126,7 @@ public:
     std::array<BaseFieldT, N> coeffs;
     coeffs[0] = baseConst;
     for (size_t i = 1; i < N; ++i) {
-      coeffs[i] = createConstBaseField(0);
+      coeffs[i] = NonResidue().CreateConst(0);
     }
     return FromCoeffs(coeffs);
   }
@@ -203,27 +203,9 @@ private:
       ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
       auto extField = cast<ExtensionFieldType>(value.getType());
       auto baseEfType = cast<ExtensionFieldType>(extField.getBaseField());
-      Value baseNonResidue = getBaseFieldNonResidue(*b, baseEfType);
+      Value baseNonResidue = createNonResidueConstant(*b, baseEfType);
       return BaseFieldT(v, baseNonResidue);
     }
-  }
-
-  static Value getBaseFieldNonResidue(ImplicitLocOpBuilder &b,
-                                      ExtensionFieldType baseEfType) {
-    Attribute nonResidueAttr = baseEfType.getNonResidue();
-    Type baseBaseField = baseEfType.getBaseField();
-
-    if (isa<PrimeFieldType>(baseBaseField)) {
-      // Base is prime field - nonResidue is already in the right form
-      auto primeField = cast<PrimeFieldType>(baseBaseField);
-      if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
-        return createConst(b, primeField, intAttr.getInt());
-      }
-    }
-
-    // For deeper towers or DenseElementsAttr, materialize directly
-    return ConstantOp::materialize(b, nonResidueAttr, baseBaseField,
-                                   b.getLoc());
   }
 
   Value value;

@@ -58,6 +58,7 @@ cc_library(
     srcs = ["FieldCodeGen.cpp"],
     hdrs = ["FieldCodeGen.h"],
     deps = [
+        ":ConversionUtils",
         ":ExtensionFieldCodeGen",
         ":PrimeFieldCodeGen",
         "//prime_ir/Dialect/Field/IR:Field",
