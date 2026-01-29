@@ -55,6 +55,17 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "tf_op_utils",
+    srcs = ["tf_op_utils.cc"],
+    hdrs = ["tf_op_utils.h"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/strings",
+        "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+zkx_cc_library(
     name = "time_utils",
     srcs = ["time_utils.cc"],
     hdrs = ["time_utils.h"],
