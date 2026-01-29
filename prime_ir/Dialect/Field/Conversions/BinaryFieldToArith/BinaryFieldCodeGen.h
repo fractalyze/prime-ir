@@ -95,6 +95,10 @@ private:
   // Get the α constant for tower level k
   // Alpha is the element satisfying x² + x + α = 0
   uint64_t getTowerAlpha(unsigned towerLevel) const;
+
+  // Lookup table-based inverse for bf<8> (tower level 3)
+  // Uses O(1) table lookup instead of O(n) Fermat computation
+  BinaryFieldCodeGen inverseLookupTable() const;
 };
 
 } // namespace mlir::prime_ir::field
