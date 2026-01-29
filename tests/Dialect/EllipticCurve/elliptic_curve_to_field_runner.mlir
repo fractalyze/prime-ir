@@ -31,35 +31,35 @@ func.func @test_ops_in_order() {
   %jacobian1 = elliptic_curve.from_coords %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobian
 
   %jacobian2 = elliptic_curve.add %affine1, %jacobian1 : !affine, !jacobian -> !jacobian
-  func.call @printG1Jacobian(%jacobian2) : (!jacobian) -> ()
+  func.call @printG1JacobianMont(%jacobian2) : (!jacobian) -> ()
 
   %jacobian3 = elliptic_curve.sub %affine1, %jacobian2 : !affine, !jacobian -> !jacobian
-  func.call @printG1Jacobian(%jacobian3) : (!jacobian) -> ()
+  func.call @printG1JacobianMont(%jacobian3) : (!jacobian) -> ()
 
   %jacobian4 = elliptic_curve.negate %jacobian3 : !jacobian
-  func.call @printG1Jacobian(%jacobian4) : (!jacobian) -> ()
+  func.call @printG1JacobianMont(%jacobian4) : (!jacobian) -> ()
 
   %jacobian5 = elliptic_curve.double %jacobian4 : !jacobian -> !jacobian
-  func.call @printG1Jacobian(%jacobian5) : (!jacobian) -> ()
+  func.call @printG1JacobianMont(%jacobian5) : (!jacobian) -> ()
 
   %xyzz1 = elliptic_curve.convert_point_type %affine1 : !affine -> !xyzz
-  func.call @printG1Xyzz(%xyzz1) : (!xyzz) -> ()
+  func.call @printG1XyzzMont(%xyzz1) : (!xyzz) -> ()
 
   %affine2 = elliptic_curve.convert_point_type %xyzz1 : !xyzz -> !affine
-  func.call @printG1Affine(%affine2) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine2) : (!affine) -> ()
 
   %jacobian6 = elliptic_curve.scalar_mul %var7, %affine2 : !SFm, !affine -> !jacobian
   %affine2_1 = elliptic_curve.convert_point_type %jacobian6 : !jacobian -> !affine
   %jacobian6_1 = elliptic_curve.convert_point_type %affine2_1 : !affine -> !jacobian
-  func.call @printG1Jacobian(%jacobian6_1) : (!jacobian) -> ()
+  func.call @printG1JacobianMont(%jacobian6_1) : (!jacobian) -> ()
 
   %affine3 = elliptic_curve.convert_point_type %jacobian6 : !jacobian -> !affine
-  func.call @printG1Affine(%affine3) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine3) : (!affine) -> ()
 
   %xyzz2 = elliptic_curve.add %affine3, %xyzz1 : !affine, !xyzz -> !xyzz
   %affine4 = elliptic_curve.convert_point_type %xyzz2 : !xyzz -> !affine
   %xyzz3 = elliptic_curve.convert_point_type %affine4 : !affine -> !xyzz
-  func.call @printG1Xyzz(%xyzz3) : (!xyzz) -> ()
+  func.call @printG1XyzzMont(%xyzz3) : (!xyzz) -> ()
 
   return
 }

@@ -18,9 +18,9 @@ limitations under the License.
 #include "gtest/gtest.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Utils/ZkDtypes.h"
-#include "zk_dtypes/include/elliptic_curve/bn/bn254/fq2.h"
-#include "zk_dtypes/include/field/babybear/babybear4.h"
-#include "zk_dtypes/include/field/goldilocks/goldilocks3.h"
+#include "zk_dtypes/include/elliptic_curve/bn/bn254/fqx2.h"
+#include "zk_dtypes/include/field/babybear/babybearx4.h"
+#include "zk_dtypes/include/field/goldilocks/goldilocksx3.h"
 
 namespace mlir::prime_ir::field {
 
@@ -97,15 +97,15 @@ using ExtensionFieldTypes = testing::Types<
     // modulus bits = 2³¹
     // modulus.getBitWidth() == 32
     // modulus.getActiveBits() == 31
-    zk_dtypes::Babybear4, zk_dtypes::Babybear4Std,
+    zk_dtypes::BabybearX4Mont, zk_dtypes::BabybearX4,
     // modulus bits = 2⁶⁴
     // modulus.getBitWidth() == 64
     // modulus.getActiveBits() == 64
-    zk_dtypes::Goldilocks3, zk_dtypes::Goldilocks3Std,
+    zk_dtypes::GoldilocksX3Mont, zk_dtypes::GoldilocksX3,
     // modulus bits = 2²⁵⁴
     // modulus.getBitWidth() == 254
     // modulus.getActiveBits() == 254
-    zk_dtypes::bn254::Fq2, zk_dtypes::bn254::Fq2Std>;
+    zk_dtypes::bn254::FqX2Mont, zk_dtypes::bn254::FqX2>;
 TYPED_TEST_SUITE(ExtensionFieldOperationTest, ExtensionFieldTypes);
 
 //===----------------------------------------------------------------------===//

@@ -13,41 +13,41 @@
 // limitations under the License.
 // ==============================================================================
 
-func.func @printG1Affine(%affine: !affine) {
+func.func @printG1AffineMont(%affine: !affine) {
   %c0 = arith.constant 0 : index
   %affine_memref = memref.alloca() : memref<1x!affine>
   memref.store %affine, %affine_memref[%c0] : memref<1x!affine>
   %affine_memref_cast = memref.cast %affine_memref : memref<1x!affine> to memref<*x!affine>
-  func.call @printMemrefG1Affine(%affine_memref_cast) : (memref<*x!affine>) -> ()
+  func.call @printMemrefG1AffineMont(%affine_memref_cast) : (memref<*x!affine>) -> ()
   return
 }
 
-func.func @printG1Jacobian(%jacobian: !jacobian) {
+func.func @printG1JacobianMont(%jacobian: !jacobian) {
   %c0 = arith.constant 0 : index
   %jacobian_memref = memref.alloca() : memref<1x!jacobian>
   memref.store %jacobian, %jacobian_memref[%c0] : memref<1x!jacobian>
   %jacobian_memref_cast = memref.cast %jacobian_memref : memref<1x!jacobian> to memref<*x!jacobian>
-  func.call @printMemrefG1Jacobian(%jacobian_memref_cast) : (memref<*x!jacobian>) -> ()
+  func.call @printMemrefG1JacobianMont(%jacobian_memref_cast) : (memref<*x!jacobian>) -> ()
   return
 }
 
-func.func @printG1Xyzz(%xyzz: !xyzz) {
+func.func @printG1XyzzMont(%xyzz: !xyzz) {
   %c0 = arith.constant 0 : index
   %xyzz_memref = memref.alloca() : memref<1x!xyzz>
   memref.store %xyzz, %xyzz_memref[%c0] : memref<1x!xyzz>
   %xyzz_memref_cast = memref.cast %xyzz_memref : memref<1x!xyzz> to memref<*x!xyzz>
-  func.call @printMemrefG1Xyzz(%xyzz_memref_cast) : (memref<*x!xyzz>) -> ()
+  func.call @printMemrefG1XyzzMont(%xyzz_memref_cast) : (memref<*x!xyzz>) -> ()
   return
 }
 
-func.func @printG1AffineFromJacobian(%jacobian: !jacobian) {
+func.func @printG1AffineFromJacobianMont(%jacobian: !jacobian) {
   %affine = elliptic_curve.convert_point_type %jacobian : !jacobian -> !affine
-  func.call @printG1Affine(%affine) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine) : (!affine) -> ()
   return
 }
 
-func.func @printG1AffineFromXyzz(%xyzz: !xyzz) {
+func.func @printG1AffineFromXyzzMont(%xyzz: !xyzz) {
   %affine = elliptic_curve.convert_point_type %xyzz : !xyzz -> !affine
-  func.call @printG1Affine(%affine) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine) : (!affine) -> ()
   return
 }

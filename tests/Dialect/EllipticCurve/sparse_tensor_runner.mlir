@@ -53,13 +53,13 @@ func.func @test_bucket_acc_csr() {
 
 
   %jacobian_sum_13 = elliptic_curve.add %affine1, %affine3 : !affine, !affine -> !jacobian
-  func.call @printG1AffineFromJacobian(%jacobian_sum_13) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%jacobian_sum_13) : (!jacobian) -> ()
 
   %jacobian_sum_12 = elliptic_curve.add %affine1, %affine2 : !affine, !affine -> !jacobian
-  func.call @printG1AffineFromJacobian(%jacobian_sum_12) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%jacobian_sum_12) : (!jacobian) -> ()
 
-  func.call @printG1Affine(%affine2) : (!affine) -> ()
-  func.call @printG1Affine(%affine3) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine2) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine3) : (!affine) -> ()
 
   // Convert all affine points to jacobian before creating sparse matrix
   %jacobian1 = elliptic_curve.convert_point_type %affine1 : !affine -> !jacobian
@@ -111,7 +111,7 @@ func.func @test_bucket_acc_csr() {
   // Print results for comparison with bucket_acc
   scf.for %i = %c0 to %c8 step %c1 {
     %bucket_point = tensor.extract %result[%i] : tensor<8x!jacobian>
-    func.call @printG1AffineFromJacobian(%bucket_point) : (!jacobian) -> ()
+    func.call @printG1AffineFromJacobianMont(%bucket_point) : (!jacobian) -> ()
     scf.yield
   }
   return

@@ -49,9 +49,9 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
-        "@zk_dtypes//zk_dtypes:babybear4",
-        "@zk_dtypes//zk_dtypes:bn254_fq2",
-        "@zk_dtypes//zk_dtypes:goldilocks3",
+        "@zk_dtypes//zk_dtypes:babybearx4",
+        "@zk_dtypes//zk_dtypes:bn254_fqx2",
+        "@zk_dtypes//zk_dtypes:goldilocksx3",
     ],
 )
 

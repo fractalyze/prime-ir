@@ -27,24 +27,24 @@
 !g2jacobian = !elliptic_curve.jacobian<#g2curve>
 !g2xyzz = !elliptic_curve.xyzz<#g2curve>
 
-func.func private @printMemrefBn254G1AffineStd(memref<*x!affine>) attributes { llvm.emit_c_interface }
+func.func private @printMemrefBn254G1Affine(memref<*x!affine>) attributes { llvm.emit_c_interface }
 
 func.func private @printMemrefG1Affine(%affine: memref<*x!affine>) {
-  func.call @printMemrefBn254G1AffineStd(%affine) : (memref<*x!affine>) -> ()
+  func.call @printMemrefBn254G1Affine(%affine) : (memref<*x!affine>) -> ()
   return
 }
 
-func.func private @printMemrefBn254G1JacobianStd(memref<*x!jacobian>) attributes { llvm.emit_c_interface }
+func.func private @printMemrefBn254G1Jacobian(memref<*x!jacobian>) attributes { llvm.emit_c_interface }
 
 func.func private @printMemrefG1Jacobian(%jacobian: memref<*x!jacobian>) {
-  func.call @printMemrefBn254G1JacobianStd(%jacobian) : (memref<*x!jacobian>) -> ()
+  func.call @printMemrefBn254G1Jacobian(%jacobian) : (memref<*x!jacobian>) -> ()
   return
 }
 
-func.func private @printMemrefBn254G1XyzzStd(memref<*x!xyzz>) attributes { llvm.emit_c_interface }
+func.func private @printMemrefBn254G1Xyzz(memref<*x!xyzz>) attributes { llvm.emit_c_interface }
 
 func.func private @printMemrefG1Xyzz(%xyzz: memref<*x!xyzz>) {
-  func.call @printMemrefBn254G1XyzzStd(%xyzz) : (memref<*x!xyzz>) -> ()
+  func.call @printMemrefBn254G1Xyzz(%xyzz) : (memref<*x!xyzz>) -> ()
   return
 }
 

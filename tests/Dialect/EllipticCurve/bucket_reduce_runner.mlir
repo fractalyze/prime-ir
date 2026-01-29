@@ -60,29 +60,29 @@ func.func @test_bucket_reduce() {
   // 8G
   %k8 = field.constant 8 : !SF
   %result0 = func.call @getG1GeneratorMultiple(%k8) : (!SF) -> (!affine)
-  func.call @printG1Affine(%result0) : (!affine) -> ()
+  func.call @printG1AffineMont(%result0) : (!affine) -> ()
   %result_zero = tensor.extract %result[%i0] : tensor<4x!jacobian>
-  func.call @printG1AffineFromJacobian(%result_zero) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%result_zero) : (!jacobian) -> ()
 
   // 4G
   %k4 = field.constant 4 : !SF
   %result1 = func.call @getG1GeneratorMultiple(%k4) : (!SF) -> (!affine)
-  func.call @printG1Affine(%result1) : (!affine) -> ()
+  func.call @printG1AffineMont(%result1) : (!affine) -> ()
   %result_one = tensor.extract %result[%i1] : tensor<4x!jacobian>
-  func.call @printG1AffineFromJacobian(%result_one) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%result_one) : (!jacobian) -> ()
 
   // 3G
   %result2 = func.call @getG1GeneratorMultiple(%k3) : (!SF) -> (!affine)
-  func.call @printG1Affine(%result2) : (!affine) -> ()
+  func.call @printG1AffineMont(%result2) : (!affine) -> ()
   %result_two = tensor.extract %result[%i2] : tensor<4x!jacobian>
-  func.call @printG1AffineFromJacobian(%result_two) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%result_two) : (!jacobian) -> ()
 
   // 7G
   %k7 = field.constant 7 : !SF
   %result3 = func.call @getG1GeneratorMultiple(%k7) : (!SF) -> (!affine)
-  func.call @printG1Affine(%result3) : (!affine) -> ()
+  func.call @printG1AffineMont(%result3) : (!affine) -> ()
   %result_three = tensor.extract %result[%i3] : tensor<4x!jacobian>
-  func.call @printG1AffineFromJacobian(%result_three) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%result_three) : (!jacobian) -> ()
   return
 }
 
