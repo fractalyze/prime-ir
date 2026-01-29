@@ -571,7 +571,8 @@ bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
   }
   if (intAttr) {
     auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
-    ModArithOperation valueOp(intAttr.getValue(), modArithType);
+    ModArithOperation valueOp =
+        ModArithOperation::fromUnchecked(intAttr.getValue(), modArithType);
     ModArithType stdType = modArithType;
     if (modArithType.isMontgomery()) {
       stdType = cast<ModArithType>(getStandardFormType(modArithType));
