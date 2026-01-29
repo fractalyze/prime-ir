@@ -91,6 +91,23 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "xplane_builder",
+    srcs = ["xplane_builder.cc"],
+    hdrs = ["xplane_builder.h"],
+    deps = [
+        ":math_utils",
+        ":timespan",
+        ":xplane_schema",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/meta:type_traits",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
+
+zkx_cc_library(
     name = "xplane_schema",
     srcs = ["xplane_schema.cc"],
     hdrs = ["xplane_schema.h"],
