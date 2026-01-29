@@ -1348,54 +1348,49 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 
 namespace {
 
+// Helper to compare a constant attribute with an integer offset.
+// Handles both standard and Montgomery forms.
+template <typename Predicate>
+bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
+                       Predicate pred) {
+  Type elementType = getElementTypeOrSelf(val.getType());
+
+  // Extract typed attr, handling splat for prime field tensors
+  TypedAttr typedAttr;
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
+    typedAttr = intAttr;
+  } else if (auto splatAttr = dyn_cast<SplatElementsAttr>(attr)) {
+    typedAttr = splatAttr.getSplatValue<IntegerAttr>();
+  } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr)) {
+    typedAttr = denseAttr;
+  }
+  if (!typedAttr) {
+    return false;
+  }
+
+  // Use fromUnchecked because the attribute is already stored in the correct
+  // representation (Montgomery form for Montgomery types).
+  FieldOperation valueOp =
+      FieldOperation::fromUnchecked(typedAttr, elementType);
+  Type stdType = elementType;
+  if (isMontgomery(elementType)) {
+    stdType = getStandardFormType(elementType);
+    valueOp = valueOp.fromMont();
+  }
+  FieldOperation offsetOp(static_cast<uint64_t>(offset), stdType);
+  return pred(valueOp, offsetOp);
+}
+
 bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
-  IntegerAttr intAttr = dyn_cast_if_present<IntegerAttr>(attr);
-  if (auto denseIntAttr = dyn_cast_if_present<SplatElementsAttr>(attr)) {
-    intAttr = denseIntAttr.getSplatValue<IntegerAttr>();
-  }
-  if (intAttr) {
-    auto primeFieldType =
-        dyn_cast<PrimeFieldType>(getElementTypeOrSelf(val.getType()));
-    if (!primeFieldType) {
-      return false;
-    }
-    PrimeFieldOperation valueOp =
-        PrimeFieldOperation::fromUnchecked(intAttr.getValue(), primeFieldType);
-    PrimeFieldType stdType = primeFieldType;
-    if (primeFieldType.isMontgomery()) {
-      stdType = cast<PrimeFieldType>(getStandardFormType(primeFieldType));
-      valueOp = valueOp.fromMont();
-    }
-    PrimeFieldOperation offsetOp(
-        APInt(intAttr.getValue().getBitWidth(), offset), stdType);
-    return valueOp == -offsetOp;
-  }
-  return false;
+  return compareWithOffset(
+      attr, val, offset,
+      [](const FieldOperation &a, const FieldOperation &b) { return a == -b; });
 }
 
 bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
-  IntegerAttr intAttr = dyn_cast_if_present<IntegerAttr>(attr);
-  if (auto denseIntAttr = dyn_cast_if_present<SplatElementsAttr>(attr)) {
-    intAttr = denseIntAttr.getSplatValue<IntegerAttr>();
-  }
-  if (intAttr) {
-    auto primeFieldType =
-        dyn_cast<PrimeFieldType>(getElementTypeOrSelf(val.getType()));
-    if (!primeFieldType) {
-      return false;
-    }
-    PrimeFieldOperation valueOp =
-        PrimeFieldOperation::fromUnchecked(intAttr.getValue(), primeFieldType);
-    PrimeFieldType stdType = primeFieldType;
-    if (primeFieldType.isMontgomery()) {
-      stdType = cast<PrimeFieldType>(getStandardFormType(primeFieldType));
-      valueOp = valueOp.fromMont();
-    }
-    PrimeFieldOperation offsetOp(
-        APInt(intAttr.getValue().getBitWidth(), offset), stdType);
-    return valueOp == offsetOp;
-  }
-  return false;
+  return compareWithOffset(
+      attr, val, offset,
+      [](const FieldOperation &a, const FieldOperation &b) { return a == b; });
 }
 
 } // namespace
