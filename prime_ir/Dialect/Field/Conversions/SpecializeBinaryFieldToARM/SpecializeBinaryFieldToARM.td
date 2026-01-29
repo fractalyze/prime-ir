@@ -50,6 +50,10 @@ def SpecializeBinaryFieldToARM : Pass<"specialize-binary-field-to-arm", "ModuleO
   let options = [
     Option<"usePMULL", "use-pmull", "bool", /*default=*/"true",
            "Use PMULL instructions for binary field operations">,
+    Option<"usePolyval", "use-polyval", "bool", /*default=*/"false",
+           "Use Polyval polynomial (X^128+X^127+X^126+X^121+1) with Montgomery "
+           "reduction for bf<128>. Faster than Tower polynomial but produces "
+           "different field representation.">,
   ];
 }
 
