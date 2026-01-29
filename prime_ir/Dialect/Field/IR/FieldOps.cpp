@@ -1359,7 +1359,8 @@ bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
     if (!primeFieldType) {
       return false;
     }
-    PrimeFieldOperation valueOp(intAttr.getValue(), primeFieldType);
+    PrimeFieldOperation valueOp =
+        PrimeFieldOperation::fromUnchecked(intAttr.getValue(), primeFieldType);
     PrimeFieldType stdType = primeFieldType;
     if (primeFieldType.isMontgomery()) {
       stdType = cast<PrimeFieldType>(getStandardFormType(primeFieldType));
@@ -1383,7 +1384,8 @@ bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
     if (!primeFieldType) {
       return false;
     }
-    PrimeFieldOperation valueOp(intAttr.getValue(), primeFieldType);
+    PrimeFieldOperation valueOp =
+        PrimeFieldOperation::fromUnchecked(intAttr.getValue(), primeFieldType);
     PrimeFieldType stdType = primeFieldType;
     if (primeFieldType.isMontgomery()) {
       stdType = cast<PrimeFieldType>(getStandardFormType(primeFieldType));
