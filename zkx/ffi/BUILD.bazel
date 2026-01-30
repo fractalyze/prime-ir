@@ -73,6 +73,36 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "ffi",
+    hdrs = ["ffi.h"],
+    deps = [
+        ":execution_context",
+        ":execution_state",
+        "//xla/tsl/concurrency:async_value",
+        "//zkx:executable_run_options",
+        "//zkx:primitive_util",
+        "//zkx:types",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/ffi/api",
+        "//zkx/ffi/api:c_api",
+        "//zkx/ffi/api:c_api_internal",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/stream_executor:device_memory",
+        "//zkx/stream_executor:device_memory_allocator",
+        "//zkx/stream_executor:scratch_allocator",
+        "//zkx/stream_executor:stream",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/base:nullability",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "type_id_registry",
     srcs = ["type_id_registry.cc"],
     hdrs = ["type_id_registry.h"],

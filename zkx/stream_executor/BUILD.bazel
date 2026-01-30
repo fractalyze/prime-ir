@@ -319,6 +319,18 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "scratch_allocator",
+    hdrs = ["scratch_allocator.h"],
+    deps = [
+        ":device_memory",
+        ":device_memory_allocator",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "semantic_version",
     srcs = ["semantic_version.cc"],
     hdrs = ["semantic_version.h"],
