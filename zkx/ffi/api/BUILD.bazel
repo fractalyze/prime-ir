@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+load("//bazel:zkx_cc.bzl", "zkx_cc_unittest")
 
 package(
     default_visibility = ["//visibility:public"],
@@ -119,5 +120,31 @@ cc_library(
         ":api",
         ":c_api",
         "@zk_dtypes//zk_dtypes:all_types",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "api_unittests",
+    srcs = ["ffi_unittest.cc"],
+    deps = [
+        ":c_api",
+        ":ffi",
+        "//xla/tsl/concurrency:async_value",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:status",
+        "//zkx:executable_run_options",
+        "//zkx/ffi:call_frame",
+        "//zkx/ffi:execution_context",
+        "//zkx/ffi:execution_state",
+        "//zkx/ffi:ffi_api",
+        "//zkx/ffi:type_id_registry",
+        "//zkx/stream_executor:device_memory",
+        "//zkx/stream_executor:device_memory_allocator",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:status_matchers",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+        "@eigen_archive//:eigen3",
     ],
 )
