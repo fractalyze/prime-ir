@@ -1,0 +1,123 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+#===-------------------------------------------------------------------------------------------===//
+# Code Generation
+#===-------------------------------------------------------------------------------------------===//
+
+cc_binary(
+    name = "emit_zk_dtypes",
+    srcs = ["emit_zk_dtypes.cc"],
+    deps = ["@zk_dtypes//zk_dtypes:all_types"],
+)
+
+genrule(
+    name = "gen_zk_dtypes_list",
+    outs = ["zk_dtypes_list.txt"],
+    cmd = "$(execpath :emit_zk_dtypes) > $@",
+    tools = [":emit_zk_dtypes"],
+)
+
+genrule(
+    name = "gen_ffi_data_types",
+    srcs = [
+        "//zkx:zkx_data.proto",
+        ":zk_dtypes_list.txt",
+    ],
+    outs = ["c_api_data_types.h"],
+    cmd = "$(execpath :gen_ffi_data_types.py) $(location //zkx:zkx_data.proto) $(location :zk_dtypes_list.txt) $@",
+    tools = [":gen_ffi_data_types.py"],
+)
+
+#===-------------------------------------------------------------------------------------------===//
+# Public ZKX FFI API
+#===-------------------------------------------------------------------------------------------===//
+
+# ZKX FFI is a header only library that does not have any dependencies on ZKX. The intent is that
+# users that do want to register custom FFI handlers with ZKX should copy these headers to their
+# project, build a shared object with an ZKX FFI handler implementation, and load it at run time.
+#
+# `api.h` and `ffi.h` headers provide a C++ library for decoding ZKX FFI C API structs into a more
+# user friendly C++ types. Shared objects defining ZKX FFI handlers should be built with private
+# symbol visibility to avoid potential ODR violations coming from template instantiations of
+# different ZKX FFI versions.
+#
+# `ffi.h` defines builtin decoding for canonical ZKX types, but users can add their own decodings
+# with template specializations.
+
+# A user of the FFI interface will only need the headers included in the `all_headers`
+# filegroup: `api.h`, `c_api.h`, `c_api_data_types.h`, and `ffi.h`.
+filegroup(
+    name = "all_headers",
+    srcs = [
+        "api.h",
+        "c_api.h",
+        "ffi.h",
+        ":c_api_data_types.h",
+    ],
+)
+
+filegroup(
+    name = "api_headers",
+    srcs = ["api.h"],
+)
+
+filegroup(
+    name = "c_api_headers",
+    srcs = [
+        "c_api.h",
+        ":c_api_data_types.h",
+    ],
+)
+
+cc_library(
+    name = "api",
+    hdrs = ["api.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":c_api",
+        "@com_google_absl//absl/log:check",
+        "@zk_dtypes//zk_dtypes:all_types",
+    ],
+)
+
+cc_library(
+    name = "c_api",
+    hdrs = [
+        "c_api.h",
+        ":c_api_data_types.h",
+    ],
+)
+
+cc_library(
+    name = "c_api_internal",
+    hdrs = ["c_api_internal.h"],
+    deps = [":c_api"],
+)
+
+cc_library(
+    name = "ffi",
+    hdrs = ["ffi.h"],
+    deps = [
+        ":api",
+        ":c_api",
+        "@zk_dtypes//zk_dtypes:all_types",
+    ],
+)
