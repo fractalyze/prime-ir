@@ -1236,57 +1236,52 @@ absl::Status ShapeVerifier::HandleCall(HloInstruction* call) {
 }
 
 absl::Status ShapeVerifier::HandleCustomCall(HloInstruction* instruction) {
-  // TODO(chokobole): Uncomment this. Dependency: HloCustomCallInstruction
-  // const HloCustomCallInstruction* custom_call =
-  //     DynCast<const HloCustomCallInstruction>(instruction);
-  // TF_RET_CHECK(custom_call != nullptr);
-  // if (custom_call->layout_constrained() &&
-  //     !custom_call->IsCustomCall("LayoutConstraint")) {
-  //   // If the layout is constrained, verify all the respective shapes have
-  //   // layouts and that the constrained operand shapes match the shapes of
-  //   the
-  //   // operands.
-  //   TF_RET_CHECK(LayoutUtil::HasLayout(custom_call->shape()));
-  //   TF_RET_CHECK(custom_call->operand_count() ==
-  //                custom_call->operand_shapes_with_layout().size());
-  //   for (int64_t i = 0; i < custom_call->operand_count(); ++i) {
-  //     const Shape& operand_shape_with_layout =
-  //         custom_call->operand_shapes_with_layout()[i];
-  //     TF_RET_CHECK(ShapeUtil::Compatible(custom_call->operand(i)->shape(),
-  //                                        operand_shape_with_layout))
-  //         << custom_call->operand(i)->shape().ToString(true) << " operand "
-  //         << operand_shape_with_layout.ToString();
-  //     TF_RET_CHECK(LayoutUtil::HasLayout(operand_shape_with_layout));
-  //   }
-  // }
-  // for (const auto& pair : custom_call->output_to_operand_aliasing()) {
-  //   TF_RET_CHECK(pair.second.first < custom_call->operand_count())
-  //       << "Invalid aliasing operand index.";
-  //   TF_RET_CHECK(ShapeUtil::IndexIsValid(
-  //       custom_call->operand(pair.second.first)->shape(),
-  //       pair.second.second))
-  //       << "Invalid aliasing operand shape index.";
-  //   TF_RET_CHECK(ShapeUtil::IndexIsValid(custom_call->shape(), pair.first))
-  //       << "Invalid aliasing output shape index.";
-  //   const Shape& output_subshape =
-  //       ShapeUtil::GetSubshape(custom_call->shape(), pair.first);
-  //   const Shape& operand_subshape = ShapeUtil::GetSubshape(
-  //       custom_call->operand(pair.second.first)->shape(),
-  //       pair.second.second);
-  //   if (opts_.layout_sensitive) {
-  //     TF_RET_CHECK(operand_subshape == output_subshape)
-  //         << "Different aliasing shapes: "
-  //         << operand_subshape.ToString(/*print_layout=*/true) << " vs "
-  //         << output_subshape.ToString(/*print_layout=*/true);
-  //   } else {
-  //     TF_RET_CHECK(ShapeUtil::Compatible(output_subshape, operand_subshape))
-  //         << "Different aliasing shapes: "
-  //         << operand_subshape.ToString(/*print_layout=*/true) << " vs "
-  //         << output_subshape.ToString(/*print_layout=*/true);
-  //   }
-  // }
-  // return absl::OkStatus();
-  return absl::UnimplementedError("HandleCustomCall not supported");
+  const HloCustomCallInstruction* custom_call =
+      DynCast<const HloCustomCallInstruction>(instruction);
+  TF_RET_CHECK(custom_call != nullptr);
+  if (custom_call->layout_constrained() &&
+      !custom_call->IsCustomCall("LayoutConstraint")) {
+    // If the layout is constrained, verify all the respective shapes have
+    // layouts and that the constrained operand shapes match the shapes of the
+    // operands.
+    TF_RET_CHECK(LayoutUtil::HasLayout(custom_call->shape()));
+    TF_RET_CHECK(custom_call->operand_count() ==
+                 custom_call->operand_shapes_with_layout().size());
+    for (int64_t i = 0; i < custom_call->operand_count(); ++i) {
+      const Shape& operand_shape_with_layout =
+          custom_call->operand_shapes_with_layout()[i];
+      TF_RET_CHECK(ShapeUtil::Compatible(custom_call->operand(i)->shape(),
+                                         operand_shape_with_layout))
+          << custom_call->operand(i)->shape().ToString(true) << " operand "
+          << operand_shape_with_layout.ToString();
+      TF_RET_CHECK(LayoutUtil::HasLayout(operand_shape_with_layout));
+    }
+  }
+  for (const auto& pair : custom_call->output_to_operand_aliasing()) {
+    TF_RET_CHECK(pair.second.first < custom_call->operand_count())
+        << "Invalid aliasing operand index.";
+    TF_RET_CHECK(ShapeUtil::IndexIsValid(
+        custom_call->operand(pair.second.first)->shape(), pair.second.second))
+        << "Invalid aliasing operand shape index.";
+    TF_RET_CHECK(ShapeUtil::IndexIsValid(custom_call->shape(), pair.first))
+        << "Invalid aliasing output shape index.";
+    const Shape& output_subshape =
+        ShapeUtil::GetSubshape(custom_call->shape(), pair.first);
+    const Shape& operand_subshape = ShapeUtil::GetSubshape(
+        custom_call->operand(pair.second.first)->shape(), pair.second.second);
+    if (opts_.layout_sensitive) {
+      TF_RET_CHECK(operand_subshape == output_subshape)
+          << "Different aliasing shapes: "
+          << operand_subshape.ToString(/*print_layout=*/true) << " vs "
+          << output_subshape.ToString(/*print_layout=*/true);
+    } else {
+      TF_RET_CHECK(ShapeUtil::Compatible(output_subshape, operand_subshape))
+          << "Different aliasing shapes: "
+          << operand_subshape.ToString(/*print_layout=*/true) << " vs "
+          << output_subshape.ToString(/*print_layout=*/true);
+    }
+  }
+  return absl::OkStatus();
 }
 
 absl::Status ShapeVerifier::HandleSlice(HloInstruction* slice) {

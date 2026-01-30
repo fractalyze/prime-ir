@@ -44,6 +44,14 @@ absl::Status EraseElementFromVector(PtrVec<T>* container, T value) {
   container->erase(it);
   return absl::OkStatus();
 }
+
+std::string CustomCallScheduleToString(const CustomCallSchedule& schedule) {
+  return absl::AsciiStrToLower(CustomCallSchedule_Name(schedule));
+}
+
+std::string CustomCallApiVersionToString(const CustomCallApiVersion& version) {
+  return absl::AsciiStrToLower(CustomCallApiVersion_Name(version));
+}
 }  // namespace
 
 void HloInstruction::Users::Clear() {
@@ -790,9 +798,52 @@ absl::StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
       break;
     }
     case HloOpcode::kCustomCall: {
-      // TODO(chokobole): Implement this. Dependency: CreateCustomCall
-      return absl::UnimplementedError(
-          "HloInstruction::CreateFromProto: CustomCall not implemented");
+      if (proto.constrain_layout()) {
+        // A proto RepeatedPtrField cannot be converted to a Span (it is a
+        // vector of pointers essentially) so create a vector of shapes to pass
+        // in.
+        std::vector<Shape> operand_shapes;
+        const auto& operand_shapes_with_layout =
+            proto.operand_shapes_with_layout();
+        operand_shapes.reserve(operand_shapes_with_layout.size());
+        for (const ShapeProto& shape_proto : operand_shapes_with_layout) {
+          operand_shapes.emplace_back(shape_proto);
+        }
+        instruction =
+            CreateCustomCall(shape, all_operands(), proto.custom_call_target(),
+                             operand_shapes, proto.backend_config());
+      } else {
+        if (proto.called_computation_ids_size() == 1) {
+          instruction = CreateCustomCall(shape, all_operands(), computations(0),
+                                         proto.custom_call_target(),
+                                         proto.backend_config());
+        } else if (proto.called_computation_ids_size() > 1) {
+          instruction = CreateCustomCall(
+              shape, all_operands(), all_computations(),
+              proto.custom_call_target(), proto.backend_config());
+        } else {
+          instruction = CreateCustomCall(shape, all_operands(),
+                                         proto.custom_call_target(),
+                                         proto.backend_config());
+        }
+      }
+      auto* custom_call_instr =
+          Cast<HloCustomCallInstruction>(instruction.get());
+      // Note: window_, convolution_dimension_numbers_, feature_group_count_,
+      // batch_group_count_, padding_type_, and precision_config_ are omitted
+      // as ZKX does not support convolution operations.
+      if (proto.has_literal()) {
+        TF_ASSIGN_OR_RETURN(
+            auto literal,
+            Literal::CreateFromProto(proto.literal(), prohibit_empty_literal));
+        custom_call_instr->set_literal(std::move(literal));
+      }
+      custom_call_instr->set_custom_call_has_side_effect(
+          proto.custom_call_has_side_effect());
+      custom_call_instr->set_output_to_operand_aliasing(
+          output_to_operand_aliasing());
+      custom_call_instr->set_custom_call_schedule(proto.custom_call_schedule());
+      custom_call_instr->set_api_version(proto.custom_call_api_version());
       break;
     }
     case HloOpcode::kPad:
@@ -1942,10 +1993,9 @@ bool HloInstruction::HasSideEffectNoRecurse() const {
       return Cast<HloChannelInstruction>(this)->channel_id().has_value() &&
              !GetModule()->config().use_spmd_partitioning();
 
-    // TODO(chokobole): Uncomment this. Dependency: HloCustomCallInstruction
-    // case HloOpcode::kCustomCall:
-    //   return Cast<HloCustomCallInstruction>(this)
-    //       ->custom_call_has_side_effect();
+    case HloOpcode::kCustomCall:
+      return Cast<HloCustomCallInstruction>(this)
+          ->custom_call_has_side_effect();
     default:
       return false;
   }
@@ -1992,6 +2042,43 @@ std::unique_ptr<HloInstruction> HloInstruction::CreateCompositeCall(
     const std::string& attributes, int64_t version) {
   return std::make_unique<HloCallInstruction>(shape, operands, decomposition,
                                               name, attributes, version);
+}
+
+std::unique_ptr<HloInstruction> HloInstruction::CreateCustomCall(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    std::string_view custom_call_target, std::string opaque,
+    CustomCallApiVersion api_version) {
+  return std::make_unique<HloCustomCallInstruction>(
+      shape, operands, custom_call_target, std::move(opaque), api_version);
+}
+
+std::unique_ptr<HloInstruction> HloInstruction::CreateCustomCall(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    HloComputation* to_apply, std::string_view custom_call_target,
+    std::string opaque, CustomCallApiVersion api_version) {
+  return std::make_unique<HloCustomCallInstruction>(
+      shape, operands, to_apply, custom_call_target, std::move(opaque),
+      api_version);
+}
+
+std::unique_ptr<HloInstruction> HloInstruction::CreateCustomCall(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    absl::Span<HloComputation* const> called_computations,
+    std::string_view custom_call_target, std::string opaque,
+    CustomCallApiVersion api_version) {
+  return std::make_unique<HloCustomCallInstruction>(
+      shape, operands, called_computations, custom_call_target,
+      std::move(opaque), api_version);
+}
+
+std::unique_ptr<HloInstruction> HloInstruction::CreateCustomCall(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    std::string_view custom_call_target,
+    absl::Span<const Shape> operand_shapes_with_layout, std::string opaque,
+    CustomCallApiVersion api_version) {
+  return std::make_unique<HloCustomCallInstruction>(
+      shape, operands, custom_call_target, std::move(opaque),
+      operand_shapes_with_layout, api_version);
 }
 
 // static
@@ -2487,6 +2574,15 @@ void HloInstruction::RemoveOperandsAtAscendingIndices(
   }
   CHECK_EQ(removed_count, ascending_indices.size());
   operands_.resize(operands_.size() - removed_count);
+}
+
+bool HloInstruction::HasConstantOperand() const {
+  for (const HloInstruction* operand : operands_) {
+    if (operand->IsConstant()) {
+      return true;
+    }
+  }
+  return false;
 }
 
 bool HloInstruction::IdenticalSlowPath(
@@ -3574,6 +3670,16 @@ bool HloInstruction::IsFused() const {
   return parent_ != nullptr && parent_->IsFusionComputation();
 }
 
+bool HloInstruction::IsCustomCall(std::string_view target) const {
+  return opcode() == HloOpcode::kCustomCall && custom_call_target() == target;
+}
+
+bool HloInstruction::IsCustomCall(
+    absl::Span<const std::string_view> targets) const {
+  return opcode() == HloOpcode::kCustomCall &&
+         absl::c_linear_search(targets, custom_call_target());
+}
+
 bool HloInstruction::IsInputFusion() const {
   return opcode() == HloOpcode::kFusion && fusion_kind() == FusionKind::kInput;
 }
@@ -4603,6 +4709,14 @@ void HloInstruction::set_output_to_operand_aliasing(
       std::move(aliasing));
 }
 
+const std::string& HloInstruction::custom_call_target() const {
+  return Cast<HloCustomCallInstruction>(this)->custom_call_target();
+}
+
+void HloInstruction::set_custom_call_target(std::string_view target) {
+  Cast<HloCustomCallInstruction>(this)->set_custom_call_target(target);
+}
+
 std::string_view ToString(HloInstruction::FusionKind kind) {
   switch (kind) {
     case HloInstruction::FusionKind::kLoop:
@@ -4616,6 +4730,46 @@ std::string_view ToString(HloInstruction::FusionKind kind) {
   }
 }
 
+absl::StatusOr<CustomCallSchedule> StringToCustomCallSchedule(
+    std::string_view name) {
+  static const absl::flat_hash_map<std::string, CustomCallSchedule>* map = [] {
+    static auto* map = absl::IgnoreLeak(
+        new absl::flat_hash_map<std::string, CustomCallSchedule>);
+    for (int i = 0; i < CustomCallSchedule_ARRAYSIZE; i++) {
+      if (CustomCallSchedule_IsValid(i)) {
+        auto value = static_cast<CustomCallSchedule>(i);
+        (*map)[CustomCallScheduleToString(value)] = value;
+      }
+    }
+    return map;
+  }();
+  auto found = map->find(absl::AsciiStrToLower(name));
+  if (found == map->end()) {
+    return absl::InvalidArgumentError("Unknown schedule");
+  }
+  return found->second;
+}
+
+absl::StatusOr<CustomCallApiVersion> StringToCustomCallApiVersion(
+    std::string_view name) {
+  static const absl::flat_hash_map<std::string, CustomCallApiVersion>* map =
+      [] {
+        static auto* map = absl::IgnoreLeak(
+            new absl::flat_hash_map<std::string, CustomCallApiVersion>);
+        for (int i = 0; i < CustomCallApiVersion_ARRAYSIZE; i++) {
+          if (CustomCallApiVersion_IsValid(i)) {
+            auto value = static_cast<CustomCallApiVersion>(i);
+            (*map)[CustomCallApiVersionToString(value)] = value;
+          }
+        }
+        return map;
+      }();
+  auto found = map->find(absl::AsciiStrToLower(name));
+  if (found == map->end()) {
+    return absl::InvalidArgumentError("Unknown API version");
+  }
+  return found->second;
+}
 absl::StatusOr<HloInstruction::FusionKind> StringToFusionKind(
     std::string_view kind_name) {
   if (kind_name == "kLoop") {

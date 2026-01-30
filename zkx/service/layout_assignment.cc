@@ -2622,7 +2622,7 @@ absl::StatusOr<bool> LayoutAssignment::Run(
         }
       }
     }
-    for (const auto [instruction, operand_no] : operands_to_copy) {
+    for (const auto& [instruction, operand_no] : operands_to_copy) {
       TF_RETURN_IF_ERROR(AddCopyForOperand(instruction, operand_no));
     }
     operands_to_copy.clear();
