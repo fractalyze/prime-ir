@@ -80,3 +80,24 @@ func.func @test_linalg_transpose(%input : tensor<2x3x!PF>) -> tensor<3x2x!PF> {
   // CHECK: return %[[RES]] : [[OUTPUT_TYPE]]
   return %res : tensor<3x2x!PF>
 }
+
+// CHECK-LABEL: @test_linalg_fill
+// CHECK-SAME: (%[[VALUE:.*]]: [[VALUE_TYPE:.*]], %[[INIT:.*]]: [[INIT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_linalg_fill(%value : !PF, %init: tensor<4x!PF>) -> tensor<4x!PF> {
+  // CHECK: %[[RES:.*]] = linalg.fill ins(%[[VALUE]] : [[VALUE_TYPE]]) outs(%[[INIT]] : [[INIT_TYPE]]) -> [[T]]
+  %res = linalg.fill ins(%value : !PF) outs(%init : tensor<4x!PF>) -> tensor<4x!PF>
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<4x!PF>
+}
+
+// CHECK-LABEL: @test_tensor_generate
+// CHECK-SAME: (%[[VALUE:.*]]: [[VALUE_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_tensor_generate(%value : !PF) -> tensor<4x!PF> {
+  // CHECK: %[[RES:.*]] = tensor.generate {
+  %res = tensor.generate {
+    ^bb0(%i : index):
+      tensor.yield %value : !PF
+  } : tensor<4x!PF>
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<4x!PF>
+}
