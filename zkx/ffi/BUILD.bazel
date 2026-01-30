@@ -19,6 +19,36 @@ package(
 )
 
 zkx_cc_library(
+    name = "execution_context",
+    srcs = ["execution_context.cc"],
+    hdrs = ["execution_context.h"],
+    deps = [
+        ":type_id_registry",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:function_ref",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "execution_state",
+    srcs = ["execution_state.cc"],
+    hdrs = ["execution_state.h"],
+    deps = [
+        ":type_id_registry",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
     name = "type_id_registry",
     srcs = ["type_id_registry.cc"],
     hdrs = ["type_id_registry.h"],
@@ -35,9 +65,16 @@ zkx_cc_library(
 
 zkx_cc_unittest(
     name = "ffi_unittests",
-    srcs = ["type_id_registry_unittest.cc"],
+    srcs = [
+        "execution_context_unittest.cc",
+        "execution_state_unittest.cc",
+        "type_id_registry_unittest.cc",
+    ],
     deps = [
+        ":execution_context",
+        ":execution_state",
         ":type_id_registry",
+        "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/status",
     ],
