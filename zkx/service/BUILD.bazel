@@ -662,6 +662,28 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "hlo_domain_map",
+    srcs = ["hlo_domain_map.cc"],
+    hdrs = ["hlo_domain_map.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:map_util",
+        "//zkx:status_macros",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_domain_metadata",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "hlo_graph_dumper",
     srcs = ["hlo_graph_dumper.cc"],
     hdrs = ["hlo_graph_dumper.h"],

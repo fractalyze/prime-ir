@@ -130,10 +130,28 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "hlo_cse",
+    srcs = ["hlo_cse.cc"],
+    hdrs = ["hlo_cse.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:literal",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:hlo_domain_map",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
 zkx_cc_unittest(
     name = "simplifiers_unittests",
     srcs = [
         "flatten_call_graph_unittest.cc",
+        "hlo_cse_unittest.cc",
         "hlo_dce_unittest.cc",
         "hlo_memory_scheduler_unittest.cc",
         "optimize_input_output_buffer_alias_unittest.cc",
@@ -142,6 +160,7 @@ zkx_cc_unittest(
     ],
     deps = [
         ":flatten_call_graph",
+        ":hlo_cse",
         ":hlo_dce",
         ":hlo_memory_scheduler",
         ":optimize_input_output_buffer_alias",
@@ -158,6 +177,7 @@ zkx_cc_unittest(
         "//zkx/hlo/analysis:hlo_alias_analysis",
         "//zkx/hlo/analysis:hlo_ordering",
         "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/parser:hlo_parser",
         "//zkx/hlo/testlib:hlo_hardware_independent_test_base",
         "//zkx/hlo/testlib:pattern_matcher_gmock",
         "//zkx/hlo/utils:hlo_matchers",
@@ -171,6 +191,7 @@ zkx_cc_unittest(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
 )
