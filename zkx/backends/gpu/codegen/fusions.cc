@@ -22,6 +22,7 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/strings/match.h"
 
+#include "zkx/backends/gpu/codegen/emitters/in_place_dynamic_update_slice.h"
 #include "zkx/backends/gpu/codegen/emitters/loop.h"
 #include "zkx/layout_util.h"
 
@@ -90,11 +91,7 @@ std::unique_ptr<FusionInterface> GetFusionEmitter(
     case HloFusionAnalysis::EmitterFusionKind::kLoop: {
       if (IsDynamicUpdateSliceFusion(analysis) &&
           fusion_info.CanEmitDynamicUpdateSliceInPlace()) {
-        // clang-format off
-        // TODO(chokobole): Implement this. Dependency: InPlaceDynamicUpdateSliceFusion
-        // clang-format on
-        // return std::make_unique<InPlaceDynamicUpdateSliceFusion>(analysis);
-        return nullptr;
+        return std::make_unique<InPlaceDynamicUpdateSliceFusion>(analysis);
       }
       if (auto copy_fusion = fusion_info.GetCopyFusion()) {
         return *std::move(copy_fusion);
