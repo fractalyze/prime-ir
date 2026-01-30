@@ -12,6 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
+
 package(
     default_visibility = ["//visibility:public"],
+)
+
+zkx_cc_library(
+    name = "type_id_registry",
+    srcs = ["type_id_registry.cc"],
+    hdrs = ["type_id_registry.h"],
+    deps = [
+        "//xla/tsl/lib/gtl:int_type",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "ffi_unittests",
+    srcs = ["type_id_registry_unittest.cc"],
+    deps = [
+        ":type_id_registry",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/status",
+    ],
 )
