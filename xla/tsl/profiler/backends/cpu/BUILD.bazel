@@ -42,6 +42,20 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "host_tracer_utils",
+    srcs = ["host_tracer_utils.cc"],
+    hdrs = ["host_tracer_utils.h"],
+    deps = [
+        ":traceme_recorder",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "//xla/tsl/profiler/utils:parse_annotation",
+        "//xla/tsl/profiler/utils:tf_op_utils",
+        "//xla/tsl/profiler/utils:xplane_builder",
+        "//xla/tsl/profiler/utils:xplane_utils",
+    ],
+)
+
 zkx_cc_unittest(
     name = "cpu_unittests",
     srcs = ["traceme_recorder_unittest.cc"],
