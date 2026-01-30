@@ -42,7 +42,9 @@ FieldOperation::operator SmallVector<APInt>() const {
           llvm_unreachable(
               "Cannot convert PrimeFieldOperation to SmallVector<APInt>");
         } else {
-          return static_cast<SmallVector<APInt>>(op);
+          // Both non-tower and tower extension fields can be flattened
+          // to SmallVector<APInt> using flattenToPrimeCoeffs()
+          return op.flattenToPrimeCoeffs();
         }
       },
       operation);

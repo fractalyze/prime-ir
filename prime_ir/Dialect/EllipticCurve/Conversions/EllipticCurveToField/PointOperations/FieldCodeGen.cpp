@@ -82,44 +82,10 @@ Value FieldCodeGen::IsZero() const {
   return b->create<field::CmpOp>(arith::CmpIPredicate::eq, value, zero);
 }
 
-namespace {
-
-template <size_t N>
-struct DegreeDispatcher {
-  static std::optional<FieldCodeGen>
-  dispatch(size_t degree, ImplicitLocOpBuilder *b, Type type, int64_t constant,
-           field::ExtensionFieldType efType) {
-    if (degree == N) {
-      return FieldCodeGen(b->create<field::ConstantOp>(
-          type, field::ExtensionFieldOperation<N>(constant, efType)
-                    .getDenseIntElementsAttr()));
-    }
-    if constexpr (N > field::kMinExtDegree) {
-      return DegreeDispatcher<N - 1>::dispatch(degree, b, type, constant,
-                                               efType);
-    }
-    return std::nullopt;
-  }
-};
-
-} // namespace
-
 FieldCodeGen FieldCodeGen::CreateConst(int64_t constant) const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  if (auto pfType = dyn_cast<field::PrimeFieldType>(value.getType())) {
-    return FieldCodeGen(b->create<field::ConstantOp>(
-        value.getType(),
-        field::PrimeFieldOperation(constant, pfType).getIntegerAttr()));
-  } else if (auto efType =
-                 dyn_cast<field::ExtensionFieldType>(value.getType())) {
-    size_t degree = efType.getDegreeOverPrime();
-    auto result = DegreeDispatcher<field::kMaxExtDegree>::dispatch(
-        degree, b, value.getType(), constant, efType);
-    if (result)
-      return *result;
-    llvm_unreachable("Unsupported extension field degree");
-  }
-  llvm_unreachable("Unsupported field type");
+  return FieldCodeGen(
+      field::createFieldConstant(value.getType(), *b, constant));
 }
 
 } // namespace mlir::prime_ir::elliptic_curve

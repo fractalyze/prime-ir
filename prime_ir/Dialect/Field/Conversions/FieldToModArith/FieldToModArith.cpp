@@ -110,8 +110,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
         return failure();
       }
 
+      // For tower extensions, use the underlying prime field
       auto modType = cast<mod_arith::ModArithType>(
-          typeConverter->convertType(efType.getBaseField()));
+          typeConverter->convertType(efType.getBasePrimeField()));
       unsigned degree = efType.getDegreeOverPrime();
 
       auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
@@ -143,16 +144,19 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       return failure();
     }
 
+    // For tower extensions, use the underlying prime field
     auto modType = cast<mod_arith::ModArithType>(
-        typeConverter->convertType(efType.getBaseField()));
+        typeConverter->convertType(efType.getBasePrimeField()));
 
     auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
-    SmallVector<Value> coeffs;
+    SmallVector<Value> primeCoeffs;
     for (auto coeff : denseAttr.getValues<APInt>()) {
       auto coeffAttr = IntegerAttr::get(modType.getStorageType(), coeff);
-      coeffs.push_back(b.create<mod_arith::ConstantOp>(modType, coeffAttr));
+      primeCoeffs.push_back(
+          b.create<mod_arith::ConstantOp>(modType, coeffAttr));
     }
-    rewriter.replaceOp(op, fromCoeffs(b, op.getType(), coeffs));
+    // Use fromPrimeCoeffs to properly handle tower extension fields
+    rewriter.replaceOp(op, fromPrimeCoeffs(b, efType, primeCoeffs));
     return success();
   }
 };
@@ -228,8 +232,9 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      auto baseField = cast<PrimeFieldType>(efType.getBaseField());
-      Type baseModArithType = typeConverter->convertType(baseField);
+      // Use getBasePrimeField() to handle both direct and tower extensions
+      auto basePrimeField = efType.getBasePrimeField();
+      Type baseModArithType = typeConverter->convertType(basePrimeField);
       auto coeffs = toCoeffs(b, adaptor.getInput());
 
       SmallVector<Value> montCoeffs;
@@ -264,8 +269,9 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
       return success();
     }
     if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      auto baseField = cast<PrimeFieldType>(efType.getBaseField());
-      Type baseModArithType = typeConverter->convertType(baseField);
+      // Use getBasePrimeField() to handle both direct and tower extensions
+      auto basePrimeField = efType.getBasePrimeField();
+      Type baseModArithType = typeConverter->convertType(basePrimeField);
       auto coeffs = toCoeffs(b, adaptor.getInput());
 
       SmallVector<Value> stdCoeffs;
@@ -281,10 +287,10 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
 };
 
 struct ConvertInverse : public OpConversionPattern<InverseOp> {
-  explicit ConvertInverse(MLIRContext *context)
-      : OpConversionPattern<InverseOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertInverse(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<InverseOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
@@ -300,10 +306,10 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
 };
 
 struct ConvertNegate : public OpConversionPattern<NegateOp> {
-  explicit ConvertNegate(MLIRContext *context)
-      : OpConversionPattern<NegateOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertNegate(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<NegateOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(NegateOp op, OpAdaptor adaptor,
@@ -319,10 +325,10 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
 };
 
 struct ConvertAdd : public OpConversionPattern<AddOp> {
-  explicit ConvertAdd(MLIRContext *context)
-      : OpConversionPattern<AddOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertAdd(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<AddOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
@@ -339,10 +345,10 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
 };
 
 struct ConvertDouble : public OpConversionPattern<DoubleOp> {
-  explicit ConvertDouble(MLIRContext *context)
-      : OpConversionPattern<DoubleOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertDouble(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<DoubleOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(DoubleOp op, OpAdaptor adaptor,
@@ -358,10 +364,10 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
 };
 
 struct ConvertSub : public OpConversionPattern<SubOp> {
-  explicit ConvertSub(MLIRContext *context)
-      : OpConversionPattern<SubOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertSub(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<SubOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(SubOp op, OpAdaptor adaptor,
@@ -378,10 +384,10 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 };
 
 struct ConvertMul : public OpConversionPattern<MulOp> {
-  explicit ConvertMul(MLIRContext *context)
-      : OpConversionPattern<MulOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertMul(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<MulOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(MulOp op, OpAdaptor adaptor,
@@ -398,10 +404,10 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 };
 
 struct ConvertSquare : public OpConversionPattern<SquareOp> {
-  explicit ConvertSquare(MLIRContext *context)
-      : OpConversionPattern<SquareOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertSquare(const TypeConverter &typeConverter, MLIRContext *context)
+      : OpConversionPattern<SquareOp>(typeConverter, context) {
+    setHasBoundedRewriteRecursion(true);
+  }
 
   LogicalResult
   matchAndRewrite(SquareOp op, OpAdaptor adaptor,
@@ -448,9 +454,7 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
         init = b.create<ToMontOp>(montType, init);
       }
     } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      // TODO(chokobole): Support towers of extension field.
-      modulus =
-          cast<PrimeFieldType>(efType.getBaseField()).getModulus().getValue();
+      modulus = efType.getBasePrimeField().getModulus().getValue();
       init = field::createFieldOne(efType, b);
     } else {
       op.emitOpError("unsupported output type");
@@ -498,10 +502,10 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       exp = b.create<arith::RemUIOp>(
           exp, b.create<arith::ConstantIntOp>(intType, modulus - 1));
     } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      unsigned degree = efType.getDegree();
-      modulus = modulus.zext(modBitWidth * degree);
+      unsigned degreeOverPrime = efType.getDegreeOverPrime();
+      modulus = modulus.zext(modBitWidth * degreeOverPrime);
       APInt order = modulus;
-      for (unsigned i = 1; i < degree; ++i) {
+      for (unsigned i = 1; i < degreeOverPrime; ++i) {
         order = order * modulus;
       }
       order = order - 1;

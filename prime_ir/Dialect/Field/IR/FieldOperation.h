@@ -17,22 +17,22 @@
 #define PRIME_IR_DIALECT_FIELD_IR_FIELDOPERATION_H_
 
 #include <cassert>
+#include <variant>
 
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointOperationBaseForward.h"
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/PrimeFieldOperation.h"
+#include "prime_ir/Dialect/Field/IR/TowerFieldConfig.h"
 #include "zk_dtypes/include/geometry/point_declarations.h"
 
 namespace mlir::prime_ir::field {
 
 class FieldOperation {
 public:
-  using OperationType =
-      std::variant<PrimeFieldOperation, QuadraticExtensionFieldOperation,
-                   CubicExtensionFieldOperation,
-                   QuarticExtensionFieldOperation>;
+  using OperationType = TOWER_FIELD_VARIANT(PrimeFieldOperation,
+                                            ExtensionFieldOperation, Op);
 
   FieldOperation() = default;
 
@@ -155,41 +155,22 @@ private:
 
   template <typename T>
   void createExtFieldOp(T &&value, ExtensionFieldType efType) {
-    unsigned degree = efType.getDegree();
-    switch (degree) {
-    case 2:
-      operation = ExtensionFieldOperation<2>(std::forward<T>(value), efType);
-      break;
-    case 3:
-      operation = ExtensionFieldOperation<3>(std::forward<T>(value), efType);
-      break;
-    case 4:
-      operation = ExtensionFieldOperation<4>(std::forward<T>(value), efType);
-      break;
-    default:
-      llvm_unreachable("Unsupported extension field degree");
-    }
+    auto sig = getTowerSignature(efType);
+#define CREATE_EXT_FIELD_OP(unused_sig, TypeName)                              \
+  operation = TypeName(std::forward<T>(value), efType);
+    DISPATCH_TOWER_BY_SIGNATURE(sig, CREATE_EXT_FIELD_OP,
+                                ExtensionFieldOperation, Op)
+#undef CREATE_EXT_FIELD_OP
   }
 
   template <typename T>
   void createRawExtFieldOp(T &&value, ExtensionFieldType efType) {
-    unsigned degree = efType.getDegree();
-    switch (degree) {
-    case 2:
-      operation = ExtensionFieldOperation<2>::fromUnchecked(
-          std::forward<T>(value), efType);
-      break;
-    case 3:
-      operation = ExtensionFieldOperation<3>::fromUnchecked(
-          std::forward<T>(value), efType);
-      break;
-    case 4:
-      operation = ExtensionFieldOperation<4>::fromUnchecked(
-          std::forward<T>(value), efType);
-      break;
-    default:
-      llvm_unreachable("Unsupported extension field degree");
-    }
+    auto sig = getTowerSignature(efType);
+#define CREATE_RAW_EXT_FIELD_OP(unused_sig, TypeName)                          \
+  operation = TypeName::fromUnchecked(std::forward<T>(value), efType);
+    DISPATCH_TOWER_BY_SIGNATURE(sig, CREATE_RAW_EXT_FIELD_OP,
+                                ExtensionFieldOperation, Op)
+#undef CREATE_RAW_EXT_FIELD_OP
   }
 
   OperationType operation;

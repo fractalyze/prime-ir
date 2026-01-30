@@ -49,6 +49,7 @@ cc_library(
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Utils:BuilderContext",
         "@llvm-project//mlir:IR",
+        "@zk_dtypes//zk_dtypes:extension_field_operation_traits_forward",
     ],
 )
 
@@ -57,10 +58,12 @@ cc_library(
     srcs = ["FieldCodeGen.cpp"],
     hdrs = ["FieldCodeGen.h"],
     deps = [
+        ":ConversionUtils",
         ":ExtensionFieldCodeGen",
         ":PrimeFieldCodeGen",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Utils:BuilderContext",
+        "@llvm-project//mlir:IR",
         "@llvm-project//mlir:TransformUtils",
     ],
 )
