@@ -18,8 +18,8 @@ limitations under the License.
 
 #include "absl/log/log.h"
 #include "absl/strings/str_join.h"
-#include "zk_dtypes/include/all_types.h"
 
+#include "zk_dtypes/include/all_types.h"
 #include "zkx/backends/cpu/collectives/cpu_clique_key.h"
 #include "zkx/backends/cpu/collectives/cpu_cliques.h"
 #include "zkx/status_macros.h"

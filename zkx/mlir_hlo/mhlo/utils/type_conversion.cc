@@ -25,9 +25,9 @@ limitations under the License.
 #include "mlir/IR/Types.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LLVM.h"
+#include "stablehlo/dialect/StablehloOps.h"
 
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h"
-#include "zkx/mlir_hlo/stablehlo/dialect/StablehloOps.h"
 
 namespace mlir {
 namespace mhlo {

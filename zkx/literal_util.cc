@@ -22,10 +22,10 @@ limitations under the License.
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+
 #include "zk_dtypes/include/big_int.h"
 #include "zk_dtypes/include/field/prime_field.h"
 #include "zk_dtypes/include/geometry/point_declarations.h"
-
 #include "zkx/base/containers/container_util.h"
 
 namespace zkx {

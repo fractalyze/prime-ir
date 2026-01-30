@@ -16,10 +16,10 @@ limitations under the License.
 #include "zkx/math/elliptic_curve/short_weierstrass/jacobian_point_serde.h"
 
 #include "gtest/gtest.h"
-#include "zk_dtypes/include/elliptic_curve/short_weierstrass/test/sw_curve_config.h"
 
 #include "xla/tsl/platform/status.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zk_dtypes/include/elliptic_curve/short_weierstrass/test/sw_curve_config.h"
 #include "zkx/base/buffer/vector_buffer.h"
 
 namespace zkx {

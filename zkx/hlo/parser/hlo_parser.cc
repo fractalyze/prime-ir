@@ -28,11 +28,11 @@ limitations under the License.
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "google/protobuf/message.h"
+
+#include "xla/tsl/lib/gtl/map_util.h"
 #include "zk_dtypes/include/all_types.h"
 #include "zk_dtypes/include/field/prime_field.h"
 #include "zk_dtypes/include/geometry/point_declarations.h"
-
-#include "xla/tsl/lib/gtl/map_util.h"
 #include "zkx/comparison_util.h"
 #include "zkx/hlo/ir/collective_device_list.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"

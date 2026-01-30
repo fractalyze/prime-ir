@@ -17,8 +17,9 @@ limitations under the License.
 #ifndef ZKX_MLIR_HLO_MHLO_TRANSFORMS_MAP_STABLEHLO_TO_HLO_OP_H_
 #define ZKX_MLIR_HLO_MHLO_TRANSFORMS_MAP_STABLEHLO_TO_HLO_OP_H_
 
+#include "stablehlo/dialect/StablehloOps.h"
+
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h"
-#include "zkx/mlir_hlo/stablehlo/dialect/StablehloOps.h"
 
 namespace mlir::stablehlo {
 

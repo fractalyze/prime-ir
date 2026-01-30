@@ -22,8 +22,8 @@ limitations under the License.
 #include <string>
 
 #include "absl/status/statusor.h"
-#include "zk_dtypes/include/all_types.h"
 
+#include "zk_dtypes/include/all_types.h"
 #include "zkx/primitive_util.h"
 #include "zkx/python/ifrt/dtype.pb.h"
 #include "zkx/python/ifrt/serdes_default_version_accessor.h"

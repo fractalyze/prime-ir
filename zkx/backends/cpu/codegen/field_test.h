@@ -22,10 +22,10 @@ limitations under the License.
 
 #include "absl/log/check.h"
 #include "absl/strings/substitute.h"
-#include "zk_dtypes/include/batch_inverse.h"
-#include "zk_dtypes/include/field/root_of_unity.h"
 
 #include "xla/tsl/platform/status.h"
+#include "zk_dtypes/include/batch_inverse.h"
+#include "zk_dtypes/include/field/root_of_unity.h"
 #include "zkx/array2d.h"
 #include "zkx/backends/cpu/codegen/cpu_kernel_emitter_test.h"
 #include "zkx/base/containers/container_util.h"

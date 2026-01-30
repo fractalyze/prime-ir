@@ -24,8 +24,8 @@ limitations under the License.
 
 #include "absl/base/casts.h"
 #include "absl/strings/substitute.h"
-#include "zk_dtypes/include/pow.h"
 
+#include "zk_dtypes/include/pow.h"
 #include "zkx/array2d.h"
 #include "zkx/backends/cpu/codegen/cpu_kernel_emitter_test.h"
 #include "zkx/base/containers/container_util.h"

@@ -25,7 +25,6 @@ limitations under the License.
 // clang-format on
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/g1.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/g2.h"
-
 #include "zkx/literal_util.h"
 #include "zkx/math/field/prime_field_serde.h"
 

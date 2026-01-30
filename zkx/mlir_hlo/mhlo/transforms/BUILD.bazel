@@ -49,7 +49,7 @@ zkx_cc_library(
     hdrs = ["map_stablehlo_to_hlo_op.h"],
     deps = [
         "//zkx/mlir_hlo/mhlo/IR:mlir_hlo",
-        "//zkx/mlir_hlo/stablehlo/dialect:stablehlo_ops",
+        "@stablehlo//stablehlo/dialect:stablehlo_ops",
     ],
 )
 

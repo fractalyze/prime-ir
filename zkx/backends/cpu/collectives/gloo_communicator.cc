@@ -29,10 +29,10 @@ limitations under the License.
 #include "gloo/reduce_scatter.h"
 #include "gloo/transport/unbound_buffer.h"
 #include "gloo/types.h"
-#include "zk_dtypes/include/all_types.h"
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zk_dtypes/include/all_types.h"
 #include "zkx/backends/cpu/collectives/cpu_collectives.h"
 #include "zkx/core/collectives/reduction_util.h"
 #include "zkx/primitive_util.h"

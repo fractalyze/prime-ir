@@ -17,9 +17,9 @@ limitations under the License.
 
 #include "absl/strings/substitute.h"
 #include "gtest/gtest.h"
-#include "zk_dtypes/include/elliptic_curve/short_weierstrass/test/sw_curve_config.h"
 
 #include "xla/tsl/platform/status.h"
+#include "zk_dtypes/include/elliptic_curve/short_weierstrass/test/sw_curve_config.h"
 #include "zkx/base/auto_reset.h"
 #include "zkx/base/buffer/vector_buffer.h"
 

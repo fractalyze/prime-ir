@@ -16,11 +16,11 @@ limitations under the License.
 #include "zkx/math/field/prime_field_serde.h"
 
 #include "gtest/gtest.h"
-#include "zk_dtypes/include/all_types.h"
-#include "zk_dtypes/include/elliptic_curve/short_weierstrass/test/sw_curve_config.h"
 
 #include "xla/tsl/platform/status.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zk_dtypes/include/all_types.h"
+#include "zk_dtypes/include/elliptic_curve/short_weierstrass/test/sw_curve_config.h"
 #include "zkx/base/auto_reset.h"
 #include "zkx/base/buffer/vector_buffer.h"
 

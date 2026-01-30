@@ -29,8 +29,7 @@ limitations under the License.
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Support/LLVM.h"
-
-#include "zkx/mlir_hlo/stablehlo/dialect/Base.h"
+#include "stablehlo/dialect/Base.h"
 
 // Include order below matters.
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops_enums.h.inc"

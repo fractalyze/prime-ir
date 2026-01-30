@@ -19,11 +19,11 @@ limitations under the License.
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
+#include "stablehlo/dialect/StablehloOps.h"
 
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "zkx/mlir_hlo/mhlo/transforms/rewriters.h"
 #include "zkx/mlir_hlo/mhlo/utils/type_conversion.h"
-#include "zkx/mlir_hlo/stablehlo/dialect/StablehloOps.h"
 
 namespace mlir::mhlo {
 

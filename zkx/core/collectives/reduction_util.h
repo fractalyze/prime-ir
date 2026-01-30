@@ -17,10 +17,10 @@ limitations under the License.
 #define ZKX_CORE_COLLECTIVES_REDUCTION_UTIL_H_
 
 #include "absl/status/statusor.h"
+
 #include "zk_dtypes/include/comparable_traits.h"
 #include "zk_dtypes/include/field/field.h"
 #include "zk_dtypes/include/group/group.h"
-
 #include "zkx/service/collective_ops_utils.h"
 
 namespace zkx {

@@ -45,12 +45,12 @@ limitations under the License.
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Transforms/InliningUtils.h"
+#include "stablehlo/dialect/AssemblyFormat.h"
+#include "stablehlo/dialect/TypeInference.h"
 
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/IR/Attributes.h"
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h.inc"
-#include "zkx/mlir_hlo/stablehlo/dialect/AssemblyFormat.h"
-#include "zkx/mlir_hlo/stablehlo/dialect/TypeInference.h"
 #include "zkx/mlir_hlo/utils/convert_op_folder.h"
 #include "zkx/mlir_hlo/utils/hlo_utils.h" // IWYU pragma: keep
 

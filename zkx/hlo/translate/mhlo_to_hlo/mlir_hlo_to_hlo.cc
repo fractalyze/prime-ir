@@ -60,6 +60,7 @@ limitations under the License.
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/RegionUtils.h"
 
+#include "stablehlo/dialect/Base.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/comparison_util.h"
@@ -78,7 +79,6 @@ limitations under the License.
 #include "zkx/mlir/utils/error_util.h"
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "zkx/mlir_hlo/mhlo/transforms/passes.h"
-#include "zkx/mlir_hlo/stablehlo/dialect/Base.h"
 #include "zkx/service/gpu/backend_configs.pb.h"
 #include "zkx/service/hlo_module_config.h"
 #include "zkx/shape.h"

@@ -20,10 +20,10 @@ limitations under the License.
 #include "llvm/ADT/ArrayRef.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
-#include "zk_dtypes/include/all_types.h"
 
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
+#include "zk_dtypes/include/all_types.h"
 #include "zkx/layout_util.h"
 #include "zkx/primitive_util.h"
 

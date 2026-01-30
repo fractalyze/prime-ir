@@ -31,13 +31,13 @@ limitations under the License.
 #include "absl/numeric/bits.h"
 #include "absl/strings/str_format.h"
 #include "absl/types/span.h"
+
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/statusor.h"
 #include "zk_dtypes/include/comparable_traits.h"
 #include "zk_dtypes/include/field/field.h"
 #include "zk_dtypes/include/geometry/point_declarations.h"
 #include "zk_dtypes/include/group/group.h"
-
-#include "xla/tsl/platform/errors.h"
-#include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/evaluator/hlo_evaluator.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
 #include "zkx/hlo/ir/hlo_instruction.h"

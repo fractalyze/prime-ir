@@ -24,11 +24,10 @@ limitations under the License.
 // clang-format off
 #include "benchmark/field_flag.h"
 // clang-format on
-#include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
-
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zkx/base/buffer/vector_buffer.h"
 #include "zkx/base/flag/flag_parser.h"
 #include "zkx/base/flag/numeric_flags.h"

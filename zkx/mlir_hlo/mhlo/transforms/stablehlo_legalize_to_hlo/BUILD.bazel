@@ -23,11 +23,11 @@ zkx_cc_library(
     deps = [
         "//zkx/mlir_hlo/mhlo/IR:mlir_hlo",
         "//zkx/mlir_hlo/mhlo/transforms:map_stablehlo_to_hlo_op",
-        "//zkx/mlir_hlo/stablehlo/dialect:stablehlo_ops",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TransformUtils",
+        "@stablehlo//stablehlo/dialect:stablehlo_ops",
     ],
 )
 

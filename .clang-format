@@ -31,7 +31,7 @@ IncludeCategories:
   - Regex:    '^<'
     Priority: 40
   # Your project's h files.
-  - Regex:    '^"(prime_ir|zkx|xla)'
+  - Regex:    '^"(stablehlo|prime_ir|zk_dtypes|zkx|xla)'
     Priority: 50
   # Other libraries' h files (with quotes).
   - Regex:    '^"'

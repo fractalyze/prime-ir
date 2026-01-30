@@ -57,14 +57,13 @@ limitations under the License.
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
+
 #include "zk_dtypes/include/field/root_of_unity.h"
 
 #ifdef ZKX_HAS_OPENMP
 #include "mlir/Conversion/SCFToOpenMP/SCFToOpenMP.h"
 #include "mlir/Target/LLVMIR/Dialect/OpenMP/OpenMPToLLVMIRTranslation.h"
 #endif
-
-#include "zk_dtypes/include/all_types.h"
 
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
@@ -84,6 +83,7 @@ limitations under the License.
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
 #include "xla/tsl/platform/cpu_info.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zk_dtypes/include/all_types.h"
 #include "zkx/backends/cpu/codegen/kernel_api_ir_builder.h"
 #include "zkx/base/bits.h"
 #include "zkx/base/logging.h"

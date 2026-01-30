@@ -19,7 +19,7 @@ limitations under the License.
 
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/Constraints.td"
-include "zkx/mlir_hlo/stablehlo/dialect/Base.td"
+include "stablehlo/dialect/Base.td"
 
 //===----------------------------------------------------------------------===//
 // MHLO type definitions.

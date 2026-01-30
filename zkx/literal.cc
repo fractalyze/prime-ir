@@ -21,11 +21,11 @@ limitations under the License.
 #include "absl/container/inlined_vector.h"
 #include "absl/debugging/leak_check.h"
 #include "absl/numeric/bits.h"
-#include "zk_dtypes/include/all_types.h"
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/mem.h"
 #include "xla/tsl/util/byte_swap_array.h"
+#include "zk_dtypes/include/all_types.h"
 #include "zkx/permutation_util.h"
 #include "zkx/primitive_util.h"
 

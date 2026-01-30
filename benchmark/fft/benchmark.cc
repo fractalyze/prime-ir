@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "absl/base/optimization.h"
 #include "absl/strings/substitute.h"
+
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 
 // clang-format off

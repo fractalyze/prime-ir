@@ -114,7 +114,6 @@ zkx_cc_library(
         "//zkx/mlir/utils:error_util",
         "//zkx/mlir_hlo/mhlo/IR:mlir_hlo",
         "//zkx/mlir_hlo/mhlo/transforms:passes",
-        "//zkx/mlir_hlo/stablehlo/dialect:base",
         "//zkx/service:hlo_module_config",
         "//zkx/service/gpu:backend_configs_cc_proto",
         "@com_google_absl//absl/log:check",
@@ -131,6 +130,7 @@ zkx_cc_library(
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:TransformUtils",
+        "@stablehlo//stablehlo/dialect:base",
     ],
 )
 

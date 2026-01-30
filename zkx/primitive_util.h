@@ -33,6 +33,8 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
+
+#include "xla/tsl/lib/math/math_util.h"
 #include "zk_dtypes/include/all_types.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/g1.h"
@@ -43,8 +45,6 @@ limitations under the License.
 #include "zk_dtypes/include/field/goldilocks/goldilocks.h"
 #include "zk_dtypes/include/field/koalabear/koalabear.h"
 #include "zk_dtypes/include/field/mersenne31/mersenne31.h"
-
-#include "xla/tsl/lib/math/math_util.h"
 #include "zkx/types.h"
 #include "zkx/util.h"
 #include "zkx/zkx_data.pb.h"

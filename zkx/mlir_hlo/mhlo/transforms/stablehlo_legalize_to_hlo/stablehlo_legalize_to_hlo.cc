@@ -28,10 +28,10 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "stablehlo/dialect/StablehloOps.h"
 
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "zkx/mlir_hlo/mhlo/transforms/map_stablehlo_to_hlo_op.h"
-#include "zkx/mlir_hlo/stablehlo/dialect/StablehloOps.h"
 
 namespace mlir::stablehlo {
 namespace {
@@ -225,7 +225,7 @@ void populateStablehloToHloPatterns(RewritePatternSet *patterns,
   // Our guiding principle is to support all StableHLO functionality in MHLO.
   populateStablehloToHloPatterns<
 #define GET_OP_LIST
-#include "zkx/mlir_hlo/stablehlo/dialect/StablehloOps.cpp.inc"
+#include "stablehlo/dialect/StablehloOps.cpp.inc"
       >(patterns, converter, context);
 }
 

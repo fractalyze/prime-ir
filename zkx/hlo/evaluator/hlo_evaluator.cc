@@ -33,10 +33,10 @@ limitations under the License.
 #include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-#include "zk_dtypes/include/comparable_traits.h"
 
 #include "xla/tsl/platform/cpu_info.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zk_dtypes/include/comparable_traits.h"
 #include "zkx/base/logging.h"
 #include "zkx/hlo/evaluator/hlo_evaluator_typed_visitor.h"
 #include "zkx/hlo/ir/hlo_clone_context.h"

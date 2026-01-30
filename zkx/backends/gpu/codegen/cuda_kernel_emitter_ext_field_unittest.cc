@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "zk_dtypes/include/all_types.h"
-
 #include "zkx/backends/gpu/codegen/field_test.h"
 
 namespace zkx::gpu {
