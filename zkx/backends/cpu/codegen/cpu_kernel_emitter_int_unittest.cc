@@ -344,6 +344,11 @@ TYPED_TEST(IntTest, Reduce) {
   this->RunAndVerify();
 }
 
+TYPED_TEST(IntTest, ReducePartial) {
+  this->SetUpReducePartial();
+  this->RunAndVerify();
+}
+
 TYPED_TEST(IntTest, ReduceWindow) {
   this->SetUpReduceWindow();
   this->RunAndVerify();

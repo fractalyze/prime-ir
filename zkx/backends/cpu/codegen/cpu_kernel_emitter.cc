@@ -2065,9 +2065,40 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitReduceOp(
 
   pass_flag_.enable_linalg_to_parallel_loops = true;
 
+  // linalg::ReduceOp requires init (outs) tensors to match the output rank
+  // (input rank minus the number of reduced dimensions). HLO reduce uses
+  // scalar (rank-0) init values. When the output has rank > 0, broadcast each
+  // scalar init to the output shape via extract + fill.
+  auto input_type = mlir::cast<mlir::RankedTensorType>(inputs[0].getType());
+  llvm::DenseSet<int64_t> reduce_dims(instr->dimensions().begin(),
+                                      instr->dimensions().end());
+  llvm::SmallVector<int64_t> output_shape;
+  for (int64_t i = 0; i < input_type.getRank(); ++i) {
+    if (!reduce_dims.contains(i)) {
+      output_shape.push_back(input_type.getDimSize(i));
+    }
+  }
+
+  llvm::SmallVector<mlir::Value> filled_inits;
+  for (auto init : inits) {
+    auto init_type = mlir::cast<mlir::RankedTensorType>(init.getType());
+    if (init_type.getRank() == 0 && !output_shape.empty()) {
+      mlir::Value scalar =
+          b.create<mlir::tensor::ExtractOp>(init, mlir::ValueRange{});
+      auto out_type =
+          mlir::RankedTensorType::get(output_shape, init_type.getElementType());
+      mlir::Value empty =
+          b.create<mlir::tensor::EmptyOp>(out_type, mlir::ValueRange{});
+      auto filled = b.create<mlir::linalg::FillOp>(scalar, empty);
+      filled_inits.push_back(filled.getResult(0));
+    } else {
+      filled_inits.push_back(init);
+    }
+  }
+
   HloComputation* to_apply = instr->to_apply();
   auto reduce = b.create<mlir::linalg::ReduceOp>(
-      inputs, inits, instr->dimensions(),
+      inputs, filled_inits, instr->dimensions(),
       [this, to_apply](mlir::OpBuilder& nested_b, mlir::Location loc,
                        mlir::ValueRange loop_vars) {
         EmitterLocOpBuilder b(loc, nested_b);
