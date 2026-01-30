@@ -110,6 +110,10 @@ void GetLoopBoundsFromIndexingMap(mlir::ImplicitLocOpBuilder& b,
                                   llvm::SmallVectorImpl<mlir::Value>& ubs,
                                   llvm::SmallVectorImpl<mlir::Value>& steps);
 
+// Clamps `index` to [0, high] boundaries.
+mlir::Value ClampIndex(mlir::Value index, bool is_unsigned, int64_t high,
+                       mlir::ImplicitLocOpBuilder& b);
+
 }  // namespace zkx::emitters
 
 #endif  // ZKX_CODEGEN_EMITTERS_ELEMENTAL_HLO_TO_MLIR_H_
