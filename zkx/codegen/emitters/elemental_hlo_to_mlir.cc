@@ -861,6 +861,8 @@ absl::StatusOr<SmallVector<Value, 1>> HloToMlir(
       return EmitCompare(instr, arg_types, operands, builder);
     case HloOpcode::kDivide:
       return MapElementwiseOp<mhlo::DivOp>(arg_types, operands, builder);
+    case HloOpcode::kInverse:
+      return MapElementwiseOp<mhlo::InverseOp>(arg_types, operands, builder);
     case HloOpcode::kMap: {
       auto mapper = call_target_provider(
           instr->called_computations().front()->root_instruction());

@@ -90,6 +90,7 @@ zkx_cc_unittest(
     name = "emitters_unittests",
     srcs = [
         "computation_partitioner_unittest.cc",
+        "elemental_hlo_to_mlir_field_unittest.cc",
         "elemental_hlo_to_mlir_unittest.cc",
     ],
     deps = [
@@ -98,15 +99,18 @@ zkx_cc_unittest(
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
+        "//zkx:primitive_util",
         "//zkx:status_macros",
         "//zkx/backends/gpu/codegen/emitters/ir:zkx_gpu",
         "//zkx/codegen/emitters/ir:zkx",
         "//zkx/hlo/analysis:indexing_analysis",
         "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/parser:hlo_parser",
         "//zkx/hlo/testlib:file_check",
         "//zkx/mlir_hlo/mhlo/IR:mlir_hlo",
         "//zkx/service/llvm_ir:llvm_util",
         "//zkx/tests:hlo_test_base",
+        "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:ArithDialect",
@@ -118,5 +122,6 @@ zkx_cc_unittest(
         "@llvm-project//mlir:SCFDialect",
         "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:Transforms",
+        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
     ],
 )
