@@ -70,39 +70,48 @@ enum PrimitiveType {
   TOKEN = 18;
 
   BABYBEAR = 35;
-  BABYBEAR_STD = 36;
+  BABYBEAR_MONT = 36;
   BABYBEARX4 = 41;
-  BABYBEARX4_STD = 42;
+  BABYBEARX4_MONT = 42;
 
   GOLDILOCKS = 39;
-  GOLDILOCKS_STD = 40;
+  GOLDILOCKS_MONT = 40;
   GOLDILOCKSX3 = 45;
-  GOLDILOCKSX3_STD = 46;
+  GOLDILOCKSX3_MONT = 46;
 
   KOALABEAR = 33;
-  KOALABEAR_STD = 34;
+  KOALABEAR_MONT = 34;
   KOALABEARX4 = 43;
-  KOALABEARX4_STD = 44;
+  KOALABEARX4_MONT = 44;
 
   MERSENNE31 = 37;
-  MERSENNE31_STD = 38;
+  RESERVED_38 = 38;
   MERSENNE31X2 = 47;
-  MERSENNE31X2_STD = 48;
+  RESERVED_48 = 48;
 
   BN254_SF = 19;
-  BN254_SF_STD = 20;
+  BN254_SF_MONT = 20;
   BN254_G1_AFFINE = 21;
-  BN254_G1_AFFINE_STD = 22;
+  BN254_G1_AFFINE_MONT = 22;
   BN254_G1_JACOBIAN = 23;
-  BN254_G1_JACOBIAN_STD = 24;
+  BN254_G1_JACOBIAN_MONT = 24;
   BN254_G1_XYZZ = 25;
-  BN254_G1_XYZZ_STD = 26;
+  BN254_G1_XYZZ_MONT = 26;
   BN254_G2_AFFINE = 27;
-  BN254_G2_AFFINE_STD = 28;
+  BN254_G2_AFFINE_MONT = 28;
   BN254_G2_JACOBIAN = 29;
-  BN254_G2_JACOBIAN_STD = 30;
+  BN254_G2_JACOBIAN_MONT = 30;
   BN254_G2_XYZZ = 31;
-  BN254_G2_XYZZ_STD = 32;
+  BN254_G2_XYZZ_MONT = 32;
+
+  BINARY_FIELD_T0 = 49;
+  BINARY_FIELD_T1 = 50;
+  BINARY_FIELD_T2 = 51;
+  BINARY_FIELD_T3 = 52;
+  BINARY_FIELD_T4 = 53;
+  BINARY_FIELD_T5 = 54;
+  BINARY_FIELD_T6 = 55;
+  BINARY_FIELD_T7 = 56;
 }
 
 // Describes the padding configuration for Pad operation. The padding amount on
@@ -516,35 +525,41 @@ message LiteralProto {
   repeated int64 sparse_indices = 18;
 
   bytes babybears = 35;
-  bytes babybear_stds = 36;
+  bytes babybear_monts = 36;
   bytes babybearx4s = 41;
-  bytes babybearx4_stds = 42;
+  bytes babybearx4_monts = 42;
   bytes goldilockss = 39;
-  bytes goldilocks_stds = 40;
+  bytes goldilocks_monts = 40;
   bytes goldilocksx3s = 45;
-  bytes goldilocksx3_stds = 46;
+  bytes goldilocksx3_monts = 46;
   bytes koalabears = 33;
-  bytes koalabear_stds = 34;
+  bytes koalabear_monts = 34;
   bytes koalabearx4s = 43;
-  bytes koalabearx4_stds = 44;
+  bytes koalabearx4_monts = 44;
   bytes mersenne31s = 37;
-  bytes mersenne31_stds = 38;
   bytes mersenne31x2s = 47;
-  bytes mersenne31x2_stds = 48;
   bytes bn254_sfs = 19;
-  bytes bn254_sf_stds = 20;
+  bytes bn254_sf_monts = 20;
   bytes bn254_g1_affines = 21;
-  bytes bn254_g1_affine_stds = 22;
+  bytes bn254_g1_affine_monts = 22;
   bytes bn254_g1_jacobians = 23;
-  bytes bn254_g1_jacobian_stds = 24;
+  bytes bn254_g1_jacobian_monts = 24;
   bytes bn254_g1_xyzzs = 25;
-  bytes bn254_g1_xyzz_stds = 26;
+  bytes bn254_g1_xyzz_monts = 26;
   bytes bn254_g2_affines = 27;
-  bytes bn254_g2_affine_stds = 28;
+  bytes bn254_g2_affine_monts = 28;
   bytes bn254_g2_jacobians = 29;
-  bytes bn254_g2_jacobian_stds = 30;
+  bytes bn254_g2_jacobian_monts = 30;
   bytes bn254_g2_xyzzs = 31;
-  bytes bn254_g2_xyzz_stds = 32;
+  bytes bn254_g2_xyzz_monts = 32;
+  bytes binary_field_t0s = 49;
+  bytes binary_field_t1s = 50;
+  bytes binary_field_t2s = 51;
+  bytes binary_field_t3s = 52;
+  bytes binary_field_t4s = 53;
+  bytes binary_field_t5s = 54;
+  bytes binary_field_t6s = 55;
+  bytes binary_field_t7s = 56;
 }
 
 message WindowDimension {

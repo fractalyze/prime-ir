@@ -31,6 +31,7 @@ limitations under the License.
 
 #include "xla/tsl/lib/gtl/map_util.h"
 #include "zk_dtypes/include/all_types.h"
+#include "zk_dtypes/include/field/binary_field.h"
 #include "zk_dtypes/include/field/prime_field.h"
 #include "zk_dtypes/include/geometry/point_declarations.h"
 #include "zkx/comparison_util.h"
@@ -3900,6 +3901,21 @@ bool HloParserImpl::CheckParsedValueIsInRange(LocTy loc, ParsedElemT value) {
 
       using ScalarField = typename LiteralNativeT::ScalarField;
       return CheckParsedValueIsInRange<ScalarField>(loc, value);
+    }
+  } else if constexpr (zk_dtypes::IsBinaryField<LiteralNativeT>) {
+    if constexpr (zk_dtypes::IsBinaryField<ParsedElemT>) {
+      return true;
+    } else {
+      static_assert(std::is_same_v<ParsedElemT, int64_t>,
+                    "Unimplemented checking for ParsedElemT");
+
+      // Binary fields have kValueMask that defines valid range
+      if constexpr (LiteralNativeT::Config::kStorageBits > 64) {
+        return true;  // Can't fully check 128-bit fields with int64
+      } else {
+        constexpr uint64_t mask = LiteralNativeT::Config::kValueMask;
+        return static_cast<uint64_t>(value) <= mask;
+      }
     }
   } else {
     if constexpr (std::is_floating_point_v<ParsedElemT>) {

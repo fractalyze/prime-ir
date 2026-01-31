@@ -20,9 +20,9 @@ namespace zkx::gpu {
 
 using ExtensionFieldTypes = testing::Types<
     // clang-format off
-    zk_dtypes::BabybearX4,
-    zk_dtypes::GoldilocksX3,
-    zk_dtypes::KoalabearX4,
+    zk_dtypes::BabybearX4Mont,
+    zk_dtypes::GoldilocksX3Mont,
+    zk_dtypes::KoalabearX4Mont,
     zk_dtypes::Mersenne31X2
     // clang-format on
     >;

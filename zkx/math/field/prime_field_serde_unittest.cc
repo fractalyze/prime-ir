@@ -34,8 +34,8 @@ using PrimeFieldTypes = testing::Types<
 #define PRIME_FIELD_TYPE(ActualType, ...) ActualType,
     ZK_DTYPES_ALL_PRIME_FIELD_TYPE_LIST(PRIME_FIELD_TYPE)
 #undef PRIME_FIELD_TYPE
-        zk_dtypes::test::Fr,
-    zk_dtypes::test::FrStd>;
+        zk_dtypes::test::FrMont,
+    zk_dtypes::test::Fr>;
 TYPED_TEST_SUITE(PrimeFieldTypedTest, PrimeFieldTypes);
 
 TYPED_TEST(PrimeFieldTypedTest, Serde) {

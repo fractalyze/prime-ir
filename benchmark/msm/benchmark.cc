@@ -85,9 +85,9 @@ absl::Status RealMain(int argc, char** argv) {
 
   switch (curve) {
     case Curve::kBn254G1:
-      return RunBenchmark<zk_dtypes::bn254::G1AffinePoint>(runner, curve);
+      return RunBenchmark<zk_dtypes::bn254::G1AffinePointMont>(runner, curve);
     case Curve::kBn254G2:
-      return RunBenchmark<zk_dtypes::bn254::G2AffinePoint>(runner, curve);
+      return RunBenchmark<zk_dtypes::bn254::G2AffinePointMont>(runner, curve);
   }
   ABSL_UNREACHABLE();
   return absl::InternalError("Invalid curve");

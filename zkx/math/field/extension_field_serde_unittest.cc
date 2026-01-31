@@ -33,8 +33,8 @@ using ExtensionFieldTypes = testing::Types<
 #define EXTENSION_FIELD_TYPE(ActualType, ...) ActualType,
     ZK_DTYPES_ALL_EXT_FIELD_TYPE_LIST(EXTENSION_FIELD_TYPE)
 #undef EXTENSION_FIELD_TYPE
-        zk_dtypes::test::FqX2,
-    zk_dtypes::test::FqX2Std>;
+        zk_dtypes::test::FqX2Mont,
+    zk_dtypes::test::FqX2>;
 TYPED_TEST_SUITE(ExtensionFieldTypedTest, ExtensionFieldTypes);
 
 TYPED_TEST(ExtensionFieldTypedTest, Serde) {

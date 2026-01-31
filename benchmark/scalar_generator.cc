@@ -98,8 +98,8 @@ absl::Status RealMain(int argc, char** argv) {
 
   switch (field) {
     case Field::kBn254Fr:
-      TF_ASSIGN_OR_RETURN(
-          write_buf, GenerateScalars<zk_dtypes::bn254::Fr>(degree, condensed));
+      TF_ASSIGN_OR_RETURN(write_buf, GenerateScalars<zk_dtypes::bn254::FrMont>(
+                                         degree, condensed));
       break;
   }
 

@@ -19,9 +19,9 @@ namespace zkx::cpu {
 
 using FieldTypes = testing::Types<
     // clang-format off
-    zk_dtypes::Babybear,
-    zk_dtypes::Goldilocks,
-    zk_dtypes::bn254::Fr
+    zk_dtypes::BabybearMont,
+    zk_dtypes::GoldilocksMont,
+    zk_dtypes::bn254::FrMont
     // clang-format on
     >;
 TYPED_TEST_SUITE(FieldScalarUnaryTest, FieldTypes);

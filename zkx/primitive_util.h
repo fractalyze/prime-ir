@@ -241,6 +241,17 @@ struct PrimitiveTypeToNative<TOKEN> {
   using type = void;
 };
 
+// Reserved (placeholder for removed types)
+template <>
+struct PrimitiveTypeToNative<RESERVED_38> {
+  using type = void;
+};
+
+template <>
+struct PrimitiveTypeToNative<RESERVED_48> {
+  using type = void;
+};
+
 #define ZK_DTYPES_CONVERSION(cpp_type, unused, enum, unused2) \
   template <>                                                 \
   struct PrimitiveTypeToNative<enum> {                        \
@@ -259,7 +270,9 @@ using PrimitiveTypeConstant =
 // Returns true if values of the given primitive type are held in array shapes.
 inline constexpr bool IsArrayType(PrimitiveType primitive_type) {
   return primitive_type != TUPLE && primitive_type != OPAQUE_TYPE &&
-         primitive_type != TOKEN && primitive_type > PRIMITIVE_TYPE_INVALID &&
+         primitive_type != TOKEN && primitive_type != RESERVED_38 &&
+         primitive_type != RESERVED_48 &&
+         primitive_type > PRIMITIVE_TYPE_INVALID &&
          primitive_type < PrimitiveType_ARRAYSIZE;
 }
 
@@ -293,8 +306,15 @@ constexpr bool IsExtensionFieldType(PrimitiveType type) {
 #undef ZK_DTYPES_CASE
 }
 
+constexpr bool IsBinaryFieldType(PrimitiveType type) {
+#define ZK_DTYPES_CASE(unused, unused2, enum, unused3) type == enum ||
+  return ZK_DTYPES_PUBLIC_BINARY_FIELD_TYPE_LIST(ZK_DTYPES_CASE) false;
+#undef ZK_DTYPES_CASE
+}
+
 constexpr bool IsFieldType(PrimitiveType type) {
-  return IsPrimeFieldType(type) || IsExtensionFieldType(type);
+  return IsPrimeFieldType(type) || IsExtensionFieldType(type) ||
+         IsBinaryFieldType(type);
 }
 
 constexpr bool IsEcPointType(PrimitiveType type) {
@@ -304,9 +324,10 @@ constexpr bool IsEcPointType(PrimitiveType type) {
 }
 
 // Returns true if the type supports comparison operators (<, >, <=, >=).
-// Extension fields and EC points don't have natural ordering.
+// Extension fields, binary fields, and EC points don't have natural ordering.
 constexpr bool IsComparableType(PrimitiveType type) {
-  return !IsExtensionFieldType(type) && !IsEcPointType(type);
+  return !IsExtensionFieldType(type) && !IsBinaryFieldType(type) &&
+         !IsEcPointType(type);
 }
 
 constexpr bool IsZkDtypesType(PrimitiveType type) {

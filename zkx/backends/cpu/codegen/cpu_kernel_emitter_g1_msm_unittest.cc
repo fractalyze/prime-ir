@@ -17,7 +17,7 @@ limitations under the License.
 
 namespace zkx::cpu {
 
-using GroupTypes = testing::Types<zk_dtypes::bn254::G1AffinePoint>;
+using GroupTypes = testing::Types<zk_dtypes::bn254::G1AffinePointMont>;
 TYPED_TEST_SUITE(MSMTest, GroupTypes);
 
 TYPED_TEST(MSMTest, G1MSM) {

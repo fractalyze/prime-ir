@@ -44,6 +44,8 @@ class FieldScalarUnaryTest : public CpuKernelEmitterTest {
     CpuKernelEmitterTest::SetUp();
     x_typename_ = primitive_util::LowercasePrimitiveTypeName(
         primitive_util::NativeToPrimitiveType<F>());
+    x_std_typename_ = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<typename F::StdType>());
     x_ = F::Random();
     literals_.push_back(LiteralUtil::CreateR0<F>(x_));
   }
@@ -76,10 +78,10 @@ class FieldScalarUnaryTest : public CpuKernelEmitterTest {
     ENTRY %main {
       %x = u32[] parameter(0)
 
-      ROOT %ret = $0_std[] convert(%x)
+      ROOT %ret = $0[] convert(%x)
     }
   )",
-                                 x_typename_);
+                                 x_std_typename_);
     uint32_t x;
     if (F::Config::kModulus < std::numeric_limits<uint32_t>::max()) {
       x = base::Uniform<uint32_t>(
@@ -98,10 +100,10 @@ class FieldScalarUnaryTest : public CpuKernelEmitterTest {
       ENTRY %main {
         %x = $0[] parameter(0)
 
-        ROOT %ret = $0_std[] convert(%x)
+        ROOT %ret = $1[] convert(%x)
       }
     )",
-                                 x_typename_);
+                                 x_typename_, x_std_typename_);
     expected_literal_ = LiteralUtil::CreateR0<FStd>(x_.MontReduce());
   }
 

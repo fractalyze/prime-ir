@@ -81,7 +81,7 @@ absl::Status RealMain(int argc, char** argv) {
 
   switch (field) {
     case Field::kBn254Fr:
-      return RunBenchmark<zk_dtypes::bn254::Fr>(runner, field, inverse);
+      return RunBenchmark<zk_dtypes::bn254::FrMont>(runner, field, inverse);
   }
   ABSL_UNREACHABLE();
   return absl::InternalError("Invalid field");

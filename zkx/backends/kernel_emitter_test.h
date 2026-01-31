@@ -38,6 +38,7 @@ class KernelEmitterTest : public testing::Test {
 
   HloRunner runner_;
   std::string_view x_typename_;
+  std::string_view x_std_typename_;
   std::vector<Literal> literals_;
   std::string hlo_text_;
   Literal expected_literal_;
