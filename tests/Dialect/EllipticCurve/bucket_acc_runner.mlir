@@ -52,17 +52,17 @@ func.func @test_bucket_acc() {
   %result = elliptic_curve.bucket_acc %points, %sorted_point_indices, %sorted_unique_bucket_indices, %offsets: (tensor<3x!affine>, tensor<6xindex>, tensor<4xindex>, tensor<5xindex>) -> tensor<8x!jacobian>
 
   %jacobian_sum_13 = elliptic_curve.add %affine1, %affine3 : !affine, !affine -> !jacobian
-  func.call @printG1AffineFromJacobian(%jacobian_sum_13) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%jacobian_sum_13) : (!jacobian) -> ()
 
   %jacobian_sum_12 = elliptic_curve.add %affine1, %affine2 : !affine, !affine -> !jacobian
-  func.call @printG1AffineFromJacobian(%jacobian_sum_12) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%jacobian_sum_12) : (!jacobian) -> ()
 
-  func.call @printG1Affine(%affine2) : (!affine) -> ()
-  func.call @printG1Affine(%affine3) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine2) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine3) : (!affine) -> ()
 
   scf.for %i = %c0 to %c8 step %c1 {
     %point = tensor.extract %result[%i] : tensor<8x!jacobian>
-    func.call @printG1AffineFromJacobian(%point) : (!jacobian) -> ()
+    func.call @printG1AffineFromJacobianMont(%point) : (!jacobian) -> ()
     scf.yield
   }
   return

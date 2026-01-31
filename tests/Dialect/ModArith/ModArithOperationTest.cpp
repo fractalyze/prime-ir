@@ -89,15 +89,15 @@ using PrimeFieldTypes = testing::Types<
     // modulus bits = 2³¹
     // modulus.getBitWidth() == 32
     // modulus.getActiveBits() == 31
-    zk_dtypes::Babybear, zk_dtypes::BabybearStd,
+    zk_dtypes::BabybearMont, zk_dtypes::Babybear,
     // modulus bits = 2⁶⁴
     // modulus.getBitWidth() == 64
     // modulus.getActiveBits() == 64
-    zk_dtypes::Goldilocks, zk_dtypes::GoldilocksStd,
+    zk_dtypes::GoldilocksMont, zk_dtypes::Goldilocks,
     // modulus bits = 2²⁵⁴
     // modulus.getBitWidth() == 254
     // modulus.getActiveBits() == 254
-    zk_dtypes::bn254::Fr, zk_dtypes::bn254::FrStd>;
+    zk_dtypes::bn254::FrMont, zk_dtypes::bn254::Fr>;
 TYPED_TEST_SUITE(ModArithOperationTest, PrimeFieldTypes);
 
 //===----------------------------------------------------------------------===//

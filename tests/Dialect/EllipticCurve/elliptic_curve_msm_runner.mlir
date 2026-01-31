@@ -43,13 +43,13 @@ func.func @test_msm() {
   %add1 = elliptic_curve.add %scalar_mul1, %scalar_mul2 : !jacobian, !jacobian -> !jacobian
   %add2 = elliptic_curve.add %scalar_mul3, %scalar_mul4 : !jacobian, !jacobian -> !jacobian
   %msm_true = elliptic_curve.add %add1, %add2 : !jacobian, !jacobian -> !jacobian
-  func.call @printG1AffineFromJacobian(%msm_true) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%msm_true) : (!jacobian) -> ()
 
   // RUNNING MSM
   %scalars = tensor.from_elements %scalar3, %scalar3, %scalar5, %scalar7 : tensor<4x!SFm>
   %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
   %msm_test = elliptic_curve.msm %scalars, %points degree=2 parallel : tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
-  func.call @printG1AffineFromJacobian(%msm_test) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%msm_test) : (!jacobian) -> ()
 
   return
 }

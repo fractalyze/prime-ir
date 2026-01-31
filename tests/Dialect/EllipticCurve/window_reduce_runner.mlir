@@ -61,10 +61,10 @@ func.func @test_window_reduce() {
   // 57G
   %k57 = field.constant 57 : !SF
   %true_result = func.call @getG1GeneratorMultiple(%k57) : (!SF) -> (!affine)
-  func.call @printG1Affine(%true_result) : (!affine) -> ()
+  func.call @printG1AffineMont(%true_result) : (!affine) -> ()
 
   %result = elliptic_curve.window_reduce %windows {bitsPerWindow = 2 : i16, scalarType = !SF}: (tensor<128x!jacobian>) -> !jacobian
-  func.call @printG1AffineFromJacobian(%result) : (!jacobian) -> ()
+  func.call @printG1AffineFromJacobianMont(%result) : (!jacobian) -> ()
   return
 }
 

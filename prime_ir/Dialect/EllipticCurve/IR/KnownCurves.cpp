@@ -78,11 +78,11 @@ std::optional<std::string> getKnownCurveAlias(ShortWeierstrassAttr attr) {
       return std::nullopt;
     if (alias == "bn254_bf") {
       if (pfType.isMontgomery()) {
-        if (isKnownCurve<zk_dtypes::bn254::G1Curve>(attr)) {
+        if (isKnownCurve<zk_dtypes::bn254::G1CurveMont>(attr)) {
           return "bn254_g1";
         }
       } else {
-        if (isKnownCurve<zk_dtypes::bn254::G1CurveStd>(attr)) {
+        if (isKnownCurve<zk_dtypes::bn254::G1Curve>(attr)) {
           return "bn254_g1";
         }
       }
@@ -96,11 +96,11 @@ std::optional<std::string> getKnownCurveAlias(ShortWeierstrassAttr attr) {
         return std::nullopt;
       if (alias == "bn254_bf") {
         if (pfType.isMontgomery()) {
-          if (isKnownCurve<zk_dtypes::bn254::G2Curve>(attr)) {
+          if (isKnownCurve<zk_dtypes::bn254::G2CurveMont>(attr)) {
             return "bn254_g2";
           }
         } else {
-          if (isKnownCurve<zk_dtypes::bn254::G2CurveStd>(attr)) {
+          if (isKnownCurve<zk_dtypes::bn254::G2Curve>(attr)) {
             return "bn254_g2";
           }
         }
