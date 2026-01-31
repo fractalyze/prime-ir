@@ -34,6 +34,7 @@ limitations under the License.
 #include "absl/types/span.h"
 
 #include "zkx/client/executable_build_options.h"
+#include "zkx/ffi/execution_context.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/pjrt/compile_options.pb.h"
 #include "zkx/pjrt/executable_metadata.pb.h"
@@ -141,22 +142,19 @@ struct LoadOptions {
   const MultiSliceConfig* multi_slice_config = nullptr;
 };
 
-// TODO(chokobole): Uncomment this. Dependency: ExecutionContext
-// class ExecuteContext {
-//  public:
-//   virtual ~ExecuteContext() = default;
+class ExecuteContext {
+ public:
+  virtual ~ExecuteContext() = default;
 
-//   ffi::ExecutionContext& ffi_context() { return ffi_context_; }
-//   const ffi::ExecutionContext& ffi_context() const { return ffi_context_; }
+  ffi::ExecutionContext& ffi_context() { return ffi_context_; }
+  const ffi::ExecutionContext& ffi_context() const { return ffi_context_; }
 
-//  private:
-//   // ZKX FFI execution context is a mechanism to attach arbitrary user data
-//   to
-//   // a particular call of PjRtLoadedExecutable::Execute and forward it to
-//   custom
-//   // calls implemented as ZKX FFI handlers.
-//   ffi::ExecutionContext ffi_context_;
-// };
+ private:
+  // ZKX FFI execution context is a mechanism to attach arbitrary user data to
+  // a particular call of PjRtLoadedExecutable::Execute and forward it to custom
+  // calls implemented as ZKX FFI handlers.
+  ffi::ExecutionContext ffi_context_;
+};
 
 struct PjRtTransferMetadata {
   // May be invalid if
@@ -221,8 +219,7 @@ struct ExecuteOptions {
   // supply additional arguments to a derived class of PjRtExecutable. It is
   // a caller responsibility to ensure that the context is valid for the
   // duration of the execution.
-  // TODO(chokobole): Uncomment this. Dependency: ExecuteContext
-  // const ExecuteContext* context = nullptr;
+  const ExecuteContext* context = nullptr;
   // If true, check that the PjRtBuffer argument shapes match the compiled
   // shapes. Otherwise, any shape with the right size on device may be passed.
   bool strict_shape_checking = true;
