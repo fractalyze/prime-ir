@@ -24,6 +24,7 @@ zkx_cc_binary(
     # symlinked from the lit_lib directory.
     linkopts = ["-Wl,-rpath,$$ORIGIN/../lit_lib"],
     visibility = [
+        "//zkx/backends/gpu/codegen/emitters/tests:__subpackages__",
         "//zkx/backends/gpu/codegen/emitters/transforms/tests:__subpackages__",
         "//zkx/codegen/emitters/transforms/tests:__subpackages__",
     ],

@@ -1,0 +1,39 @@
+// RUN: fusion_to_mlir %s   | emitters_opt -zkx-gpu-test-optimize \
+// RUN: | FileCheck %s
+// TODO(batzor): Enable test_correctness. The emitter calls scatter_indices
+// unconditionally for all threads before the bounds check, causing OOB reads.
+// XLA has the same pattern but doesn't crash. Needs investigation.
+// DISABLED: test_correctness %s --bijection_inputs=scatter:2
+
+add {
+  %p0 = s32[] parameter(0)
+  %p1 = s32[] parameter(1)
+  ROOT %sum = s32[] add(%p0, %p1)
+}
+scatter {
+  %operand = s32[100]  parameter(0)
+  %indices = s32[200,1] parameter(1)
+  %update = s32[200,32] parameter(2)
+
+  ROOT %scatter = s32[100] scatter(
+      s32[100] %operand,
+      s32[200,1] %indices,
+      s32[200,32] %update
+    ),
+    update_window_dims={1},
+    inserted_window_dims={},
+    scatter_dims_to_operand_dims={0},
+    index_vector_dim=1,
+    indices_are_sorted=true,
+    unique_indices=false,
+    to_apply=add
+}
+// When there is not enough indices per warp, we fall back to the naive impl,
+// when one warp processes one slice.
+// CHECK:      #zkx.indexing_map<"(th_x, bl_x)[s0, s1]
+// CHECK-SAME:   -> (bl_x * 4 + th_x floordiv 32, th_x mod 32),
+// CHECK-SAME:   domain: th_x in [0, 127],
+// CHECK-SAME:           bl_x in [0, 49],
+// CHECK-LABEL: func.func @main
+// CHECK:     zkx.loop
+// CHECK-NOT: zkx.loop

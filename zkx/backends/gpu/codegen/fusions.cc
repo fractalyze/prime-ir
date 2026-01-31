@@ -25,6 +25,7 @@ limitations under the License.
 #include "zkx/backends/gpu/codegen/emitters/in_place_dynamic_update_slice.h"
 #include "zkx/backends/gpu/codegen/emitters/loop.h"
 #include "zkx/backends/gpu/codegen/emitters/reduction.h"
+#include "zkx/backends/gpu/codegen/emitters/scatter.h"
 #include "zkx/layout_util.h"
 
 namespace zkx::gpu {
@@ -101,11 +102,8 @@ std::unique_ptr<FusionInterface> GetFusionEmitter(
     }
     case HloFusionAnalysis::EmitterFusionKind::kReduction:
       return CreateReductionFusion(analysis);
-    case HloFusionAnalysis::EmitterFusionKind::kScatter: {
-      // TODO(chokobole): Implement this. Dependency: CreateScatterFusion
-      // return CreateScatterFusion(analysis);
-      return nullptr;
-    }
+    case HloFusionAnalysis::EmitterFusionKind::kScatter:
+      return CreateScatterFusion(analysis);
     case HloFusionAnalysis::EmitterFusionKind::kTranspose: {
       // TODO(chokobole): Implement this. Dependency: TransposeFusion
       // return std::make_unique<TransposeFusion>(analysis);

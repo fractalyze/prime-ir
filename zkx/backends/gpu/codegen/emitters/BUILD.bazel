@@ -238,6 +238,39 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "scatter",
+    srcs = ["scatter.cc"],
+    hdrs = ["scatter.h"],
+    deps = [
+        ":emitter_base",
+        "//zkx:primitive_util",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/codegen/emitters:computation_partitioner",
+        "//zkx/codegen/emitters:elemental_hlo_to_mlir",
+        "//zkx/codegen/emitters/ir:zkx",
+        "//zkx/hlo/analysis:indexing_analysis",
+        "//zkx/hlo/analysis:indexing_map",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/mlir:mlir_utils",
+        "//zkx/service:scatter_simplifier",
+        "//zkx/service/gpu:gpu_fusible",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/service/gpu:ir_emission_utils",
+        "//zkx/service/gpu:launch_dimensions",
+        "//zkx/stream_executor:device_description",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/types:span",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+    ],
+)
+
 zkx_cc_unittest(
     name = "emitters_unittests",
     srcs = ["emitter_base_unittest.cc"],

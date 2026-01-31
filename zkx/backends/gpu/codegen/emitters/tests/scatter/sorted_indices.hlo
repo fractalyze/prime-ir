@@ -1,0 +1,34 @@
+// RUN: fusion_to_mlir %s   | emitters_opt -zkx-gpu-test-optimize \
+// RUN:   -zkx-gpu-test-transform-loops  | FileCheck %s
+// TODO(batzor): Enable test_correctness. The emitter calls scatter_indices
+// unconditionally for all threads before the bounds check, causing OOB reads.
+// XLA has the same pattern but doesn't crash. Needs investigation.
+// DISABLED: test_correctness %s --bijection_inputs=scatter:2
+
+add {
+  %p0 = s32[] parameter(0)
+  %p1 = s32[] parameter(1)
+  ROOT %sum = s32[] add(%p0, %p1)
+}
+scatter {
+  %operand = s32[100]  parameter(0)
+  %indices = s32[2008,1] parameter(1)
+  %update = s32[2008,32] parameter(2)
+
+  ROOT %scatter = s32[100] scatter(
+      s32[100] %operand,
+      s32[2008,1] %indices,
+      s32[2008,32] %update
+    ),
+    update_window_dims={1},
+    inserted_window_dims={},
+    scatter_dims_to_operand_dims={0},
+    index_vector_dim=1,
+    indices_are_sorted=true,
+    unique_indices=false,
+    to_apply=add
+}
+// CHECK-LABEL: func.func @main
+// CHECK: arith.constant dense<0> : vector<1xi32>
+// CHECK:      vector.transfer_read
+// CHECK-SAME:   tensor<2008xi32>, vector<4xi32>
