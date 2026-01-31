@@ -19,6 +19,30 @@ package(
 )
 
 zkx_cc_library(
+    name = "call_frame",
+    srcs = ["call_frame.cc"],
+    hdrs = ["call_frame.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:types",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/ffi/api",
+        "//zkx/ffi/api:c_api",
+        "//zkx/ffi/api:c_api_internal",
+        "//zkx/stream_executor:device_memory",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "execution_context",
     srcs = ["execution_context.cc"],
     hdrs = ["execution_context.h"],
@@ -66,16 +90,21 @@ zkx_cc_library(
 zkx_cc_unittest(
     name = "ffi_unittests",
     srcs = [
+        "call_frame_unittest.cc",
         "execution_context_unittest.cc",
         "execution_state_unittest.cc",
         "type_id_registry_unittest.cc",
     ],
     deps = [
+        ":call_frame",
         ":execution_context",
         ":execution_state",
         ":type_id_registry",
         "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/ffi/api:c_api",
+        "//zkx/stream_executor:device_memory",
         "@com_google_absl//absl/status",
     ],
 )

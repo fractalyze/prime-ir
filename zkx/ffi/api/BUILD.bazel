@@ -90,7 +90,7 @@ filegroup(
 cc_library(
     name = "api",
     hdrs = ["api.h"],
-    visibility = ["//visibility:private"],
+    visibility = ["//zkx/ffi:__subpackages__"],
     deps = [
         ":c_api",
         "@com_google_absl//absl/log:check",
