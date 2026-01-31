@@ -2572,6 +2572,10 @@ ZkxOp BitcastConvertType(const ZkxOp operand, PrimitiveType new_element_type) {
   return operand.builder()->BitcastConvertType(operand, new_element_type);
 }
 
+ZkxOp Inverse(const ZkxOp operand) {
+  return operand.builder()->UnaryOp(HloOpcode::kInverse, operand);
+}
+
 ZkxOp Neg(const ZkxOp operand) {
   return operand.builder()->UnaryOp(HloOpcode::kNegate, operand);
 }

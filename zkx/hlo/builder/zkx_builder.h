@@ -888,6 +888,7 @@ class ZkxBuilder {
                                   PrimitiveType new_element_type);
   friend ZkxOp BitcastConvertType(ZkxOp operand,
                                   PrimitiveType new_element_type);
+  friend ZkxOp Inverse(ZkxOp operand);
   friend ZkxOp Neg(ZkxOp operand);
   friend ZkxOp Transpose(ZkxOp operand, absl::Span<const int64_t> permutation);
   friend ZkxOp Rev(ZkxOp operand, absl::Span<const int64_t> dimensions);
@@ -1472,6 +1473,9 @@ ZkxOp ConvertElementType(ZkxOp operand, PrimitiveType new_element_type);
 // bit-widths of the source and destination element types must be
 // identical.
 ZkxOp BitcastConvertType(ZkxOp operand, PrimitiveType new_element_type);
+
+// Enqueues a multiplicative inverse instruction onto the computation.
+ZkxOp Inverse(ZkxOp operand);
 
 // Enqueues a negate instruction onto the computation.
 ZkxOp Neg(ZkxOp operand);
