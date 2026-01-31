@@ -28,6 +28,7 @@ zkx_cc_library(
         "//zkx:array2d",
         "//zkx:comparison_util",
         "//zkx:literal",
+        "//zkx:literal_util",
         "//zkx:shape_util",
         "//zkx:status_macros",
         "//zkx:types",
