@@ -78,3 +78,14 @@ func.func @test_linalg_transpose(%input : tensor<2x3x!Zp>) -> tensor<3x2x!Zp> {
   // CHECK: return %[[RES]] : [[OUTPUT_TYPE]]
   return %res : tensor<3x2x!Zp>
 }
+
+// CHECK-LABEL: @test_linalg_fill
+// CHECK-SAME: (%[[INIT:.*]]: [[INIT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_linalg_fill(%init: tensor<4x!Zp>) -> tensor<4x!Zp> {
+  // CHECK: %[[C0:.*]] = arith.constant 0 : [[ARITH_TYPE:.*]]
+  %c0 = mod_arith.constant 0 : !Zp
+  // CHECK: %[[RES:.*]] = linalg.fill ins(%[[C0]] : [[ARITH_TYPE]]) outs(%[[INIT]] : [[INIT_TYPE]]) -> [[T]]
+  %res = linalg.fill ins(%c0 : !Zp) outs(%init : tensor<4x!Zp>) -> tensor<4x!Zp>
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<4x!Zp>
+}
