@@ -1063,7 +1063,7 @@ func.func @test_mul_by_neg_three(%arg0: !Zp) -> !Zp {
   %0 = mod_arith.constant 34 : !Zp // -3
   %1 = mod_arith.mul %arg0, %0 : !Zp
   // CHECK: %[[DOUBLE:.*]] = mod_arith.double %[[ARG0]] : [[T]]
-  // CHECK: %[[ADD:.*]] = mod_arith.add %[[DOUBLE]], %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE]] : [[T]]
   // CHECK: %[[RES:.*]] = mod_arith.negate %[[ADD]] : [[T]]
   // CHECK: return %[[RES]]
   return %1 : !Zp
@@ -1081,6 +1081,157 @@ func.func @test_mul_by_neg_four(%arg0: !Zp) -> !Zp {
   return %1 : !Zp
 }
 
+// CHECK-LABEL: @test_mul_by_three
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_three(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 3 : !Zp
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_four
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_four(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 4 : !Zp
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.double %[[DOUBLE1]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_five
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_five(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 5 : !Zp
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_six
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_six(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 6 : !Zp
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.double %[[ADD]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_seven
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_seven(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 7 : !Zp
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD1:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[ADD1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_eight
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_eight(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 8 : !Zp
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.double %[[DOUBLE2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_nine
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_nine(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 9 : !Zp
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE3:.*]] = mod_arith.double %[[DOUBLE2]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE3]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_neg_five
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_neg_five(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 32 : !Zp // -5 mod 37
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[ADD:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE2]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.negate %[[ADD]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_neg_six
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_neg_six(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 31 : !Zp // -6 mod 37
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[ADD]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.negate %[[DOUBLE2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_neg_seven
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_neg_seven(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 30 : !Zp // -7 mod 37
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD1:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[ADD1]] : [[T]]
+  // CHECK: %[[ADD2:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE2]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.negate %[[ADD2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_neg_eight
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_neg_eight(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 29 : !Zp // -8 mod 37
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE3:.*]] = mod_arith.double %[[DOUBLE2]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.negate %[[DOUBLE3]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
+// CHECK-LABEL: @test_mul_by_neg_nine
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_neg_nine(%arg0: !Zp) -> !Zp {
+  %0 = mod_arith.constant 28 : !Zp // -9 mod 37
+  %1 = mod_arith.mul %arg0, %0 : !Zp
+  // CHECK: %[[DOUBLE1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = mod_arith.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE3:.*]] = mod_arith.double %[[DOUBLE2]] : [[T]]
+  // CHECK: %[[ADD:.*]] = mod_arith.add %[[ARG0]], %[[DOUBLE3]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.negate %[[ADD]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !Zp
+}
+
 // CHECK-LABEL: @test_mul_constant_twice
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_mul_constant_twice(%arg0: !Zp) -> !Zp {
@@ -1088,8 +1239,11 @@ func.func @test_mul_constant_twice(%arg0: !Zp) -> !Zp {
   %c4 = mod_arith.constant 4 : !Zp
   %0 = mod_arith.mul %arg0, %c3 : !Zp
   %1 = mod_arith.mul %0, %c4 : !Zp
-  // CHECK: %[[C12:.*]] = mod_arith.constant 12 : [[T]]
-  // CHECK: %[[RES:.*]] = mod_arith.mul %[[ARG0]], %[[C12]] : [[T]]
+  // x * 3 -> x + double(x), then * 4 -> double(double(...))
+  // CHECK: %[[D1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[A1:.*]] = mod_arith.add %[[ARG0]], %[[D1]] : [[T]]
+  // CHECK: %[[D2:.*]] = mod_arith.double %[[A1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.double %[[D2]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %1 : !Zp
 }
@@ -1102,9 +1256,12 @@ func.func @test_mul_of_mul_by_constant(%arg0: !Zp, %arg1: !Zp) -> !Zp {
   %0 = mod_arith.mul %arg0, %c3 : !Zp
   %1 = mod_arith.mul %arg1, %c4 : !Zp
   %2 = mod_arith.mul %0, %1 : !Zp
-  // CHECK: %[[C12:.*]] = mod_arith.constant 12 : [[T]]
-  // CHECK: %[[PROD:.*]] = mod_arith.mul %[[ARG0]], %[[ARG1]] : [[T]]
-  // CHECK: %[[RES:.*]] = mod_arith.mul %[[PROD]], %[[C12]] : [[T]]
+  // x * 3 -> x + double(x), y * 4 -> double(double(y))
+  // CHECK: %[[D0:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[A0:.*]] = mod_arith.add %[[ARG0]], %[[D0]] : [[T]]
+  // CHECK: %[[D1:.*]] = mod_arith.double %[[ARG1]] : [[T]]
+  // CHECK: %[[D2:.*]] = mod_arith.double %[[D1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[A0]], %[[D2]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %2 : !Zp
 }
@@ -1116,10 +1273,11 @@ func.func @test_mul_add_distribute_constant(%arg0: !Zp) -> !Zp {
   %c4 = mod_arith.constant 4 : !Zp
   %0 = mod_arith.add %arg0, %c3 : !Zp
   %1 = mod_arith.mul %0, %c4 : !Zp
+  // (x + 3) * 4 -> x * 4 + 12, then x * 4 -> double(double(x))
   // CHECK: %[[C12:.*]] = mod_arith.constant 12 : [[T]]
-  // CHECK: %[[C4:.*]] = mod_arith.constant 4 : [[T]]
-  // CHECK: %[[PROD:.*]] = mod_arith.mul %[[ARG0]], %[[C4]] : [[T]]
-  // CHECK: %[[RES:.*]] = mod_arith.add %[[PROD]], %[[C12]] : [[T]]
+  // CHECK: %[[D1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[D2:.*]] = mod_arith.double %[[D1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.add %[[D2]], %[[C12]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %1 : !Zp
 }
@@ -1131,10 +1289,11 @@ func.func @test_mul_sub_distribute_constant_rhs(%arg0: !Zp) -> !Zp {
   %c4 = mod_arith.constant 4 : !Zp
   %0 = mod_arith.sub %arg0, %c3 : !Zp
   %1 = mod_arith.mul %0, %c4 : !Zp
+  // (x - 3) * 4 -> x * 4 - 12, then x * 4 -> double(double(x))
   // CHECK: %[[C12:.*]] = mod_arith.constant 12 : [[T]]
-  // CHECK: %[[C4:.*]] = mod_arith.constant 4 : [[T]]
-  // CHECK: %[[PROD:.*]] = mod_arith.mul %[[ARG0]], %[[C4]] : [[T]]
-  // CHECK: %[[RES:.*]] = mod_arith.sub %[[PROD]], %[[C12]] : [[T]]
+  // CHECK: %[[D1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[D2:.*]] = mod_arith.double %[[D1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.sub %[[D2]], %[[C12]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %1 : !Zp
 }
@@ -1146,10 +1305,11 @@ func.func @test_mul_sub_distribute_constant_lhs(%arg0: !Zp) -> !Zp {
   %c4 = mod_arith.constant 4 : !Zp
   %0 = mod_arith.sub %c3, %arg0 : !Zp
   %1 = mod_arith.mul %0, %c4 : !Zp
+  // (3 - x) * 4 -> 12 - x * 4, then x * 4 -> double(double(x))
   // CHECK: %[[C12:.*]] = mod_arith.constant 12 : [[T]]
-  // CHECK: %[[C4:.*]] = mod_arith.constant 4 : [[T]]
-  // CHECK: %[[PROD:.*]] = mod_arith.mul %[[ARG0]], %[[C4]] : [[T]]
-  // CHECK: %[[RES:.*]] = mod_arith.sub %[[C12]], %[[PROD]] : [[T]]
+  // CHECK: %[[D1:.*]] = mod_arith.double %[[ARG0]] : [[T]]
+  // CHECK: %[[D2:.*]] = mod_arith.double %[[D1]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.sub %[[C12]], %[[D2]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %1 : !Zp
 }

@@ -139,10 +139,22 @@
 
 #define PRIME_IR_FIELD_MUL_STRENGTH_REDUCTION_PATTERN_LIST(X) \
   X(MulByTwoIsDouble)                                         \
+  X(MulByThreeRhs)                                            \
+  X(MulByFourRhs)                                             \
+  X(MulByFiveRhs)                                             \
+  X(MulBySixRhs)                                              \
+  X(MulBySevenRhs)                                            \
+  X(MulByEightRhs)                                            \
+  X(MulByNineRhs)                                             \
   X(MulNegativeOneRhs)                                        \
   X(MulNegativeTwoRhs)                                        \
   X(MulNegativeThreeRhs)                                      \
-  X(MulNegativeFourRhs)
+  X(MulNegativeFourRhs)                                       \
+  X(MulNegativeFiveRhs)                                       \
+  X(MulNegativeSixRhs)                                        \
+  X(MulNegativeSevenRhs)                                      \
+  X(MulNegativeEightRhs)                                      \
+  X(MulNegativeNineRhs)
 
 #define PRIME_IR_FIELD_MUL_DISTRIBUTIVITY_PATTERN_LIST(X) \
   X(MulAddDistributeConstant)                             \

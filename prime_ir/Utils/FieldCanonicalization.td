@@ -32,8 +32,10 @@ limitations under the License.
 // Requirements for the including file:
 // 1. Define `GetAsConstant`: A helper to materialize a constant of the same
 //    type as a given value from an attribute.
-// 2. Define constant matchers: `IsZero`, `IsOne`, `IsTwo`, `IsNegativeOne`,
-//    `IsNegativeTwo`, `IsNegativeThree`, `IsNegativeFour`.
+// 2. Define constant matchers: `IsZero`, `IsOne`, `IsTwo`, `IsThree`, `IsFour`,
+//    `IsFive`, `IsSix`, `IsSeven`, `IsEight`, `IsNine`, `IsNegativeOne`,
+//    `IsNegativeTwo`, `IsNegativeThree`, `IsNegativeFour`, `IsNegativeFive`,
+//    `IsNegativeSix`, `IsNegativeSeven`, `IsNegativeEight`, `IsNegativeNine`.
 // 3. Define `GetZeroAttr` and `GetIntegerType` for the zero constant pattern.
 //
 //===----------------------------------------------------------------------===//
@@ -249,13 +251,77 @@ multiclass FieldMultiplicativeConstantPatterns<Op MulOp> {
 // Patterns that replace multiplication by small constants with cheaper
 // additive operations (DoubleOp, NegOp).
 //
+// Optimal addition chains for multipliers:
+// | n | Operations    | Expression                   |
+// |---|------------ --|------------------------------|
+// | 2 | D             | double(x)                    |
+// | 3 | D + A         | x + double(x)                |
+// | 4 | D + D         | double(double(x))            |
+// | 5 | D + D + A     | x + double(double(x))        |
+// | 6 | D + A + D     | double(x + double(x))        |
+// | 7 | D + A + D + A | x + double(x + double(x))    |
+// | 8 | D + D + D     | double(double(double(x)))    |
+// | 9 | D + D + D + A | x + double(double(double(x)))|
+//
+// Negative: neg(positive_pattern)
+//
 //===----------------------------------------------------------------------===//
 multiclass FieldStrengthReductionPatterns<Op AddOp, Op MulOp, Op DoubleOp, Op NegOp> {
+    //===------------------------------------------------------------------===//
+    // Positive Multipliers
+    //===------------------------------------------------------------------===//
+
     // x * 2 -> double(x)
     def MulByTwoIsDouble :
-        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c2)),
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
             (DoubleOp $x),
-            [(IsTwo $c2, $x)]>;
+            [(IsTwo $c0, $x)]>;
+
+    // x * 3 -> x + double(x)
+    def MulByThreeRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (AddOp $x, (DoubleOp $x)),
+            [(IsThree $c0, $x)]>;
+
+    // x * 4 -> double(double(x))
+    def MulByFourRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (DoubleOp (DoubleOp $x)),
+            [(IsFour $c0, $x)]>;
+
+    // x * 5 -> x + double(double(x))
+    def MulByFiveRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (AddOp $x, (DoubleOp (DoubleOp $x))),
+            [(IsFive $c0, $x)]>;
+
+    // x * 6 -> double(x + double(x))
+    def MulBySixRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (DoubleOp (AddOp $x, (DoubleOp $x))),
+            [(IsSix $c0, $x)]>;
+
+    // x * 7 -> x + double(x + double(x))
+    def MulBySevenRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (AddOp $x, (DoubleOp (AddOp $x, (DoubleOp $x)))),
+            [(IsSeven $c0, $x)]>;
+
+    // x * 8 -> double(double(double(x)))
+    def MulByEightRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (DoubleOp (DoubleOp (DoubleOp $x))),
+            [(IsEight $c0, $x)]>;
+
+    // x * 9 -> x + double(double(double(x)))
+    def MulByNineRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (AddOp $x, (DoubleOp (DoubleOp (DoubleOp $x)))),
+            [(IsNine $c0, $x)]>;
+
+    //===------------------------------------------------------------------===//
+    // Negative Multipliers
+    //===------------------------------------------------------------------===//
 
     // x * (-1) -> -x
     def MulNegativeOneRhs :
@@ -272,7 +338,7 @@ multiclass FieldStrengthReductionPatterns<Op AddOp, Op MulOp, Op DoubleOp, Op Ne
     // x * (-3) -> -(x + double(x))
     def MulNegativeThreeRhs :
         Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
-            (NegOp (AddOp (DoubleOp $x), $x)),
+            (NegOp (AddOp $x, (DoubleOp $x))),
             [(IsNegativeThree $c0, $x)]>;
 
     // x * (-4) -> -double(double(x))
@@ -280,6 +346,36 @@ multiclass FieldStrengthReductionPatterns<Op AddOp, Op MulOp, Op DoubleOp, Op Ne
         Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
             (NegOp (DoubleOp (DoubleOp $x))),
             [(IsNegativeFour $c0, $x)]>;
+
+    // x * (-5) -> -(x + double(double(x)))
+    def MulNegativeFiveRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (NegOp (AddOp $x, (DoubleOp (DoubleOp $x)))),
+            [(IsNegativeFive $c0, $x)]>;
+
+    // x * (-6) -> -double(x + double(x))
+    def MulNegativeSixRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (NegOp (DoubleOp (AddOp $x, (DoubleOp $x)))),
+            [(IsNegativeSix $c0, $x)]>;
+
+    // x * (-7) -> -(x + double(x + double(x)))
+    def MulNegativeSevenRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (NegOp (AddOp $x, (DoubleOp (AddOp $x, (DoubleOp $x))))),
+            [(IsNegativeSeven $c0, $x)]>;
+
+    // x * (-8) -> -double(double(double(x)))
+    def MulNegativeEightRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (NegOp (DoubleOp (DoubleOp (DoubleOp $x)))),
+            [(IsNegativeEight $c0, $x)]>;
+
+    // x * (-9) -> -(x + double(double(double(x))))
+    def MulNegativeNineRhs :
+        Pat<(MulOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
+            (NegOp (AddOp $x, (DoubleOp (DoubleOp (DoubleOp $x))))),
+            [(IsNegativeNine $c0, $x)]>;
 }
 
 //===----------------------------------------------------------------------===//
