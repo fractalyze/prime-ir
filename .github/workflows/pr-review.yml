@@ -1,0 +1,24 @@
+name: PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+
+jobs:
+  review:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: fractalyze/github-actions/pr-reviewer@main
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+  collect-score:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: fractalyze/github-actions/pr-review-score-collector@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_repo_token: ${{ secrets.CLAUDE_REPO_TOKEN }}
