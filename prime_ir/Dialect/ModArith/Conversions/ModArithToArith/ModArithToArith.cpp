@@ -21,6 +21,7 @@ limitations under the License.
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
@@ -941,10 +942,51 @@ struct ModArithToArith : impl::ModArithToArithBase<ModArithToArith> {
   void runOnOperation() override;
 };
 
+namespace {
+
+// Check if a type contains mod_arith types.
+bool containsModArithType(Type type) {
+  if (isa<ModArithType>(type)) {
+    return true;
+  }
+  if (auto shapedType = dyn_cast<ShapedType>(type)) {
+    return containsModArithType(shapedType.getElementType());
+  }
+  return false;
+}
+
+// Check if a linalg op has mod_arith types.
+bool hasModArithTypes(linalg::LinalgOp op) {
+  return llvm::any_of(op->getOperandTypes(), containsModArithType) ||
+         llvm::any_of(op->getResultTypes(), containsModArithType);
+}
+
+} // namespace
+
 void ModArithToArith::runOnOperation() {
   MLIRContext *context = &getContext();
   ModuleOp module = getOperation();
   ModArithToArithTypeConverter typeConverter(context);
+
+  // Pre-processing: Generalize named linalg ops with mod_arith types.
+  // Named linalg ops (matvec, matmul, dot) have verifiers that expect simple
+  // add/mul ops in their body. When we convert mod_arith to arith, the body
+  // becomes complex (Montgomery reduction, etc.), violating this constraint.
+  // Generalizing to linalg.generic first avoids this issue.
+  IRRewriter rewriter(context);
+  module.walk([&](linalg::LinalgOp op) {
+    if (!isa<linalg::MatvecOp, linalg::MatmulOp, linalg::DotOp>(op)) {
+      return WalkResult::advance();
+    }
+    if (!hasModArithTypes(op)) {
+      return WalkResult::advance();
+    }
+    rewriter.setInsertionPoint(op);
+    if (failed(linalg::generalizeNamedOp(rewriter, op))) {
+      op.emitWarning("failed to generalize named linalg op");
+    }
+    return WalkResult::advance();
+  });
 
   ConversionTarget target(*context);
   target.addIllegalDialect<ModArithDialect>();
