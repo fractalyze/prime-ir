@@ -435,16 +435,9 @@ void ExtensionFieldType::print(AsmPrinter &printer) const {
 }
 
 llvm::TypeSize ExtensionFieldType::getTypeSizeInBits(
-    DataLayout const &dataLayout,
-    llvm::ArrayRef<DataLayoutEntryInterface> params) const {
-  Type baseField = getBaseField();
-  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
-    return llvm::TypeSize::getFixed(pfType.getStorageBitWidth() * getDegree());
-  }
-  // For tower: recursively compute base field size
-  auto efType = cast<ExtensionFieldType>(baseField);
-  auto baseSize = efType.getTypeSizeInBits(dataLayout, params);
-  return llvm::TypeSize::getFixed(baseSize.getFixedValue() * getDegree());
+    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return llvm::TypeSize::getFixed(getDegreeOverPrime() *
+                                  getBasePrimeField().getStorageBitWidth());
 }
 
 uint64_t ExtensionFieldType::getABIAlignment(

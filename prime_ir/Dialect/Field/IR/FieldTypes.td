@@ -141,6 +141,11 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     // Returns the tower depth (1 for direct extension over prime).
     unsigned getTowerDepth() const;
 
+    // Returns the total storage bit width (degreeOverPrime * prime field width).
+    unsigned getStorageBitWidth() const {
+      return getDegreeOverPrime() * getBasePrimeField().getStorageBitWidth();
+    }
+
     Type cloneWith(Type baseField, Attribute element) const;
 
     // Creates a Value representing the non-residue constant in the base field.

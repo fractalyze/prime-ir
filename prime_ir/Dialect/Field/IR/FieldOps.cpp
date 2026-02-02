@@ -544,8 +544,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     // Calculate bitwidth for each element type
     unsigned inputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      inputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBasePrimeField()) *
-                      efType.getDegreeOverPrime();
+      inputBitWidth = efType.getStorageBitWidth();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(inputElementType)) {
       inputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -555,8 +554,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 
     unsigned outputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      outputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBasePrimeField()) *
-                       efType.getDegreeOverPrime();
+      outputBitWidth = efType.getStorageBitWidth();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(outputElementType)) {
       outputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
