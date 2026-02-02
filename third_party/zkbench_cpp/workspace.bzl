@@ -17,7 +17,7 @@
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-ZKBENCH_CPP_COMMIT = "7263538c429e7be93a6d9a95c4011cfe59843637"
+ZKBENCH_CPP_COMMIT = "d504b3fe17cb1c1f2d89292f5f038a4a58bbcdf3"
 ZKBENCH_CPP_SHA256 = ""  # TODO: Add SHA256 after stable release
 
 def repo():
