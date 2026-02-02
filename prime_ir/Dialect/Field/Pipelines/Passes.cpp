@@ -35,6 +35,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
+#include "prime_ir/Dialect/Field/Transforms/FoldFieldLinalgContraction.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
 
@@ -45,6 +46,7 @@ limitations under the License.
 namespace mlir::prime_ir::field {
 
 void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
+  pm.addNestedPass<func::FuncOp>(createFoldFieldLinalgContraction());
   pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
 
   // If we convert elementwise to linalg, tensor folding in ModArithDialect will
