@@ -115,6 +115,12 @@ absl::StatusOr<std::vector<GlobalDeviceId>> GetParticipatingDevices(
     absl::Span<const ReplicaGroup> replica_groups,
     CollectiveOpGroupMode group_mode);
 
+// Figures out how many ranks are participating in each collective subgroup.
+absl::StatusOr<std::vector<int64_t>> GetParticipantCountsForReplicaGroups(
+    int64_t num_replicas, int64_t num_partitions,
+    absl::Span<const ReplicaGroup> replica_groups,
+    CollectiveOpGroupMode group_mode);
+
 // Key that identifies a particular Rendezvous object in our global hashtable.
 // This determines which calls to ExecuteOnStream communicate with each other.
 // The rules are as follows.

@@ -1,0 +1,38 @@
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "gpu_hlo_cost_analysis",
+    srcs = ["gpu_hlo_cost_analysis.cc"],
+    hdrs = ["gpu_hlo_cost_analysis.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service:collective_ops_utils",
+        "//zkx/service:hlo_cost_analysis",
+        "//zkx/service:hlo_module_config",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "model_unittests",
+    srcs = ["gpu_hlo_cost_analysis_unittest.cc"],
+    deps = [
+        ":gpu_hlo_cost_analysis",
+        "//xla/tsl/platform:status",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/tests:hlo_test_base",
+    ],
+)
