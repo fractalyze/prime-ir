@@ -701,7 +701,7 @@ func.func @test_mul_by_neg_three(%arg0: !PF17) -> !PF17 {
   %0 = field.constant 14 : !PF17 // -3 mod 17
   %1 = field.mul %arg0, %0 : !PF17
   // CHECK: %[[DOUBLE:.*]] = field.double %[[ARG0]] : [[T]]
-  // CHECK: %[[ADD:.*]] = field.add %[[DOUBLE]], %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD:.*]] = field.add %[[ARG0]], %[[DOUBLE]] : [[T]]
   // CHECK: %[[RES:.*]] = field.negate %[[ADD]] : [[T]]
   // CHECK: return %[[RES]]
   return %1 : !PF17
@@ -719,6 +719,135 @@ func.func @test_mul_by_neg_four(%arg0: !PF17) -> !PF17 {
   return %1 : !PF17
 }
 
+// CHECK-LABEL: @test_mul_by_three
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_three(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 3 : !PF17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.add %[[ARG0]], %[[DOUBLE]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_four
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_four(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 4 : !PF17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.double %[[DOUBLE1]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_five
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_five(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 5 : !PF17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = field.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.add %[[ARG0]], %[[DOUBLE2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_six
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_six(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 6 : !PF17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD:.*]] = field.add %[[ARG0]], %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.double %[[ADD]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_seven
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_seven(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 7 : !PF17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD1:.*]] = field.add %[[ARG0]], %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = field.double %[[ADD1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.add %[[ARG0]], %[[DOUBLE2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_eight
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_eight(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 8 : !PF17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = field.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.double %[[DOUBLE2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_nine
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_nine(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 9 : !PF17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = field.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE3:.*]] = field.double %[[DOUBLE2]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.add %[[ARG0]], %[[DOUBLE3]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_neg_five
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_neg_five(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 12 : !PF17 // -5 mod 17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = field.double %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[ADD:.*]] = field.add %[[ARG0]], %[[DOUBLE2]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.negate %[[ADD]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_neg_six
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_neg_six(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 11 : !PF17 // -6 mod 17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD:.*]] = field.add %[[ARG0]], %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = field.double %[[ADD]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.negate %[[DOUBLE2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// CHECK-LABEL: @test_mul_by_neg_seven
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_neg_seven(%arg0: !PF17) -> !PF17 {
+  %0 = field.constant 10 : !PF17 // -7 mod 17
+  %1 = field.mul %arg0, %0 : !PF17
+  // CHECK: %[[DOUBLE1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[ADD1:.*]] = field.add %[[ARG0]], %[[DOUBLE1]] : [[T]]
+  // CHECK: %[[DOUBLE2:.*]] = field.double %[[ADD1]] : [[T]]
+  // CHECK: %[[ADD2:.*]] = field.add %[[ARG0]], %[[DOUBLE2]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.negate %[[ADD2]] : [[T]]
+  // CHECK: return %[[RES]]
+  return %1 : !PF17
+}
+
+// Note: test_mul_by_neg_eight and test_mul_by_neg_nine are not tested here
+// because in PF17, constants 9 and 8 collide with positive patterns (IsNine,
+// IsEight). These are tested in ModArith tests with p=37 where no collision
+// occurs.
+
 // CHECK-LABEL: @test_mul_constant_twice
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_mul_constant_twice(%arg0: !PF17) -> !PF17 {
@@ -726,8 +855,11 @@ func.func @test_mul_constant_twice(%arg0: !PF17) -> !PF17 {
   %c4 = field.constant 4 : !PF17
   %0 = field.mul %arg0, %c3 : !PF17
   %1 = field.mul %0, %c4 : !PF17
-  // CHECK: %[[C12:.*]] = field.constant 12 : [[T]]
-  // CHECK: %[[RES:.*]] = field.mul %[[ARG0]], %[[C12]] : [[T]]
+  // x * 3 -> x + double(x), then * 4 -> double(double(...))
+  // CHECK: %[[D1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[A1:.*]] = field.add %[[ARG0]], %[[D1]] : [[T]]
+  // CHECK: %[[D2:.*]] = field.double %[[A1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.double %[[D2]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %1 : !PF17
 }
@@ -740,9 +872,12 @@ func.func @test_mul_of_mul_by_constant(%arg0: !PF17, %arg1: !PF17) -> !PF17 {
   %0 = field.mul %arg0, %c3 : !PF17
   %1 = field.mul %arg1, %c4 : !PF17
   %2 = field.mul %0, %1 : !PF17
-  // CHECK: %[[C12:.*]] = field.constant 12 : [[T]]
-  // CHECK: %[[PROD:.*]] = field.mul %[[ARG0]], %[[ARG1]] : [[T]]
-  // CHECK: %[[RES:.*]] = field.mul %[[PROD]], %[[C12]] : [[T]]
+  // x * 3 -> x + double(x), y * 4 -> double(double(y))
+  // CHECK: %[[D0:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[A0:.*]] = field.add %[[ARG0]], %[[D0]] : [[T]]
+  // CHECK: %[[D1:.*]] = field.double %[[ARG1]] : [[T]]
+  // CHECK: %[[D2:.*]] = field.double %[[D1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.mul %[[A0]], %[[D2]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %2 : !PF17
 }
@@ -754,10 +889,11 @@ func.func @test_mul_add_distribute_constant(%arg0: !PF17) -> !PF17 {
   %c4 = field.constant 4 : !PF17
   %0 = field.add %arg0, %c3 : !PF17
   %1 = field.mul %0, %c4 : !PF17
+  // (x + 3) * 4 -> x * 4 + 12, then x * 4 -> double(double(x))
   // CHECK: %[[C12:.*]] = field.constant 12 : [[T]]
-  // CHECK: %[[C4:.*]] = field.constant 4 : [[T]]
-  // CHECK: %[[PROD:.*]] = field.mul %[[ARG0]], %[[C4]] : [[T]]
-  // CHECK: %[[RES:.*]] = field.add %[[PROD]], %[[C12]] : [[T]]
+  // CHECK: %[[D1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[D2:.*]] = field.double %[[D1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.add %[[D2]], %[[C12]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %1 : !PF17
 }
@@ -769,10 +905,11 @@ func.func @test_mul_sub_distribute_constant_rhs(%arg0: !PF17) -> !PF17 {
   %c4 = field.constant 4 : !PF17
   %0 = field.sub %arg0, %c3 : !PF17
   %1 = field.mul %0, %c4 : !PF17
+  // (x - 3) * 4 -> x * 4 - 12, then x * 4 -> double(double(x))
   // CHECK: %[[C12:.*]] = field.constant 12 : [[T]]
-  // CHECK: %[[C4:.*]] = field.constant 4 : [[T]]
-  // CHECK: %[[PROD:.*]] = field.mul %[[ARG0]], %[[C4]] : [[T]]
-  // CHECK: %[[RES:.*]] = field.sub %[[PROD]], %[[C12]] : [[T]]
+  // CHECK: %[[D1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[D2:.*]] = field.double %[[D1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.sub %[[D2]], %[[C12]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %1 : !PF17
 }
@@ -784,10 +921,11 @@ func.func @test_mul_sub_distribute_constant_lhs(%arg0: !PF17) -> !PF17 {
   %c4 = field.constant 4 : !PF17
   %0 = field.sub %c3, %arg0 : !PF17
   %1 = field.mul %0, %c4 : !PF17
+  // (3 - x) * 4 -> 12 - x * 4, then x * 4 -> double(double(x))
   // CHECK: %[[C12:.*]] = field.constant 12 : [[T]]
-  // CHECK: %[[C4:.*]] = field.constant 4 : [[T]]
-  // CHECK: %[[PROD:.*]] = field.mul %[[ARG0]], %[[C4]] : [[T]]
-  // CHECK: %[[RES:.*]] = field.sub %[[C12]], %[[PROD]] : [[T]]
+  // CHECK: %[[D1:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[D2:.*]] = field.double %[[D1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.sub %[[C12]], %[[D2]] : [[T]]
   // CHECK: return %[[RES]] : [[T]]
   return %1 : !PF17
 }

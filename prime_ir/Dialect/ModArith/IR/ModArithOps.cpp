@@ -543,46 +543,56 @@ void ConstantOp::print(OpAsmPrinter &p) {
 }
 
 namespace {
-bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
-  IntegerAttr intAttr = dyn_cast_if_present<IntegerAttr>(attr);
-  if (auto denseIntAttr = dyn_cast_if_present<SplatElementsAttr>(attr)) {
-    intAttr = denseIntAttr.getSplatValue<IntegerAttr>();
-  }
-  if (intAttr) {
-    auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
-    auto valueOp =
-        ModArithOperation::fromUnchecked(intAttr.getValue(), modArithType);
-    ModArithType stdType = modArithType;
-    if (modArithType.isMontgomery()) {
-      stdType = cast<ModArithType>(getStandardFormType(modArithType));
-      valueOp = valueOp.fromMont();
+
+// Helper to compare a constant attribute with an integer offset.
+// Handles both standard and Montgomery forms.
+template <typename Predicate>
+bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
+                       Predicate pred) {
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
+
+  // Extract typed attr, handling splat for tensors
+  IntegerAttr typedAttr;
+  if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
+    typedAttr = intAttr;
+  } else if (auto splatAttr = dyn_cast<SplatElementsAttr>(attr)) {
+    typedAttr = splatAttr.getSplatValue<IntegerAttr>();
+  } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr)) {
+    if (denseAttr.isSplat()) {
+      typedAttr = denseAttr.getSplatValue<IntegerAttr>();
     }
-    ModArithOperation offsetOp(APInt(intAttr.getValue().getBitWidth(), offset),
-                               stdType);
-    return valueOp == -offsetOp;
   }
-  return false;
+  if (!typedAttr) {
+    return false;
+  }
+
+  // Use fromUnchecked because the attribute is already stored in the correct
+  // representation (Montgomery form for Montgomery types).
+  ModArithOperation valueOp =
+      ModArithOperation::fromUnchecked(typedAttr.getValue(), modArithType);
+  ModArithType stdType = modArithType;
+  if (modArithType.isMontgomery()) {
+    stdType = cast<ModArithType>(getStandardFormType(modArithType));
+    valueOp = valueOp.fromMont();
+  }
+  ModArithOperation offsetOp(static_cast<uint64_t>(offset), stdType);
+  return pred(valueOp, offsetOp);
+}
+
+bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
+  return compareWithOffset(attr, val, offset,
+                           [](const ModArithOperation &a,
+                              // NOLINTNEXTLINE(whitespace/newline)
+                              const ModArithOperation &b) { return a == -b; });
 }
 
 bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
-  IntegerAttr intAttr = dyn_cast_if_present<IntegerAttr>(attr);
-  if (auto denseIntAttr = dyn_cast_if_present<SplatElementsAttr>(attr)) {
-    intAttr = denseIntAttr.getSplatValue<IntegerAttr>();
-  }
-  if (intAttr) {
-    auto modArithType = cast<ModArithType>(getElementTypeOrSelf(val.getType()));
-    ModArithOperation valueOp(intAttr.getValue(), modArithType);
-    ModArithType stdType = modArithType;
-    if (modArithType.isMontgomery()) {
-      stdType = cast<ModArithType>(getStandardFormType(modArithType));
-      valueOp = valueOp.fromMont();
-    }
-    ModArithOperation offsetOp(APInt(intAttr.getValue().getBitWidth(), offset),
-                               stdType);
-    return valueOp == offsetOp;
-  }
-  return false;
+  return compareWithOffset(attr, val, offset,
+                           [](const ModArithOperation &a,
+                              // NOLINTNEXTLINE(whitespace/newline)
+                              const ModArithOperation &b) { return a == b; });
 }
+
 } // namespace
 
 namespace {
