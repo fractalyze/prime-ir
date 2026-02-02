@@ -60,6 +60,15 @@ load("//bazel:prime_ir_deps.bzl", "prime_ir_deps")
 
 prime_ir_deps()
 
+# zkbench-cpp for benchmark JSON output
+load("//third_party/nlohmann_json:workspace.bzl", nlohmann_json = "repo")
+
+nlohmann_json()
+
+load("//third_party/zkbench_cpp:workspace.bzl", zkbench_cpp = "repo")
+
+zkbench_cpp()
+
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//third_party/llvm-project:workspace.bzl", "LLVM_COMMIT", "LLVM_PATCHES", "LLVM_SHA256")
 

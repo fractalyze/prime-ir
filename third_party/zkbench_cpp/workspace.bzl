@@ -13,25 +13,18 @@
 # limitations under the License.
 # ==============================================================================
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+"""Provides the repo macro to import zkbench-cpp."""
 
-cc_library(
-    name = "zkbench_reporter",
-    srcs = ["zkbench_reporter.cc"],
-    hdrs = ["zkbench_reporter.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@com_google_benchmark//:benchmark",
-        "@zkbench_cpp//zkbench:schema",
-    ],
-)
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-cc_library(
-    name = "benchmark_main",
-    srcs = ["benchmark_main.cc"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":zkbench_reporter",
-        "@com_google_benchmark//:benchmark",
-    ],
-)
+ZKBENCH_CPP_COMMIT = "7263538c429e7be93a6d9a95c4011cfe59843637"
+ZKBENCH_CPP_SHA256 = ""  # TODO: Add SHA256 after stable release
+
+def repo():
+    """Imports zkbench-cpp."""
+    http_archive(
+        name = "zkbench_cpp",
+        sha256 = ZKBENCH_CPP_SHA256,
+        strip_prefix = "zkbench-cpp-{commit}".format(commit = ZKBENCH_CPP_COMMIT),
+        urls = ["https://github.com/fractalyze/zkbench-cpp/archive/{commit}.tar.gz".format(commit = ZKBENCH_CPP_COMMIT)],
+    )
