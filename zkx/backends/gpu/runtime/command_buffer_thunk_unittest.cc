@@ -31,6 +31,7 @@ limitations under the License.
 
 #include "xla/tsl/platform/status.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/profiler_lock.h"
 #include "zkx/backends/gpu/runtime/command_buffer_cmd.h"
 #include "zkx/backends/gpu/runtime/memset_thunk.h"
 #include "zkx/backends/gpu/runtime/sequential_thunk.h"
@@ -244,9 +245,9 @@ TEST(CommandBufferThunkTest, Memset32Cmd) {
   ASSERT_EQ(dst, std::vector<int32_t>(4, 84));
 }
 
-// TODO(batzor): Enable this test. Dependency: Profiler
-TEST(CommandBufferThunkTest,
-     DISABLED_Memset32CmdCommandBuffersDisabledDuringProfiling) {
+// Verifies that when profiler is active and command buffers are disabled during
+// profiling, the thunk falls back to sequential execution.
+TEST(CommandBufferThunkTest, Memset32CmdCommandBuffersDisabledDuringProfiling) {
   se::StreamExecutor* executor = GpuExecutor();
 
   TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
@@ -287,9 +288,9 @@ TEST(CommandBufferThunkTest,
   Thunk::ExecuteParams params = Thunk::ExecuteParams::Create(
       run_options, allocations, stream.get(), stream.get(), nullptr, nullptr);
 
-  // TODO(batzor): Uncomment this. Dependency: Profiler
-  // TF_ASSERT_OK_AND_ASSIGN(auto profiler_lock,
-  //                         tsl::profiler::ProfilerLock::Acquire());
+  // Acquire profiler lock to simulate active profiling session.
+  TF_ASSERT_OK_AND_ASSIGN(auto profiler_lock,
+                          tsl::profiler::ProfilerLock::Acquire());
   // Execute command buffer thunk and verify that it set the memory.
   TF_ASSERT_OK(thunk.ExecuteOnStream(params));
   TF_ASSERT_OK(stream->BlockHostUntilDone());
@@ -301,9 +302,9 @@ TEST(CommandBufferThunkTest,
   ASSERT_EQ(dst, std::vector<int32_t>(4, 84));
 }
 
-// TODO(batzor): Enable this test. Dependency: Profiler
-TEST(CommandBufferThunkTest,
-     DISABLED_Memset32CmdCommandBuffersEnabledDuringProfiling) {
+// Verifies that when profiler is active but command buffers are enabled during
+// profiling, the thunk still uses command buffer execution.
+TEST(CommandBufferThunkTest, Memset32CmdCommandBuffersEnabledDuringProfiling) {
   se::StreamExecutor* executor = GpuExecutor();
 
   TF_ASSERT_OK_AND_ASSIGN(auto stream, executor->CreateStream());
@@ -344,9 +345,9 @@ TEST(CommandBufferThunkTest,
   Thunk::ExecuteParams params = Thunk::ExecuteParams::Create(
       run_options, allocations, stream.get(), stream.get(), nullptr, nullptr);
 
-  // TODO(batzor): Uncomment this. Dependency: Profiler
-  // TF_ASSERT_OK_AND_ASSIGN(auto profiler_lock,
-  //                         tsl::profiler::ProfilerLock::Acquire());
+  // Acquire profiler lock to simulate active profiling session.
+  TF_ASSERT_OK_AND_ASSIGN(auto profiler_lock,
+                          tsl::profiler::ProfilerLock::Acquire());
   // Execute command buffer thunk and verify that it set the memory.
   TF_ASSERT_OK(thunk.ExecuteOnStream(params));
   TF_ASSERT_OK(stream->BlockHostUntilDone());

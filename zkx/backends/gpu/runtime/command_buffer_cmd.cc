@@ -27,6 +27,7 @@ limitations under the License.
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zkx/backends/gpu/runtime/annotation.h"
 #include "zkx/debug_options_flags.h"
 #include "zkx/executable_run_options.h"
 #include "zkx/service/computation_placer.h"
@@ -262,9 +263,8 @@ absl::Status CommandBufferCmdSequence::Record(
 
     ExecutionScopeId execution_scope_id =
         command.cmd->GetExecutionScope(record_params);
-    // TODO(batzor): Uncomment this. Dependency: Profiler.
-    // std::optional<tsl::profiler::ScopedAnnotation> annotation =
-    //     GetKernelAnnotation(command.cmd->profile_annotation());
+    std::optional<tsl::profiler::ScopedAnnotation> annotation =
+        GetKernelAnnotation(command.cmd->profile_annotation());
 
     if (command.requires_barrier) {
       VLOG(3) << "Add command buffer barrier after "

@@ -25,6 +25,8 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
+#include "xla/tsl/profiler/lib/traceme_encode.h"
 #include "zkx/stream_executor/device_memory.h"
 
 namespace zkx {
@@ -110,9 +112,9 @@ absl::Status WhileThunk::ExecuteOnStream(const ExecuteParams& params) {
   }();
 
   while (true) {
-    // TODO(batzor): Uncomment this. Dependency: Profiler
-    // TraceMe trace(
-    //     [&] { return TraceMeEncode("While", {{"iteration:", iter}}); });
+    tsl::profiler::TraceMe trace([&] {
+      return tsl::profiler::TraceMeEncode("While", {{"iteration", iter}});
+    });
     VLOG(3) << "Executing WhileThunk condition computation; iter=" << iter;
     TF_RETURN_IF_ERROR(condition_thunk_sequence_->ExecuteOnStream(params));
 
