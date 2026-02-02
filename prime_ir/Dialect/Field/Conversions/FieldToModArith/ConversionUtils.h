@@ -55,13 +55,6 @@ inline Value createRationalConst(ImplicitLocOpBuilder &b,
   return createPrimeConst(b, baseField, numerator, denominator);
 }
 
-// Create a non-residue constant for an extension field.
-// Returns a field::ConstantOp Value representing the non-residue in the base
-// field. Uses ConstantLikeInterface to properly embed integer non-residues
-// into extension fields when the base field is itself an extension field.
-Value createNonResidueConstant(ImplicitLocOpBuilder &b,
-                               ExtensionFieldType efType);
-
 } // namespace mlir::prime_ir::field
 
 #endif // PRIME_IR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_CONVERSIONUTILS_H_

@@ -142,6 +142,10 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     unsigned getTowerDepth() const;
 
     Type cloneWith(Type baseField, Attribute element) const;
+
+    // Creates a Value representing the non-residue constant in the base field.
+    Value createNonResidueValue(ImplicitLocOpBuilder &builder) const;
+
     Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder,
                                 Type structType,
                                 ArrayRef<Value> coeffs) const;

@@ -203,7 +203,7 @@ private:
       ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
       auto extField = cast<ExtensionFieldType>(value.getType());
       auto baseEfType = cast<ExtensionFieldType>(extField.getBaseField());
-      Value baseNonResidue = createNonResidueConstant(*b, baseEfType);
+      Value baseNonResidue = baseEfType.createNonResidueValue(*b);
       return BaseFieldT(v, baseNonResidue);
     }
   }

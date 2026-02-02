@@ -21,6 +21,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/TowerFieldConfig.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::prime_ir::field {
@@ -514,6 +515,33 @@ unsigned ExtensionFieldType::getTowerDepth() const {
 
 Type ExtensionFieldType::cloneWith(Type baseField, Attribute element) const {
   return ExtensionFieldType::get(getContext(), getDegree(), baseField, element);
+}
+
+Value ExtensionFieldType::createNonResidueValue(
+    ImplicitLocOpBuilder &builder) const {
+  Type baseFieldType = getBaseField();
+  Attribute nonResidueAttr = getNonResidue();
+
+  // Prime field base: return mod_arith constant directly.
+  // The non-residue attribute is already in the correct form (standard or
+  // Montgomery), so we use it directly without conversion.
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseFieldType)) {
+    auto intAttr = cast<IntegerAttr>(nonResidueAttr);
+    return builder.create<mod_arith::ConstantOp>(convertPrimeFieldType(pfType),
+                                                 intAttr);
+  }
+
+  // Extension field base: use ConstantLikeInterface for proper embedding
+  auto baseEfType = cast<ExtensionFieldType>(baseFieldType);
+  auto constantLike = cast<ConstantLikeInterface>(baseEfType);
+
+  // If integer attr, embed as [value, 0, 0, ...] in the extension field
+  if (auto intAttr = dyn_cast<IntegerAttr>(nonResidueAttr)) {
+    nonResidueAttr = constantLike.createConstantAttr(intAttr.getInt());
+  }
+
+  return ConstantOp::materialize(builder, nonResidueAttr, baseEfType,
+                                 builder.getLoc());
 }
 
 Value ExtensionFieldType::buildStructFromCoeffs(

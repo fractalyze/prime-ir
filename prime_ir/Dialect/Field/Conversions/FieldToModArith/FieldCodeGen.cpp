@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldCodeGen.h"
 
-#include "prime_ir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/BuilderContext.h"
 
@@ -30,7 +29,7 @@ FieldCodeGen::FieldCodeGen(Type type, Value value,
 
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   auto efType = cast<ExtensionFieldType>(type);
-  Value nonResidue = createNonResidueConstant(*b, efType);
+  Value nonResidue = efType.createNonResidueValue(*b);
 
   auto sig = getTowerSignature(efType);
 #define CREATE_CODEGEN(unused_sig, TypeName)                                   \
