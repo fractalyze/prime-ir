@@ -175,22 +175,18 @@ absl::Status LogicalBufferAnalysis::HandleTuple(HloInstruction* tuple) {
 
 absl::Status LogicalBufferAnalysis::HandleCustomCall(
     HloInstruction* custom_call) {
-  // clang-format off
-  // TODO(chokobole): Uncomment this. Dependency: HloCustomCallInstruction
-  // clang-format on
-  // auto ccall = Cast<HloCustomCallInstruction>(custom_call);
-  // absl::flat_hash_set<ShapeIndex> aliased_outputs;
-  // for (const auto& pair : ccall->output_to_operand_aliasing()) {
-  //   aliased_outputs.insert(pair.first);
-  // }
-  // ShapeUtil::ForEachSubshape(ccall->shape(), [&](const Shape& shape,
-  //                                                const ShapeIndex& index) {
-  //   if (!aliased_outputs.contains(index) || !alias_buffer_across_dataflow_) {
-  //     NewLogicalBuffer(custom_call, index);
-  //   }
-  // });
-  // return absl::OkStatus();
-  return absl::UnimplementedError("");
+  auto ccall = Cast<HloCustomCallInstruction>(custom_call);
+  absl::flat_hash_set<ShapeIndex> aliased_outputs;
+  for (const auto& pair : ccall->output_to_operand_aliasing()) {
+    aliased_outputs.insert(pair.first);
+  }
+  ShapeUtil::ForEachSubshape(ccall->shape(), [&](const Shape& shape,
+                                                 const ShapeIndex& index) {
+    if (!aliased_outputs.contains(index) || !alias_buffer_across_dataflow_) {
+      NewLogicalBuffer(custom_call, index);
+    }
+  });
+  return absl::OkStatus();
 }
 
 // WARNING (b/259460539): output_to_operand_aliasing was moved from

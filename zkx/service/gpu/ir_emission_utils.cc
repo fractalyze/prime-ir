@@ -33,6 +33,11 @@ bool IsSliceWithUnitStrides(const HloInstruction* instr) {
                                  [](int64_t stride) { return stride == 1; });
 }
 
+bool IsCubDeviceRadixSort(const HloInstruction& hlo) {
+  return hlo.opcode() == HloOpcode::kCustomCall &&
+         hlo.custom_call_target() == kCubDeviceRadixSortTarget;
+}
+
 absl::StatusOr<BufferAllocation::Slice> GetAllocationSlice(
     const BufferAssignment& buffer_assignment, const HloInstruction* instr,
     const ShapeIndex& index) {

@@ -71,6 +71,14 @@ inline constexpr std::string_view kTritonGemmFusionKind = "__triton_gemm";
 
 inline constexpr std::string_view kUncompilableFusion = "__uncompilable_fusion";
 
+// CUB library calls.
+// Reference: https://nvlabs.github.io/cub/
+inline constexpr std::string_view kCubDeviceRadixSortTarget =
+    "__cub$DeviceRadixSort";
+
+// Returns true if the instruction is a CUB DeviceRadixSort custom call.
+bool IsCubDeviceRadixSort(const HloInstruction& hlo);
+
 // Returns true if `instr` is a non-strided slice.
 bool IsSliceWithUnitStrides(const HloInstruction* instr);
 

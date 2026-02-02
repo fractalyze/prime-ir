@@ -209,6 +209,32 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "host_memory_offload_annotations",
+    hdrs = ["host_memory_offload_annotations.h"],
+)
+
+zkx_cc_library(
+    name = "host_offload_utils",
+    srcs = ["host_offload_utils.cc"],
+    hdrs = ["host_offload_utils.h"],
+    deps = [
+        ":call_graph",
+        ":host_memory_offload_annotations",
+        "//zkx:shape_util",
+        "//zkx:side_effect_util",
+        "//zkx:util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+zkx_cc_library(
     name = "call_inliner",
     srcs = ["call_inliner.cc"],
     hdrs = ["call_inliner.h"],
@@ -1514,6 +1540,7 @@ zkx_cc_unittest(
         "hlo_proto_util_unittest.cc",
         # TODO(chokobole): Add unittest. Dependency: HloTestBase
         # "hlo_verifier_unittest.cc",
+        "host_offload_utils_unittest.cc",
         "instruction_fusion_unittest.cc",
         "lockable_unittest.cc",
         # TODO(chokobole): Add unittest. Dependency: HloTestBase
@@ -1551,6 +1578,7 @@ zkx_cc_unittest(
         ":hlo_graph_dumper",
         ":hlo_module_config",
         ":hlo_proto_util",
+        ":host_offload_utils",
         ":instruction_fusion",
         ":lockable",
         ":mapped_ptr_container_sorter",

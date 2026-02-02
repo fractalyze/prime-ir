@@ -342,6 +342,12 @@ class ShapeUtil {
   // Copy the dynamic dimensions property from one shape to another.
   static void CopyDynamicDimensions(Shape* to, const Shape& from);
 
+  // Returns true if the given dimension is effectively the most major dimension
+  // of the shape taking into account any unit dimensions. Requires that the
+  // shape has a layout.
+  static bool IsEffectivelyMostMajorDimension(const Shape& shape,
+                                              int64_t dimension);
+
   // Returns an empty tuple shape. Can be used as a sentinel Shape value.
   static Shape MakeNil() { return MakeTupleShape({}); }
 
@@ -808,6 +814,12 @@ class ShapeUtil {
   // Returns a shape with the given dimensions deleted.
   static Shape DeleteDimensions(absl::Span<int64_t const> dims_to_delete,
                                 Shape shape);
+
+  // Constructs a new shape with the given dimension `dim` as the most major
+  // dimension in the layout. If the shape does not have a layout, assumes a
+  // default layout. If the shape is a tuple, apply this to all the leaf shapes
+  // of the tuple.
+  static Shape MoveDimToMajor(const Shape& shape, int64_t dim);
 
   // Returns a shape with all the dimensions of the input shape for which `p`
   // returns true.

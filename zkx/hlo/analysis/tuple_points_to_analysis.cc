@@ -490,39 +490,34 @@ absl::Status TuplePointsToAnalysis::HandleTuple(HloInstruction* tuple) {
 
 absl::Status TuplePointsToAnalysis::HandleCustomCall(
     HloInstruction* custom_call) {
-  // clang-format off
-  // TODO(chokobole): Uncomment this. Dependency: HloCustomCallInstruction
-  // clang-format on
-  // auto ccall = Cast<HloCustomCallInstruction>(custom_call);
-  // PointsToSet& points_to_set = CreateEmptyPointsToSet(custom_call);
-  // absl::flat_hash_map<ShapeIndex, std::pair<int64_t, ShapeIndex>>
-  //     aliased_outputs;
-  // for (const auto& pair : ccall->output_to_operand_aliasing()) {
-  //   aliased_outputs.emplace(pair.first, pair.second);
-  // }
-  // points_to_set.ForEachMutableElement([&](const ShapeIndex& index,
-  //                                         PointsToSet::BufferList* buffers) {
-  //   auto it = aliased_outputs.find(index);
-  //   if (it == aliased_outputs.end() || !alias_buffer_across_dataflow_) {
-  //     points_to_set.AddPointedToBuffer(
-  //         logical_buffer_analysis_->GetBuffer(custom_call, index), index);
-  //   } else {
-  //     const PointsToSet& input_set =
-  //         *PerInst(ccall->operand(it->second.first))->points_to_set;
-  //     for (const LogicalBuffer* input_buffer :
-  //          input_set.element(it->second.second)) {
-  //       points_to_set.AddPointedToBuffer(*input_buffer, index);
-  //     }
+  auto ccall = Cast<HloCustomCallInstruction>(custom_call);
+  PointsToSet& points_to_set = CreateEmptyPointsToSet(custom_call);
+  absl::flat_hash_map<ShapeIndex, std::pair<int64_t, ShapeIndex>>
+      aliased_outputs;
+  for (const auto& pair : ccall->output_to_operand_aliasing()) {
+    aliased_outputs.emplace(pair.first, pair.second);
+  }
+  points_to_set.ForEachMutableElement([&](const ShapeIndex& index,
+                                          PointsToSet::BufferList* buffers) {
+    auto it = aliased_outputs.find(index);
+    if (it == aliased_outputs.end() || !alias_buffer_across_dataflow_) {
+      points_to_set.AddPointedToBuffer(
+          logical_buffer_analysis_->GetBuffer(custom_call, index), index);
+    } else {
+      const PointsToSet& input_set =
+          *PerInst(ccall->operand(it->second.first))->points_to_set;
+      for (const LogicalBuffer* input_buffer :
+           input_set.element(it->second.second)) {
+        points_to_set.AddPointedToBuffer(*input_buffer, index);
+      }
 
-  //     for (HloInstruction* tuple :
-  //     input_set.tuple_sources(it->second.second)) {
-  //       points_to_set.add_tuple_source(index, tuple);
-  //     }
-  //   }
-  // });
-  // points_to_set.add_tuple_source({}, custom_call);
-  // return absl::OkStatus();
-  return absl::UnimplementedError("");
+      for (HloInstruction* tuple : input_set.tuple_sources(it->second.second)) {
+        points_to_set.add_tuple_source(index, tuple);
+      }
+    }
+  });
+  points_to_set.add_tuple_source({}, custom_call);
+  return absl::OkStatus();
 }
 
 // WARNING:

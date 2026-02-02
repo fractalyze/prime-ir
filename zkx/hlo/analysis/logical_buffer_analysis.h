@@ -92,7 +92,7 @@ class LogicalBufferAnalysis : public DfsHloVisitorWithDefault {
   // Whether to alias buffers defined by dataflow relations. This aliasing
   // relation should not be recognized if copies can be inserted to break up
   // the dataflow relation-induced aliasing.
-  //   const bool alias_buffer_across_dataflow_ = false;
+  const bool alias_buffer_across_dataflow_ = false;
 };
 
 void GatherFusionInstructions(

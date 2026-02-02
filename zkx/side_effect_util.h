@@ -25,6 +25,12 @@ extern const char kZkxStreamAnnotationAttr[];
 // ZKX frontend attribute for specifying the scheduling group id annotations.
 extern const char kZkxSchedulingGroupIdAttr[];
 
+// ZKX frontend attribute for specifying the type of computation.
+extern const char kZkxComputeTypeAttr[];
+
+// ZKX frontend attribute values for kZkxComputeTypeAttr.
+extern const char kZkxComputeTypeHost[];
+
 }  // namespace zkx
 
 #endif  // ZKX_SIDE_EFFECT_UTIL_H_

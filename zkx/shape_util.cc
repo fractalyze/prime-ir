@@ -597,6 +597,25 @@ void ShapeUtil::CopyDynamicDimensions(Shape* to, const Shape& from) {
 }
 
 // static
+bool ShapeUtil::IsEffectivelyMostMajorDimension(const Shape& shape,
+                                                int64_t dimension) {
+  // Check if the dimension is most major as returned by LayoutUtil::Major(0).
+  // If not, and the most major dimension's size is 1, then we can repeat the
+  // same check for next most major dimension as returned by
+  // LayoutUtil::Major(1) and so on.
+  for (int64_t i = 0; i < shape.dimensions_size(); ++i) {
+    int64_t major_dimension = LayoutUtil::Major(shape.layout(), i);
+    if (major_dimension == dimension) {
+      return true;
+    }
+    if (shape.dimensions(major_dimension) != 1) {
+      return false;
+    }
+  }
+  return false;
+}
+
+// static
 bool ShapeUtil::ElementIsIntegral(const Shape& shape) {
   return primitive_util::IsIntegralType(shape.element_type());
 }
@@ -1602,6 +1621,33 @@ Shape ShapeUtil::DeleteDimensions(absl::Span<int64_t const> dims_to_delete,
   absl::c_sort(dims_to_delete_v);
   shape.DeleteDimensions(dims_to_delete_v);
   return shape;
+}
+
+// static
+Shape ShapeUtil::MoveDimToMajor(const Shape& shape, int64_t dim) {
+  if (shape.IsTuple()) {
+    std::vector<Shape> result_shapes;
+    result_shapes.reserve(shape.tuple_shapes_size());
+    for (const Shape& s : shape.tuple_shapes()) {
+      result_shapes.push_back(MoveDimToMajor(s, dim));
+    }
+    return ShapeUtil::MakeTupleShape(result_shapes);
+  }
+
+  Shape ret = shape;
+  if (!ret.has_layout()) {
+    LayoutUtil::SetToDefaultLayout(&ret);
+  }
+  *ret.mutable_layout() = LayoutUtil::MoveDimToMajor(ret.layout(), dim);
+  DimensionVector minor_to_major;
+  for (int64_t d : LayoutUtil::MinorToMajor(ret)) {
+    if (d != dim) {
+      minor_to_major.push_back(d);
+    }
+  }
+  minor_to_major.push_back(dim);
+  *ret.mutable_layout() = LayoutUtil::MakeLayout(minor_to_major);
+  return ret;
 }
 
 // static

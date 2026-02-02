@@ -22,4 +22,8 @@ const char kZkxStreamAnnotationAttr[] = "_zkx_stream_annotation";
 
 const char kZkxSchedulingGroupIdAttr[] = "_scheduling_group_id";
 
+const char kZkxComputeTypeAttr[] = "_zkx_compute_type";
+
+const char kZkxComputeTypeHost[] = "host";
+
 }  // namespace zkx
