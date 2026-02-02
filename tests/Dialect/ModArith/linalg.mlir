@@ -78,3 +78,24 @@ func.func @test_linalg_transpose(%input : tensor<2x3x!Zp>) -> tensor<3x2x!Zp> {
   // CHECK: return %[[RES]] : [[OUTPUT_TYPE]]
   return %res : tensor<3x2x!Zp>
 }
+
+// CHECK-LABEL: @test_linalg_fill
+// CHECK-SAME: (%[[VALUE:.*]]: [[VALUE_TYPE:.*]], %[[INIT:.*]]: [[INIT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_linalg_fill(%value : !Zp, %init: tensor<4x!Zp>) -> tensor<4x!Zp> {
+  // CHECK: %[[RES:.*]] = linalg.fill ins(%[[VALUE]] : [[VALUE_TYPE]]) outs(%[[INIT]] : [[INIT_TYPE]]) -> [[T]]
+  %res = linalg.fill ins(%value : !Zp) outs(%init : tensor<4x!Zp>) -> tensor<4x!Zp>
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<4x!Zp>
+}
+
+// CHECK-LABEL: @test_tensor_generate
+// CHECK-SAME: (%[[VALUE:.*]]: [[VALUE_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_tensor_generate(%value : !Zp) -> tensor<4x!Zp> {
+  // CHECK: %[[RES:.*]] = tensor.generate {
+  %res = tensor.generate {
+    ^bb0(%i : index):
+      tensor.yield %value : !Zp
+  } : tensor<4x!Zp>
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<4x!Zp>
+}
