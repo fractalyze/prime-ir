@@ -1183,7 +1183,7 @@ class IntTest : public BaseIntTest<T>, public CpuKernelEmitterTest {
       for (int64_t j = W - 1; j >= 0; --j) {
         int64_t pos = window_start + j * WIN_DIL;
         T val = (pos < PADDED) ? padded[pos] : init;
-        acc = 2 * acc + val;  // f(a, b) = 2*a + b
+        acc = acc + acc + val;  // f(a, b) = 2*a + b
       }
       expected[i] = acc;
     }
