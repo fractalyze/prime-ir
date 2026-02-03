@@ -140,6 +140,14 @@ struct TransposeDescription {
 std::optional<TransposeDescription> GetDescriptionForTiledTransposeEmitter(
     const HloInstruction& hero);
 
+// Returns the dynamic-update-slice instructions defining the results of a
+// fusion node. A dynamic slice update is said to be "defining" of a result if
+// that result is the output of a dynamic slice update, or if that result is the
+// output of a bitcast of a dynamic slice update---since such bitcast may be
+// handled as a no-op.
+std::vector<HloInstructionAdaptor> GetOutputDefiningDynamicUpdateSlices(
+    absl::Span<HloInstructionAdaptor const> roots);
+
 // Checks if the instruction is elementwise.
 bool IsIntermediate(const HloInstruction* instr, int allowed_operand_count = 1);
 

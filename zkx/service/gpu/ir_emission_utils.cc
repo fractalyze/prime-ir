@@ -57,6 +57,21 @@ absl::StatusOr<bool> CanEmitFusedDynamicUpdateSliceInPlaceForGpu(
       "Not implemented for CanEmitFusedDynamicUpdateSliceInPlaceForGpu");
 }
 
+std::vector<HloInstructionAdaptor> GetOutputDefiningDynamicUpdateSlices(
+    absl::Span<HloInstructionAdaptor const> roots) {
+  std::vector<HloInstructionAdaptor> dus_ops;
+  for (HloInstructionAdaptor root : roots) {
+    while (root.opcode() == HloOpcode::kBitcast) {
+      root = root.GetOperand(0);
+    }
+
+    if (root.opcode() == HloOpcode::kDynamicUpdateSlice) {
+      dus_ops.push_back(root);
+    }
+  }
+  return dus_ops;
+}
+
 std::optional<TransposeDescription> GetDescriptionForTiledTransposeEmitter(
     const HloInstruction& hero) {
   if (hero.opcode() != HloOpcode::kTranspose) {

@@ -79,6 +79,7 @@ zkx_cc_library(
     deps = [
         ":fusion_emitter",
         "//zkx:shape_util",
+        "//zkx/backends/gpu/codegen/emitters:in_place_dynamic_update_slice",
         "//zkx/backends/gpu/codegen/emitters:loop",
         "//zkx/hlo/ir:hlo",
         "//zkx/service:buffer_assignment",

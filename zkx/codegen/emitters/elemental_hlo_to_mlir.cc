@@ -1001,4 +1001,28 @@ ValueRange EmitZkxLoopOp(
       .getResults();
 }
 
+Value ClampIndex(Value index, bool is_unsigned, int64_t high,
+                 ImplicitLocOpBuilder& b) {
+  auto zero = b.create<ConstantOp>(b.getIndexAttr(0));
+  if (high <= 0) {
+    return zero;
+  }
+
+  if (is_unsigned) {
+    if (index.getType() != b.getIndexType()) {
+      index = b.create<arith::IndexCastUIOp>(b.getIndexType(), index);
+    }
+    index = b.create<arith::MinUIOp>(
+        index, b.create<ConstantOp>(b.getIndexAttr(high)));
+  } else {
+    if (index.getType() != b.getIndexType()) {
+      index = b.create<arith::IndexCastOp>(b.getIndexType(), index);
+    }
+    index = b.create<arith::MinSIOp>(
+        index, b.create<ConstantOp>(b.getIndexAttr(high)));
+    index = b.create<arith::MaxSIOp>(index, zero);
+  }
+  return index;
+}
+
 }  // namespace zkx::emitters
