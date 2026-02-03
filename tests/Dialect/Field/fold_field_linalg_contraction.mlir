@@ -176,7 +176,7 @@ func.func @test_all_zeros(%vec: tensor<3x!PF>) -> tensor<!PF> {
 
 // CHECK-LABEL: @test_matvec_ext_field
 // CHECK-NOT: linalg.matvec
-// CHECK-DAG: tensor.extract
+// 2x2 matrix folded into scalar ops (muls/adds interleaved, so use CHECK-DAG)
 // CHECK-DAG: field.mul
 // CHECK-DAG: field.add
 // CHECK: tensor.from_elements
@@ -197,10 +197,11 @@ func.func @test_matvec_ext_field(%vec: tensor<2x!QF>) -> tensor<2x!QF> {
 
 // CHECK-LABEL: @test_dot_ext_field
 // CHECK-NOT: linalg.dot
-// CHECK-DAG: tensor.extract
-// CHECK-DAG: field.mul
-// CHECK-DAG: field.add
-// CHECK: tensor.from_elements
+// 2 non-zero/non-one coefficients: 2 muls, 1 add
+// CHECK-COUNT-2: field.mul
+// CHECK-NOT: field.mul
+// CHECK-COUNT-1: field.add
+// CHECK-NOT: field.add
 func.func @test_dot_ext_field(%vec: tensor<2x!QF2>) -> tensor<!QF2> {
   %const_vec = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF2>
   %init = bufferization.alloc_tensor() : tensor<!QF2>
@@ -251,3 +252,85 @@ func.func @test_ext_field_one_coeff(%vec: tensor<2x!QF4>) -> tensor<!QF4> {
 // maybeConvertPrimeIRToBuiltinType in prime_ir/IR/Attributes.cpp doesn't handle
 // ExtensionFieldType yet. Once added, tensor.from_elements fold will work for
 // extension fields when all elements are constant.
+
+// -----
+// Test 15: Tower extension field dot - basic case
+// Fp6 = (Fp2)³ where Fp2 = Fp[v]/(v² - 6), Fp6 = Fp2[w]/(w³ - 2)
+// Each Fp6 element has 6 prime field coefficients
+// Two non-zero/non-one coefficients → 2 muls, 1 add
+
+!PF_tower = !field.pf<7:i32>
+!QF_tower = !field.ef<2x!PF_tower, 6:i32>
+!TowerF6 = !field.ef<3x!QF_tower, 2:i32>
+
+// CHECK-LABEL: @test_dot_tower_ext_field
+// CHECK-NOT: linalg.dot
+// CHECK-COUNT-2: field.mul
+// CHECK-NOT: field.mul
+// CHECK-COUNT-1: field.add
+// CHECK-NOT: field.add
+func.func @test_dot_tower_ext_field(%vec: tensor<2x!TowerF6>) -> tensor<!TowerF6> {
+  // Two non-zero, non-one coefficients (flattened to 6 prime field elements)
+  // [1, 2, 0, 0, 0, 0] = (1 + 2v) in Fp6
+  // [3, 4, 0, 0, 0, 0] = (3 + 4v) in Fp6
+  %const_vec = field.constant dense<[
+    [1, 2, 0, 0, 0, 0],
+    [3, 4, 0, 0, 0, 0]
+  ]> : tensor<2x!TowerF6>
+  %init = bufferization.alloc_tensor() : tensor<!TowerF6>
+  %result = linalg.dot ins(%const_vec, %vec : tensor<2x!TowerF6>, tensor<2x!TowerF6>)
+                       outs(%init : tensor<!TowerF6>) -> tensor<!TowerF6>
+  return %result : tensor<!TowerF6>
+}
+
+// -----
+// Test 16: Tower extension field with zero coefficient optimization
+// One zero coefficient → 1 mul, 0 adds
+
+!PF_tower2 = !field.pf<7:i32>
+!QF_tower2 = !field.ef<2x!PF_tower2, 6:i32>
+!TowerF6_2 = !field.ef<3x!QF_tower2, 2:i32>
+
+// CHECK-LABEL: @test_tower_zero_coeff
+// CHECK-NOT: linalg.dot
+// CHECK-COUNT-1: field.mul
+// CHECK-NOT: field.mul
+// CHECK-NOT: field.add
+func.func @test_tower_zero_coeff(%vec: tensor<2x!TowerF6_2>) -> tensor<!TowerF6_2> {
+  // First element is zero [0,0,0,0,0,0], second is non-zero [2,3,0,0,0,0]
+  %const_vec = field.constant dense<[
+    [0, 0, 0, 0, 0, 0],
+    [2, 3, 0, 0, 0, 0]
+  ]> : tensor<2x!TowerF6_2>
+  %init = bufferization.alloc_tensor() : tensor<!TowerF6_2>
+  %result = linalg.dot ins(%const_vec, %vec : tensor<2x!TowerF6_2>, tensor<2x!TowerF6_2>)
+                       outs(%init : tensor<!TowerF6_2>) -> tensor<!TowerF6_2>
+  return %result : tensor<!TowerF6_2>
+}
+
+// -----
+// Test 17: Tower extension field with identity coefficient optimization
+// Identity [1,0,0,0,0,0] skips multiplication
+
+!PF_tower3 = !field.pf<7:i32>
+!QF_tower3 = !field.ef<2x!PF_tower3, 6:i32>
+!TowerF6_3 = !field.ef<3x!QF_tower3, 2:i32>
+
+// CHECK-LABEL: @test_tower_one_coeff
+// CHECK-NOT: linalg.dot
+// First coeff is identity [1,0,0,0,0,0] (no mul), second is [2,0,0,0,0,0] (1 mul)
+// CHECK-COUNT-1: field.mul
+// CHECK-NOT: field.mul
+// CHECK-COUNT-1: field.add
+// CHECK-NOT: field.add
+func.func @test_tower_one_coeff(%vec: tensor<2x!TowerF6_3>) -> tensor<!TowerF6_3> {
+  // First element is identity [1,0,0,0,0,0], second is non-trivial [2,0,0,0,0,0]
+  %const_vec = field.constant dense<[
+    [1, 0, 0, 0, 0, 0],
+    [2, 0, 0, 0, 0, 0]
+  ]> : tensor<2x!TowerF6_3>
+  %init = bufferization.alloc_tensor() : tensor<!TowerF6_3>
+  %result = linalg.dot ins(%const_vec, %vec : tensor<2x!TowerF6_3>, tensor<2x!TowerF6_3>)
+                       outs(%init : tensor<!TowerF6_3>) -> tensor<!TowerF6_3>
+  return %result : tensor<!TowerF6_3>
+}
