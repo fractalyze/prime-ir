@@ -38,6 +38,8 @@ class ExtensionFieldOperation;
 namespace mlir::prime_ir::field {
 
 class FieldCodeGen;
+template <size_t N, typename BaseFieldT>
+class ExtensionFieldCodeGen;
 
 // NOTE(chokobole): This class is not used directly. It is used to generate
 // MLIR operations that implement prime field arithmetic. User should use
@@ -60,6 +62,8 @@ public:
 
 private:
   friend class FieldCodeGen;
+  template <size_t, typename>
+  friend class ExtensionFieldCodeGen;
   template <typename>
   friend class zk_dtypes::QuadraticExtensionFieldOperation;
   template <typename>
@@ -77,6 +81,7 @@ private:
   PrimeFieldCodeGen Square() const;
   PrimeFieldCodeGen Inverse() const;
   PrimeFieldCodeGen CreateConst(int64_t constant) const;
+  PrimeFieldCodeGen CreateRationalConst(int64_t num, int64_t denom) const;
 
   Value value;
 };

@@ -29,23 +29,14 @@ FieldCodeGen::FieldCodeGen(Type type, Value value,
 
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   auto efType = cast<ExtensionFieldType>(type);
-  Value nonResidue = b->create<mod_arith::ConstantOp>(
-      converter->convertType(efType.getBaseField()),
-      cast<IntegerAttr>(efType.getNonResidue()));
-  unsigned degree = efType.getDegree();
-  switch (degree) {
-  case 2:
-    codeGen = ExtensionFieldCodeGen<2>(value, nonResidue);
-    break;
-  case 3:
-    codeGen = ExtensionFieldCodeGen<3>(value, nonResidue);
-    break;
-  case 4:
-    codeGen = ExtensionFieldCodeGen<4>(value, nonResidue);
-    break;
-  default:
-    llvm_unreachable("Unsupported extension field degree");
-  }
+  Value nonResidue = efType.createNonResidueValue(*b);
+
+  auto sig = getTowerSignature(efType);
+#define CREATE_CODEGEN(unused_sig, TypeName)                                   \
+  codeGen = TypeName(value, nonResidue);
+  DISPATCH_TOWER_BY_SIGNATURE(sig, CREATE_CODEGEN, ExtensionFieldCodeGen,
+                              CodeGen)
+#undef CREATE_CODEGEN
 }
 
 FieldCodeGen::operator Value() const {

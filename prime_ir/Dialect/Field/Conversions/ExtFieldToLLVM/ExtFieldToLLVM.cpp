@@ -134,8 +134,28 @@ struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
 } // namespace
 
 void populateExtFieldToLLVMTypeConversion(LLVMTypeConverter &typeConverter) {
+  // Scalar extension field
   typeConverter.addConversion(
       [](ExtensionFieldType type) { return convertExtFieldType(type); });
+
+  // Tensor types with extension field element type.
+  // Note: MemRef and Vector types cannot have !llvm.struct as element type,
+  // so they are handled by subsequent lowering passes.
+  typeConverter.addConversion(
+      [](RankedTensorType tensorType) -> std::optional<Type> {
+        auto efType = dyn_cast<ExtensionFieldType>(tensorType.getElementType());
+        if (!efType)
+          return std::nullopt;
+        return RankedTensorType::get(tensorType.getShape(),
+                                     convertExtFieldType(efType));
+      });
+  typeConverter.addConversion(
+      [](UnrankedTensorType tensorType) -> std::optional<Type> {
+        auto efType = dyn_cast<ExtensionFieldType>(tensorType.getElementType());
+        if (!efType)
+          return std::nullopt;
+        return UnrankedTensorType::get(convertExtFieldType(efType));
+      });
 }
 
 void populateExtFieldToLLVMConversionPatterns(

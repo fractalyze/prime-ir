@@ -35,7 +35,7 @@ namespace {
 unsigned getFieldDegree(Type elementType) {
   if (isa<PrimeFieldType>(elementType))
     return 1;
-  return cast<ExtensionFieldType>(elementType).getDegree();
+  return cast<ExtensionFieldType>(elementType).getDegreeOverPrime();
 }
 
 // Extract a scalar field element's attribute from a dense tensor attribute.
@@ -55,8 +55,9 @@ TypedAttr extractFieldElementAttr(DenseIntElementsAttr denseAttr,
   for (unsigned d = 0; d < degree; ++d) {
     coeffs.push_back(values[linearIndex * degree + d]);
   }
-  auto tensorType = RankedTensorType::get(
-      {static_cast<int64_t>(degree)}, efType.getBaseField().getStorageType());
+  auto tensorType =
+      RankedTensorType::get({static_cast<int64_t>(degree)},
+                            efType.getBasePrimeField().getStorageType());
   return DenseIntElementsAttr::get(tensorType, coeffs);
 }
 

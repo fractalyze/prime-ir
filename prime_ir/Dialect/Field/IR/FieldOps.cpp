@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 
+#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
@@ -40,13 +41,9 @@ Type getStandardFormType(Type type) {
     }
   } else if (auto extField = dyn_cast<ExtensionFieldType>(standardType)) {
     if (extField.isMontgomery()) {
-      auto baseField = cast<PrimeFieldType>(extField.getBaseField());
-      auto pfType =
-          PrimeFieldType::get(type.getContext(), baseField.getModulus());
-      auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
-      standardType = extField.cloneWith(
-          pfType,
-          mod_arith::getAttrAsStandardForm(baseField.getModulus(), nonResidue));
+      standardType =
+          detail::convertExtFieldType<detail::MontDirection::FromMont>(
+              extField);
     }
   }
   if (auto memrefType = dyn_cast<MemRefType>(type)) {
@@ -68,13 +65,8 @@ Type getMontgomeryFormType(Type type) {
     }
   } else if (auto extField = dyn_cast<ExtensionFieldType>(montType)) {
     if (!extField.isMontgomery()) {
-      auto baseField = cast<PrimeFieldType>(extField.getBaseField());
-      auto pfType =
-          PrimeFieldType::get(type.getContext(), baseField.getModulus(), true);
-      auto nonResidue = cast<IntegerAttr>(extField.getNonResidue());
       montType =
-          extField.cloneWith(pfType, mod_arith::getAttrAsMontgomeryForm(
-                                         baseField.getModulus(), nonResidue));
+          detail::convertExtFieldType<detail::MontDirection::ToMont>(extField);
     }
   }
   if (auto memrefType = dyn_cast<MemRefType>(type)) {
@@ -118,7 +110,7 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
              << " coefficients, but expected " << degree;
     }
 
-    auto pfType = cast<PrimeFieldType>(efType.getBaseField());
+    auto pfType = efType.getBasePrimeField();
     APInt modulus = pfType.getModulus().getValue();
 
     SmallVector<APInt> adjustedValues;
@@ -144,7 +136,6 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
 }
 
 ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
-  // TODO(chokboole): support towers of extension fields
   SmallVector<APInt> parsedInts;
   Type parsedType;
 
@@ -154,8 +145,7 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
       modulus = pfType.getModulus().getValue();
       return success();
     } else if (auto extField = dyn_cast<ExtensionFieldType>(elementType)) {
-      modulus =
-          cast<PrimeFieldType>(extField.getBaseField()).getModulus().getValue();
+      modulus = extField.getBasePrimeField().getModulus().getValue();
       return success();
     }
 
@@ -183,10 +173,10 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
                << "extension field constant has " << parsedInts.size()
                << " coefficients, but expected " << efType.getDegreeOverPrime();
       }
-      auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+      auto pfType = efType.getBasePrimeField();
       auto denseAttr = DenseElementsAttr::get(
           RankedTensorType::get({efType.getDegreeOverPrime()},
-                                baseFieldType.getStorageType()),
+                                pfType.getStorageType()),
           parsedInts);
       result.addAttribute("value", maybeToMontgomery(efType, denseAttr));
     } else {
@@ -249,7 +239,7 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     return success();
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    auto pfType = cast<PrimeFieldType>(efType.getBaseField());
+    auto pfType = efType.getBasePrimeField();
     // For tensor<Nx!EF{d}>, the attribute shape is [N, d].
     SmallVector<int64_t> attrShape(shapedType.getShape());
     attrShape.push_back(static_cast<int64_t>(efType.getDegreeOverPrime()));
@@ -483,7 +473,8 @@ namespace {
 
 // Helper function to compute the total number of prime field elements
 // represented by a shaped type. IntegerType is treated as a single element
-// (after mod-arith-to-arith lowering).
+// (after mod-arith-to-arith lowering). For tower extensions, uses
+// getDegreeOverPrime() to get the total degree.
 std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
   if (!shapedType.hasStaticShape()) {
     return std::nullopt;
@@ -496,7 +487,8 @@ std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
     return numElements;
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    return numElements * efType.getDegree();
+    // Use getDegreeOverPrime() to handle tower extensions correctly
+    return numElements * efType.getDegreeOverPrime();
   }
   return std::nullopt;
 }
@@ -552,16 +544,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     // Calculate bitwidth for each element type
     unsigned inputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      // For extension fields, multiply base field bitwidth by degree
-      if (auto baseField = dyn_cast<PrimeFieldType>(efType.getBaseField())) {
-        inputBitWidth =
-            getIntOrPrimeFieldBitWidth(baseField) * efType.getDegree();
-      } else {
-        // After field-to-mod-arith pass, base field may be ModArithType
-        inputBitWidth =
-            mod_arith::getIntOrModArithBitWidth(efType.getBaseField()) *
-            efType.getDegree();
-      }
+      inputBitWidth = efType.getStorageBitWidth();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(inputElementType)) {
       inputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -571,16 +554,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 
     unsigned outputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      // For extension fields, multiply base field bitwidth by degree
-      if (auto baseField = dyn_cast<PrimeFieldType>(efType.getBaseField())) {
-        outputBitWidth =
-            getIntOrPrimeFieldBitWidth(baseField) * efType.getDegree();
-      } else {
-        // After field-to-mod-arith pass, base field may be ModArithType
-        outputBitWidth =
-            mod_arith::getIntOrModArithBitWidth(efType.getBaseField()) *
-            efType.getDegree();
-      }
+      outputBitWidth = efType.getStorageBitWidth();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(outputElementType)) {
       outputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -615,16 +589,17 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   }
 
   // Case 3: extension field <-> extension field bitcast
+  // This handles both simple extensions (EF over PF) and tower extensions
+  // (EF over EF over ... over PF)
   if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
     if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      // Degree must match
-      if (inputEF.getDegree() != outputEF.getDegree()) {
+      // Total degree over prime must match (handles tower extensions)
+      if (inputEF.getDegreeOverPrime() != outputEF.getDegreeOverPrime()) {
         return false;
       }
-      // Allow if bitwidths match (base field modulus and non-residue can be
-      // different)
-      return getIntOrPrimeFieldBitWidth(inputEF.getBaseField()) ==
-             getIntOrPrimeFieldBitWidth(outputEF.getBaseField());
+      // Allow if base prime field bitwidths match
+      return getIntOrPrimeFieldBitWidth(inputEF.getBasePrimeField()) ==
+             getIntOrPrimeFieldBitWidth(outputEF.getBasePrimeField());
     }
   }
 
@@ -676,20 +651,19 @@ LogicalResult BitcastOp::verify() {
                            << *outputTotal;
     }
 
-    // Check bitwidth
+    // Check bitwidth (handles tower extensions via getBasePrimeField and
+    // getDegreeOverPrime)
     Type inputElementType = inputShaped.getElementType();
     Type outputElementType = outputShaped.getElementType();
     unsigned inputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      inputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBaseField()) *
-                      efType.getDegree();
+      inputBitWidth = efType.getStorageBitWidth();
     } else {
       inputBitWidth = getIntOrPrimeFieldBitWidth(inputElementType);
     }
     unsigned outputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      outputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBaseField()) *
-                       efType.getDegree();
+      outputBitWidth = efType.getStorageBitWidth();
     } else {
       outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
     }
@@ -718,23 +692,22 @@ LogicalResult BitcastOp::verify() {
            << " bits";
   }
 
-  // Case 3: Extension field bitcast
+  // Case 3: Extension field bitcast (including tower extensions)
   if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
     if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      if (inputEF.getDegree() != outputEF.getDegree()) {
+      if (inputEF.getDegreeOverPrime() != outputEF.getDegreeOverPrime()) {
         return emitOpError()
-               << "extension field bitcast requires matching degrees, but "
-                  "input has "
-               << "degree " << inputEF.getDegree() << " and output has degree "
-               << outputEF.getDegree();
+               << "extension field bitcast requires matching total degrees "
+                  "over prime, but input has degree "
+               << inputEF.getDegreeOverPrime() << " and output has degree "
+               << outputEF.getDegreeOverPrime();
       }
       unsigned inputBitWidth =
-          getIntOrPrimeFieldBitWidth(inputEF.getBaseField());
+          getIntOrPrimeFieldBitWidth(inputEF.getBasePrimeField());
       unsigned outputBitWidth =
-          getIntOrPrimeFieldBitWidth(outputEF.getBaseField());
+          getIntOrPrimeFieldBitWidth(outputEF.getBasePrimeField());
       return emitOpError() << "extension field bitcast requires matching base "
-                              "field bitwidths, "
-                              "but input has "
+                              "prime field bitwidths, but input has "
                            << inputBitWidth << " bits and output has "
                            << outputBitWidth << " bits";
     }
@@ -874,7 +847,7 @@ public:
   }
 
   OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
-    PrimeFieldType baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+    PrimeFieldType baseFieldType = efType.getBasePrimeField();
     auto tensorType = RankedTensorType::get(
         {static_cast<int64_t>(coeffs.size())}, baseFieldType.getStorageType());
     return DenseIntElementsAttr::get(tensorType, coeffs);
@@ -888,7 +861,7 @@ public:
       flattenedValues.append(coeffs.begin(), coeffs.end());
     }
     // Create result attribute with shape [tensor_dims..., degree]
-    PrimeFieldType pfType = cast<PrimeFieldType>(efType.getBaseField());
+    PrimeFieldType pfType = efType.getBasePrimeField();
     unsigned degree = efType.getDegreeOverPrime();
     SmallVector<int64_t> attrShape(type.getShape());
     attrShape.push_back(static_cast<int64_t>(degree));
@@ -1233,17 +1206,19 @@ OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn,
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
-  if (isa<PrimeFieldType>(elemType)) {
-    GenericUnaryPrimeFieldFolder<Func> folder(type, fn, inputType);
-    return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                     &folder);
-  }
-  if (isa<ExtensionFieldType>(elemType)) {
-    GenericUnaryExtFieldFolder<Func> folder(type, fn, inputType);
-    return UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
-        adaptor, &folder);
-  }
-  return {};
+  return llvm::TypeSwitch<Type, OpFoldResult>(elemType)
+      .Case<PrimeFieldType>([&](auto) {
+        GenericUnaryPrimeFieldFolder<Func> folder(type, fn, inputType);
+        return UnaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      .template Case<ExtensionFieldType>([&](auto) {
+        GenericUnaryExtFieldFolder<Func> folder(type, fn, inputType);
+        return UnaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      // NOLINTNEXTLINE(whitespace/newline)
+      .Default([](auto) { return OpFoldResult{}; });
 }
 
 template <typename Op, typename Func>
@@ -1252,17 +1227,19 @@ OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
-  if (isa<PrimeFieldType>(elemType)) {
-    PrimeAdditiveFolder<Op, Func> folder(op, fn);
-    return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                      &folder);
-  }
-  if (isa<ExtensionFieldType>(elemType)) {
-    ExtAdditiveFolder<Op, Func> folder(op, fn);
-    return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
-        adaptor, &folder);
-  }
-  return {};
+  return llvm::TypeSwitch<Type, OpFoldResult>(elemType)
+      .Case<PrimeFieldType>([&](auto) {
+        PrimeAdditiveFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      .template Case<ExtensionFieldType>([&](auto) {
+        ExtAdditiveFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      // NOLINTNEXTLINE(whitespace/newline)
+      .Default([](auto) { return OpFoldResult{}; });
 }
 
 template <typename Op, typename Func>
@@ -1271,17 +1248,19 @@ foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
-  if (isa<PrimeFieldType>(elemType)) {
-    PrimeMultiplicativeFolder<Op, Func> folder(op, fn);
-    return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(adaptor,
-                                                                      &folder);
-  }
-  if (isa<ExtensionFieldType>(elemType)) {
-    ExtMultiplicativeFolder<Op, Func> folder(op, fn);
-    return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
-        adaptor, &folder);
-  }
-  return {};
+  return llvm::TypeSwitch<Type, OpFoldResult>(elemType)
+      .Case<PrimeFieldType>([&](auto) {
+        PrimeMultiplicativeFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<PrimeFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      .template Case<ExtensionFieldType>([&](auto) {
+        ExtMultiplicativeFolder<Op, Func> folder(op, fn);
+        return BinaryConstantFolder<ExtensionFieldConstantFolderConfig>::fold(
+            adaptor, &folder);
+      })
+      // NOLINTNEXTLINE(whitespace/newline)
+      .Default([](auto) { return OpFoldResult{}; });
 }
 
 } // namespace

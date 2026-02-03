@@ -17,15 +17,19 @@
 
 namespace mlir::prime_ir::field {
 
-template class ExtensionFieldOperation<2>;
-template class ExtensionFieldOperation<3>;
-template class ExtensionFieldOperation<4>;
+// Non-tower extension fields (base field is PrimeFieldOperation)
+template class ExtensionFieldOperation<2, PrimeFieldOperation>;
+template class ExtensionFieldOperation<3, PrimeFieldOperation>;
+template class ExtensionFieldOperation<4, PrimeFieldOperation>;
 
-template raw_ostream &operator<<(raw_ostream &os,
-                                 const ExtensionFieldOperation<2> &op);
-template raw_ostream &operator<<(raw_ostream &os,
-                                 const ExtensionFieldOperation<3> &op);
-template raw_ostream &operator<<(raw_ostream &os,
-                                 const ExtensionFieldOperation<4> &op);
+template raw_ostream &
+operator<<(raw_ostream &os,
+           const ExtensionFieldOperation<2, PrimeFieldOperation> &op);
+template raw_ostream &
+operator<<(raw_ostream &os,
+           const ExtensionFieldOperation<3, PrimeFieldOperation> &op);
+template raw_ostream &
+operator<<(raw_ostream &os,
+           const ExtensionFieldOperation<4, PrimeFieldOperation> &op);
 
 } // namespace mlir::prime_ir::field
