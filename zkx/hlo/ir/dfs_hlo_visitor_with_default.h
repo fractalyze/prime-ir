@@ -183,6 +183,9 @@ class DfsHloVisitorWithDefaultBase
   absl::Status HandleReduce(HloInstructionPtr reduce) override {
     return DefaultAction(reduce);
   }
+  absl::Status HandleReduceWindow(HloInstructionPtr reduce_window) override {
+    return DefaultAction(reduce_window);
+  }
   absl::Status HandleBitcast(HloInstructionPtr bitcast) override {
     return DefaultAction(bitcast);
   }

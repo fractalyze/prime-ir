@@ -108,6 +108,7 @@ bool CanInferShape(HloOpcode code) {
     case HloOpcode::kPopulationCount:
     case HloOpcode::kRaggedDot:
     case HloOpcode::kReduce:
+    case HloOpcode::kReduceWindow:
     case HloOpcode::kRemainder:
     case HloOpcode::kReplicaId:
     case HloOpcode::kReverse:
@@ -240,6 +241,7 @@ class HloParserImpl : public HloParser {
     kOriginalValue,
     kCustomCallSchedule,
     kCustomCallApiVersion,
+    kWindow,
   };
 
   struct AttrConfig {
@@ -464,6 +466,7 @@ class HloParserImpl : public HloParser {
   bool ParseDxD(const std::string& name, std::vector<int64_t>* result);
 
   bool ParseSliceRanges(SliceRanges* result);
+  bool ParseWindow(Window* result);
   bool ParseHloComputation(HloComputation** result);
   bool ParseHloComputationList(std::vector<HloComputation*>* result);
   bool ParseShapeList(std::vector<Shape>* result);
@@ -2683,6 +2686,27 @@ HloInstruction* HloParserImpl::CreateInstruction(  // NOLINT
                                                               2),
           *dimensions_to_reduce, *reduce_computation));
     }
+    case HloOpcode::kReduceWindow: {
+      std::optional<Window> window;
+      attrs["window"] = {/*required=*/true, AttrTy::kWindow, &window};
+      std::optional<HloComputation*> reduce_computation;
+      attrs["to_apply"] = {/*required=*/true, AttrTy::kHloComputation,
+                           &reduce_computation};
+      if ((!preset_operands &&
+           !ParseOperands(&operands, builder, /*expected_size=*/2)) ||
+          !ParseAttributes(attrs, allow_attributes, shape)) {
+        return nullptr;
+      }
+      if (!maybe_infer_shape([&] {
+            return ShapeInference::InferReduceWindowShape(
+                operands[0]->shape(), operands[1]->shape(), *window,
+                reduce_computation.value()->ComputeProgramShape());
+          })) {
+        return nullptr;
+      }
+      return builder->AddInstruction(HloInstruction::CreateReduceWindow(
+          *shape, operands[0], operands[1], *window, *reduce_computation));
+    }
     case HloOpcode::kReverse: {
       std::optional<std::vector<int64_t>> dimensions;
       attrs["dimensions"] = {/*required=*/true, AttrTy::kBracedInt64List,
@@ -4797,6 +4821,14 @@ bool HloParserImpl::ParseAttributeHelper(
             ->emplace(result);
         return true;
       }
+      case AttrTy::kWindow: {
+        Window result;
+        if (!ParseWindow(&result)) {
+          return false;
+        }
+        static_cast<std::optional<Window>*>(attr_out_ptr)->emplace(result);
+        return true;
+      }
       case AttrTy::kString: {
         std::string result;
         if (!ParseString(&result)) {
@@ -5852,6 +5884,126 @@ bool HloParserImpl::ParsePaddingConfig(PaddingConfig* padding) {
   }
   lexer_.Lex();
   return true;
+}
+
+// Window ::= '{' window_attributes '}'
+// window_attributes ::= (window_attribute ','?)*
+// window_attribute ::= 'size=' dim_list
+//                    | 'stride=' dim_list
+//                    | 'pad=' padding_list
+//                    | 'lhs_dilate=' dim_list
+//                    | 'rhs_dilate=' dim_list
+//                    | 'rhs_reversal=' dim_list
+// dim_list ::= int ('x' int)*
+// padding_list ::= low '_' high ('x' low '_' high)*
+bool HloParserImpl::ParseWindow(Window* window) {
+  LocTy loc = lexer_.GetLoc();
+  if (!ParseToken(TokKind::kLbrace, "expects '{' to start window")) {
+    return false;
+  }
+
+  std::vector<int64_t> size;
+  std::vector<int64_t> stride;
+  std::vector<int64_t> pad_low;
+  std::vector<int64_t> pad_high;
+  std::vector<int64_t> lhs_dilate;
+  std::vector<int64_t> rhs_dilate;
+  std::vector<int64_t> rhs_reversal;
+
+  while (lexer_.GetKind() != TokKind::kRbrace) {
+    LocTy attr_loc = lexer_.GetLoc();
+    std::string field_name;
+    // ParseAttributeName consumes "name=" as a single kAttributeName token
+    if (!ParseAttributeName(&field_name)) {
+      return Error(attr_loc, "expects window attribute name");
+    }
+
+    if (field_name == "size") {
+      if (!ParseDxD(field_name, &size)) {
+        return false;
+      }
+    } else if (field_name == "stride") {
+      if (!ParseDxD(field_name, &stride)) {
+        return false;
+      }
+    } else if (field_name == "pad") {
+      // pad uses format like "0_0x1_1" (padding_low_padding_high per dim)
+      if (lexer_.GetKind() != TokKind::kPad) {
+        return TokenError("expects padding format like '0_0x1_1'");
+      }
+      std::string pad_str = lexer_.GetStrVal();
+      for (const auto& dim_pad_str : absl::StrSplit(pad_str, 'x')) {
+        std::vector<int64_t> dim_pad;
+        if (!SplitToInt64s(dim_pad_str, '_', &dim_pad) || dim_pad.size() != 2) {
+          return Error(attr_loc, "expects padding pattern like 'low_high'");
+        }
+        pad_low.push_back(dim_pad[0]);
+        pad_high.push_back(dim_pad[1]);
+      }
+      lexer_.Lex();
+    } else if (field_name == "lhs_dilate") {
+      if (!ParseDxD(field_name, &lhs_dilate)) {
+        return false;
+      }
+    } else if (field_name == "rhs_dilate") {
+      if (!ParseDxD(field_name, &rhs_dilate)) {
+        return false;
+      }
+    } else if (field_name == "rhs_reversal") {
+      if (!ParseDxD(field_name, &rhs_reversal)) {
+        return false;
+      }
+    } else {
+      return Error(
+          attr_loc,
+          absl::StrFormat("unexpected window attribute: '%s'", field_name));
+    }
+  }
+
+  if (size.empty()) {
+    return Error(loc, "window requires 'size' attribute");
+  }
+
+  const int64_t num_dims = size.size();
+  // Set defaults for optional attributes
+  if (stride.empty()) {
+    stride.resize(num_dims, 1);
+  }
+  if (pad_low.empty()) {
+    pad_low.resize(num_dims, 0);
+    pad_high.resize(num_dims, 0);
+  }
+  if (lhs_dilate.empty()) {
+    lhs_dilate.resize(num_dims, 1);
+  }
+  if (rhs_dilate.empty()) {
+    rhs_dilate.resize(num_dims, 1);
+  }
+  if (rhs_reversal.empty()) {
+    rhs_reversal.resize(num_dims, 0);
+  }
+
+  // Validate all vectors have the same size
+  if (stride.size() != num_dims || pad_low.size() != num_dims ||
+      pad_high.size() != num_dims || lhs_dilate.size() != num_dims ||
+      rhs_dilate.size() != num_dims || rhs_reversal.size() != num_dims) {
+    return Error(loc,
+                 "all window attributes must have the same number of "
+                 "dimensions as 'size'");
+  }
+
+  for (int64_t i = 0; i < num_dims; ++i) {
+    auto* dim = window->add_dimensions();
+    dim->set_size(size[i]);
+    dim->set_stride(stride[i]);
+    dim->set_padding_low(pad_low[i]);
+    dim->set_padding_high(pad_high[i]);
+    dim->set_base_dilation(lhs_dilate[i]);
+    dim->set_window_dilation(rhs_dilate[i]);
+    dim->set_window_reversal(rhs_reversal[i] != 0);
+  }
+
+  return ParseToken(TokKind::kRbrace, "expects '}' to end window");
 }
 
 // original_value ::= original_value | '{' [shape_index] ',' original_array '}'

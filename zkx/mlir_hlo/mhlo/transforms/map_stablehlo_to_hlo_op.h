@@ -118,6 +118,7 @@ MAP_STABLEHLO_TO_HLO(RealDynamicSliceOp)
 // TODO(chokobole): Uncomment this. Dependency: stablehlo::RealOp
 // MAP_STABLEHLO_TO_HLO(RecvOp)
 MAP_STABLEHLO_TO_HLO(ReduceOp)
+MAP_STABLEHLO_TO_HLO(ReduceWindowOp)
 // TODO(chokobole): Uncomment this. Dependency: stablehlo::ReduceScatterOp
 // MAP_STABLEHLO_TO_HLO(ReduceScatterOp)
 MAP_STABLEHLO_TO_HLO(RemOp)

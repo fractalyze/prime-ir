@@ -1802,6 +1802,59 @@ absl::StatusOr<ZkxOp> ZkxBuilder::ReduceInternal(
   });
 }
 
+ZkxOp ZkxBuilder::ReduceWindow(ZkxOp operand, ZkxOp init_value,
+                               const ZkxComputation& computation,
+                               const Window& window) {
+  return ReduceWindow(absl::Span<const ZkxOp>({operand}),
+                      absl::Span<const ZkxOp>({init_value}), computation,
+                      window);
+}
+
+ZkxOp ZkxBuilder::ReduceWindow(absl::Span<const ZkxOp> operands,
+                               absl::Span<const ZkxOp> init_values,
+                               const ZkxComputation& computation,
+                               const Window& window) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    TF_ASSIGN_OR_RETURN(const ProgramShape& called_program_shape,
+                        computation.GetProgramShape());
+
+    std::vector<ZkxOp> all_operands;
+    all_operands.insert(all_operands.end(), operands.begin(), operands.end());
+    all_operands.insert(all_operands.end(), init_values.begin(),
+                        init_values.end());
+
+    std::vector<const Shape*> operand_shape_ptrs;
+    std::vector<const Shape*> init_value_shape_ptrs;
+    TF_ASSIGN_OR_RETURN(const auto& all_shapes, GetOperandShapes(all_operands));
+    for (size_t i = 0; i < operands.size(); ++i) {
+      operand_shape_ptrs.push_back(&all_shapes[i]);
+    }
+    for (size_t i = 0; i < init_values.size(); ++i) {
+      init_value_shape_ptrs.push_back(&all_shapes[operands.size() + i]);
+    }
+
+    TF_ASSIGN_OR_RETURN(Shape shape,
+                        ShapeInference::InferReduceWindowShape(
+                            operand_shape_ptrs, init_value_shape_ptrs, window,
+                            called_program_shape));
+    return ReduceWindowInternal(shape, all_operands, computation, window);
+  });
+}
+
+absl::StatusOr<ZkxOp> ZkxBuilder::ReduceWindowInternal(
+    const Shape& shape, absl::Span<const ZkxOp> all_operands,
+    const ZkxComputation& computation, const Window& window) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    HloInstructionProto instr;
+    *instr.mutable_shape() = shape.ToProto();
+    *instr.mutable_window() = window;
+
+    AddCalledComputation(computation, &instr);
+    return AddInstruction(std::move(instr), HloOpcode::kReduceWindow,
+                          all_operands);
+  });
+}
+
 ZkxOp ZkxBuilder::GetDimensionSize(ZkxOp operand, int64_t dimension) {
   return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
     HloInstructionProto instr;
@@ -2479,6 +2532,18 @@ ZkxOp Reduce(ZkxBuilder* builder, absl::Span<const ZkxOp> operands,
              absl::Span<const int64_t> dimensions_to_reduce) {
   return builder->Reduce(operands, init_values, computation,
                          dimensions_to_reduce);
+}
+
+ZkxOp ReduceWindow(const ZkxOp operand, const ZkxOp init_value,
+                   const ZkxComputation& computation, const Window& window) {
+  return operand.builder()->ReduceWindow(operand, init_value, computation,
+                                         window);
+}
+
+ZkxOp ReduceWindow(ZkxBuilder* builder, absl::Span<const ZkxOp> operands,
+                   absl::Span<const ZkxOp> init_values,
+                   const ZkxComputation& computation, const Window& window) {
+  return builder->ReduceWindow(operands, init_values, computation, window);
 }
 
 ZkxOp Abs(const ZkxOp operand) {

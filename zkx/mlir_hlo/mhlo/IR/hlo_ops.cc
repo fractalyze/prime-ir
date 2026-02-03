@@ -2422,6 +2422,44 @@ LogicalResult ReduceOp::verify() {
       llvm::to_vector(getDimensions().getValues<int64_t>()), getBody());
 }
 
+//===----------------------------------------------------------------------===//
+// ReduceWindowOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult ReduceWindowOp::inferReturnTypeComponents(
+    MLIRContext *, std::optional<Location> location, ValueShapeRange operands,
+    DictionaryAttr attributes, OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<ShapedTypeComponents> &inferredReturnShapes) {
+  ReduceWindowOp::Adaptor adaptor(operands, attributes, properties, regions);
+  auto optToVec = [](std::optional<DenseIntElementsAttr> attr)
+      -> std::optional<SmallVector<int64_t>> {
+    if (!attr)
+      return std::nullopt;
+    return llvm::to_vector(attr->getValues<int64_t>());
+  };
+  return hlo::inferReduceWindowOp(
+      location, adaptor.getInputs(), adaptor.getInitValues(),
+      llvm::to_vector(adaptor.getWindowDimensions().getValues<int64_t>()),
+      optToVec(adaptor.getWindowStrides()),
+      optToVec(adaptor.getBaseDilations()),
+      optToVec(adaptor.getWindowDilations()), adaptor.getPadding(),
+      adaptor.getBody(), inferredReturnShapes);
+}
+
+LogicalResult ReduceWindowOp::verify() {
+  auto optToVec = [](std::optional<DenseIntElementsAttr> attr)
+      -> std::optional<SmallVector<int64_t>> {
+    if (!attr)
+      return std::nullopt;
+    return llvm::to_vector(attr->getValues<int64_t>());
+  };
+  return hlo::verifyReduceWindowOp(
+      getLoc(), getInputs(), getInitValues(),
+      llvm::to_vector(getWindowDimensions().getValues<int64_t>()),
+      optToVec(getWindowStrides()), optToVec(getBaseDilations()),
+      optToVec(getWindowDilations()), getPadding(), getBody());
+}
+
 namespace {
 
 // Enable constant folding to occur within the region of the ReduceOp

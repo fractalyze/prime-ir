@@ -128,6 +128,7 @@ zkx_cc_library(
         "//zkx:shape_util",
         "//zkx:status_macros",
         "//zkx:util",
+        "//zkx:window_util",
         "//zkx/base:logging",
         "//zkx/service:compilation_environments",
         "//zkx/service:computation_layout",

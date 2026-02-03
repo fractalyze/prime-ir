@@ -432,8 +432,7 @@ absl::Status LayoutAssignment::SetInstructionLayout(
     switch (op->opcode()) {
       case HloOpcode::kSort:
       case HloOpcode::kReduce:
-        // TODO(batzor): Uncomment this. Dependency: ReduceWindow
-        // case HloOpcode::kReduceWindow:
+      case HloOpcode::kReduceWindow:
         return true;
       default:
         return false;
@@ -2829,8 +2828,7 @@ bool LayoutAssignment::InstructionCanChangeLayout(
     case HloOpcode::kXor:
     case HloOpcode::kPad:
     case HloOpcode::kPower:
-    // TODO(batzor): Uncomment this. Dependency: ReduceWindow
-    // case HloOpcode::kReduceWindow:
+    case HloOpcode::kReduceWindow:
     case HloOpcode::kRemainder:
     case HloOpcode::kReverse:
     case HloOpcode::kScatter:

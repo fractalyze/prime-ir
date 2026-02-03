@@ -28,6 +28,7 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/permutation_util.h"
 #include "zkx/shape_util.h"
+#include "zkx/window_util.h"
 
 namespace zkx {
 namespace {
@@ -155,6 +156,58 @@ absl::Status VerifyReducerShape(
   }
 
   return absl::OkStatus();
+}
+
+absl::StatusOr<Shape> InferWindowOutputShape(const Shape& base_shape,
+                                             const Window& window,
+                                             PrimitiveType element_type) {
+  if (window.dimensions_size() != base_shape.rank()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Window has dimension %d but base shape has dimension %d.",
+        window.dimensions_size(), base_shape.rank()));
+  }
+
+  std::vector<int64_t> output_dimensions(window.dimensions_size());
+  std::vector<bool> output_is_dynamic(window.dimensions_size());
+  for (int64_t i = 0; i < window.dimensions_size(); ++i) {
+    const auto& dim = window.dimensions(i);
+    if (dim.size() <= 0) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Window %s has a non-positive dimension.", window.DebugString()));
+    }
+    if (dim.stride() <= 0) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Window %s has a non-positive stride.", window.DebugString()));
+    }
+    if (dim.base_dilation() < 1) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Window %s has a non-positive base area dilation factor.",
+          window.DebugString()));
+    }
+    if (dim.window_dilation() < 1) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Window %s has a non-positive window dilation factor.",
+          window.DebugString()));
+    }
+
+    if (IsUnboundedDynamicSize(ShapeUtil::GetDimension(base_shape, i))) {
+      output_dimensions[i] = Shape::kUnboundedSize;
+    } else {
+      const int64_t dilated_base = window_util::DilatedBound(
+          ShapeUtil::GetDimension(base_shape, i), dim.base_dilation());
+      const int64_t padded_dilated_base =
+          dim.padding_low() + dilated_base + dim.padding_high();
+      const int64_t dilated_window =
+          window_util::DilatedBound(dim.size(), dim.window_dilation());
+
+      output_dimensions[i] = window_util::StridedBound(
+          padded_dilated_base, dilated_window, dim.stride());
+    }
+    output_is_dynamic[i] = base_shape.is_dynamic_dimension(i);
+  }
+
+  return ShapeUtil::MakeValidatedShape(element_type, output_dimensions,
+                                       output_is_dynamic);
 }
 
 // Encapsulates inferred dimension size and bound size.
@@ -1631,6 +1684,67 @@ absl::StatusOr<Shape> ShapeInference::InferReduceShape(
     }
     return ShapeUtil::MakeTupleShape(result_subshapes);
   }
+}
+
+// static
+absl::StatusOr<Shape> ShapeInference::InferReduceWindowShape(
+    const Shape& operand_shape, const Shape& init_value_shape,
+    const Window& window, const ProgramShape& to_apply_shape) {
+  TF_RETURN_IF_ERROR(VerifyReducerShape(to_apply_shape, {&init_value_shape},
+                                        {operand_shape.element_type()},
+                                        /*inputs=*/1));
+  return InferReduceWindowShape(operand_shape, init_value_shape, window);
+}
+
+// static
+absl::StatusOr<Shape> ShapeInference::InferReduceWindowShape(
+    absl::Span<const Shape* const> operands,
+    absl::Span<const Shape* const> init_values, const Window& window,
+    const ProgramShape& to_apply_shape) {
+  auto number_of_input = operands.size();
+  // Check that all of the reduced tensors have the same dimensions. The element
+  // types may be different.
+  for (int64_t i = 1; i < number_of_input; ++i) {
+    if (!ShapeUtil::SameDimensions(*operands[0], *operands[i])) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("All reduced tensors must have the same dimension. "
+                          "Tensor 0 has shape %s, Tensor %d has shape %s",
+                          ShapeUtil::HumanString(*operands[0]), i,
+                          ShapeUtil::HumanString(*operands[i])));
+    }
+  }
+  std::vector<PrimitiveType> operand_element_type_vec;
+  operand_element_type_vec.reserve(operands.size());
+  for (const Shape* s : operands) {
+    operand_element_type_vec.push_back(s->element_type());
+  }
+  TF_RETURN_IF_ERROR(VerifyReducerShape(to_apply_shape, init_values,
+                                        operand_element_type_vec,
+                                        /*inputs=*/number_of_input));
+  std::vector<Shape> output_shape_vec;
+  const size_t n = operands.size();
+  output_shape_vec.reserve(n);
+  for (size_t i = 0; i < operands.size(); ++i) {
+    TF_ASSIGN_OR_RETURN(
+        auto cur_output_shape,
+        InferReduceWindowShape(*operands[i], *init_values[i], window));
+    output_shape_vec.push_back(cur_output_shape);
+  }
+  if (ShapeUtil::IsScalar(to_apply_shape.result())) {
+    CHECK_EQ(output_shape_vec.size(), 1);
+    return output_shape_vec[0];
+  } else {
+    return ShapeUtil::MakeTupleShape(output_shape_vec);
+  }
+}
+
+// static
+absl::StatusOr<Shape> ShapeInference::InferReduceWindowShape(
+    const Shape& operand_shape, const Shape& init_value_shape,
+    const Window& window) {
+  TF_RETURN_IF_ERROR(ExpectArray(operand_shape, "operand of reduce-window"));
+  return InferWindowOutputShape(operand_shape, window,
+                                init_value_shape.element_type());
 }
 
 // static

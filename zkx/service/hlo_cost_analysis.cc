@@ -528,7 +528,89 @@ absl::Status HloCostAnalysis::HandleReduce(const HloInstruction* reduce) {
   return absl::OkStatus();
 }
 
-// TODO(batzor): Add HandleReduceWindow. Dependency: ReduceWindow.
+absl::Status HloCostAnalysis::HandleReduceWindow(
+    const HloInstruction* reduce_window) {
+  const Window& window = reduce_window->window();
+  auto function = reduce_window->to_apply();
+  // Compute the properties of the reduction function.
+  TF_ASSIGN_OR_RETURN(Properties sub_properties,
+                      ProcessSubcomputation(function));
+
+  // Compute the cost of all elements for this ReduceWindow operation. For each
+  // output element there are window_size - 1 reductions to perform.
+  int64_t window_element_count = 1;
+  for (const auto& dimension : window.dimensions()) {
+    window_element_count *= dimension.size();
+  }
+
+  const int64_t input_element_count =
+      ShapeUtil::ElementsIn(reduce_window->operand(0)->shape());
+  const int64_t output_element_count =
+      ShapeUtil::ElementsIn(reduce_window->shape().IsArray()
+                                ? reduce_window->shape()
+                                : reduce_window->shape().tuple_shapes(0));
+  int64_t reduction_count = (window_element_count - 1) * output_element_count;
+
+  // To report FLOPs correctly, identify a reduce window that represents
+  // a reduce followed by a broadcast of a single dimension, and update the
+  // reduction_count appropriately.
+  bool optimized_rw = false;
+  int64_t logical_reduction_dim = -1;
+  int64_t num_reduction_dimensions = absl::c_count_if(
+      window.dimensions(),
+      [](const WindowDimension& dim) { return (dim.size() != 1); });
+  int64_t num_padded_dimensions =
+      absl::c_count_if(window.dimensions(), [](const WindowDimension& dim) {
+        return (dim.padding_low() != 0 || dim.padding_high() != 0);
+      });
+  if (num_reduction_dimensions == 1 && num_padded_dimensions == 1 &&
+      reduce_window->shape().IsArray()) {
+    // Determine the reduction dimension that is broadcasted back to the full
+    // span, if such a dimension exists. To do so, two checks are needed: (a) if
+    // the pad_low and pad_high are one less than the dimension span, and (b)
+    // the reduction window size is one less than twice the dimension span.
+    auto reduction_dim =
+        absl::c_find_if(window.dimensions(), [](const WindowDimension& dim) {
+          return (dim.size() != 1 && dim.padding_low() != 0 &&
+                  dim.padding_high() != 0 &&
+                  dim.padding_low() == dim.padding_high() &&
+                  dim.size() == 2 * dim.padding_low() + 1);
+        });
+    if (reduction_dim != window.dimensions().end()) {
+      logical_reduction_dim = reduction_dim - window.dimensions().begin();
+      optimized_rw =
+          reduction_dim->padding_low() ==
+          reduce_window->shape().dimensions(logical_reduction_dim) - 1;
+    }
+  }
+
+  if (optimized_rw) {
+    window_element_count =
+        reduce_window->shape().dimensions(logical_reduction_dim);
+    reduction_count = (output_element_count / window_element_count) +
+                      (window_element_count - 1);
+    VLOG(3) << "Reduction count: " << reduction_count
+            << " reported for reduce-window:\n"
+            << reduce_window->ToString();
+  }
+  if (options_.count_multiple_input_accesses) {
+    current_properties_.set_operand_utilization(0, 1.0 * output_element_count *
+                                                       window_element_count /
+                                                       input_element_count);
+    current_properties_.set_operand_bytes_accessed(
+        0, output_element_count * window_element_count *
+               ShapeUtil::ByteSizeOfPrimitiveType(
+                   reduce_window->operand(0)->shape().element_type()));
+  }
+
+  sub_properties.ForEach([&](absl::string_view key, float val) {
+    if (KeyToCopyFromSubcomputation(key)) {
+      current_properties_[key] = val * reduction_count;
+    }
+  });
+  return absl::OkStatus();
+}
+
 // TODO(batzor): Add HandleSelectAndScatter. Dependency: SelectAndScatter.
 
 absl::Status HloCostAnalysis::HandleBitcast(const HloInstruction*) {

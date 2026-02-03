@@ -49,8 +49,7 @@ bool ElementalIrEmitter::OpInvalidatesCache(const HloInstruction* instr) {
     case HloOpcode::kDynamicUpdateSlice:
     case HloOpcode::kPad:
     case HloOpcode::kReduce:
-      // TODO(batzor): Uncomment this. Dependency: ReduceWindow
-      // case HloOpcode::kReduceWindow:
+    case HloOpcode::kReduceWindow:
       return true;
     default:
       return false;

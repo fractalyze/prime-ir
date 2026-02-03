@@ -173,8 +173,7 @@ bool InstructionFusion::IsExpensive(const HloInstruction& instruction) {
     case HloOpcode::kRecv:
     case HloOpcode::kRecvDone:
     case HloOpcode::kReduce:
-    // TODO(batzor): Uncomment this. Dependency: ReduceWindow
-    // case HloOpcode::kReduceWindow:
+    case HloOpcode::kReduceWindow:
     // TODO(batzor): Uncomment this. Dependency: Rng
     // case HloOpcode::kRng:
     // case HloOpcode::kRngGetAndUpdateState:

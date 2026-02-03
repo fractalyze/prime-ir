@@ -411,9 +411,109 @@ TEST_F(HloCreationUtilsTest, ExpandDegenerateReshape) {
                             m::Reshape(m::Reshape(m::Parameter(0)))))));
 }
 
-// TODO(chokobole): Enable this test. Dependency: HloReduceWindowInstruction
-// TEST_F(HloCreationUtilsTest, ReduceWindow)
-// TEST_F(HloCreationUtilsTest, ReduceWindowBinaryOpcode)
+TEST_F(HloCreationUtilsTest, ReduceWindow) {
+  std::unique_ptr<VerifiedHloModule> module = CreateNewVerifiedModule("test");
+
+  HloComputation* addition = [&] {
+    auto embedded_builder = HloComputation::Builder("add");
+    auto lhs = embedded_builder.AddInstruction(HloInstruction::CreateParameter(
+        0, ShapeUtil::MakeShape(S32, {}), "lhs"));
+    auto rhs = embedded_builder.AddInstruction(HloInstruction::CreateParameter(
+        1, ShapeUtil::MakeShape(S32, {}), "rhs"));
+    embedded_builder.AddInstruction(
+        HloInstruction::CreateBinary(lhs->shape(), HloOpcode::kAdd, lhs, rhs));
+    return module->AddEmbeddedComputation(embedded_builder.Build());
+  }();
+
+  auto builder = HloComputation::Builder(TestName());
+  Shape input_shape = ShapeUtil::MakeShape(S32, {2, 4, 4});
+  Shape expected_output_shape = ShapeUtil::MakeShape(S32, {2, 2, 2});
+
+  Window window;
+  // First dimension is unchanged.
+  WindowDimension* batch_dim = window.add_dimensions();
+  batch_dim->set_size(1);
+  batch_dim->set_stride(1);
+  batch_dim->set_padding_low(0);
+  batch_dim->set_padding_high(0);
+  batch_dim->set_window_dilation(1);
+  batch_dim->set_base_dilation(1);
+
+  // Second and third dimension are reduced.
+  for (int64_t i = 0; i < 2; ++i) {
+    WindowDimension* dim = window.add_dimensions();
+    dim->set_size(2);
+    dim->set_stride(2);
+    dim->set_padding_low(0);
+    dim->set_padding_high(0);
+    dim->set_window_dilation(1);
+    dim->set_base_dilation(1);
+  }
+
+  auto* a_param = builder.AddInstruction(HloInstruction::CreateParameter(
+      /*parameter_number=*/0, input_shape, "A"));
+
+  auto init = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32_t>(0)));
+  module->AddEntryComputation(builder.Build());
+  TF_ASSERT_OK_AND_ASSIGN(HloInstruction * reduce_window,
+                          MakeReduceWindowHlo(a_param, init, window, addition));
+  module->entry_computation()->set_root_instruction(
+      reduce_window,
+      /*accept_different_shape=*/true);
+
+  *module->mutable_entry_computation_layout() =
+      module->compute_computation_layout();
+  EXPECT_EQ(module->entry_computation()->root_instruction()->shape(),
+            expected_output_shape);
+}
+
+TEST_F(HloCreationUtilsTest, ReduceWindowBinaryOpcode) {
+  std::unique_ptr<VerifiedHloModule> module = CreateNewVerifiedModule("test");
+
+  auto builder = HloComputation::Builder(TestName());
+  Shape input_shape = ShapeUtil::MakeShape(S32, {2, 4, 4});
+  Shape expected_output_shape = ShapeUtil::MakeShape(S32, {2, 2, 2});
+
+  Window window;
+  // First dimension is unchanged.
+  WindowDimension* batch_dim = window.add_dimensions();
+  batch_dim->set_size(1);
+  batch_dim->set_stride(1);
+  batch_dim->set_padding_low(0);
+  batch_dim->set_padding_high(0);
+  batch_dim->set_window_dilation(1);
+  batch_dim->set_base_dilation(1);
+
+  // Second and third dimension are reduced.
+  for (int64_t i = 0; i < 2; ++i) {
+    WindowDimension* dim = window.add_dimensions();
+    dim->set_size(2);
+    dim->set_stride(2);
+    dim->set_padding_low(0);
+    dim->set_padding_high(0);
+    dim->set_window_dilation(1);
+    dim->set_base_dilation(1);
+  }
+
+  auto* a_param = builder.AddInstruction(HloInstruction::CreateParameter(
+      /*parameter_number=*/0, input_shape, "A"));
+
+  auto init = builder.AddInstruction(
+      HloInstruction::CreateConstant(LiteralUtil::CreateR0<int32_t>(0)));
+  module->AddEntryComputation(builder.Build());
+  TF_ASSERT_OK_AND_ASSIGN(
+      HloInstruction * reduce_window,
+      MakeReduceWindowHlo(a_param, init, window, HloOpcode::kAdd));
+  module->entry_computation()->set_root_instruction(
+      reduce_window,
+      /*accept_different_shape=*/true);
+
+  *module->mutable_entry_computation_layout() =
+      module->compute_computation_layout();
+  EXPECT_EQ(module->entry_computation()->root_instruction()->shape(),
+            expected_output_shape);
+}
 
 TEST_F(HloCreationUtilsTest, DynamicBroadcastShape) {
   HloInstruction* param;

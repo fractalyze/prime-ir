@@ -797,6 +797,26 @@ absl::StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
       instruction = CreatePartitionId(shape);
       break;
     }
+    case HloOpcode::kReduceWindow: {
+      TF_RET_CHECK(proto.operand_ids_size() % 2 == 0)
+          << "Reduce window should have an even number of operands but "
+             "sees "
+          << proto.operand_ids_size();
+      TF_RET_CHECK(proto.called_computation_ids_size() == 1)
+          << "ReduceWindow should have 1 called computation but sees "
+          << proto.called_computation_ids_size();
+      {
+        const auto reduce_operands = all_operands();
+        auto inputs = absl::MakeSpan(reduce_operands)
+                          .subspan(0, reduce_operands.size() / 2);
+        auto init_values =
+            absl::MakeSpan(reduce_operands)
+                .subspan(reduce_operands.size() / 2, reduce_operands.size());
+        instruction = CreateReduceWindow(shape, inputs, init_values,
+                                         proto.window(), computations(0));
+      }
+      break;
+    }
     case HloOpcode::kCustomCall: {
       if (proto.constrain_layout()) {
         // A proto RepeatedPtrField cannot be converted to a Span (it is a
@@ -1608,6 +1628,23 @@ std::unique_ptr<HloInstruction> HloInstruction::CreateReduce(
 }
 
 // static
+std::unique_ptr<HloInstruction> HloInstruction::CreateReduceWindow(
+    const Shape& shape, HloInstruction* operand, HloInstruction* init_value,
+    const Window& window, HloComputation* reduce_computation) {
+  return std::make_unique<HloReduceWindowInstruction>(
+      shape, operand, init_value, window, reduce_computation);
+}
+
+// static
+std::unique_ptr<HloInstruction> HloInstruction::CreateReduceWindow(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    absl::Span<HloInstruction* const> init_values, const Window& window,
+    HloComputation* reduce_computation) {
+  return std::make_unique<HloReduceWindowInstruction>(
+      shape, operands, init_values, window, reduce_computation);
+}
+
+// static
 std::unique_ptr<HloInstruction> HloInstruction::CreateInfeed(
     const Shape& infeed_shape, HloInstruction* token_operand,
     const std::string& config) {
@@ -2219,6 +2256,7 @@ std::unique_ptr<HloInstruction> HloInstruction::CloneWithNewOperands(
     case HloOpcode::kTranspose:
       clone = CloneWithNewOperandsImpl(shape, new_operands, context);
       break;
+    case HloOpcode::kReduceWindow:
     // Unary ops.
     case HloOpcode::kAbs:
     case HloOpcode::kAllGatherDone:
@@ -2686,6 +2724,7 @@ bool HloInstruction::IdenticalSlowPath(
     case HloOpcode::kMap:
     case HloOpcode::kMsm:
     case HloOpcode::kOutfeed:
+    case HloOpcode::kReduceWindow:
     case HloOpcode::kPad:
     case HloOpcode::kParameter:
     case HloOpcode::kRaggedAllToAll:
@@ -2897,6 +2936,7 @@ bool HloInstruction::has_to_apply() const {
     case HloOpcode::kMap:
     case HloOpcode::kReduce:
     case HloOpcode::kReduceScatter:
+    case HloOpcode::kReduceWindow:
     case HloOpcode::kScatter:
     case HloOpcode::kSort:
       return true;
@@ -3300,8 +3340,7 @@ void HloInstruction::PrintExtraAttributes(
         });
       }
     } else if (opcode() == HloOpcode::kCall || opcode() == HloOpcode::kMap ||
-               // TODO(batzor): Uncomment this. Dependency: ReduceWindow
-               // opcode() == HloOpcode::kReduceWindow ||
+               opcode() == HloOpcode::kReduceWindow ||
                opcode() == HloOpcode::kReduce ||
                opcode() == HloOpcode::kAllReduce ||
                opcode() == HloOpcode::kReduceScatter ||
@@ -3402,8 +3441,7 @@ void HloInstruction::PrintExtraAttributes(
         break;
       case HloOpcode::kCall:
       case HloOpcode::kMap:
-      // TODO(batzor): Uncomment this. Dependency: ReduceWindow
-      // case HloOpcode::kReduceWindow:
+      case HloOpcode::kReduceWindow:
       case HloOpcode::kReduce:
       case HloOpcode::kAllReduce:
       case HloOpcode::kAllReduceStart:
@@ -3875,6 +3913,8 @@ absl::Status HloInstruction::Visit(
       return visitor->HandleRecvDone(this);
     case HloOpcode::kReduce:
       return visitor->HandleReduce(this);
+    case HloOpcode::kReduceWindow:
+      return visitor->HandleReduceWindow(this);
     case HloOpcode::kReduceScatter:
       return visitor->HandleReduceScatter(this);
     case HloOpcode::kRemainder:

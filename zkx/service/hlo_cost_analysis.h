@@ -499,9 +499,7 @@ class HloCostAnalysis : public ConstDfsHloVisitor {
       const HloInstruction* dynamic_update_slice) override;
   absl::Status HandleTuple(const HloInstruction* tuple) override;
   absl::Status HandleMap(const HloInstruction* map) override;
-  // TODO(batzor): Uncomment this. Dependency: ReduceWindow
-  // absl::Status HandleReduceWindow(const HloInstruction* reduce_window)
-  // override;
+  absl::Status HandleReduceWindow(const HloInstruction* reduce_window) override;
   // TODO(batzor): Uncomment this. Dependency: SelectAndScatter
   // absl::Status HandleSelectAndScatter(
   //     const HloInstruction* instruction) override;

@@ -16,6 +16,8 @@ limitations under the License.
 
 #include "zkx/backends/cpu/codegen/cpu_kernel_emitter.h"
 
+#include <functional>
+
 #include "absl/functional/bind_front.h"
 #include "absl/log/vlog_is_on.h"
 #include "absl/strings/str_cat.h"
@@ -26,6 +28,7 @@ limitations under the License.
 #include "mlir/Conversion/ConvertToLLVM/ToLLVMPass.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/TensorToLinalg/TensorToLinalgPass.h"
+#include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Arith/Transforms/BufferDeallocationOpInterfaceImpl.h"
 #include "mlir/Dialect/Arith/Transforms/BufferizableOpInterfaceImpl.h"
@@ -179,6 +182,7 @@ mlir::Value CreateFieldMinimum(EmitterLocOpBuilder& b, mlir::Value lhs,
 void LoadMlirDialects(mlir::MLIRContext* mlir_context) {
   mlir_context->loadDialect<
       // clang-format off
+      mlir::affine::AffineDialect,
       mlir::arith::ArithDialect,
       mlir::bufferization::BufferizationDialect,
       mlir::cf::ControlFlowDialect,
@@ -1927,6 +1931,194 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitReduceOp(
   return reduce.getResult(0);
 }
 
+namespace {
+
+struct WindowDimConstants {
+  mlir::Value stride;
+  mlir::Value dilation;
+  mlir::Value pad_low;
+  mlir::Value input_dim;
+  mlir::Value base_dilation;  // null if base_dilation <= 1
+  mlir::Value reversal_max;   // null if no reversal
+};
+
+struct ReduceWindowContext {
+  int64_t rank;
+  const Window& window;
+  llvm::ArrayRef<WindowDimConstants> dim_constants;
+  HloComputation* to_apply;
+  mlir::Value input;
+  mlir::Value init_scalar;
+  mlir::Value zero;
+  std::function<mlir::Value(EmitterLocOpBuilder&, HloComputation*, mlir::Value,
+                            mlir::Value)>
+      apply_reduction;
+};
+
+std::pair<mlir::Value, mlir::Value> ComputeWindowInputIndexForDim(
+    EmitterLocOpBuilder& b, const WindowDimension& dim,
+    const WindowDimConstants& constants, mlir::Value output_iv,
+    mlir::Value window_iv, mlir::Value zero) {
+  mlir::Value win_iv = window_iv;
+  if (dim.window_reversal()) {
+    win_iv = b.create<mlir::arith::SubIOp>(constants.reversal_max, win_iv);
+  }
+
+  // base_idx = output_iv * stride + window_iv * dilation - pad_low
+  auto strided = b.create<mlir::arith::MulIOp>(output_iv, constants.stride);
+  auto dilated = b.create<mlir::arith::MulIOp>(win_iv, constants.dilation);
+  auto sum = b.create<mlir::arith::AddIOp>(strided, dilated);
+  mlir::Value input_idx = b.create<mlir::arith::SubIOp>(sum, constants.pad_low);
+
+  mlir::Value in_bounds =
+      b.create<mlir::arith::ConstantOp>(b.getI1Type(), b.getBoolAttr(true));
+
+  if (dim.base_dilation() > 1) {
+    auto rem =
+        b.create<mlir::arith::RemSIOp>(input_idx, constants.base_dilation);
+    auto is_aligned = b.create<mlir::arith::CmpIOp>(
+        mlir::arith::CmpIPredicate::eq, rem, zero);
+    in_bounds = b.create<mlir::arith::AndIOp>(in_bounds, is_aligned);
+    input_idx =
+        b.create<mlir::arith::DivSIOp>(input_idx, constants.base_dilation);
+  }
+
+  auto ge_zero = b.create<mlir::arith::CmpIOp>(mlir::arith::CmpIPredicate::sge,
+                                               input_idx, zero);
+  auto lt_dim = b.create<mlir::arith::CmpIOp>(mlir::arith::CmpIPredicate::slt,
+                                              input_idx, constants.input_dim);
+  auto dim_ok = b.create<mlir::arith::AndIOp>(ge_zero, lt_dim);
+  in_bounds = b.create<mlir::arith::AndIOp>(in_bounds, dim_ok);
+
+  return {input_idx, in_bounds};
+}
+
+mlir::Value EmitBoundsCheckedReduction(
+    EmitterLocOpBuilder& b, ReduceWindowContext& ctx, mlir::Value in_bounds,
+    mlir::Value acc, mlir::Value input,
+    llvm::ArrayRef<mlir::Value> input_indices, mlir::Value init_scalar) {
+  auto if_op = b.create<mlir::scf::IfOp>(
+      in_bounds,
+      [&](mlir::OpBuilder& then_b, mlir::Location loc) {
+        EmitterLocOpBuilder tb(loc, then_b);
+        auto element = tb.create<mlir::tensor::ExtractOp>(input, input_indices);
+        auto result = ctx.apply_reduction(tb, ctx.to_apply, acc, element);
+        tb.create<mlir::scf::YieldOp>(mlir::ValueRange{result});
+      },
+      [&](mlir::OpBuilder& else_b, mlir::Location loc) {
+        EmitterLocOpBuilder eb(loc, else_b);
+        auto result = ctx.apply_reduction(eb, ctx.to_apply, acc, init_scalar);
+        eb.create<mlir::scf::YieldOp>(mlir::ValueRange{result});
+      });
+  return if_op.getResult(0);
+}
+
+mlir::Value BuildWindowLoopNest(
+    EmitterLocOpBuilder& b, ReduceWindowContext& ctx, int64_t dim,
+    mlir::Value acc, llvm::ArrayRef<mlir::Value> output_ivs,
+    llvm::SmallVectorImpl<mlir::Value>& window_ivs) {
+  if (dim == ctx.rank) {
+    llvm::SmallVector<mlir::Value> input_indices;
+    mlir::Value in_bounds =
+        b.create<mlir::arith::ConstantOp>(b.getI1Type(), b.getBoolAttr(true));
+
+    for (int64_t d = 0; d < ctx.rank; ++d) {
+      auto [idx, bounds] = ComputeWindowInputIndexForDim(
+          b, ctx.window.dimensions(d), ctx.dim_constants[d], output_ivs[d],
+          window_ivs[d], ctx.zero);
+      input_indices.push_back(idx);
+      in_bounds = b.create<mlir::arith::AndIOp>(in_bounds, bounds);
+    }
+
+    return EmitBoundsCheckedReduction(b, ctx, in_bounds, acc, ctx.input,
+                                      input_indices, ctx.init_scalar);
+  }
+
+  const auto& wd = ctx.window.dimensions(dim);
+  auto loop = b.create<mlir::affine::AffineForOp>(
+      0, wd.size(), 1, mlir::ValueRange{acc},
+      [&](mlir::OpBuilder& nb, mlir::Location loc, mlir::Value iv,
+          mlir::ValueRange iter_args) {
+        EmitterLocOpBuilder inner_b(loc, nb);
+        window_ivs.push_back(iv);
+        mlir::Value new_acc = BuildWindowLoopNest(
+            inner_b, ctx, dim + 1, iter_args[0], output_ivs, window_ivs);
+        window_ivs.pop_back();
+        inner_b.create<mlir::affine::AffineYieldOp>(mlir::ValueRange{new_acc});
+      });
+  return loop.getResult(0);
+}
+
+}  // namespace
+
+absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitReduceWindowOp(
+    const HloInstruction* instr, EmitterLocOpBuilder& b,
+    mlir::ValueRange inputs, mlir::ValueRange inits) {
+  pass_flag_.enable_lower_affine = true;
+
+  auto* reduce_window = Cast<HloReduceWindowInstruction>(instr);
+  const Shape& input_shape = reduce_window->inputs()[0]->shape();
+  const Shape& output_shape = instr->shape();
+  const Window& window = reduce_window->window();
+  HloComputation* to_apply = reduce_window->to_apply();
+  int64_t rank = output_shape.rank();
+
+  mlir::Value input = inputs[0];
+  mlir::Value zero = b.create<mlir::arith::ConstantIndexOp>(0);
+  mlir::Value init_scalar =
+      b.create<mlir::tensor::ExtractOp>(inits[0], mlir::ValueRange{});
+
+  auto output_type =
+      mlir_utils::ShapeToMlirTensorType(output_shape, b.getContext());
+
+  // Precompute window dimension constants
+  llvm::SmallVector<WindowDimConstants> dim_constants(rank);
+  for (int64_t d = 0; d < rank; ++d) {
+    const auto& wd = window.dimensions(d);
+    auto& dc = dim_constants[d];
+    dc.stride = b.create<mlir::arith::ConstantIndexOp>(wd.stride());
+    dc.dilation = b.create<mlir::arith::ConstantIndexOp>(wd.window_dilation());
+    dc.pad_low = b.create<mlir::arith::ConstantIndexOp>(wd.padding_low());
+    dc.input_dim =
+        b.create<mlir::arith::ConstantIndexOp>(input_shape.dimensions(d));
+    if (wd.base_dilation() > 1) {
+      dc.base_dilation =
+          b.create<mlir::arith::ConstantIndexOp>(wd.base_dilation());
+    }
+    if (wd.window_reversal()) {
+      dc.reversal_max = b.create<mlir::arith::ConstantIndexOp>(wd.size() - 1);
+    }
+  }
+
+  auto apply_reduction = [this](EmitterLocOpBuilder& b,
+                                HloComputation* to_apply, mlir::Value acc,
+                                mlir::Value value) -> mlir::Value {
+    absl::flat_hash_map<const HloInstruction*, mlir::Value> values;
+    values[to_apply->parameter_instruction(0)] = acc;
+    values[to_apply->parameter_instruction(1)] = value;
+    to_apply->ForEachInstructionPostOrder(
+        absl::bind_front(&CpuKernelEmitter::EmitOpInToApply, this, std::ref(b),
+                         std::ref(values)));
+    return values[to_apply->root_instruction()];
+  };
+
+  ReduceWindowContext ctx{rank,  window,      dim_constants, to_apply,
+                          input, init_scalar, zero,          apply_reduction};
+
+  auto generate_op = b.create<mlir::tensor::GenerateOp>(
+      output_type, mlir::ValueRange{},
+      [&](mlir::OpBuilder& ob, mlir::Location loc, mlir::ValueRange indices) {
+        EmitterLocOpBuilder inner_b(loc, ob);
+        llvm::SmallVector<mlir::Value> output_ivs(indices.begin(),
+                                                  indices.end());
+        llvm::SmallVector<mlir::Value> window_ivs;
+        mlir::Value reduced = BuildWindowLoopNest(inner_b, ctx, 0, init_scalar,
+                                                  output_ivs, window_ivs);
+        inner_b.create<mlir::tensor::YieldOp>(reduced);
+      });
+  return generate_op.getResult();
+}
+
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitReshapeOp(
     const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value input) {
   auto output_type =
@@ -2196,6 +2388,17 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
         inits.push_back(values.at(init));
       }
       return EmitReduceOp(instr, b, inputs, inits);
+    }
+    case HloOpcode::kReduceWindow: {
+      auto* reduce_window = Cast<HloReduceWindowInstruction>(instr);
+      llvm::SmallVector<mlir::Value> input_vals, init_vals;
+      for (const HloInstruction* inp : reduce_window->inputs()) {
+        input_vals.push_back(values.at(inp));
+      }
+      for (const HloInstruction* ini : reduce_window->init_values()) {
+        init_vals.push_back(values.at(ini));
+      }
+      return EmitReduceWindowOp(instr, b, input_vals, init_vals);
     }
     case HloOpcode::kReshape:
       return EmitReshapeOp(instr, b, values[instr->operand(0)]);

@@ -2161,6 +2161,57 @@ absl::StatusOr<Literal> ExtractFromIndexPositions(
       type);
 }
 
+// For one particular placement of a window in a base shape (the placement is
+// represented as `window_count_index`), iterates inside the window.
+// Translates the window index into base index. If the base index is within
+// bound, call `f` with the base index.
+void IterateThroughWindow(
+    const Shape& window_shape, const Window& window, const Shape& base_shape,
+    const absl::Span<const int64_t> window_count_index,
+    const std::function<void(absl::Span<const int64_t>)>& f) {
+  const int64_t rank = base_shape.rank();
+  DimensionVector window_index(rank);
+  std::fill(window_index.begin(), window_index.end(), 0);
+  do {
+    DimensionVector base_index(rank);
+    bool out_of_bound = false;
+    for (int64_t i = 0; i < rank; ++i) {
+      // Padding is applied to the dilated base. Say that padding is 3 and
+      // dilation is 2 for some dimension. After applying base dilation and
+      // padding, the dimension looks like:
+      // P P P E D D E D D ... E D D E P P P
+      // where E are the elements and D are the holes. So, the elements are
+      // located in indices: padding + k*base_dilation for k = {0, 1, 2, ...}.
+      // We are accessing elements in the transformed base at indices:
+      // window_count_index * stride + window_index * window_dilation.
+      // Solving for k gives us
+      // (win_count_i * stride + win_i * win_dilation - pad) / base_dilation
+      // When this is a natural number, we index an original element.
+      // Otherwise, we index a 0 (pad or hole), and we don't need to apply
+      // the callback f.
+      int64_t win_idx =
+          window.dimensions(i).window_reversal()
+              ? (window.dimensions(i).size() - 1 - window_index[i])
+              : window_index[i];
+      base_index[i] = window_count_index[i] * window.dimensions(i).stride() +
+                      win_idx * window.dimensions(i).window_dilation() -
+                      window.dimensions(i).padding_low();
+      if (base_index[i] % window.dimensions(i).base_dilation() != 0) {
+        out_of_bound = true;
+        break;
+      }
+      base_index[i] /= window.dimensions(i).base_dilation();
+      if (base_index[i] < 0 || base_index[i] >= base_shape.dimensions(i)) {
+        out_of_bound = true;
+        break;
+      }
+    }
+    if (!out_of_bound) {
+      f(base_index);
+    }
+  } while (IndexUtil::BumpIndices(window_shape, absl::MakeSpan(window_index)));
+}
+
 }  // namespace
 
 absl::Status HloEvaluator::HandleSort(const HloInstruction* sort) {
@@ -2610,6 +2661,92 @@ absl::Status HloEvaluator::HandleReduce(const HloInstruction* hlo) {
     TF_ASSIGN_OR_RETURN(evaluated_[reduce],
                         evaluated_[reduce].ConvertToShape(reduce->shape()));
   }
+  return absl::OkStatus();
+}
+
+// Evaluate the reduction body for a single output element by iterating
+// through the window and applying the reduce function.
+static Literal EvaluateReduceWindowElement(
+    absl::Span<const int64_t> output_index, const Shape& window_shape,
+    const Window& window, const Literal& input_literal,
+    const Literal& init_literal, HloComputation* function,
+    HloEvaluator& embedded_evaluator) {
+  Literal computed_result = init_literal.Clone();
+
+  IterateThroughWindow(
+      window_shape, window, input_literal.shape(), output_index,
+      [&](absl::Span<const int64_t> operand_index) -> void {
+        Literal curr_val(
+            ShapeUtil::MakeShape(input_literal.shape().element_type(), {}));
+        curr_val.CopyElementFrom(input_literal, operand_index, {});
+
+        const Literal* args[] = {&computed_result, &curr_val};
+        computed_result = embedded_evaluator.Evaluate(*function, args).value();
+        embedded_evaluator.ResetVisitStates();
+      });
+
+  return computed_result;
+}
+
+absl::Status HloEvaluator::HandleReduceWindow(const HloInstruction* hlo) {
+  auto* reduce_window = Cast<HloReduceWindowInstruction>(hlo);
+  const Window& window = reduce_window->window();
+  HloComputation* function = reduce_window->to_apply();
+
+  // NOTE(jeong0982): Variadic `ReduceWindow` (tuple output) is not supported.
+  if (reduce_window->shape().IsTuple()) {
+    return absl::UnimplementedError(
+        "Variadic ReduceWindow (tuple output) is not supported");
+  }
+
+  TF_ASSIGN_OR_RETURN(auto inferred_return_shape,
+                      ShapeInference::InferReduceWindowShape(
+                          reduce_window->input_shapes(),
+                          reduce_window->init_value_shapes(), window,
+                          /*to_apply_shape=*/function->ComputeProgramShape()));
+  TF_RET_CHECK(
+      ShapeUtil::Compatible(reduce_window->shape(), inferred_return_shape))
+      << "return shape is set to: "
+      << ShapeUtil::HumanStringWithLayout(reduce_window->shape())
+      << " but is inferred to be: "
+      << ShapeUtil::HumanStringWithLayout(inferred_return_shape);
+
+  const Literal& input_literal =
+      GetEvaluatedLiteralFor(reduce_window->inputs()[0]);
+  VLOG(3) << "HandleReduceWindow arg_literal: " << input_literal.ToString();
+  const Literal& init_literal =
+      GetEvaluatedLiteralFor(reduce_window->init_values()[0]);
+  VLOG(3) << "HandleReduceWindow init_literal: " << init_literal.ToString();
+  TF_RET_CHECK(ShapeUtil::IsScalar(init_literal.shape()));
+
+  // Creates a Shape object from window, for iteration below.
+  absl::InlinedVector<int64_t, 2> window_dimension_sizes;
+  for (const auto& window_dimension : window.dimensions()) {
+    window_dimension_sizes.push_back(window_dimension.size());
+  }
+  const Shape window_shape = ShapeUtil::MakeShape(
+      input_literal.shape().element_type(), window_dimension_sizes);
+
+  const int num_threads = ShapeUtil::GetForEachIndexParallelThreadCount() + 1;
+  std::vector<std::unique_ptr<HloEvaluator>> embedded_evaluators;
+  embedded_evaluators.reserve(num_threads);
+  for (int i = 0; i < num_threads; ++i) {
+    embedded_evaluators.push_back(CreateEmbedded(max_loop_iterations_));
+  }
+
+  Literal result(inferred_return_shape);
+  TF_RETURN_IF_ERROR(Apply<PopulateParallelImpl>(
+      result, [&](absl::Span<const int64_t> output_index, int thread_id) {
+        const int idx = thread_id + 1;
+        CHECK_GE(idx, 0);
+        CHECK_LT(idx, embedded_evaluators.size());
+        return EvaluateReduceWindowElement(output_index, window_shape, window,
+                                           input_literal, init_literal,
+                                           function, *embedded_evaluators[idx]);
+      }));
+
+  VLOG(2) << "Final result is:" << result.ToString() << "\n";
+  evaluated_[reduce_window] = std::move(result);
   return absl::OkStatus();
 }
 

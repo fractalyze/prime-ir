@@ -1603,8 +1603,7 @@ TEST_F(IndexingAnalysisTest, VariadicReduceOp) {
                   ElementsAre(MatchIndexingMap(kInitToOutputIndexing))));
 }
 
-// TODO(chokobole): Enable this test. Dependency: HloReduceWindowInstruction
-TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_NoPadding) {
+TEST_F(IndexingAnalysisTest, ReduceWindowOp_NoPadding) {
   auto root = ParseAndGetRoot(R"(
     HloModule m
     max {
@@ -1635,8 +1634,7 @@ TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_NoPadding) {
                           )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: HloReduceWindowInstruction
-TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_PaddingAndWindowStride) {
+TEST_F(IndexingAnalysisTest, ReduceWindowOp_PaddingAndWindowStride) {
   auto root = ParseAndGetRoot(R"(
     HloModule m
     max {
@@ -1670,8 +1668,7 @@ TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_PaddingAndWindowStride) {
                           )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: HloReduceWindowInstruction
-TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_BaseDilation) {
+TEST_F(IndexingAnalysisTest, ReduceWindowOp_BaseDilation) {
   auto root = ParseAndGetRoot(R"(
     HloModule m
     max {
@@ -1703,8 +1700,7 @@ TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_BaseDilation) {
                           )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: HloReduceWindowInstruction
-TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_WindowDilation) {
+TEST_F(IndexingAnalysisTest, ReduceWindowOp_WindowDilation) {
   auto root = ParseAndGetRoot(R"(
     HloModule m
     max {
@@ -1735,7 +1731,7 @@ TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_WindowDilation) {
                           )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::ReduceWindowOp
+// TODO(chokobole): Enable this test. Dependency: variadic ReduceWindow
 TEST_F(IndexingAnalysisTest, DISABLED_ReduceWindowOp_Variadic) {
   auto root = ParseAndGetRoot(R"(
     HloModule m

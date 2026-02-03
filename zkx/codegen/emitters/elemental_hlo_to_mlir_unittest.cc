@@ -212,8 +212,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_ReduceUnsigned) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::ReduceWindowOp
-TEST_F(ElementalHloToMlirTest, DISABLED_ReduceWindow) {
+TEST_F(ElementalHloToMlirTest, ReduceWindow) {
   TF_EXPECT_OK(Run(R"(
     add {
       p0 = s32[] parameter(0)
@@ -238,41 +237,33 @@ TEST_F(ElementalHloToMlirTest, DISABLED_ReduceWindow) {
     // CHECK-SAME:   %[[X:arg[0-9]*]]: index {{[^}]*}}},
     // CHECK-SAME:   %[[Y:arg[0-9]*]]: index {{[^}]*}}},
     // CHECK-SAME:   %[[Z:arg[0-9]*]]: index {{[^}]*}}}) -> i32
-    // CHECK-DAG:  %[[C10:.*]] = arith.constant 10
-    // CHECK-DAG:  %[[C0:.*]] = arith.constant 0
-    // CHECK-DAG:  %[[C1:.*]] = arith.constant 1
-    // CHECK-DAG:  %[[C7:.*]] = arith.constant 7
     // CHECK:      %[[INIT:.*]] = tensor.extract %[[ARG1]][]
-    // CHECK:      %[[RET:.*]] = scf.for %[[I:.*]] = %[[C0]] to %[[C7]]
-    // CHECK-SAME:   step %[[C1]] iter_args(%[[ACC:.*]] = %[[INIT]])
-    // CHECK:      %[[J0:.*]] = zkx.apply_indexing #zkx.indexing_map<"(d0) -> (d0 * 4), domain: d0 in [0, 2]">(%[[Y]])
-    // CHECK:      %[[J1:.*]] = zkx.apply_indexing
-    // CHECK-SAME:     #zkx.indexing_map<"(d0, d1) -> (d0 + d1 - 3),
-    // CHECK-SAME:              d0 in [0, 7], d1 in [0, 6]">(%[[Z]], %[[I]])
-    // CHECK:          %[[VAL:.*]] = tensor.extract %[[ARG0]]
-    // CHECK-SAME:        [%[[X]], %[[J0]], %[[J1]]]
-    // CHECK:          %[[UPD:.*]] = func.call @add_sum(%[[ACC]],
-    // CHECK-SAME:                                      %[[VAL]])
-    // CHECK:          scf.yield %[[UPD]]
-    // CHECK:        }
-    // CHECK:      }
+    // NOTE: zkx uses `zkx.loop` (EmitZkxLoopOp) instead of XLA's
+    // `scf.for` (EmitLoopNest) to preserve indexing map semantics.
+    // CHECK:      %[[RET:.*]] = zkx.loop
+    // CHECK-SAME:   in #zkx.indexing_map<"(d0, d1, d2)[s0] -> (d0, d1 * 4, d2 + s0 - 3),
+    // CHECK-SAME:     domain: d0 in [0, 41], d1 in [0, 2], d2 in [0, 7],
+    // CHECK-SAME:     s0 in [0, 6], d2 + s0 in [3, 10]">
+    // CHECK-SAME:   iter_args({{.*}} = %[[INIT]])
+    // CHECK:      tensor.extract %[[ARG0]]
+    // CHECK:      func.call @add_sum
+    // CHECK:      zkx.yield
     // CHECK:      return %[[RET]]
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::ReduceWindowOp
-TEST_F(ElementalHloToMlirTest, DISABLED_ReduceWindowWithRescaling) {
+TEST_F(ElementalHloToMlirTest, ReduceWindowWithRescaling) {
   TF_EXPECT_OK(Run(R"(
     add {
       p0 = s32[] parameter(0)
       p1 = s32[] parameter(1)
-      ROOT sum = i32[] add(p0, p1)
+      ROOT sum = s32[] add(p0, p1)
     }
 
     ENTRY main {
-      p0 = i32[42,12,8] parameter(0)
-      p1 = i32[] parameter(1)
-      ROOT r = i32[19,12,8] reduce-window(p0, p1), window={
+      p0 = s32[42,12,8] parameter(0)
+      p1 = s32[] parameter(1)
+      ROOT r = s32[19,12,8] reduce-window(p0, p1), window={
                                                 size=8x1x1
                                                 stride=4x1x1
                                                 pad=0_0x0_0x0_0
@@ -287,19 +278,15 @@ TEST_F(ElementalHloToMlirTest, DISABLED_ReduceWindowWithRescaling) {
     // CHECK-SAME:   %[[X:arg[0-9]*]]: index {{[^}]*}}},
     // CHECK-SAME:   %[[Y:arg[0-9]*]]: index {{[^}]*}}},
     // CHECK-SAME:   %[[Z:arg[0-9]*]]: index {{[^}]*}}}) -> i32
-    // CHECK-DAG:  %[[C0:.*]] = arith.constant 0 : index
-    // CHECK-DAG:  %[[C1:.*]] = arith.constant 1 : index
-    // CHECK-DAG:  %[[C4:.*]] = arith.constant 4 : index
-    // We have a window size of 8, but expect a loop from 0 to 4
-    // due to the base dilation of 2 and the applied symbol rescaling:
-    // CHECK:      scf.for %[[I:.*]] = %[[C0]] to %[[C4]] step %[[C1]]
+    // CHECK:      %[[INIT:.*]] = tensor.extract %[[ARG1]][]
+    // CHECK:      %[[RET:.*]] = zkx.loop
     // If symbol rescaling wasn't working we would have a
-    // `d1 floordiv <base_dilation>` in the map:
-    // CHECK:      %[[K:.*]] = zkx.apply_indexing
-    // CHECK-SAME:   #zkx.indexing_map<"(d0, d1) -> (d0 * 2 + d1),
-    // CHECK-SAME:   d0 in [0, 18], d1 in [0, 3]">(%[[X]], %[[I]])
-
-    // CHECK:      tensor.extract %[[ARG0]][%[[K]], %[[Y]], %[[Z]]]
+    // `floordiv` in the map:
+    // CHECK-SAME:   #zkx.indexing_map<"(d0, d1, d2)[s0] -> (d0 * 2 + s0, d1, d2),
+    // CHECK-SAME:     domain: d0 in [0, 18], d1 in [0, 11], d2 in [0, 7], s0 in [0, 3]">
+    // CHECK-SAME:   iter_args({{.*}} = %[[INIT]])
+    // CHECK:      tensor.extract %[[ARG0]]
+    // CHECK:      return %[[RET]]
   )"));
 }
 

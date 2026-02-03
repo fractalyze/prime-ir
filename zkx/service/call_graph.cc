@@ -64,6 +64,7 @@ CallContext GetInstructionCallContext(HloOpcode opcode) {
     case HloOpcode::kMap:
     case HloOpcode::kReduce:
     case HloOpcode::kReduceScatter:
+    case HloOpcode::kReduceWindow:
     case HloOpcode::kScatter:
     case HloOpcode::kSort:
       return CallContext::kEmbedded;

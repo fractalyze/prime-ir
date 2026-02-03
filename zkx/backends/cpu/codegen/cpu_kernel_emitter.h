@@ -162,6 +162,11 @@ class CpuKernelEmitter final : public KernelEmitter {
                                            mlir::ValueRange inputs,
                                            mlir::ValueRange inits);
 
+  absl::StatusOr<mlir::Value> EmitReduceWindowOp(const HloInstruction* instr,
+                                                 EmitterLocOpBuilder& b,
+                                                 mlir::ValueRange inputs,
+                                                 mlir::ValueRange inits);
+
   absl::StatusOr<mlir::Value> EmitReshapeOp(const HloInstruction* instr,
                                             EmitterLocOpBuilder& b,
                                             mlir::Value value);

@@ -1793,6 +1793,67 @@ class HloOutfeedInstruction : public HloInstruction {
   std::string outfeed_config_;
 };
 
+class HloReduceWindowInstruction : public HloInstruction {
+ public:
+  explicit HloReduceWindowInstruction(const Shape& shape,
+                                      HloInstruction* operand,
+                                      HloInstruction* init_value,
+                                      const Window& window,
+                                      HloComputation* reduce_computation);
+  explicit HloReduceWindowInstruction(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      absl::Span<HloInstruction* const> init_values, const Window& window,
+      HloComputation* reduce_computation);
+  const Window& window() const override { return window_; }
+  // Returns a serialized representation of this instruction.
+  HloInstructionProto ToProto() const override;
+  // Returns the number of input arrays (and, consequently, the number of
+  // init values) this reduce has.
+  int64_t input_count() const { return operand_count() / 2; }
+  // Returns the input tensors to be reduced.
+  absl::Span<HloInstruction* const> inputs() const {
+    return absl::MakeSpan(operands()).subspan(0, input_count());
+  }
+  // Returns the init values of the reduction.
+  absl::Span<HloInstruction* const> init_values() const {
+    return absl::MakeSpan(operands()).subspan(input_count(), operand_count());
+  }
+  // Returns the shapes of input tensors to be reduced.
+  absl::InlinedVector<const Shape*, 2> input_shapes() const {
+    absl::InlinedVector<const Shape*, 2> shapes;
+    for (const auto* op : inputs()) {
+      shapes.push_back(&op->shape());
+    }
+    return shapes;
+  }
+  // Returns the init values of the reduction.
+  absl::InlinedVector<const Shape*, 2> init_value_shapes() const {
+    absl::InlinedVector<const Shape*, 2> shapes;
+    for (const auto* op : init_values()) {
+      shapes.push_back(&op->shape());
+    }
+    return shapes;
+  }
+
+  static bool ClassOf(const HloInstruction* hlo) {
+    return hlo->opcode() == HloOpcode::kReduceWindow;
+  }
+
+ private:
+  void PrintExtraAttributesImpl(AttributePrinter& printer,
+                                const HloPrintOptions& options) const override;
+  bool IdenticalSlowPath(
+      const HloInstruction& other,
+      absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
+          eq_computations) const override;
+  // Implementation for non-common logic of CloneWithNewOperands.
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+      HloCloneContext* context) const override;
+
+  Window window_;
+};
+
 class HloPadInstruction : public HloInstruction {
  public:
   explicit HloPadInstruction(const Shape& shape, HloInstruction* operand,

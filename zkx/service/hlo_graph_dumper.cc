@@ -1193,8 +1193,7 @@ ColorScheme HloDotDumper::GetInstructionColor(const HloInstruction* instr) {
     case HloOpcode::kParameter:
       return parameter_color;
     case HloOpcode::kReduce:
-    // TODO(batzor): Uncomment this. Dependency: ReduceWindow
-    // case HloOpcode::kReduceWindow:
+    case HloOpcode::kReduceWindow:
     case HloOpcode::kScatter:  // scatter is a kind of reduction
     case HloOpcode::kGather:   // not a reduction, but goes with scatter
       return kPurple;

@@ -120,6 +120,19 @@ class ShapeInference {
   static absl::StatusOr<Shape> InferAllReduceShape(
       absl::Span<const Shape* const> operand_shapes);
 
+  // Infers the shape produced by applying the given computation to the operand
+  // shape with the given window and stride dimensions.
+  static absl::StatusOr<Shape> InferReduceWindowShape(
+      const Shape& operand_shape, const Shape& init_value, const Window& window,
+      const ProgramShape& to_apply_shape);
+  static absl::StatusOr<Shape> InferReduceWindowShape(
+      const Shape& operand_shape, const Shape& init_value,
+      const Window& window);
+  static absl::StatusOr<Shape> InferReduceWindowShape(
+      absl::Span<const Shape* const> operands,
+      absl::Span<const Shape* const> init_values, const Window& window,
+      const ProgramShape& to_apply_shape);
+
   // Infers the shape produced by a reduce-scatter with the given operand
   // shape, scatter dimension, and shard count.
   static absl::StatusOr<Shape> InferReduceScatterShape(

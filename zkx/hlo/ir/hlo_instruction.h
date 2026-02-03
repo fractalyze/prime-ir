@@ -1,3 +1,19 @@
+/* Copyright 2017 The OpenXLA Authors.
+Copyright 2025 The ZKX Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
 #ifndef ZKX_HLO_IR_HLO_INSTRUCTION_H_
 #define ZKX_HLO_IR_HLO_INSTRUCTION_H_
 
@@ -772,6 +788,23 @@ class HloInstruction {
       const Shape& shape, HloInstruction* tuple_of_instructions,
       absl::Span<HloInstruction* const> init_values,
       absl::Span<const int64_t> dimensions_to_reduce,
+      HloComputation* reduce_computation);
+
+  // Creates a reduce-window instruction, where the computation (given
+  // by the handle) is applied window-wise at each valid window
+  // position in the operand.
+  static std::unique_ptr<HloInstruction> CreateReduceWindow(
+      const Shape& shape, HloInstruction* operand, HloInstruction* init_value,
+      const Window& window, HloComputation* reduce_computation);
+
+  // A more general, multiple-argument version of the above.
+  // The reduce_computation being applied,now takes N arguments:
+  // [accumulator0, accumulator1, ..., accumulatorN, value0, value1, ...,
+  // valueN], and returns an N-tuple. The operands and init_values now each
+  // contain a span of N input arrays and n initial values.
+  static std::unique_ptr<HloInstruction> CreateReduceWindow(
+      const Shape& shape, absl::Span<HloInstruction* const> operands,
+      absl::Span<HloInstruction* const> init_values, const Window& window,
       HloComputation* reduce_computation);
 
   // Creates a broadcast instruction.
@@ -1923,6 +1956,17 @@ class HloInstruction {
   // Delegates to HloCollectivePermuteInstruction::source_target_pairs.
   const std::vector<std::pair<int64_t, int64_t>>& source_target_pairs() const;
 
+  // Returns data on the window in a windowed operation such as
+  // convolution.
+  virtual const Window& window() const {
+    LOG(FATAL) << "Unimplemented method.";
+  }
+
+  // Sets the window data in a windowed operation such as convolution.
+  virtual void set_window(const Window& window) {
+    LOG(FATAL) << "Unimplemented method.";
+  }
+
   // Returns the unique_indices field.
   virtual bool unique_indices() const { LOG(FATAL) << "Unimplemented method."; }
 
@@ -2346,6 +2390,7 @@ inline bool HloInstruction::MightHaveCalledComputations(HloOpcode opcode) {
     case HloOpcode::kMap:
     case HloOpcode::kReduce:
     case HloOpcode::kReduceScatter:
+    case HloOpcode::kReduceWindow:
     case HloOpcode::kScatter:
     case HloOpcode::kSort:
       return true;

@@ -1110,6 +1110,75 @@ class IntTest : public BaseIntTest<T>, public CpuKernelEmitterTest {
     expected_literal_ = LiteralUtil::CreateR0<T>(result);
   }
 
+  void SetUpReduceWindow() {
+    constexpr static int64_t D0 = 8;
+    constexpr static int64_t W = 3;
+    constexpr static int64_t STRIDE = 2;
+    constexpr static int64_t PAD_LOW = 2;
+    constexpr static int64_t PAD_HIGH = 2;
+    constexpr static int64_t BASE_DIL = 2;
+    constexpr static int64_t WIN_DIL = 2;
+    // dilated_base = 15
+    // padded = 19
+    // dilated_window = 5
+    // output = 8
+    constexpr static int64_t DILATED_BASE = (D0 - 1) * BASE_DIL + 1;
+    constexpr static int64_t PADDED = PAD_LOW + DILATED_BASE + PAD_HIGH;
+    constexpr static int64_t DILATED_WIN = (W - 1) * WIN_DIL + 1;
+    constexpr static int64_t OUT = (PADDED - DILATED_WIN) / STRIDE + 1;
+
+    // f(a, b) = 2*a + b is non-commutative in fold order, so window reversal
+    // produces a different result: e.g. for [x0, x1, x2]:
+    //   forward: 4*x0 + 2*x1 + x2
+    //   reversed: 4*x2 + 2*x1 + x0
+    hlo_text_ =
+        absl::Substitute(R"(
+      %reduce_func {
+        %a = $0[] parameter(0)
+        %b = $0[] parameter(1)
+
+        %doubled = $0[] add(%a, %a)
+        ROOT %ret = $0[] add(%doubled, %b)
+      }
+
+      ENTRY %main {
+        %x = $0[$1] parameter(0)
+        %init = $0[] parameter(1)
+
+        ROOT %ret = $0[$2] reduce-window(%x, %init), window={size=$3 stride=$4 pad=2_2 lhs_dilate=$5 rhs_dilate=$6 rhs_reversal=1}, to_apply=%reduce_func
+      }
+    )",
+                         x_typename_, D0, OUT, W, STRIDE, BASE_DIL, WIN_DIL);
+
+    std::vector<T> x = base::CreateVector(
+        D0, []() { return BaseIntTest<T>::GetRandomValue(); });
+    T init = 0;
+    literals_.push_back(LiteralUtil::CreateR1<T>(x));
+    literals_.push_back(LiteralUtil::CreateR0<T>(init));
+
+    // Build dilated and padded input
+    std::vector<T> padded(PADDED, init);
+    for (int64_t i = 0; i < D0; ++i) {
+      padded[PAD_LOW + i * BASE_DIL] = x[i];
+    }
+
+    // Compute expected with window reversal and dilation
+    // reduction function: f(a, b) = 2*a + b
+    std::vector<T> expected(OUT);
+    for (int64_t i = 0; i < OUT; ++i) {
+      int64_t window_start = i * STRIDE;
+      T acc = init;
+      // With rhs_reversal=1, iterate window in reverse order
+      for (int64_t j = W - 1; j >= 0; --j) {
+        int64_t pos = window_start + j * WIN_DIL;
+        T val = (pos < PADDED) ? padded[pos] : init;
+        acc = 2 * acc + val;  // f(a, b) = 2*a + b
+      }
+      expected[i] = acc;
+    }
+    expected_literal_ = LiteralUtil::CreateR1<T>(expected);
+  }
+
   void SetUpReshapeScalar() {
     hlo_text_ = absl::Substitute(R"(
       ENTRY %main {

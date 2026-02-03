@@ -49,6 +49,8 @@ limitations under the License.
 #include "zkx/codegen/emitters/ir/zkx_ops.h"
 #include "zkx/comparison_util.h"
 #include "zkx/hlo/analysis/indexing_analysis.h"
+#include "zkx/hlo/ir/hlo_casting_utils.h"
+#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/translate/hlo_to_mhlo/hlo_utils.h"
 #include "zkx/mlir/mlir_utils.h"
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h"
@@ -394,6 +396,56 @@ absl::StatusOr<SmallVector<Value, 1>> EmitConvert(
   return {{out}};
 }
 
+absl::StatusOr<SmallVector<Value, 1>> EmitReduceWindow(
+    const HloInstruction* instr, ValueRange indices,
+    const OperandProvider& operand_provider,
+    const CallTargetProvider& call_target_provider, ImplicitLocOpBuilder& b) {
+  mlir::MLIRContext* mlir_context = b.getContext();
+  HloInstructionIndexing indexing =
+      ComputeOutputToInputIndexing(instr, 0, mlir_context);
+  auto indexing_map = *indexing.indexing_maps[0].begin();
+  indexing_map.RescaleSymbols();
+
+  auto reduce_window = DynCast<HloReduceWindowInstruction>(instr);
+  CHECK(reduce_window != nullptr);
+
+  SmallVector<Value, 1> init_values;
+  for (auto [index, init_value] :
+       llvm::enumerate(reduce_window->init_values())) {
+    TF_ASSIGN_OR_RETURN(
+        init_values.emplace_back(),
+        GetSingleOperandValue(operand_provider, instr,
+                              reduce_window->input_count() + index, {}));
+  }
+
+  absl::Status status = absl::OkStatus();
+  auto body = [&](ImplicitLocOpBuilder& nested_b, ValueRange ivs,
+                  ValueRange map_results,
+                  ValueRange iter_args) -> SmallVector<Value> {
+    SmallVector<Value, 2> args(iter_args.begin(), iter_args.end());
+    for (auto [index, input] : llvm::enumerate(reduce_window->inputs())) {
+      auto result =
+          GetSingleOperandValue(operand_provider, instr, index, map_results);
+      if (!result.ok()) {
+        status = result.status();
+        return {};
+      }
+      args.push_back(*result);
+    }
+
+    auto reducer = call_target_provider(
+        instr->called_computations().front()->root_instruction());
+    return SmallVector<Value>(
+        nested_b.create<func::CallOp>(reducer, args).getResults());
+  };
+
+  auto results = EmitZkxLoopOp(b, indices, init_values, indexing_map, body);
+  if (!status.ok()) {
+    return status;
+  }
+  return SmallVector<Value, 1>(results.begin(), results.end());
+}
+
 absl::StatusOr<SmallVector<Value, 1>> HloToMlir(
     const HloInstruction* instr, func::FuncOp this_fn, ValueRange indices,
     const OperandProvider& operand_provider,
@@ -454,6 +506,9 @@ absl::StatusOr<SmallVector<Value, 1>> HloToMlir(
       //                   builder);
       return absl::UnimplementedError(
           "HloToMlir not implemented for HloOpcode::kReduce");
+    case HloOpcode::kReduceWindow:
+      return EmitReduceWindow(instr, indices, operand_provider,
+                              call_target_provider, builder);
     case HloOpcode::kTuple:
       return EmitTuple(instr, indices, operand_provider, builder);
     case HloOpcode::kGetTupleElement: {

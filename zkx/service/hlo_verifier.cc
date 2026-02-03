@@ -1336,6 +1336,19 @@ absl::Status ShapeVerifier::HandleMap(HloInstruction* map) {
                                                          map->operand_count());
 }
 
+absl::Status ShapeVerifier::HandleReduceWindow(HloInstruction* reduce_window) {
+  auto reduce_window_instr = Cast<HloReduceWindowInstruction>(reduce_window);
+  auto input_shapes = reduce_window_instr->input_shapes();
+  auto init_shapes = reduce_window_instr->init_value_shapes();
+  TF_RETURN_IF_ERROR(CheckShape(
+      reduce_window, ShapeInference::InferReduceWindowShape(
+                         input_shapes, init_shapes, reduce_window->window(),
+                         reduce_window->to_apply()->ComputeProgramShape())));
+
+  return SameElementTypesForOperandsAndToApplyParameters(
+      *reduce_window, reduce_window->operand_count());
+}
+
 absl::Status ShapeVerifier::HandleWhile(HloInstruction* zkx_while) {
   TF_RETURN_IF_ERROR(
       CheckParameterCount(zkx_while, zkx_while->while_body(), 1));

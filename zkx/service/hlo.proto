@@ -156,6 +156,9 @@ message HloInstructionProto {
   // broadcasting, including Reshape, Reduce, and Reverse.
   repeated int64 dimensions = 14;
 
+  // Describes the window in a windowed operation such as ReduceWindow.
+  Window window = 15;
+
   // Describes the [begin, end) index range and stride for slices.
   message SliceDimensions {
     int64 start = 1;

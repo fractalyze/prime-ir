@@ -147,8 +147,8 @@ void PrepareForExportPass::runOnOperation() {
     // IfOp, CaseOp, WhileOp are already being handled during
     // mhlo --> hlo translation. MapOp soon be deprecated.
     // clang-format off
-    // TODO(chokobole): Uncomment this. Dependency: mhlo::AllReduceOp, mhlo::ReduceScatterOp, mhlo::ReduceWindowOp, mhlo::SelectAndScatterOp, mhlo::SortOp
-    if (isa<ReduceOp, /*AllReduceOp, ReduceScatterOp, ReduceWindowOp, */
+    // TODO(chokobole): Uncomment this. Dependency: mhlo::AllReduceOp, mhlo::ReduceScatterOp, mhlo::SelectAndScatterOp
+    if (isa<ReduceOp, ReduceWindowOp, /*AllReduceOp, ReduceScatterOp, */
            // clang-format on
            ScatterOp, SortOp>(op))
       return prepareExplicitCapturedConstants(op);

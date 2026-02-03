@@ -203,6 +203,16 @@ absl::StatusOr<HloInstruction*> MakeReduceHlo(
     const OpMetadata* metadata = nullptr,
     const FrontendAttributes* frontend_attributes = nullptr);
 
+// Creates a ReduceWindow HLO instruction and adds it to the computation
+// containing `operand`.
+absl::StatusOr<HloInstruction*> MakeReduceWindowHlo(
+    HloInstruction* operand, HloInstruction* init_value, const Window& window,
+    HloComputation* reduce_computation, const OpMetadata* metadata = nullptr);
+
+absl::StatusOr<HloInstruction*> MakeReduceWindowHlo(
+    HloInstruction* operand, HloInstruction* init_value, const Window& window,
+    HloOpcode binary_opcode, const OpMetadata* metadata = nullptr);
+
 // Creates a Reverse HLO instruction and adds it to the computation containing
 // `operand`.
 absl::StatusOr<HloInstruction*> MakeReverseHlo(

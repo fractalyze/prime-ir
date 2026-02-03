@@ -23,6 +23,7 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/literal_util.h"
 #include "zkx/protobuf_util.h"
+#include "zkx/window_util.h"
 
 namespace zkx {
 namespace {
@@ -2821,6 +2822,66 @@ HloCustomCallInstruction::CloneWithNewOperandsImpl(
   cloned->set_custom_call_schedule(custom_call_schedule_);
   return std::move(cloned);
 }
+
+HloReduceWindowInstruction::HloReduceWindowInstruction(
+    const Shape& shape, HloInstruction* operand, HloInstruction* init_value,
+    const Window& window, HloComputation* reduce_computation)
+    : HloReduceWindowInstruction(shape, absl::MakeSpan(&operand, 1),
+                                 absl::MakeSpan(&init_value, 1), window,
+                                 reduce_computation) {}
+
+HloReduceWindowInstruction::HloReduceWindowInstruction(
+    const Shape& shape, absl::Span<HloInstruction* const> operands,
+    absl::Span<HloInstruction* const> init_values, const Window& window,
+    HloComputation* reduce_computation)
+    : HloInstruction(HloOpcode::kReduceWindow, shape), window_(window) {
+  for (auto* operand : operands) {
+    AppendOperand(operand);
+  }
+  for (auto* init_value : init_values) {
+    AppendOperand(init_value);
+  }
+  AppendComputation(reduce_computation);
+}
+
+HloInstructionProto HloReduceWindowInstruction::ToProto() const {
+  HloInstructionProto proto = HloInstruction::ToProto();
+  *proto.mutable_window() = window_;
+  return proto;
+}
+
+void HloReduceWindowInstruction::PrintExtraAttributesImpl(
+    AttributePrinter& printer, const HloPrintOptions& options) const {
+  if (window_.dimensions_size() != 0) {
+    printer.Next([this](Printer* printer) {
+      AppendCat(printer, "window={", window_util::ToString(window()), "}");
+    });
+  }
+}
+
+bool HloReduceWindowInstruction::IdenticalSlowPath(
+    const HloInstruction& other,
+    absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
+        eq_computations) const {
+  const auto& casted_other =
+      static_cast<const HloReduceWindowInstruction&>(other);
+  return eq_computations(to_apply(), casted_other.to_apply()) &&
+         protobuf_util::ProtobufEquals(window(), casted_other.window());
+}
+
+std::unique_ptr<HloInstruction>
+HloReduceWindowInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext* context) const {
+  CHECK_EQ(new_operands.size() % 2, 0);
+  int64_t num_operands = new_operands.size() / 2;
+  return std::make_unique<HloReduceWindowInstruction>(
+      shape, absl::MakeSpan(new_operands).subspan(0, num_operands),
+      absl::MakeSpan(new_operands)
+          .subspan(num_operands, new_operands.size() / 2),
+      window(), to_apply());
+}
+
 HloPadInstruction::HloPadInstruction(const Shape& shape,
                                      HloInstruction* operand,
                                      HloInstruction* padding_value,

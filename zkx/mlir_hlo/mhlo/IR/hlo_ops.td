@@ -1687,5 +1687,52 @@ def MHLO_TransposeOp: MHLO_ShapedInterfaceOp<"transpose",
   let hasCanonicalizer = 1;
 }
 
+def MHLO_ReduceWindowOp: MHLO_Op<"reduce_window", [
+      RecursiveMemoryEffects,
+      SameVariadicOperandSize,
+      SingleBlockImplicitTerminator<"ReturnOp">,
+      InferTensorType,
+    ]> {
+  let summary = "ReduceWindow operation";
+  let description = [{
+    Applies a reduction function `body` to windows of `inputs` and `init_values`
+    and produces `results`.
+
+    See:
+    https://github.com/openxla/stablehlo/blob/main/docs/spec.md#reduce_window
+
+    Example:
+    ```mlir
+    %result = "mhlo.reduce_window"(%input, %init_value) ({
+      ^bb0(%arg0: tensor<i64>, %arg1: tensor<i64>):
+        %0 = mhlo.add %arg0, %arg1 : tensor<i64>
+        "mhlo.return"(%0) : (tensor<i64>) -> ()
+    }) {
+      window_dimensions = dense<[2, 1]> : tensor<2xi64>,
+      window_strides = dense<[4, 1]> : tensor<2xi64>,
+      base_dilations = dense<[2, 1]> : tensor<2xi64>,
+      window_dilations = dense<[3, 1]> : tensor<2xi64>,
+      padding = dense<[[2, 1], [0, 0]]> : tensor<2x2xi64>
+    } : (tensor<3x2xi64>, tensor<i64>) -> tensor<2x2xi64>
+    ```
+  }];
+  let arguments = (ins
+    Variadic<MHLO_Tensor>:$inputs,
+    Variadic<MHLO_Tensor>:$init_values,
+    I64ElementsAttr:$window_dimensions,
+    OptionalAttr<I64ElementsAttr>:$window_strides,
+    OptionalAttr<I64ElementsAttr>:$base_dilations,
+    OptionalAttr<I64ElementsAttr>:$window_dilations,
+    OptionalAttr<I64ElementsAttr>:$padding
+  );
+
+  let results = (outs Variadic<MHLO_Tensor>);
+
+  let regions = (region SizedRegion<1>:$body);
+
+  let hasVerifier = 1;
+
+  let hasCustomHLOConverter = 1;
+}
 
 #endif // ZKX_MLIR_HLO_MHLO_IR_HLO_OPS_TD

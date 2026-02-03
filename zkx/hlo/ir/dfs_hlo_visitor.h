@@ -207,6 +207,7 @@ class DfsHloVisitorBase {
   virtual absl::Status HandleMap(HloInstructionPtr hlo) = 0;
   virtual absl::Status HandleParameter(HloInstructionPtr hlo) = 0;
   virtual absl::Status HandleReduce(HloInstructionPtr hlo) = 0;
+  virtual absl::Status HandleReduceWindow(HloInstructionPtr hlo) = 0;
   virtual absl::Status HandleReshape(HloInstructionPtr hlo) = 0;
   virtual absl::Status HandleReverse(HloInstructionPtr hlo) = 0;
   virtual absl::Status HandleScatter(HloInstructionPtr hlo) = 0;

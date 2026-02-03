@@ -513,6 +513,17 @@ class ZkxBuilder {
       const ZkxComputation& computation,
       absl::Span<const int64_t> dimensions_to_reduce);
 
+  ZkxOp ReduceWindow(ZkxOp operand, ZkxOp init_value,
+                     const ZkxComputation& computation, const Window& window);
+
+  ZkxOp ReduceWindow(absl::Span<const ZkxOp> operands,
+                     absl::Span<const ZkxOp> init_values,
+                     const ZkxComputation& computation, const Window& window);
+
+  virtual absl::StatusOr<ZkxOp> ReduceWindowInternal(
+      const Shape& shape, absl::Span<const ZkxOp> all_operands,
+      const ZkxComputation& computation, const Window& window);
+
   virtual ZkxOp Iota(const Shape& shape, int64_t iota_dimension);
 
   ZkxOp Iota(PrimitiveType type, int64_t size);
@@ -856,6 +867,14 @@ class ZkxBuilder {
                       absl::Span<const ZkxOp> init_values,
                       const ZkxComputation& computation,
                       absl::Span<const int64_t> dimensions_to_reduce);
+  friend ZkxOp ReduceWindow(ZkxOp operand, ZkxOp init_value,
+                            const ZkxComputation& computation,
+                            const Window& window);
+  friend ZkxOp ReduceWindow(ZkxBuilder* builder,
+                            absl::Span<const ZkxOp> operands,
+                            absl::Span<const ZkxOp> init_values,
+                            const ZkxComputation& computation,
+                            const Window& window);
 
   friend ZkxOp Abs(ZkxOp operand);
   friend ZkxOp Sign(ZkxOp operand);
@@ -1415,6 +1434,15 @@ ZkxOp Reduce(ZkxBuilder* builder, absl::Span<const ZkxOp> operands,
              absl::Span<const ZkxOp> init_values,
              const ZkxComputation& computation,
              absl::Span<const int64_t> dimensions_to_reduce);
+
+// Applies a reduction function to windows of the operand.
+ZkxOp ReduceWindow(ZkxOp operand, ZkxOp init_value,
+                   const ZkxComputation& computation, const Window& window);
+
+// Reduces several arrays simultaneously over windows.
+ZkxOp ReduceWindow(ZkxBuilder* builder, absl::Span<const ZkxOp> operands,
+                   absl::Span<const ZkxOp> init_values,
+                   const ZkxComputation& computation, const Window& window);
 
 // Enqueues an abs instruction onto the computation.
 ZkxOp Abs(ZkxOp operand);

@@ -262,6 +262,11 @@ TYPED_TEST(IntTest, Reduce) {
   this->RunAndVerify();
 }
 
+TYPED_TEST(IntTest, ReduceWindow) {
+  this->SetUpReduceWindow();
+  this->RunAndVerify();
+}
+
 TYPED_TEST(IntTest, ReshapeScalar) {
   this->SetUpReshapeScalar();
   this->RunAndVerify();

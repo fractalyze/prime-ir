@@ -138,6 +138,7 @@ namespace zkx {
   V(kRecvDone, "recv-done", 1)                                                 \
   V(kReduce, "reduce", kHloOpcodeIsVariadic)                                   \
   V(kReduceScatter, "reduce-scatter", kHloOpcodeIsVariadic)                    \
+  V(kReduceWindow, "reduce-window", kHloOpcodeIsVariadic)                      \
   V(kRemainder, "remainder", 2)                                                \
   V(kReplicaId, "replica-id", 0)                                               \
   V(kReshape, "reshape", 1)                                                    \
