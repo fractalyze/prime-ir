@@ -130,8 +130,7 @@ class ElementalHloToMlirTest : public HloTestBase {
   mlir::MLIRContext context_;
 };
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::ReduceOp
-TEST_F(ElementalHloToMlirTest, DISABLED_Reduce) {
+TEST_F(ElementalHloToMlirTest, Reduce) {
   TF_EXPECT_OK(Run(R"(
     add {
       p0 = s32[] parameter(0)
@@ -171,8 +170,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_Reduce) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::ReduceOp
-TEST_F(ElementalHloToMlirTest, DISABLED_ReduceUnsigned) {
+TEST_F(ElementalHloToMlirTest, ReduceUnsigned) {
   TF_EXPECT_OK(Run(R"(
     add {
       p0 = u32[] parameter(0)
@@ -290,8 +288,7 @@ TEST_F(ElementalHloToMlirTest, ReduceWindowWithRescaling) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::ConcatenateOp
-TEST_F(ElementalHloToMlirTest, DISABLED_Concatenate) {
+TEST_F(ElementalHloToMlirTest, Concatenate) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = s32[10,20,30] parameter(0)
@@ -332,8 +329,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_Concatenate) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::ConcatenateOp
-TEST_F(ElementalHloToMlirTest, DISABLED_ConcatenateMany) {
+TEST_F(ElementalHloToMlirTest, ConcatenateMany) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = s32[10,1,30] parameter(0)
@@ -406,8 +402,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_ConcatenateMany) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::ConcatenateOp
-TEST_F(ElementalHloToMlirTest, DISABLED_ConcatenateUnsigned) {
+TEST_F(ElementalHloToMlirTest, ConcatenateUnsigned) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = u32[10,20,30] parameter(0)
@@ -492,39 +487,28 @@ TEST_F(ElementalHloToMlirTest, DISABLED_GatherWithImplicitVectorDim) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::PadOp
-TEST_F(ElementalHloToMlirTest, DISABLED_Pad) {
+TEST_F(ElementalHloToMlirTest, Pad) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = s32[4, 4] parameter(0)
       p1 = s32[] parameter(1)
-      ROOT pad = s32[12, 16] pad(p0, p1), padding=1_4_1x4_8_0
+      ROOT pad = s32[9, 16] pad(p0, p1), padding=1_4x4_8
     })",
                    R"(
     // CHECK:      @main_pad(
     // CHECK-SAME:     %[[ARG0:.*]]: tensor<4x4xi32>,
     // CHECK-SAME:     %[[ARG1:.*]]: tensor<i32>,
     // CHECK-SAME:     %[[X:.*]]: index {{{.*}}}, %[[Y:.*]]: index {{{.*}}}
-    // CHECK-DAG:    %[[C0:.*]] = arith.constant 0
-    // CHECK-DAG:    %[[C1:.*]] = arith.constant 1
-    // CHECK-DAG:    %[[C4:.*]] = arith.constant 4
-    // CHECK-DAG:    %[[C7:.*]] = arith.constant 7
-    // CHECK:        %[[CONSTRAINT_VAL:.*]] = zkx.apply_indexing
-    // CHECK-SAME:     <"(d0) -> ((d0 - 1) mod 2), domain: d0 in [1, 7]">(%[[X]])
-    // CHECK:        %[[CONSTRAINT:.*]] = arith.cmpi eq, %[[CONSTRAINT_VAL]], %[[C0]]
-    // CHECK-DAG:        %[[X_L:.*]] = arith.cmpi sge, %[[X]], %[[C1]]
-    // CHECK-DAG:        %[[X_H:.*]] = arith.cmpi sle, %[[X]], %[[C7]]
+    // CHECK-DAG:        %[[X_L:.*]] = arith.cmpi sge, %[[X]], %{{.*}}
+    // CHECK-DAG:        %[[X_H:.*]] = arith.cmpi sle, %[[X]], %{{.*}}
     // CHECK:        %[[X_BOUNDS:.*]] = arith.andi %[[X_L]], %[[X_H]]
-    // CHECK:        %[[X_AND_CONSTRAINT:.*]] = arith.andi %[[CONSTRAINT]], %[[X_BOUNDS]]
-    // CHECK-DAG:        %[[Y_L:.*]] = arith.cmpi sge, %[[Y]], %[[C4]]
-    // CHECK-DAG:        %[[Y_H:.*]] = arith.cmpi sle, %[[Y]], %[[C7]]
+    // CHECK-DAG:        %[[Y_L:.*]] = arith.cmpi sge, %[[Y]], %{{.*}}
+    // CHECK-DAG:        %[[Y_H:.*]] = arith.cmpi sle, %[[Y]], %{{.*}}
     // CHECK:        %[[Y_BOUNDS:.*]] = arith.andi %[[Y_L]], %[[Y_H]]
-    // CHECK:        %[[FROM_INPUT:.*]] = arith.andi %[[X_AND_CONSTRAINT]], %[[Y_BOUNDS]]
+    // CHECK:        %[[FROM_INPUT:.*]] = arith.andi %[[X_BOUNDS]], %[[Y_BOUNDS]]
     // CHECK:        %[[RET:.*]] = scf.if %[[FROM_INPUT]]
     // CHECK:          %[[IN0:.*]] = zkx.apply_indexing
-    // CHECK-SAME:         <"(d0) -> ((d0 - 1) floordiv 2), domain: d0 in [1, 7]">(%[[X]])
     // CHECK:          %[[IN1:.*]] = zkx.apply_indexing
-    // CHECK-SAME:         <"(d0) -> (d0 - 4), domain: d0 in [4, 7]">(%[[Y]])
     // CHECK:          %[[VAL:.*]] = tensor.extract %[[ARG0]][%[[IN0]], %[[IN1]]]
     // CHECK:          scf.yield %[[VAL]]
     // CHECK:        } else {
@@ -535,39 +519,28 @@ TEST_F(ElementalHloToMlirTest, DISABLED_Pad) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::PadOp
-TEST_F(ElementalHloToMlirTest, DISABLED_PadUnsigned) {
+TEST_F(ElementalHloToMlirTest, PadUnsigned) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = u32[4, 4] parameter(0)
       p1 = u32[] parameter(1)
-      ROOT pad = u32[12, 16] pad(p0, p1), padding=1_4_1x4_8_0
+      ROOT pad = u32[9, 16] pad(p0, p1), padding=1_4x4_8
     })",
                    R"(
     // CHECK:      @main_pad(
     // CHECK-SAME:     %[[ARG0:.*]]: tensor<4x4xi32>,
     // CHECK-SAME:     %[[ARG1:.*]]: tensor<i32>,
     // CHECK-SAME:     %[[X:.*]]: index {{{.*}}}, %[[Y:.*]]: index {{{.*}}}
-    // CHECK-DAG:    %[[C0:.*]] = arith.constant 0
-    // CHECK-DAG:    %[[C1:.*]] = arith.constant 1
-    // CHECK-DAG:    %[[C4:.*]] = arith.constant 4
-    // CHECK-DAG:    %[[C7:.*]] = arith.constant 7
-    // CHECK:        %[[CONSTRAINT_VAL:.*]] = zkx.apply_indexing
-    // CHECK-SAME:     <"(d0) -> ((d0 - 1) mod 2), domain: d0 in [1, 7]">(%[[X]])
-    // CHECK:        %[[CONSTRAINT:.*]] = arith.cmpi eq, %[[CONSTRAINT_VAL]], %[[C0]]
-    // CHECK-DAG:        %[[X_L:.*]] = arith.cmpi sge, %[[X]], %[[C1]]
-    // CHECK-DAG:        %[[X_H:.*]] = arith.cmpi sle, %[[X]], %[[C7]]
+    // CHECK-DAG:        %[[X_L:.*]] = arith.cmpi sge, %[[X]], %{{.*}}
+    // CHECK-DAG:        %[[X_H:.*]] = arith.cmpi sle, %[[X]], %{{.*}}
     // CHECK:        %[[X_BOUNDS:.*]] = arith.andi %[[X_L]], %[[X_H]]
-    // CHECK:        %[[X_AND_CONSTRAINT:.*]] = arith.andi %[[CONSTRAINT]], %[[X_BOUNDS]]
-    // CHECK-DAG:        %[[Y_L:.*]] = arith.cmpi sge, %[[Y]], %[[C4]]
-    // CHECK-DAG:        %[[Y_H:.*]] = arith.cmpi sle, %[[Y]], %[[C7]]
+    // CHECK-DAG:        %[[Y_L:.*]] = arith.cmpi sge, %[[Y]], %{{.*}}
+    // CHECK-DAG:        %[[Y_H:.*]] = arith.cmpi sle, %[[Y]], %{{.*}}
     // CHECK:        %[[Y_BOUNDS:.*]] = arith.andi %[[Y_L]], %[[Y_H]]
-    // CHECK:        %[[FROM_INPUT:.*]] = arith.andi %[[X_AND_CONSTRAINT]], %[[Y_BOUNDS]]
+    // CHECK:        %[[FROM_INPUT:.*]] = arith.andi %[[X_BOUNDS]], %[[Y_BOUNDS]]
     // CHECK:        %[[RET:.*]] = scf.if %[[FROM_INPUT]]
     // CHECK:          %[[IN0:.*]] = zkx.apply_indexing
-    // CHECK-SAME:         <"(d0) -> ((d0 - 1) floordiv 2), domain: d0 in [1, 7]">(%[[X]])
     // CHECK:          %[[IN1:.*]] = zkx.apply_indexing
-    // CHECK-SAME:         <"(d0) -> (d0 - 4), domain: d0 in [4, 7]">(%[[Y]])
     // CHECK:          %[[VAL:.*]] = tensor.extract %[[ARG0]][%[[IN0]], %[[IN1]]]
     // CHECK:          scf.yield %[[VAL]]
     // CHECK:        } else {
@@ -578,8 +551,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_PadUnsigned) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DotOp
-TEST_F(ElementalHloToMlirTest, DISABLED_DotWithS32Type) {
+TEST_F(ElementalHloToMlirTest, DotWithS32Type) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = s32[3, 4] parameter(0)
@@ -623,8 +595,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DotWithS32Type) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DotOp
-TEST_F(ElementalHloToMlirTest, DISABLED_DotWithU32Type) {
+TEST_F(ElementalHloToMlirTest, DotWithU32Type) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = u32[3, 4] parameter(0)
@@ -668,8 +639,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DotWithU32Type) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DotOp
-TEST_F(ElementalHloToMlirTest, DISABLED_DotWithPredType) {
+TEST_F(ElementalHloToMlirTest, DotWithPredType) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = pred[3, 4] parameter(0)
@@ -678,18 +648,18 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DotWithPredType) {
     })",
                    R"(
     // CHECK:      @main_dot(
-    // CHECK-SAME: %[[A:.*]]: tensor<3x4xi8>, %[[B:.*]]: tensor<4x5xi8>,
+    // CHECK-SAME: %[[A:.*]]: tensor<3x4xi1>, %[[B:.*]]: tensor<4x5xi1>,
     // CHECK-SAME: %[[I:.*]]: index {zkx.range = [0 : index, 2 : index]},
     // CHECK-SAME: %[[J:.*]]: index {zkx.range = [0 : index, 4 : index]})
-    // CHECK-SAME: -> i8
+    // CHECK-SAME: -> i1
     // CHECK-SAME: {
-    // CHECK-DAG:    %[[ACCUM_INIT:.*]] = arith.constant 0 : i8
+    // CHECK-DAG:    %[[ACCUM_INIT:.*]] = arith.constant false
     // CHECK-DAG:    %[[C0:.*]] = arith.constant 0 : index
     // CHECK-DAG:    %[[C1:.*]] = arith.constant 1 : index
     // CHECK-DAG:    %[[C2:.*]] = arith.constant 2 : index
     // CHECK-DAG:    %[[C4:.*]] = arith.constant 4 : index
     // CHECK:        %[[FOR0:.*]] = scf.for %[[K:.*]] = %[[C0]] to %[[C4]] step %[[C1]]
-    // CHECK-SAME:   iter_args(%[[ACCUM:.*]] = %[[ACCUM_INIT]]) -> (i8) {
+    // CHECK-SAME:   iter_args(%[[ACCUM:.*]] = %[[ACCUM_INIT]]) -> (i1) {
     // CHECK-DAG:      %[[CMPI0:.*]] = arith.cmpi sge, %[[I]], %[[C0]] : index
     // CHECK-DAG:      %[[CMPI1:.*]] = arith.cmpi sle, %[[I]], %[[C2]] : index
     // CHECK-DAG:      %[[I_IN_RANGE:.*]] = arith.andi %[[CMPI0]], %[[CMPI1]] : i1
@@ -697,24 +667,23 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DotWithPredType) {
     // CHECK-DAG:      %[[CMPI3:.*]] = arith.cmpi sle, %[[J]], %[[C4]] : index
     // CHECK-DAG:      %[[J_IN_RANGE:.*]] = arith.andi %[[CMPI2]], %[[CMPI3]] : i1
     // CHECK-DAG:      %[[I_J_IN_RANGE:.*]] = arith.andi %[[I_IN_RANGE]], %[[J_IN_RANGE]] : i1
-    // CHECK:          %[[IF0:.*]] = scf.if %[[I_J_IN_RANGE]] -> (i8) {
-    // CHECK-DAG:        %[[A_I_K:.*]] = tensor.extract %[[A]][%[[I]], %[[K]]] : tensor<3x4xi8>
-    // CHECK-DAG:        %[[B_K_J:.*]] = tensor.extract %[[B]][%[[K]], %[[J]]] : tensor<4x5xi8>
-    // CHECK-DAG:        %[[AND0:.*]] = arith.andi %[[A_I_K]], %[[B_K_J]] : i8
-    // CHECK-DAG:        %[[OR0:.*]] = arith.ori %[[ACCUM]], %[[AND0]] : i8
-    // CHECK-DAG:        scf.yield %[[OR0]] : i8
+    // CHECK:          %[[IF0:.*]] = scf.if %[[I_J_IN_RANGE]] -> (i1) {
+    // CHECK-DAG:        %[[A_I_K:.*]] = tensor.extract %[[A]][%[[I]], %[[K]]] : tensor<3x4xi1>
+    // CHECK-DAG:        %[[B_K_J:.*]] = tensor.extract %[[B]][%[[K]], %[[J]]] : tensor<4x5xi1>
+    // CHECK-DAG:        %[[AND0:.*]] = arith.andi %[[A_I_K]], %[[B_K_J]] : i1
+    // CHECK-DAG:        %[[OR0:.*]] = arith.ori %[[ACCUM]], %[[AND0]] : i1
+    // CHECK-DAG:        scf.yield %[[OR0]] : i1
     // CHECK:          } else {
-    // CHECK:            scf.yield %[[ACCUM]] : i8
+    // CHECK:            scf.yield %[[ACCUM]] : i1
     // CHECK:          }
-    // CHECK:          scf.yield %[[IF0]] : i8
+    // CHECK:          scf.yield %[[IF0]] : i1
     // CHECK:        }
-    // CHECK:        return %[[FOR0]] : i8
+    // CHECK:        return %[[FOR0]] : i1
     // CHECK:      }
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DotOp
-TEST_F(ElementalHloToMlirTest, DISABLED_DotWithBatchAnd2ContractingDims) {
+TEST_F(ElementalHloToMlirTest, DotWithBatchAnd2ContractingDims) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = s32[7, 3, 4, 5] parameter(0)
@@ -731,7 +700,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DotWithBatchAnd2ContractingDims) {
     // CHECK-SAME: %[[J:.*]]: index {zkx.range = [0 : index, 5 : index]})
     // CHECK-SAME: -> i32
     // CHECK-SAME: {
-    // CHECK-DAG:    %[[C0F:.*]] = arith.constant 0.000000e+00 : i32
+    // CHECK-DAG:    %[[C0F:.*]] = arith.constant 0 : i32
     // CHECK-DAG:    %[[C0:.*]] = arith.constant 0 : index
     // CHECK-DAG:    %[[C1:.*]] = arith.constant 1 : index
     // CHECK-DAG:    %[[C2:.*]] = arith.constant 2 : index
@@ -771,8 +740,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DotWithBatchAnd2ContractingDims) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::TransposeOp
-TEST_F(ElementalHloToMlirTest, DISABLED_Transpose) {
+TEST_F(ElementalHloToMlirTest, Transpose) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = s32[4,5,6] parameter(0)
@@ -789,8 +757,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_Transpose) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::BroadcastOp
-TEST_F(ElementalHloToMlirTest, DISABLED_Broadcast) {
+TEST_F(ElementalHloToMlirTest, Broadcast) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = s32[4,5] parameter(0)
@@ -859,7 +826,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_ConvertS8ToPred) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::PopulationCountOp
+// TODO(batzor): Hangs during MLIR emission — needs investigation.
 TEST_F(ElementalHloToMlirTest, DISABLED_PopulationCountUnsigned) {
   TF_EXPECT_OK(Run(R"(
      ENTRY main{
@@ -1018,8 +985,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_TensorConstantPred) {
       "// CHECK: arith.constant dense<[1, 0]> : tensor<2xi8>"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DynamicSliceOp
-TEST_F(ElementalHloToMlirTest, DISABLED_DynamicSlice) {
+TEST_F(ElementalHloToMlirTest, DynamicSlice) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       in = s32[20,30] parameter(0)
@@ -1050,8 +1016,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DynamicSlice) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DynamicSliceOp
-TEST_F(ElementalHloToMlirTest, DISABLED_DynamicSliceUnsignedIndices) {
+TEST_F(ElementalHloToMlirTest, DynamicSliceUnsignedIndices) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       in = s32[20,30] parameter(0)
@@ -1079,9 +1044,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DynamicSliceUnsignedIndices) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DynamicSliceOp
-TEST_F(ElementalHloToMlirTest,
-       DISABLED_DynamicSliceIndexIsNotCanonical_NotSupported) {
+TEST_F(ElementalHloToMlirTest, DynamicSliceIndexIsNotCanonical_NotSupported) {
   auto status = Run(R"(
     ENTRY main {
       in = s32[20,30] parameter(0)
@@ -1096,8 +1059,7 @@ TEST_F(ElementalHloToMlirTest,
                         "not supported."));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DynamicUpdateSliceOp
-TEST_F(ElementalHloToMlirTest, DISABLED_DynamicUpdateSlice) {
+TEST_F(ElementalHloToMlirTest, DynamicUpdateSlice) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       in = s32[20,30] parameter(0)
@@ -1134,8 +1096,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DynamicUpdateSlice) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DynamicUpdateSliceOp
-TEST_F(ElementalHloToMlirTest, DISABLED_DynamicUpdateSliceUnsigned) {
+TEST_F(ElementalHloToMlirTest, DynamicUpdateSliceUnsigned) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       in = u32[20,30] parameter(0)
@@ -1172,9 +1133,8 @@ TEST_F(ElementalHloToMlirTest, DISABLED_DynamicUpdateSliceUnsigned) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::DynamicUpdateSliceOp
 TEST_F(ElementalHloToMlirTest,
-       DISABLED_DynamicUpdateSliceIndexIsNotCanonical_NotSupported) {
+       DynamicUpdateSliceIndexIsNotCanonical_NotSupported) {
   auto status = Run(R"(
     ENTRY main {
       in = s32[20,30] parameter(0)
@@ -1190,8 +1150,7 @@ TEST_F(ElementalHloToMlirTest,
                         "not supported."));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::IotaOp
-TEST_F(ElementalHloToMlirTest, DISABLED_IotaUnsigned) {
+TEST_F(ElementalHloToMlirTest, IotaUnsigned) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       ROOT iota = u32[10,20] iota(), iota_dimension=0
@@ -1249,8 +1208,7 @@ TEST_F(ElementalHloToMlirTest, NestedTuple) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::MapOp
-TEST_F(ElementalHloToMlirTest, DISABLED_Map) {
+TEST_F(ElementalHloToMlirTest, Map) {
   TF_EXPECT_OK(Run(R"(
     mapper {
       a = s32[] parameter(0)
@@ -1271,8 +1229,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_Map) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::SelectOp
-TEST_F(ElementalHloToMlirTest, DISABLED_BroadcastSelect) {
+TEST_F(ElementalHloToMlirTest, BroadcastSelect) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       p0 = pred[] parameter(0)
@@ -1282,7 +1239,7 @@ TEST_F(ElementalHloToMlirTest, DISABLED_BroadcastSelect) {
     })",
                    R"(
     // CHECK: @main
-    // CHECK-SAME: %[[P0:.*]]: tensor<i8>
+    // CHECK-SAME: %[[P0:.*]]: tensor<i1>
     // CHECK-SAME: %[[P1:.*]]: tensor<5x7xi32>, %[[P2:.*]]: tensor<5x7xi32>
     // CHECK-SAME: %[[X:.*]]: index {{{.*}}}, %[[Y:.*]]: index {{{.*}}}
     // CHECK-DAG: tensor.extract %[[P0]][]
