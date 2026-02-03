@@ -24,6 +24,7 @@
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperationSelector.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/Field/IR/PrimeFieldOperation.h"
+#include "prime_ir/Dialect/Field/IR/VandermondeMatrix.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Utils/Power.h"
 #include "prime_ir/Utils/ZkDtypes.h"
@@ -200,8 +201,13 @@ ExtensionFieldType convertExtFieldType(ExtensionFieldType ef) {
 template <size_t N, typename BaseFieldT>
 class ExtensionFieldOperation
     : public ExtensionFieldOperationSelector<N>::template Type<
-          ExtensionFieldOperation<N, BaseFieldT>> {
+          ExtensionFieldOperation<N, BaseFieldT>>,
+      public VandermondeMatrix<ExtensionFieldOperation<N, BaseFieldT>> {
 public:
+  // Override zk_dtypes::VandermondeMatrix::GetVandermondeInverseMatrix to avoid
+  // static caching conflicts between Montgomery and standard domains.
+  using VandermondeMatrix<
+      ExtensionFieldOperation<N, BaseFieldT>>::GetVandermondeInverseMatrix;
   static constexpr bool kIsTower =
       !std::is_same_v<BaseFieldT, PrimeFieldOperation>;
 
@@ -530,6 +536,8 @@ private:
   friend class zk_dtypes::FrobeniusOperation;
   template <typename, size_t>
   friend class zk_dtypes::VandermondeMatrix;
+  template <typename>
+  friend class VandermondeMatrix;
 
   template <size_t N2, typename B2>
   friend raw_ostream &operator<<(raw_ostream &os,
@@ -591,16 +599,23 @@ private:
         return zk_dtypes::ExtensionFieldMulAlgorithm::kCustom;
       }
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    } else if constexpr (N == 4) {
+      // ToomCook enabled for non-tower quartic extensions
+      // (caching conflict resolved via GetVandermondeInverseMatrix override)
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
     } else {
-      // NOTE(chokobole): Avoid Toom-Cook algorithm due to caching conflicts.
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     }
   }
 
   zk_dtypes::ExtensionFieldMulAlgorithm GetMulAlgorithm() const {
-    // NOTE(chokobole): See the comment above why we should not use Toom-Cook
-    // algorithm.
-    return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    if constexpr (kIsTower) {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    } else if constexpr (N == 4) {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+    } else {
+      return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    }
   }
 
   BaseFieldT CreateConstBaseField(int64_t x) const {
@@ -623,6 +638,15 @@ private:
       newCoeffs[i] = CreateConstBaseField(0);
     }
     return fromUnchecked(newCoeffs, efType);
+  }
+
+  // Interface for VandermondeMatrix mixin (lowercase naming convention)
+  BaseFieldT createConstBaseField(int64_t x) const {
+    return CreateConstBaseField(x);
+  }
+
+  BaseFieldT createRationalConstBaseField(int64_t num, int64_t denom) const {
+    return CreateConstBaseField(num) / CreateConstBaseField(denom);
   }
 
   // Frobenius coefficients: only available for non-tower extensions
