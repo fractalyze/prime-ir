@@ -101,3 +101,30 @@ func.func @test_tensor_generate(%value : !PF) -> tensor<4x!PF> {
   // CHECK: return %[[RES]] : [[T]]
   return %res : tensor<4x!PF>
 }
+
+// CHECK-LABEL: @test_linalg_dot
+// CHECK-SAME: (%[[A:.*]]: [[A_TYPE:.*]], %[[B:.*]]: [[B_TYPE:.*]], %[[INIT:.*]]: [[INIT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_linalg_dot(%a: tensor<4x!PF>, %b: tensor<4x!PF>, %init: tensor<!PF>) -> tensor<!PF> {
+  // CHECK: %[[RES:.*]] = linalg.dot ins(%[[A]], %[[B]] : [[A_TYPE]], [[B_TYPE]]) outs(%[[INIT]] : [[INIT_TYPE]]) -> [[T]]
+  %res = linalg.dot ins(%a, %b : tensor<4x!PF>, tensor<4x!PF>) outs(%init : tensor<!PF>) -> tensor<!PF>
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<!PF>
+}
+
+// CHECK-LABEL: @test_linalg_matvec
+// CHECK-SAME: (%[[A:.*]]: [[A_TYPE:.*]], %[[V:.*]]: [[V_TYPE:.*]], %[[INIT:.*]]: [[INIT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_linalg_matvec(%A: tensor<3x4x!PF>, %v: tensor<4x!PF>, %init: tensor<3x!PF>) -> tensor<3x!PF> {
+  // CHECK: %[[RES:.*]] = linalg.matvec ins(%[[A]], %[[V]] : [[A_TYPE]], [[V_TYPE]]) outs(%[[INIT]] : [[INIT_TYPE]]) -> [[T]]
+  %res = linalg.matvec ins(%A, %v : tensor<3x4x!PF>, tensor<4x!PF>) outs(%init : tensor<3x!PF>) -> tensor<3x!PF>
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<3x!PF>
+}
+
+// CHECK-LABEL: @test_linalg_matmul
+// CHECK-SAME: (%[[A:.*]]: [[A_TYPE:.*]], %[[B:.*]]: [[B_TYPE:.*]], %[[INIT:.*]]: [[INIT_TYPE:.*]]) -> [[T:.*]] {
+func.func @test_linalg_matmul(%A: tensor<3x4x!PF>, %B: tensor<4x5x!PF>, %init: tensor<3x5x!PF>) -> tensor<3x5x!PF> {
+  // CHECK: %[[RES:.*]] = linalg.matmul ins(%[[A]], %[[B]] : [[A_TYPE]], [[B_TYPE]]) outs(%[[INIT]] : [[INIT_TYPE]]) -> [[T]]
+  %res = linalg.matmul ins(%A, %B : tensor<3x4x!PF>, tensor<4x5x!PF>) outs(%init : tensor<3x5x!PF>) -> tensor<3x5x!PF>
+  // CHECK: return %[[RES]] : [[T]]
+  return %res : tensor<3x5x!PF>
+}
