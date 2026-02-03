@@ -12,26 +12,3 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-
-load("@rules_cc//cc:defs.bzl", "cc_library")
-
-cc_library(
-    name = "zkbench_reporter",
-    srcs = ["zkbench_reporter.cc"],
-    hdrs = ["zkbench_reporter.h"],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@com_google_benchmark//:benchmark",
-        "@zkbench_cpp//zkbench:schema",
-    ],
-)
-
-cc_library(
-    name = "benchmark_main",
-    srcs = ["benchmark_main.cc"],
-    visibility = ["//visibility:public"],
-    deps = [
-        ":zkbench_reporter",
-        "@com_google_benchmark//:benchmark",
-    ],
-)

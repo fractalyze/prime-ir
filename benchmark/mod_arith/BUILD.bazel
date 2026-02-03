@@ -27,6 +27,7 @@ prime_ir_mlir_cc_import(
 prime_ir_benchmark(
     name = "mul_benchmark_test",
     srcs = ["mul_benchmark_test.cc"],
+    zkbench = True,
     deps = [
         ":mul_ciface",
         "@llvm-project//mlir:ExecutionEngine",

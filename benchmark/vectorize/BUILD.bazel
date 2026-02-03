@@ -49,6 +49,7 @@ prime_ir_mlir_cc_import(
 prime_ir_benchmark(
     name = "vectorize_benchmark",
     srcs = ["vectorize_benchmark.cc"],
+    zkbench = True,
     deps = [
         ":vectorize_scalar_ciface",
         ":vectorize_vec_ciface",
