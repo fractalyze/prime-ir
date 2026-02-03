@@ -657,15 +657,13 @@ LogicalResult BitcastOp::verify() {
     Type outputElementType = outputShaped.getElementType();
     unsigned inputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      inputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBasePrimeField()) *
-                      efType.getDegreeOverPrime();
+      inputBitWidth = efType.getStorageBitWidth();
     } else {
       inputBitWidth = getIntOrPrimeFieldBitWidth(inputElementType);
     }
     unsigned outputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      outputBitWidth = getIntOrPrimeFieldBitWidth(efType.getBasePrimeField()) *
-                       efType.getDegreeOverPrime();
+      outputBitWidth = efType.getStorageBitWidth();
     } else {
       outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
     }
