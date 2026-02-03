@@ -275,6 +275,15 @@ def MHLO_NegOp: MHLO_UnaryElementwiseOp<"negate",
   let hasFolder = 1;
 }
 
+def MHLO_InverseOp: MHLO_UnaryElementwiseOp<"inverse",
+    [Pure, HLO_CompatibleOperandsAndResultType], MHLO_FieldTensor> {
+  let summary = "Inverse operation";
+  let description = [{
+    Performs element-wise multiplicative inverse of `operand` tensor and
+    produces a `result` tensor.
+  }];
+}
+
 def MHLO_NotOp: MHLO_UnaryElementwiseOp<"not",
     [Pure, HLO_CompatibleOperandsAndResultType], MHLO_PredOrIntTensor> {
   let summary = "Not operation";

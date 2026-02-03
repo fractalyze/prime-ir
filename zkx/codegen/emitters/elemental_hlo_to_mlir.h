@@ -16,14 +16,14 @@ limitations under the License.
 #ifndef ZKX_CODEGEN_EMITTERS_ELEMENTAL_HLO_TO_MLIR_H_
 #define ZKX_CODEGEN_EMITTERS_ELEMENTAL_HLO_TO_MLIR_H_
 
-#include <stdint.h>
-
+#include <cstdint>
 #include <functional>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
@@ -91,7 +91,14 @@ mlir::Value CheckConstraints(const IndexingMap& map, mlir::ValueRange dims,
 //   inits will be initialized with a vector splat. Passing a vector init is
 //   supported.
 // - Tensor arguments and results are unaffected.
-// TODO(chokobole): Implement EmitLoopNest.
+mlir::ValueRange EmitLoopNest(
+    mlir::ImplicitLocOpBuilder& b, mlir::ValueRange dim_values,
+    mlir::ValueRange iter_args_inits, const IndexingMap& indexing_map,
+    mlir::function_ref<llvm::SmallVector<mlir::Value>(
+        mlir::ValueRange iter_args, mlir::ValueRange dim_values,
+        mlir::ValueRange symbol_values)>
+        create_body,
+    bool vectorize = false);
 
 // Same as EmitLoopNest, but uses zkx_gpu.loop.
 mlir::ValueRange EmitZkxLoopOp(
@@ -103,16 +110,33 @@ mlir::ValueRange EmitZkxLoopOp(
         create_body,
     bool vectorize = false);
 
+// Same as EmitLoopNest, but the body building function can return an error
+// which gets returned from EmitLoopNestWithStatus.
+absl::StatusOr<mlir::ValueRange> EmitLoopNestWithStatus(
+    mlir::ImplicitLocOpBuilder& b, mlir::ValueRange dim_values,
+    mlir::ValueRange iter_args_inits, const IndexingMap& indexing_map,
+    mlir::function_ref<absl::StatusOr<llvm::SmallVector<mlir::Value>>(
+        mlir::ValueRange iter_args, mlir::ValueRange dim_values,
+        mlir::ValueRange symbol_values)>
+        create_body);
+
+// Clamps `index` to [0, high] boundaries.
+mlir::Value ClampIndex(mlir::Value index, bool is_unsigned, int64_t high,
+                       mlir::ImplicitLocOpBuilder& b);
+
+// Inlines `src_block` using `mapped_args` to initialize IRMapping from the
+// block arguments of `src_block` to `mapped_args`. Return remapped values of
+// the terminator.
+mlir::SmallVector<mlir::Value, 2> InlineBlock(mlir::OpBuilder& builder,
+                                              mlir::Block& src_block,
+                                              mlir::ValueRange mapped_args);
+
 // Populates `lbs`, `ubs` and `steps` with the loop bounds from `indexing_map`.
 void GetLoopBoundsFromIndexingMap(mlir::ImplicitLocOpBuilder& b,
                                   const IndexingMap& indexing_map,
                                   llvm::SmallVectorImpl<mlir::Value>& lbs,
                                   llvm::SmallVectorImpl<mlir::Value>& ubs,
                                   llvm::SmallVectorImpl<mlir::Value>& steps);
-
-// Clamps `index` to [0, high] boundaries.
-mlir::Value ClampIndex(mlir::Value index, bool is_unsigned, int64_t high,
-                       mlir::ImplicitLocOpBuilder& b);
 
 }  // namespace zkx::emitters
 

@@ -49,6 +49,8 @@ defvar MHLO_ScalarIntTensor = HLO_ScalarIntTensor;
 
 defvar MHLO_IntOrFieldTensor = HLO_IntOrFieldTensor;
 
+defvar MHLO_FieldTensor = RankedTensorOf<[HLO_Field]>;
+
 defvar MHLO_PredTensor = HLO_PredTensor;
 
 defvar MHLO_Tensor = HLO_Tensor;

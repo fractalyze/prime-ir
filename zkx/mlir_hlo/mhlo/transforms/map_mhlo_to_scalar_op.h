@@ -217,7 +217,9 @@ inline Value mapConvertOpToStdScalarOp(Location loc, ArrayRef<Type> targetTypes,
         lb, resultTypes, sourceType, targetType, args,
         IsSignedIntegerType{}(sourceType), attributes);
   } else if (isa<prime_ir::field::PrimeFieldType>(sourceType) ||
-             isa<prime_ir::field::ExtensionFieldType>(sourceType)) {
+             isa<prime_ir::field::ExtensionFieldType>(sourceType) ||
+             isa<prime_ir::field::PrimeFieldType>(targetType) ||
+             isa<prime_ir::field::ExtensionFieldType>(targetType)) {
     return zkx::mlir_utils::ConvertField(lb, resultTypes, sourceType,
                                          targetType, args, attributes);
   } else if (isa<prime_ir::elliptic_curve::AffineType>(sourceType) ||
@@ -293,6 +295,18 @@ inline Value mapMhloOpToStdScalarOp<mhlo::NegOp>(
   } else if (IsEllipticCurveType{}(elementType)) {
     return b->create<prime_ir::elliptic_curve::NegateOp>(loc,
                                                          adaptor.getOperand());
+  }
+  return nullptr;
+}
+
+template <>
+inline Value mapMhloOpToStdScalarOp<mhlo::InverseOp>(
+    Location loc, ArrayRef<Type> resultTypes, ArrayRef<Type> argTypes,
+    mhlo::InverseOp::Adaptor adaptor, ArrayRef<NamedAttribute> attributes,
+    OpBuilder *b) {
+  Type elementType = getElementTypeOrSelf(adaptor.getOperand().getType());
+  if (IsFieldType{}(elementType)) {
+    return b->create<prime_ir::field::InverseOp>(loc, adaptor.getOperand());
   }
   return nullptr;
 }
