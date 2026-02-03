@@ -21,9 +21,29 @@ limitations under the License.
 
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/service/elemental_ir_emitter.h"
+#include "zkx/hlo/ir/hlo_opcode.h"
 
 namespace zkx {
+
+namespace {
+
+// Returns true if the given opcode invalidates the indexing cache during
+// fusion evaluation. These are ops whose elemental emission requires multiple
+// element accesses from their operands.
+bool OpInvalidatesCache(const HloInstruction* instr) {
+  switch (instr->opcode()) {
+    case HloOpcode::kConcatenate:
+    case HloOpcode::kDot:
+    case HloOpcode::kDynamicUpdateSlice:
+    case HloOpcode::kPad:
+    case HloOpcode::kReduce:
+      return true;
+    default:
+      return false;
+  }
+}
+
+}  // namespace
 
 FusionNodeIndexingEvaluation::FusionNodeIndexingEvaluation(
     const HloInstruction* fusion, int64_t root_usage_count)
@@ -71,14 +91,14 @@ bool FusionNodeIndexingEvaluation::CodeDuplicationTooHigh(
   }
   int64_t emitted_instructions = EvaluateEmittedInstructions(producer);
   return emitted_instructions > kAllowedCodeDuplication ||
-         (ElementalIrEmitter::OpInvalidatesCache(producer) &&
+         (OpInvalidatesCache(producer) &&
           (emitted_instructions > 1 || UserCount(producer) > 1));
 }
 
 bool FusionNodeIndexingEvaluation::MaxCodeDuplicationTooHigh() const {
   for (const auto& entry : index_usage_count_) {
     if (entry.second > kAllowedCodeDuplication ||
-        (ElementalIrEmitter::OpInvalidatesCache(entry.first) &&
+        (OpInvalidatesCache(entry.first) &&
          (entry.second > 1 || UserCount(entry.first) > 1))) {
       return true;
     }

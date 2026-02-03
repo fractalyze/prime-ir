@@ -517,37 +517,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "elemental_ir_emitter",
-    srcs = ["elemental_ir_emitter.cc"],
-    hdrs = ["elemental_ir_emitter.h"],
-    deps = [
-        ":buffer_assignment",
-        "//zkx:primitive_util",
-        "//zkx:shape_util",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/mlir:codegen_utils",
-        "//zkx/mlir:mlir_utils",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings:str_format",
-        "@llvm-project//mlir:ArithDialect",
-        "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:LinalgDialect",
-        "@llvm-project//mlir:MathDialect",
-        "@llvm-project//mlir:SparseTensorDialect",
-        "@llvm-project//mlir:Support",
-        "@llvm-project//mlir:TensorDialect",
-        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
-    ],
-)
-
-zkx_cc_library(
     name = "executable",
     srcs = ["executable.cc"],
     hdrs = ["executable.h"],
@@ -578,7 +547,6 @@ zkx_cc_library(
     srcs = ["fusion_node_indexing_evaluation.cc"],
     hdrs = ["fusion_node_indexing_evaluation.h"],
     deps = [
-        ":elemental_ir_emitter",
         "//zkx:types",
         "//zkx/hlo/ir:hlo",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -1580,7 +1548,6 @@ zkx_cc_unittest(
         "dump_unittest.cc",
         # TODO(chokobole): Add unittest. Dependency: HloTestBase
         # "dynamic_dimension_inference_unittest.cc",
-        "elemental_ir_emitter_unittest.cc",
         "hlo_cost_analysis_unittest.cc",
         "hlo_creation_utils_unittest.cc",
         "hlo_graph_dumper_unittest.cc",
@@ -1622,7 +1589,6 @@ zkx_cc_unittest(
         ":custom_call_status",
         ":custom_call_target_registry",
         ":dump",
-        ":elemental_ir_emitter",
         ":hlo_cost_analysis",
         ":hlo_creation_utils",
         ":hlo_graph_dumper",
