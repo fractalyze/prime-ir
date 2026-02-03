@@ -4,10 +4,16 @@ on:
   pull_request:
     types: [closed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to extract knowledge from'
+        required: true
+        type: number
 
 jobs:
   extract-knowledge:
-    if: github.event.pull_request.merged == true
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -18,3 +24,5 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           knowledge_repo_token: ${{ secrets.KNOWLEDGE_REPO_TOKEN }}
+          claude_repo_token: ${{ secrets.CLAUDE_REPO_TOKEN }}
+          pr_number: ${{ github.event.inputs.pr_number || github.event.pull_request.number }}
