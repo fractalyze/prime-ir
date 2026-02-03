@@ -41,6 +41,10 @@ PrimitiveType UnsignedIntegralTypeForBitWidth(int64_t src_bitwidth) {
       return U32;
     case 64:
       return U64;
+    case 128:
+      return U128;
+    case 256:
+      return U256;
     default:
       return PRIMITIVE_TYPE_INVALID;
   }

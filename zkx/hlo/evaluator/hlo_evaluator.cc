@@ -50,6 +50,7 @@ limitations under the License.
 #include "zkx/service/logical_buffer.h"
 #include "zkx/service/pattern_matcher.h"
 #include "zkx/service/shape_inference.h"
+#include "zkx/types.h"
 
 namespace zkx {
 namespace {
@@ -1115,8 +1116,14 @@ std::vector<int64_t> HloEvaluator::GetS64Indices(
         [&](auto primitive_type_constant) -> int64_t {
           if constexpr (primitive_util::IsIntegralType(
                             primitive_type_constant)) {
-            return static_cast<int64_t>(
-                index.GetFirstElement<NativeTypeOf<primitive_type_constant>>());
+            using NativeT = NativeTypeOf<primitive_type_constant>;
+            if constexpr (is_big_int_v<NativeT>) {
+              // BigInt has explicit operator uint64_t().
+              return static_cast<int64_t>(
+                  static_cast<uint64_t>(index.GetFirstElement<NativeT>()));
+            } else {
+              return static_cast<int64_t>(index.GetFirstElement<NativeT>());
+            }
           }
           LOG(FATAL) << "GetS64Indices: unhandled primitive type for "
                      << PrimitiveType_Name(index.shape().element_type());

@@ -892,7 +892,15 @@ mlir::DenseIntElementsAttr CreateDenseIntElementsAttr(EmitterLocOpBuilder& b,
       MakeMlirTensorTypeWithoutLayout(shape, b.getContext());
   absl::Span<const T> data = literal.data<T>();
 
-  if constexpr (is_specialized_integral_v<T>) {
+  if constexpr (is_big_int_v<T>) {
+    type = type.clone(mlir::IntegerType::get(b.getContext(), T::kBitWidth));
+    llvm::SmallVector<llvm::APInt> mlir_data;
+    mlir_data.reserve(data.size());
+    for (const T& value : data) {
+      mlir_data.push_back(mlir_utils::ConvertUnderlyingValueToAPInt(value));
+    }
+    return mlir::DenseIntElementsAttr::get(type, mlir_data);
+  } else if constexpr (is_specialized_integral_v<T>) {
     return mlir::DenseIntElementsAttr::get(
         type, llvm::ArrayRef<T>(data.data(), data.size()));
   } else {

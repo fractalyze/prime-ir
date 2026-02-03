@@ -486,7 +486,10 @@ zkx_cc_library(
 zkx_cc_library(
     name = "types",
     hdrs = ["types.h"],
-    deps = ["@zk_dtypes//zk_dtypes:intn"],
+    deps = [
+        "@zk_dtypes//zk_dtypes:big_int",
+        "@zk_dtypes//zk_dtypes:intn",
+    ],
 )
 
 zkx_cc_library(

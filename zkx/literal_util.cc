@@ -412,8 +412,18 @@ absl::StatusOr<Literal> MakeFakeLiteral(
                 }));
             return absl::OkStatus();
           }
-          if constexpr (primitive_util::IsIntegralType(
-                            primitive_type_constant)) {
+          if constexpr (primitive_util::IsBigIntType(primitive_type_constant)) {
+            for (NativeT& value : literal.data<NativeT>()) {
+              value = NativeT::Random();
+            }
+            if (is_sorted) {
+              std::sort(literal.data<NativeT>().begin(),
+                        literal.data<NativeT>().end());
+            }
+            return absl::OkStatus();
+            // NOLINTNEXTLINE(readability/braces)
+          } else if constexpr (primitive_util::IsIntegralType(
+                                   primitive_type_constant)) {
             NativeT max = std::numeric_limits<NativeT>::max();
             NativeT min = std::numeric_limits<NativeT>::lowest();
             if (limit.has_value()) {

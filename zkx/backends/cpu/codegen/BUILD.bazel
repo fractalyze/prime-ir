@@ -205,10 +205,12 @@ zkx_cc_library(
         "//zkx:comparison_util",
         "//zkx:literal_util",
         "//zkx:primitive_util",
+        "//zkx:types",
         "//zkx/base:random",
         "//zkx/base/containers:container_util",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/strings",
+        "@zk_dtypes//zk_dtypes:big_int",
         "@zk_dtypes//zk_dtypes:pow",
     ],
 )

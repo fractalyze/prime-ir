@@ -60,6 +60,7 @@ zkx_cc_library(
         "//zkx:literal_util",
         "//zkx:primitive_util",
         "//zkx:shape_util",
+        "//zkx:types",
         "//zkx:zkx_data_cc_proto",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",

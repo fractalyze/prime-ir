@@ -61,6 +61,8 @@ mlir::Type PrimitiveTypeToMlirType(PrimitiveType element_type,
     case U32:
     case S64:
     case U64:
+    case U128:
+    case U256:
       return mlir::IntegerType::get(context,
                                     primitive_util::BitWidth(element_type));
     // TODO(chokobole): For Tuple, see the comments in

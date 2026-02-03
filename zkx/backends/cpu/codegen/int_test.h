@@ -25,6 +25,7 @@ limitations under the License.
 #include "absl/base/casts.h"
 #include "absl/strings/substitute.h"
 
+#include "zk_dtypes/include/big_int.h"
 #include "zk_dtypes/include/pow.h"
 #include "zkx/array2d.h"
 #include "zkx/backends/cpu/codegen/cpu_kernel_emitter_test.h"
@@ -33,6 +34,7 @@ limitations under the License.
 #include "zkx/comparison_util.h"
 #include "zkx/literal_util.h"
 #include "zkx/primitive_util.h"
+#include "zkx/types.h"
 
 namespace zkx::cpu {
 
@@ -45,6 +47,15 @@ class BaseIntTest {
   static T GetRandomValue() {
     return absl::bit_cast<T>(base::Uniform<UnsignedT>());
   }
+};
+
+// Specialization for u128 (BigInt<2>).
+template <>
+class BaseIntTest<u128> {
+ protected:
+  using UnsignedT = u128;
+
+  static u128 GetRandomValue() { return u128::Random(); }
 };
 
 template <typename T>

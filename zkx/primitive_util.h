@@ -107,6 +107,16 @@ constexpr PrimitiveType NativeToPrimitiveType<uint64_t>() {
   return U64;
 }
 
+template <>
+constexpr PrimitiveType NativeToPrimitiveType<u128>() {
+  return U128;
+}
+
+template <>
+constexpr PrimitiveType NativeToPrimitiveType<u256>() {
+  return U256;
+}
+
 // Signed integer
 template <>
 constexpr PrimitiveType NativeToPrimitiveType<s1>() {
@@ -199,6 +209,16 @@ struct PrimitiveTypeToNative<U64> {
   using type = uint64_t;
 };
 
+template <>
+struct PrimitiveTypeToNative<U128> {
+  using type = u128;
+};
+
+template <>
+struct PrimitiveTypeToNative<U256> {
+  using type = u256;
+};
+
 // Signed integer
 template <>
 struct PrimitiveTypeToNative<S1> {
@@ -283,7 +303,7 @@ constexpr bool IsSignedIntegralType(PrimitiveType type) {
 
 constexpr bool IsUnsignedIntegralType(PrimitiveType type) {
   return type == U1 || type == U2 || type == U4 || type == U8 || type == U16 ||
-         type == U32 || type == U64;
+         type == U32 || type == U64 || type == U128 || type == U256;
 }
 
 constexpr bool IsIntegralType(PrimitiveType type) {
@@ -292,6 +312,10 @@ constexpr bool IsIntegralType(PrimitiveType type) {
 
 constexpr bool Is8BitIntegralType(PrimitiveType type) {
   return type == S8 || type == U8;
+}
+
+constexpr bool IsBigIntType(PrimitiveType type) {
+  return type == U128 || type == U256;
 }
 
 constexpr bool IsPrimeFieldType(PrimitiveType type) {
@@ -332,7 +356,7 @@ constexpr bool IsComparableType(PrimitiveType type) {
 
 constexpr bool IsZkDtypesType(PrimitiveType type) {
   if (type == U1 || type == S1 || type == U2 || type == S2 || type == U4 ||
-      type == S4) {
+      type == S4 || type == U128 || type == U256) {
     return true;
   }
 #define ZK_DTYPES_CASE(unused, unused2, enum, unused3) type == enum ||
@@ -403,6 +427,10 @@ constexpr R IntegralTypeSwitch(F&& f, PrimitiveType type) {
         return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::U32>());
       case U64:
         return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::U64>());
+      case U128:
+        return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::U128>());
+      case U256:
+        return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::U256>());
       default:
         ABSL_UNREACHABLE();
     }
@@ -486,12 +514,16 @@ inline constexpr int PrimitiveTypeBitWidth() {
   if constexpr (IsArrayType(primitive_type)) {
     using NativeT = NativeTypeOf<primitive_type>;
     if constexpr (IsIntegralType(primitive_type)) {
-      static_assert(is_specialized_integral_v<NativeT>);
-      static_assert(std::numeric_limits<NativeT>::is_signed ==
-                    IsSignedIntegralType(primitive_type));
-      static_assert(std::numeric_limits<NativeT>::radix == 2);
-      return std::numeric_limits<NativeT>::digits +
-             (IsSignedIntegralType(primitive_type) ? 1 : 0);
+      if constexpr (IsBigIntType(primitive_type)) {
+        return NativeT::kBitWidth;
+      } else {
+        static_assert(is_specialized_integral_v<NativeT>);
+        static_assert(std::numeric_limits<NativeT>::is_signed ==
+                      IsSignedIntegralType(primitive_type));
+        static_assert(std::numeric_limits<NativeT>::radix == 2);
+        return std::numeric_limits<NativeT>::digits +
+               (IsSignedIntegralType(primitive_type) ? 1 : 0);
+      }
     }
     if constexpr (IsFieldType(primitive_type) ||
                   IsEcPointType(primitive_type)) {

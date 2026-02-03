@@ -41,6 +41,19 @@ absl::StatusOr<mlir::DenseElementsAttr> CreateDenseAttrFromLiteral(
   if constexpr (zk_dtypes::IsField<CppType> || zk_dtypes::IsEcPoint<CppType>) {
     return absl::UnimplementedError(
         "Not implemented for field or ec point types");
+  } else if constexpr (is_big_int_v<CppType>) {
+    // BigInt types need to be converted to APInt for MLIR.
+    auto data_span = literal.data<CppType>();
+    constexpr unsigned bit_width = CppType::kBitWidth;
+    llvm::SmallVector<llvm::APInt, 4> apint_values;
+    apint_values.reserve(data_span.size());
+    for (const auto& val : data_span) {
+      // Construct APInt from raw limbs.
+      llvm::ArrayRef<uint64_t> limbs(reinterpret_cast<const uint64_t*>(&val),
+                                     CppType::kLimbNums);
+      apint_values.push_back(llvm::APInt(bit_width, limbs));
+    }
+    return mlir::DenseElementsAttr::get(type, llvm::ArrayRef(apint_values));
   } else {
     auto data_span = literal.data<CppType>();
     return mlir::DenseElementsAttr::get(

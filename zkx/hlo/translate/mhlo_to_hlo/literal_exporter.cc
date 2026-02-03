@@ -28,6 +28,7 @@ limitations under the License.
 #include "zkx/literal_util.h"
 #include "zkx/primitive_util.h"
 #include "zkx/shape.h"
+#include "zkx/types.h"
 #include "zkx/zkx_data.pb.h"
 
 namespace mlir::mhlo {
@@ -41,7 +42,17 @@ zkx::Array<T> ArrayFromDenseElementsAttr(mlir::DenseElementsAttr dense_attr) {
   if constexpr (!zkx::primitive_util::IsSubByteNonPredType(type)) {
     if constexpr (type == zkx::PRED ||
                   zkx::primitive_util::IsIntegralType(type)) {
-      array.SetValues(dense_attr.getValues<T>());
+      if constexpr (zkx::is_big_int_v<T>) {
+        // BigInt types need to be converted from APInt.
+        auto values = dense_attr.getValues<llvm::APInt>();
+        for (int i = 0; i < values.size(); ++i) {
+          T big_int;
+          std::copy_n(values[i].getRawData(), T::kLimbNums, big_int.limbs());
+          array.data()[i] = big_int;
+        }
+      } else {
+        array.SetValues(dense_attr.getValues<T>());
+      }
     } else {
       LOG(FATAL) << "ArrayFromDenseElementsAttr is not implemented for type: "
                  << zkx::PrimitiveType_Name(type);

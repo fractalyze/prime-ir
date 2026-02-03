@@ -510,7 +510,9 @@ std::string LiteralBase::GetAsString(absl::Span<const int64_t> multi_index,
                         std::is_same_v<NativeT, u2> ||
                         std::is_same_v<NativeT, s2> ||
                         std::is_same_v<NativeT, u4> ||
-                        std::is_same_v<NativeT, s4>) {
+                        std::is_same_v<NativeT, s4> ||
+                        std::is_same_v<NativeT, u128> ||
+                        std::is_same_v<NativeT, u256>) {
             return Get<NativeT>(multi_index, shape_index).ToString();
           } else {
             return absl::StrCat(Get<NativeT>(multi_index, shape_index));
@@ -538,7 +540,24 @@ std::optional<int64_t> LiteralBase::GetIntegralAsS64(
         if constexpr (primitive_util::IsIntegralType(primitive_type_constant) ||
                       primitive_type_constant == PRED) {
           using NativeT = primitive_util::NativeTypeOf<primitive_type_constant>;
-          return Get<NativeT>(multi_index);
+          if constexpr (primitive_util::IsBigIntType(primitive_type_constant)) {
+            auto value = Get<NativeT>(multi_index);
+            // Check if value fits in int64_t (upper limbs must be zero)
+            for (size_t i = 1; i < NativeT::kLimbNums; ++i) {
+              if (value[i] != 0) {
+                return std::nullopt;
+              }
+            }
+            // Also check MSB of lowest limb for signed conversion
+            uint64_t lower = static_cast<uint64_t>(value);
+            if (lower >
+                static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+              return std::nullopt;
+            }
+            return static_cast<int64_t>(lower);
+          } else {
+            return Get<NativeT>(multi_index);
+          }
         }
         return std::nullopt;
       },
@@ -777,7 +796,22 @@ void ConvertBetweenNativeTypes(absl::Span<const NativeSrcT> src_data,
 
   NativeDestT* dest_data = static_cast<NativeDestT*>(dst_base);
   for (const NativeSrcT& src : src_data) {
-    *(dest_data++) = static_cast<NativeDestT>(src);
+    if constexpr (is_big_int_v<NativeSrcT>) {
+      if constexpr (is_big_int_v<NativeDestT>) {
+        if constexpr (NativeDestT::kLimbNums >= NativeSrcT::kLimbNums) {
+          // BigInt to larger/equal BigInt - direct conversion.
+          *(dest_data++) = static_cast<NativeDestT>(src);
+        } else {
+          // BigInt to smaller BigInt - truncate
+          *(dest_data++) = src.template Truncate<NativeDestT::kLimbNums>();
+        }
+      } else {
+        // BigInt to non-BigInt - cast through uint64_t.
+        *(dest_data++) = static_cast<NativeDestT>(static_cast<uint64_t>(src));
+      }
+    } else {
+      *(dest_data++) = static_cast<NativeDestT>(src);
+    }
   }
 }
 
@@ -803,6 +837,13 @@ void CreateFromInteger(absl::Span<const NativeSrcT> src_data, void* dst_base) {
       // jax.jit(add)(babybear(1))
       // ```
       *(dest_data++) = NativeDestT::FromUnchecked(src);
+    } else if constexpr (zk_dtypes::IsExtensionField<NativeDestT>) {
+      using BasePrimeField = typename NativeDestT::BasePrimeField;
+      if constexpr (sizeof(src) <= sizeof(BasePrimeField)) {
+        *(dest_data++) = NativeDestT(BasePrimeField::FromUnchecked(src));
+      } else {
+        LOG(FATAL) << "Do we really need this case??";
+      }
     } else {
       *(dest_data++) = NativeDestT(src);
     }
@@ -837,8 +878,8 @@ absl::Status ConvertIfDestTypeMatches(const LiteralBase& src_literal,
             // We permit this risk to improve usability on the Zorch side; since
             // 32-bit integers are the default integral type, disallowing this
             // would create significant friction for the user.
-            if (primitive_util::ByteWidth(kSrcType) <=
-                primitive_util::ByteWidth(primitive_type_constant)) {
+            if constexpr (primitive_util::ByteWidth(kSrcType) <=
+                          primitive_util::ByteWidth(primitive_type_constant)) {
               CreateFromInteger<NativeSrcT, NativeDestT>(src_data, dst_base);
               return absl::OkStatus();
             } else {
@@ -851,8 +892,8 @@ absl::Status ConvertIfDestTypeMatches(const LiteralBase& src_literal,
                                primitive_util::IsEcPointType(
                                    primitive_type_constant)) {
             using ScalarField = typename NativeDestT::ScalarField;
-            if (primitive_util::ByteWidth(kSrcType) <=
-                ScalarField::kByteWidth) {
+            if constexpr (primitive_util::ByteWidth(kSrcType) <=
+                          ScalarField::kByteWidth) {
               CreateFromInteger<NativeSrcT, NativeDestT>(src_data, dst_base);
               return absl::OkStatus();
             } else {
@@ -1131,7 +1172,8 @@ bool LiteralBase::IsAll(int8_t value) const {
   Literal scalar(ShapeUtil::MakeScalarShape(ty));
   return primitive_util::ArrayTypeSwitch<bool>(
       [&](auto primitive_type_constant) -> bool {
-        if constexpr (primitive_util::IsFieldType(primitive_type_constant) ||
+        if constexpr (primitive_util::IsBigIntType(primitive_type_constant) ||
+                      primitive_util::IsFieldType(primitive_type_constant) ||
                       primitive_util::IsEcPointType(primitive_type_constant)) {
           return false;
         } else {
@@ -1338,13 +1380,28 @@ std::optional<int64_t> LiteralBase::GetFirstInteger() const {
       [&](auto primitive_type_constant) -> std::optional<int64_t> {
         using NativeT = primitive_util::NativeTypeOf<primitive_type_constant>;
         auto first_element = GetFirstElement<NativeT>();
-        if constexpr (std::is_same_v<NativeT, uint64_t>) {
-          int64_t v = static_cast<int64_t>(first_element);
-          if (v < 0) {
+        if constexpr (primitive_util::IsBigIntType(primitive_type_constant)) {
+          // Check if value fits in int64_t (upper limbs must be zero)
+          for (size_t i = 1; i < NativeT::kLimbNums; ++i) {
+            if (first_element[i] != 0) {
+              return std::nullopt;
+            }
+          }
+          uint64_t lower = static_cast<uint64_t>(first_element);
+          if (lower >
+              static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
             return std::nullopt;
           }
+          return static_cast<int64_t>(lower);
+        } else {
+          if constexpr (std::is_same_v<NativeT, uint64_t>) {
+            int64_t v = static_cast<int64_t>(first_element);
+            if (v < 0) {
+              return std::nullopt;
+            }
+          }
+          return first_element;
         }
-        return first_element;
       },
       shape().element_type());
 }
@@ -1728,6 +1785,16 @@ void LiteralBase::Piece::WriteToProto(LiteralProto* proto) const {
     case U64:
       CopyToRepeatedField(proto->mutable_u64s(), data<uint64_t>());
       break;
+    case U128:
+      *proto->mutable_u128s() =
+          std::string(reinterpret_cast<const char*>(data<u128>().data()),
+                      size_bytes_dense());
+      break;
+    case U256:
+      *proto->mutable_u256s() =
+          std::string(reinterpret_cast<const char*>(data<u256>().data()),
+                      size_bytes_dense());
+      break;
     case S1:
       *proto->mutable_s1s() = std::string(
           reinterpret_cast<const char*>(data<s1>().data()), size_bytes_dense());
@@ -1901,6 +1968,18 @@ absl::Status LiteralBase::Piece::CopyFromProto(const LiteralProto& proto) {
     case U64:
       TF_RETURN_IF_ERROR(CopyFromRepeatedField(data<uint64_t>(), proto.u64s()));
       break;
+    case U128: {
+      const std::string& s(proto.u128s());
+      TF_RET_CHECK(data<u128>().size() * sizeof(u128) == s.size());
+      memcpy(untyped_data(), s.data(), s.size());
+      break;
+    }
+    case U256: {
+      const std::string& s(proto.u256s());
+      TF_RET_CHECK(data<u256>().size() * sizeof(u256) == s.size());
+      memcpy(untyped_data(), s.data(), s.size());
+      break;
+    }
     case TUPLE:
       return absl::InvalidArgumentError(
           absl::StrFormat("Should not be called on tuple shapes: %s",

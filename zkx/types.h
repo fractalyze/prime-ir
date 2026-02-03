@@ -20,6 +20,7 @@ limitations under the License.
 #include <limits>
 #include <type_traits>
 
+#include "zk_dtypes/include/big_int.h"
 #include "zk_dtypes/include/intn.h"
 
 namespace zkx {
@@ -28,6 +29,9 @@ template <typename T>
 struct is_specialized_integral
     : std::bool_constant<std::numeric_limits<T>::is_specialized &&
                          std::numeric_limits<T>::is_integer> {};
+
+template <size_t N>
+struct is_specialized_integral<::zk_dtypes::BigInt<N>> : std::true_type {};
 
 template <typename T>
 inline constexpr bool is_specialized_integral_v =
@@ -39,6 +43,16 @@ using u2 = ::zk_dtypes::uint2;
 using s2 = ::zk_dtypes::int2;
 using u4 = ::zk_dtypes::uint4;
 using s4 = ::zk_dtypes::int4;
+
+using u128 = ::zk_dtypes::BigInt<2>;
+using u256 = ::zk_dtypes::BigInt<4>;
+
+template <class T>
+struct is_big_int : std::false_type {};
+template <size_t N>
+struct is_big_int<::zk_dtypes::BigInt<N>> : std::true_type {};
+template <typename T>
+inline constexpr bool is_big_int_v = is_big_int<T>::value;
 
 template <class T>
 struct is_intN : std::false_type {};
@@ -64,6 +78,13 @@ struct make_specialized_unsigned<T, typename std::enable_if_t<is_intN_v<T>>> {
 };
 
 template <typename T>
+struct make_specialized_unsigned<T,
+                                 typename std::enable_if_t<is_big_int_v<T>>> {
+  // BigInt is already unsigned, return the same type.
+  using type = T;
+};
+
+template <typename T>
 using make_specialized_unsigned_t = typename make_specialized_unsigned<T>::type;
 
 template <typename T, typename = void>
@@ -77,6 +98,12 @@ struct make_specialized_signed<T, typename std::enable_if_t<is_intN_v<T>>> {
   using type =
       ::zk_dtypes::intN<T::bits,
                         std::make_signed_t<typename T::underlying_type>>;
+};
+
+template <typename T>
+struct make_specialized_signed<T, typename std::enable_if_t<is_big_int_v<T>>> {
+  // BigInt is unsigned only, no signed variant exists.
+  using type = T;
 };
 
 template <typename T>

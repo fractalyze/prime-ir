@@ -4019,9 +4019,22 @@ bool HloParserImpl::SetValueInLiteral(LocTy loc, int64_t value, int64_t index,
           return SetValueInLiteralHelper<bool>(loc, static_cast<bool>(value),
                                                index, literal);
         }
-        if constexpr (primitive_util::IsIntegralType(primitive_type_constant) ||
-                      primitive_util::IsFieldType(primitive_type_constant) ||
-                      primitive_util::IsEcPointType(primitive_type_constant)) {
+        if constexpr (primitive_util::IsBigIntType(primitive_type_constant)) {
+          using NativeT = primitive_util::NativeTypeOf<primitive_type_constant>;
+          // int64_t always fits in BigInt, no range check needed
+          if (index >= ShapeUtil::ElementsIn(literal->shape())) {
+            return Error(loc,
+                         absl::StrCat("index ", index, " is out of range"));
+          }
+          literal->data<NativeT>().at(index) = static_cast<NativeT>(value);
+          return true;
+          // NOLINTNEXTLINE(readability/braces)
+        } else if constexpr (primitive_util::IsIntegralType(
+                                 primitive_type_constant) ||
+                             primitive_util::IsFieldType(
+                                 primitive_type_constant) ||
+                             primitive_util::IsEcPointType(
+                                 primitive_type_constant)) {
           using NativeT = primitive_util::NativeTypeOf<primitive_type_constant>;
           return SetValueInLiteralHelper<NativeT>(loc, value, index, literal);
         }
