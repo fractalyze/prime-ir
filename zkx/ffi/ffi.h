@@ -521,9 +521,12 @@ struct CtxDecoding<Allocator> {
 
   static std::optional<Type> Decode(const ZKX_FFI_Api* api,
                                     ZKX_FFI_ExecutionContext* ctx,
-                                    DiagnosticEngine&) {
+                                    DiagnosticEngine& diagnostic) {
     void* device_allocator =
         api->internal_api->ZKX_FFI_INTERNAL_DeviceMemoryAllocator_Get(ctx);
+    if (ABSL_PREDICT_FALSE(device_allocator == nullptr)) {
+      return diagnostic.Emit("Failed to decode device memory allocator");
+    }
     return reinterpret_cast<Type>(device_allocator);
   }
 };
@@ -534,11 +537,14 @@ struct CtxDecoding<ScratchAllocator> {
 
   static std::optional<Type> Decode(const ZKX_FFI_Api* api,
                                     ZKX_FFI_ExecutionContext* ctx,
-                                    DiagnosticEngine&) {
+                                    DiagnosticEngine& diagnostic) {
     int32_t device_ordinal =
         api->internal_api->ZKX_FFI_INTERNAL_DeviceOrdinal_Get(ctx);
     void* device_allocator =
         api->internal_api->ZKX_FFI_INTERNAL_DeviceMemoryAllocator_Get(ctx);
+    if (ABSL_PREDICT_FALSE(device_allocator == nullptr)) {
+      return diagnostic.Emit("Failed to decode device memory allocator");
+    }
 
     return se::OwningScratchAllocator<>(
         device_ordinal,
@@ -564,9 +570,12 @@ struct CtxDecoding<IntraOpThreadPool> {
 
   static std::optional<Type> Decode(const ZKX_FFI_Api* api,
                                     ZKX_FFI_ExecutionContext* ctx,
-                                    DiagnosticEngine&) {
+                                    DiagnosticEngine& diagnostic) {
     void* intra_op_thread_pool =
         api->internal_api->ZKX_FFI_INTERNAL_IntraOpThreadPool_Get(ctx);
+    if (ABSL_PREDICT_FALSE(intra_op_thread_pool == nullptr)) {
+      return diagnostic.Emit("Failed to decode intra-op thread pool");
+    }
     return reinterpret_cast<Type>(intra_op_thread_pool);
   }
 };

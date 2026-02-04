@@ -843,8 +843,7 @@ void* ZKX_FFI_INTERNAL_Stream_Get(ZKX_FFI_ExecutionContext* ctx) {
     return gpu->stream;
   }
 
-  return new ZKX_FFI_Error{
-      absl::InvalidArgumentError("ZKX FFI GPU context is not available")};
+  return nullptr;
 }
 
 int32_t ZKX_FFI_INTERNAL_DeviceOrdinal_Get(ZKX_FFI_ExecutionContext* ctx) {
@@ -862,8 +861,7 @@ void* ZKX_FFI_INTERNAL_DeviceMemoryAllocator_Get(
     return gpu->allocator;
   }
 
-  return new ZKX_FFI_Error{
-      absl::InvalidArgumentError("ZKX FFI GPU context is not available")};
+  return nullptr;
 }
 
 void* ZKX_FFI_INTERNAL_CalledComputation_Get(ZKX_FFI_ExecutionContext* ctx) {
@@ -886,8 +884,7 @@ void* ZKX_FFI_INTERNAL_IntraOpThreadPool_Get(ZKX_FFI_ExecutionContext* ctx) {
     return const_cast<Eigen::ThreadPoolDevice*>(cpu->intra_op_thread_pool);
   }
 
-  return new ZKX_FFI_Error{
-      absl::InvalidArgumentError("ZKX FFI CPU context is not available")};
+  return nullptr;
 }
 
 //===----------------------------------------------------------------------===//
