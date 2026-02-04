@@ -24,6 +24,7 @@ limitations under the License.
 #include <map>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -2365,6 +2366,9 @@ using HloInstructionMap = std::map<HloInstruction*, ValueT, HloPtrComparator>;
 template <typename ValueT>
 using ConstHloInstructionMap =
     std::map<const HloInstruction*, ValueT, HloPtrComparator>;
+
+using ConstHloInstructionSet =
+    std::set<const HloInstruction*, HloPtrComparator>;
 
 template <HloOpcode op, HloOpcode... rest>
 bool HloPredicateIsOp(const HloInstruction* instruction) {
