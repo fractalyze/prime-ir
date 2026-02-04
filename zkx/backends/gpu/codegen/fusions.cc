@@ -22,6 +22,7 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/strings/match.h"
 
+#include "zkx/backends/gpu/codegen/emitters/concatenate.h"
 #include "zkx/backends/gpu/codegen/emitters/in_place_dynamic_update_slice.h"
 #include "zkx/backends/gpu/codegen/emitters/loop.h"
 #include "zkx/layout_util.h"
@@ -112,11 +113,8 @@ std::unique_ptr<FusionInterface> GetFusionEmitter(
       // return std::make_unique<TransposeFusion>(analysis);
       return nullptr;
     }
-    case HloFusionAnalysis::EmitterFusionKind::kConcatenate: {
-      // TODO(chokobole): Implement this. Dependency: ConcatenateFusion
-      // return std::make_unique<ConcatenateFusion>(analysis);
-      return nullptr;
-    }
+    case HloFusionAnalysis::EmitterFusionKind::kConcatenate:
+      return std::make_unique<ConcatenateFusion>(analysis);
     case HloFusionAnalysis::EmitterFusionKind::kTriton:
       // TODO(chokobole): Implement this. Dependency: TritonFusion
       // return std::make_unique<TritonFusion>(analysis);
