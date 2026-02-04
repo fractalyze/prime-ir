@@ -25,6 +25,7 @@ limitations under the License.
 #include "absl/types/span.h"
 
 #include "xla/tsl/lib/core/bitmap.h"
+#include "zkx/array4d.h"
 #include "zkx/literal.h"
 #include "zkx/primitive_util.h"
 #include "zkx/shape_util.h"
@@ -103,6 +104,22 @@ class LiteralUtil {
   static Literal CreateR3FromArray3D(const Array3D<NativeT>& values);
   template <typename NativeT>
   static Literal CreateR3FromArray3DWithLayout(const Array3D<NativeT>& values,
+                                               const Layout& layout);
+  template <typename NativeT>
+  static Literal CreateR4(
+      std::initializer_list<std::initializer_list<
+          std::initializer_list<std::initializer_list<NativeT>>>>
+          values);
+  template <typename NativeT>
+  static Literal CreateR4WithLayout(
+      std::initializer_list<std::initializer_list<
+          std::initializer_list<std::initializer_list<NativeT>>>>
+          values,
+      const Layout& layout);
+  template <typename NativeT>
+  static Literal CreateR4FromArray4D(const Array4D<NativeT>& values);
+  template <typename NativeT>
+  static Literal CreateR4FromArray4DWithLayout(const Array4D<NativeT>& values,
                                                const Layout& layout);
 
   // Returns a tuple literal composed of given literals. Data is copied from the
@@ -286,6 +303,60 @@ Literal LiteralUtil::CreateR3FromArray3DWithLayout(
 // static
 template <typename NativeT>
 Literal LiteralUtil::CreateR3FromArray3D(const Array3D<NativeT>& values) {
+  return CreateFromArray(values);
+}
+
+// static
+template <typename NativeT>
+Literal LiteralUtil::CreateR4WithLayout(
+    std::initializer_list<std::initializer_list<
+        std::initializer_list<std::initializer_list<NativeT>>>>
+        values,
+    const Layout& layout) {
+  const int64_t d0 = values.size();
+  const int64_t d1 = values.begin()->size();
+  const int64_t d2 = values.begin()->begin()->size();
+  const int64_t d3 = values.begin()->begin()->begin()->size();
+  Array4D<NativeT> tmp(d0, d1, d2, d3);
+  int64_t i0 = 0;
+  for (auto d1_values : values) {
+    int64_t i1 = 0;
+    for (auto d2_values : d1_values) {
+      int64_t i2 = 0;
+      for (auto d3_values : d2_values) {
+        int64_t i3 = 0;
+        for (auto value : d3_values) {
+          tmp(i0, i1, i2, i3) = value;
+          ++i3;
+        }
+        ++i2;
+      }
+      ++i1;
+    }
+    ++i0;
+  }
+  return CreateR4FromArray4DWithLayout(tmp, layout);
+}
+
+// static
+template <typename NativeT>
+Literal LiteralUtil::CreateR4(
+    std::initializer_list<std::initializer_list<
+        std::initializer_list<std::initializer_list<NativeT>>>>
+        values) {
+  return CreateR4WithLayout(values, LayoutUtil::GetDefaultLayoutForR4());
+}
+
+// static
+template <typename NativeT>
+Literal LiteralUtil::CreateR4FromArray4DWithLayout(
+    const Array4D<NativeT>& values, const Layout& layout) {
+  return CreateFromArrayWithLayout(values, layout);
+}
+
+// static
+template <typename NativeT>
+Literal LiteralUtil::CreateR4FromArray4D(const Array4D<NativeT>& values) {
   return CreateFromArray(values);
 }
 
