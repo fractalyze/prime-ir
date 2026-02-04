@@ -70,20 +70,27 @@ zkx_cc_library(
 
 zkx_cc_unittest(
     name = "hlo_evaluator_unittest",
-    srcs = ["hlo_evaluator_unittest.cc"],
+    srcs = [
+        "hlo_evaluator_field_test.h",
+        "hlo_evaluator_field_unittest.cc",
+        "hlo_evaluator_unittest.cc",
+    ],
     deps = [
         ":hlo_evaluator",
         "//xla/tsl/platform:statusor",
         "//zkx:array2d",
         "//zkx:literal",
         "//zkx:literal_util",
+        "//zkx:primitive_util",
         "//zkx:shape_util",
+        "//zkx/base/containers:container_util",
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/ir:hlo_opcode",
         "//zkx/hlo/testlib:hlo_hardware_independent_test_base",
         "//zkx/service:dynamic_dimension_inference",
         "//zkx/tests:literal_test_util",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
     ],
 )
