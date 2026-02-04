@@ -1,4 +1,4 @@
-load("//bazel:zkx_cc.bzl", "zkx_cc_library")
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -68,4 +68,22 @@ zkx_cc_library(
     ],
 )
 
-# TODO(chokobole): add hlo_evaluator_unittest.cc.
+zkx_cc_unittest(
+    name = "hlo_evaluator_unittest",
+    srcs = ["hlo_evaluator_unittest.cc"],
+    deps = [
+        ":hlo_evaluator",
+        "//xla/tsl/platform:statusor",
+        "//zkx:array2d",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/testlib:hlo_hardware_independent_test_base",
+        "//zkx/service:dynamic_dimension_inference",
+        "//zkx/tests:literal_test_util",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+    ],
+)
