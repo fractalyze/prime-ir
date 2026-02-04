@@ -86,7 +86,7 @@ absl::Span<const int64_t> AnnotationStack::GetScopeRangeIds() {
 void AnnotationStack::Enable(bool enable) {
   int generation = generation_.load(std::memory_order_relaxed);
   while (!generation_.compare_exchange_weak(
-      generation, enable ? generation | 1 : generation + 1 & ~1,
+      generation, enable ? (generation | 1) : ((generation + 1) & ~1),
       std::memory_order_release)) {
   }
 }

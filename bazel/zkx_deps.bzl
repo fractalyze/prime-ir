@@ -23,6 +23,7 @@ load("@zkx//third_party/gloo:workspace.bzl", gloo = "repo")
 load("@zkx//third_party/gpus/cuda/hermetic:cuda_json_init_repository.bzl", "cuda_json_init_repository")
 load("@zkx//third_party/highwayhash:workspace.bzl", highwayhash = "repo")
 load("@zkx//third_party/implib_so:workspace.bzl", implib_so = "repo")
+load("@zkx//third_party/jsoncpp:workspace.bzl", jsoncpp = "repo")
 load("@zkx//third_party/nanobind:workspace.bzl", nanobind = "repo")
 load("@zkx//third_party/prime_ir:workspace.bzl", prime_ir = "repo")
 load("@zkx//third_party/robin_map:workspace.bzl", robin_map = "repo")
@@ -152,10 +153,4 @@ def zkx_deps():
         build_file = "@zkx//third_party:pybind11.BUILD",
     )
 
-    tf_http_archive(
-        name = "jsoncpp",
-        sha256 = "f93b6dd7ce796b13d02c108bc9f79812245a82e577581c4c9aabe57075c90ea2",
-        strip_prefix = "jsoncpp-1.9.6",
-        build_file = "@zkx//third_party:jsoncpp.BUILD",
-        urls = tf_mirror_urls("https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.6.tar.gz"),
-    )
+    jsoncpp()
