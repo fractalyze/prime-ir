@@ -194,7 +194,7 @@ template <PrimitiveType dtype> using BufferR3 = Buffer<dtype, 3>;
 template <PrimitiveType dtype> using BufferR4 = Buffer<dtype, 4>;
 // clang-format on
 
-using Token = BufferR0<PrimitiveType::TOKEN>;  // NOLINT
+using Token = BufferR0<PrimitiveType::TOKEN>;
 
 namespace internal {
 

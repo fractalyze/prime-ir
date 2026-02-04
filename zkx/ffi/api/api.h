@@ -549,8 +549,7 @@ class Binding {
   }
 
   template <typename... TTs>
-  Binding(Binding<stage, TTs...>&& other)  // NOLINT
-      : attrs_(std::move(other.attrs_)) {}
+  Binding(Binding<stage, TTs...>&& other) : attrs_(std::move(other.attrs_)) {}
 
   Binding(Binding&) = delete;
 
@@ -769,7 +768,7 @@ auto Ffi::BindTo(Fn fn, std::initializer_list<Traits> traits) {
 template <typename T>
 class Result {
  public:
-  Result(T value) : value_(value) {}  // NOLINT
+  Result(T value) : value_(value) {}
   T& operator*() { return value_; }
   T* operator->() { return &value_; }
 
@@ -782,7 +781,7 @@ class Result {
 template <typename T, char const* attr_name>
 class Attr {
  public:
-  Attr(T value) : value_(value) {}  // NOLINT
+  Attr(T value) : value_(value) {}
   T& operator*() { return value_; }
   T* operator->() { return &value_; }
 
@@ -943,7 +942,7 @@ class InFlightDiagnostic {
   }
 
   template <typename T>
-  operator std::optional<T>() const {  // NOLINT
+  operator std::optional<T>() const {
     return std::nullopt;
   }
 

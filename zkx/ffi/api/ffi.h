@@ -33,7 +33,7 @@ limitations under the License.
 #include <iostream>
 #include <limits>
 #include <memory>
-#include <mutex>  // NOLINT
+#include <mutex>  // NOLINT(build/c++11)
 #include <numeric>
 #include <optional>
 #include <ostream>
@@ -55,7 +55,7 @@ namespace zkx::ffi {
 
 // All user data types that are passed via the execution context or state must
 // be registered with the ZKX FFI ahead of time to get unique type id.
-using TypeId = ZKX_FFI_TypeId;  // NOLINT
+using TypeId = ZKX_FFI_TypeId;
 
 enum class DataType : uint8_t {
   INVALID = ZKX_FFI_DataType_INVALID,
@@ -134,7 +134,7 @@ class Span {
   constexpr Span() : data_(nullptr), size_(0) {}
 
   Span(T* data, size_t size) : data_(data), size_(size) {}
-  Span(const std::vector<std::remove_const_t<T>>& vec)  // NOLINT
+  Span(const std::vector<std::remove_const_t<T>>& vec)
       : Span(vec.data(), vec.size()) {}
 
   T& operator[](size_t index) const { return data_[index]; }
@@ -224,12 +224,10 @@ class Unexpected;
 template <typename T, typename E>
 class Expected {
  public:
-  constexpr Expected(T value) : data_(std::move(value)) {}  // NOLINT
-  constexpr Expected(Unexpected<E> u);                      // NOLINT
+  constexpr Expected(T value) : data_(std::move(value)) {}
+  constexpr Expected(Unexpected<E> u);
 
-  constexpr operator bool() const {  // NOLINT
-    return has_value();
-  }
+  constexpr operator bool() const { return has_value(); }
 
   constexpr T& operator*() & { return value(); }
   constexpr const T& operator*() const& { return value(); }
@@ -259,7 +257,7 @@ class Expected {
 template <typename E>
 class Unexpected {
  public:
-  constexpr Unexpected(E error) : error_(std::move(error)) {}  // NOLINT
+  constexpr Unexpected(E error) : error_(std::move(error)) {}
 
  private:
   template <typename, typename>
@@ -641,7 +639,7 @@ template <DataType dtype> using BufferR3 = Buffer<dtype, 3>;
 template <DataType dtype> using BufferR4 = Buffer<dtype, 4>;
 // clang-format on
 
-using Token = BufferR0<DataType::TOKEN>;  // NOLINT
+using Token = BufferR0<DataType::TOKEN>;
 
 namespace internal {
 
