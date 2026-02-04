@@ -39,6 +39,7 @@ limitations under the License.
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/path.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "xla/tsl/profiler/protobuf/profiled_instructions.pb.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
 #include "zkx/hlo/ir/hlo_computation.h"
@@ -738,8 +739,7 @@ absl::Status RunAsyncCollectivesConversionPasses(HloModule* module) {
 absl::StatusOr<ScheduleMetadata> ScheduleGpuModule(
     HloModule* module, int64_t pointer_size,
     const se::DeviceDescription& gpu_device_info) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("GpuCompiler::CompileToBackendResult");
+  tsl::profiler::TraceMe traceme("GpuCompiler::CompileToBackendResult");
 
   // Tag the module with its 128 bit fingerprint. The fingerprint should include
   // instruction name with ids.

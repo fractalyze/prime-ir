@@ -26,6 +26,7 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 
 #include "xla/tsl/platform/errors.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 
 #define EIGEN_USE_THREADS
 
@@ -141,8 +142,7 @@ template <int64_t num_arguments, int64_t num_results>
 ABSL_ATTRIBUTE_ALWAYS_INLINE tsl::AsyncValueRef<Thunk::ExecuteEvent>
 KernelThunk<num_arguments, num_results>::ExecuteInternal(
     const ExecuteParams& params) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
+  tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
 
   VLOG(3) << absl::StreamFormat(
       "Launch host kernel %s with %d arguments buffers and %d results buffers: "

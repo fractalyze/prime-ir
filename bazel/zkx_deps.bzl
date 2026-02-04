@@ -23,6 +23,7 @@ load("@zkx//third_party/gloo:workspace.bzl", gloo = "repo")
 load("@zkx//third_party/gpus/cuda/hermetic:cuda_json_init_repository.bzl", "cuda_json_init_repository")
 load("@zkx//third_party/highwayhash:workspace.bzl", highwayhash = "repo")
 load("@zkx//third_party/implib_so:workspace.bzl", implib_so = "repo")
+load("@zkx//third_party/jsoncpp:workspace.bzl", jsoncpp = "repo")
 load("@zkx//third_party/nanobind:workspace.bzl", nanobind = "repo")
 load("@zkx//third_party/prime_ir:workspace.bzl", prime_ir = "repo")
 load("@zkx//third_party/robin_map:workspace.bzl", robin_map = "repo")
@@ -153,3 +154,5 @@ def zkx_deps():
         strip_prefix = "pybind11-2.13.6",
         build_file = "@zkx//third_party:pybind11.BUILD",
     )
+
+    jsoncpp()

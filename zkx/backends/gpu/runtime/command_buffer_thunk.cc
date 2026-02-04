@@ -22,6 +22,9 @@ limitations under the License.
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/profiler_lock.h"
+#include "xla/tsl/profiler/lib/traceme.h"
+#include "xla/tsl/profiler/lib/traceme_encode.h"
 #include "zkx/service/gpu/buffer_allocations.h"
 
 namespace zkx::gpu {
@@ -156,12 +159,12 @@ absl::Status CommandBufferThunk::Initialize(const InitializeParams& params) {
             << " requires_exclusive_lock_on_gpu="
             << params.requires_exclusive_lock_on_gpu;
 
-    // TODO(batzor): Uncomment this. Dependency: Profiler
-    // TraceMe trace([&] {
-    //   return TraceMeEncode("command_buffer::initialize",
-    //                        {{"device", params.executor->device_ordinal()},
-    //                         {"num_commands", commands_.size()}});
-    // });
+    tsl::profiler::TraceMe trace([&] {
+      return tsl::profiler::TraceMeEncode(
+          "command_buffer::initialize",
+          {{"device", params.executor->device_ordinal()},
+           {"num_commands", commands_.size()}});
+    });
 
     uint64_t start_micros = tsl::Env::Default()->NowMicros();
 
@@ -188,14 +191,13 @@ absl::Status CommandBufferThunk::ExecuteOnStream(const ExecuteParams& params) {
   // TODO(b/290773547): Profiler (CUPTI) + CUDA graphs lead to memory
   // corruption. As a work around disable command buffers (CUDA graphs) and run
   // everything in op-by-op mode.
-  // TODO(batzor): Uncomment this. Dependency: Profiler
-  // if (tsl::profiler::ProfilerLock::HasActiveSession() && thunks_ &&
-  //     !enable_command_buffers_during_profiling_) {
-  //   VLOG(1) << "Execute command buffer thunk as a regular thunk sequence "
-  //              "because we detected active profiling session";
-  //   TF_RETURN_IF_ERROR(thunks_->ExecuteOnStream(params));
-  //   return absl::OkStatus();
-  // }
+  if (tsl::profiler::ProfilerLock::HasActiveSession() && thunks_ &&
+      !enable_command_buffers_during_profiling_) {
+    VLOG(1) << "Execute command buffer thunk as a regular thunk sequence "
+               "because we detected active profiling session";
+    TF_RETURN_IF_ERROR(thunks_->ExecuteOnStream(params));
+    return absl::OkStatus();
+  }
 
   se::StreamExecutor* executor = params.stream->parent();
   TF_ASSIGN_OR_RETURN(std::shared_ptr<ExecutorCommandBuffer> cmd_buffer,
@@ -210,14 +212,14 @@ absl::Status CommandBufferThunk::ExecuteOnStream(const ExecuteParams& params) {
             << cmd_buffer->num_executions << " executions since last update"
             << "; num_commands=" << commands_.size();
 
-    // TODO(batzor): Uncomment this. Dependency: Profiler
-    // TraceMe trace([&] {
-    //   cmd_buffer->mutex.AssertHeld();
-    //   return TraceMeEncode("command_buffer::update",
-    //                        {{"device", executor->device_ordinal()},
-    //                         {"num_commands", commands_.size()},
-    //                         {"num_executions", cmd_buffer->num_executions}});
-    // });
+    tsl::profiler::TraceMe trace([&] {
+      cmd_buffer->mutex.AssertHeld();
+      return tsl::profiler::TraceMeEncode(
+          "command_buffer::update",
+          {{"device", executor->device_ordinal()},
+           {"num_commands", commands_.size()},
+           {"num_executions", cmd_buffer->num_executions}});
+    });
 
     uint64_t start_micros = tsl::Env::Default()->NowMicros();
 
@@ -236,14 +238,14 @@ absl::Status CommandBufferThunk::ExecuteOnStream(const ExecuteParams& params) {
   VLOG(3) << "Execute command buffer on device #" << executor->device_ordinal()
           << "; num_executions=" << cmd_buffer->num_executions;
 
-  // TODO(batzor): Uncomment this. Dependency: Profiler
-  // TraceMe trace([&] {
-  //   cmd_buffer->mutex.AssertHeld();
-  //   return TraceMeEncode("command_buffer::execute",
-  //                        {{"device", executor->device_ordinal()},
-  //                         {"num_commands", commands_.size()},
-  //                         {"num_executions", cmd_buffer->num_executions}});
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    cmd_buffer->mutex.AssertHeld();
+    return tsl::profiler::TraceMeEncode(
+        "command_buffer::execute",
+        {{"device", executor->device_ordinal()},
+         {"num_commands", commands_.size()},
+         {"num_executions", cmd_buffer->num_executions}});
+  });
 
   return cmd_buffer->command_buffer->Submit(params.stream);
 }
@@ -292,8 +294,7 @@ void CommandBufferThunk::TrackCommandBuffers(
 }
 
 void CommandBufferThunk::EvictCommandBuffers() {
-  // TODO(batzor): Uncomment this. Dependency: Profiler
-  // TraceMe trace([&] { return "EvictCommandBuffers"; });
+  tsl::profiler::TraceMe trace([&] { return "EvictCommandBuffers"; });
 
   auto* global_state = GetGlobalState();
   absl::MutexLock global_state_lock(&global_state->mutex);

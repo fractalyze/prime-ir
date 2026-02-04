@@ -34,6 +34,7 @@ limitations under the License.
 #include "unsupported/Eigen/CXX11/Tensor"
 
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/shape_util.h"
 #include "zkx/util.h"
 
@@ -124,8 +125,7 @@ CopyThunk::ParallelBlockParams CopyThunk::ComputeParallelBlockParams(
 
 tsl::AsyncValueRef<Thunk::ExecuteEvent> CopyThunk::Execute(
     const ExecuteParams& params) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
+  tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
 
   const BufferAllocations* allocations = params.buffer_allocations;
 

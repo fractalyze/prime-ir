@@ -37,6 +37,8 @@ limitations under the License.
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 
+#include "xla/tsl/profiler/lib/traceme.h"
+
 namespace zkx {
 
 //===----------------------------------------------------------------------===//
@@ -316,12 +318,11 @@ RendezvousResultType<R> Rendezvous(std::string_view name, const K& key,
       << "Id can't be larger than the number of participating threads"
       << "; id=" << id << "; num_threads=" << num_threads;
 
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] {
-  //   return tsl::profiler::TraceMeEncode(
-  //       "Rendezvous",
-  //       {{"num_threads", num_threads}, {"name", name}, {"id", id}});
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    return tsl::profiler::TraceMeEncode(
+        "Rendezvous",
+        {{"num_threads", num_threads}, {"name", name}, {"id", id}});
+  });
 
   // Signal all waiting threads that new participant has arrived.
   state->cv.SignalAll();
@@ -346,8 +347,7 @@ RendezvousResultType<R> Rendezvous(std::string_view name, const K& key,
     // be notified via `state->ready` flag when result is ready, and we rely on
     // the store to a flag to create a memory barrier that makes access to
     // `state->result` safe without any extra synchronization.
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::TraceMe trace("ExecuteRendezvousCallback");
+    tsl::profiler::TraceMe trace("ExecuteRendezvousCallback");
     absl::Span<const V*> values(state->values.data(), num_threads);
     rendezvous.Complete(key, RendezvousResult<R>::Wrap(fn(values)));
   }

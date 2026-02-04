@@ -22,6 +22,8 @@ limitations under the License.
 #include "absl/strings/str_join.h"
 
 #include "xla/tsl/platform/errors.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/base/logging.h"
 #include "zkx/service/dump.h"
 #include "zkx/status_macros.h"
@@ -116,6 +118,20 @@ absl::Status HloPassPipeline::RunInvariantCheckers(
   return absl::OkStatus();
 }
 
+namespace {
+
+std::string UniqueId(const HloModule& mod) {
+  return std::to_string(mod.unique_id());
+}
+
+std::string UniqueId(const HloModuleGroup& group) {
+  return absl::StrJoin(group.modules(), "-",
+                       [](std::string* out, const HloModule* mod) {
+                         out->append(std::to_string(mod->unique_id()));
+                       });
+}
+}  // namespace
+
 template <typename HloT>
 absl::StatusOr<bool> HloPassPipeline::RunPassesInternal(
     HloT* hlo, const DebugOptions& debug_options,
@@ -127,12 +143,10 @@ absl::StatusOr<bool> HloPassPipeline::RunPassesInternal(
   static constexpr std::string_view kPipelineStart = "pipeline-start";
   static constexpr std::string_view kPipelineEnd = "pipeline-end";
   std::string pipeline_name = std::string(name());
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::ScopedAnnotation annotation{[&] {
-  //   return
-  //   absl::StrFormat("ZkxPassPipeline:#name=%s,module=%s,program_id=%s#",
-  //                          pipeline_name, hlo->name(), UniqueId(*hlo));
-  // }};
+  tsl::profiler::ScopedAnnotation annotation{[&] {
+    return absl::StrFormat("ZkxPassPipeline:#name=%s,module=%s,program_id=%s#",
+                           pipeline_name, hlo->name(), UniqueId(*hlo));
+  }};
 
   TF_RETURN_IF_ERROR(
       RunInvariantCheckers(hlo, kPipelineStart, execution_threads));
@@ -152,15 +166,13 @@ absl::StatusOr<bool> HloPassPipeline::RunPassesInternal(
     std::string pass_name = std::string(pass->name());
     // TODO(chokobole): Uncomment this. Dependency: XLA_SCOPED_LOGGING_TIMER
     // XLA_SCOPED_LOGGING_TIMER(absl::StrCat("HLO pass: ", pass_name));
-    // TODO(chokobole): Uncomment this. Dependency: profiler
-    // tsl::profiler::ScopedAnnotation annotation{[&] {
-    //   return absl::StrFormat("ZkxPass:#name=%s,module=%s,program_id=%s#",
-    //                          pass_name, hlo->name(), UniqueId(*hlo));
-    // }};
+    tsl::profiler::ScopedAnnotation annotation{[&] {
+      return absl::StrFormat("ZkxPass:#name=%s,module=%s,program_id=%s#",
+                             pass_name, hlo->name(), UniqueId(*hlo));
+    }};
     VLOG(1) << "  HLO pass " << pass_name;
     VLOG(2) << "  Module hash " << absl::HashOf(*hlo);
-    // TODO(chokobole): Uncomment this. Dependency: profiler
-    // tsl::profiler::TraceMe traceme(pass->name());
+    tsl::profiler::TraceMe traceme(pass->name());
     if (!pass->IsPassPipeline()) {
       compilation_stats_->StartPass(pass_name);
     }
@@ -281,8 +293,7 @@ absl::StatusOr<bool> HloPassPipeline::Run(
   VLOG(1) << "Running HLO pass pipeline on module " << module->name() << ": "
           << name();
 
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::TraceMe traceme(name());
+  tsl::profiler::TraceMe traceme(name());
   return RunPassesInternal(module, module->config().debug_options(),
                            execution_threads);
 }

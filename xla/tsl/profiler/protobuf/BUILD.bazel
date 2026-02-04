@@ -19,6 +19,16 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 package(default_visibility = ["//visibility:public"])
 
 proto_library(
+    name = "profile_proto",
+    srcs = ["profile.proto"],
+)
+
+cc_proto_library(
+    name = "profile_cc_proto",
+    deps = [":profile_proto"],
+)
+
+proto_library(
     name = "profiled_instructions_proto",
     srcs = ["profiled_instructions.proto"],
 )
@@ -26,4 +36,69 @@ proto_library(
 cc_proto_library(
     name = "profiled_instructions_cc_proto",
     deps = [":profiled_instructions_proto"],
+)
+
+proto_library(
+    name = "profiler_options_proto",
+    srcs = ["profiler_options.proto"],
+)
+
+cc_proto_library(
+    name = "profiler_options_cc_proto",
+    deps = [":profiler_options_proto"],
+)
+
+proto_library(
+    name = "profiler_service_monitor_result_proto",
+    srcs = ["profiler_service_monitor_result.proto"],
+)
+
+cc_proto_library(
+    name = "profiler_service_monitor_result_cc_proto",
+    deps = [":profiler_service_monitor_result_proto"],
+)
+
+proto_library(
+    name = "profiler_service_proto",
+    srcs = ["profiler_service.proto"],
+    deps = [
+        ":profiler_options_proto",
+        ":profiler_service_monitor_result_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "profiler_service_cc_proto",
+    deps = [":profiler_service_proto"],
+)
+
+proto_library(
+    name = "profiler_analysis_proto",
+    srcs = ["profiler_analysis.proto"],
+    deps = [":profiler_service_proto"],
+)
+
+cc_proto_library(
+    name = "profiler_analysis_cc_proto",
+    deps = [":profiler_analysis_proto"],
+)
+
+proto_library(
+    name = "trace_events_proto",
+    srcs = ["trace_events.proto"],
+)
+
+cc_proto_library(
+    name = "trace_events_cc_proto",
+    deps = [":trace_events_proto"],
+)
+
+proto_library(
+    name = "xplane_proto",
+    srcs = ["xplane.proto"],
+)
+
+cc_proto_library(
+    name = "xplane_cc_proto",
+    deps = [":xplane_proto"],
 )

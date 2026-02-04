@@ -20,6 +20,7 @@ limitations under the License.
 #include "absl/memory/memory.h"
 
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/backends/cpu/collectives/cpu_collectives.h"
 #include "zkx/core/collectives/communicator.h"
 #include "zkx/primitive_util.h"
@@ -45,8 +46,7 @@ absl::StatusOr<std::unique_ptr<ReduceScatterThunk>> ReduceScatterThunk::Create(
 
 tsl::AsyncValueRef<ReduceScatterThunk::ExecuteEvent>
 ReduceScatterThunk::Execute(const ExecuteParams& params) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
+  tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
 
   TF_ASSIGN_OR_RETURN(OpDeviceMemory data, GetOpDeviceMemory(params));
 

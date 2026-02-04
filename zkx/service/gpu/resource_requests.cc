@@ -109,13 +109,12 @@ ResourceRequests::AcquireCollectiveCliques(
             << "; id=" << r.id << "; key=" << r.key.ToString();
   }
 
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] {
-  //   return tsl::profiler::TraceMeEncode(
-  //       "AcquireCollectiveCliques",
-  //       {{"num_cliques", cliques_.size()},
-  //        {"use_persistent_cliques", use_persistent_cliques}});
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    return tsl::profiler::TraceMeEncode(
+        "AcquireCollectiveCliques",
+        {{"num_cliques", cliques_.size()},
+         {"use_persistent_cliques", use_persistent_cliques}});
+  });
 
   uint64_t start_micros = tsl::Env::Default()->NowMicros();
 

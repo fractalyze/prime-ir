@@ -43,6 +43,8 @@ zkx_cc_library(
         "//xla/tsl/platform:env",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:statusor",
+        "//xla/tsl/profiler/lib:traceme",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
         "//xla/tsl/util:fixed_option_set_flag",
         "//zkx:literal",
         "//zkx:literal_util",

@@ -31,6 +31,8 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 
+#include "xla/tsl/profiler/lib/traceme.h"
+#include "xla/tsl/profiler/protobuf/xplane.pb.h"
 #include "zkx/client/executable_build_options.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/literal.h"
@@ -83,11 +85,10 @@ class ProfilerInterface {
 // Interface that may optionally returns an XSpace proto after UploadSession()
 // is called. This can be used by caller to get a programmatic handler of the
 // profile data.
-// TODO(chokobole): Uncomment this. Dependency: Profiler
-// class XSpaceProfilerInterface : public ProfilerInterface {
-//  public:
-//   virtual const tensorflow::profiler::XSpace* GetXSpace() = 0;
-// };
+class XSpaceProfilerInterface : public ProfilerInterface {
+ public:
+  virtual const tensorflow::profiler::XSpace* GetXSpace() = 0;
+};
 
 bool AbslParseFlag(std::string_view text, InputFormat* input_format,
                    std::string* error);

@@ -1,0 +1,166 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "connected_traceme",
+    hdrs = ["connected_traceme.h"],
+    deps = [
+        ":context_types",
+        ":traceme",
+        ":traceme_encode",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "context_types",
+    srcs = ["context_types.cc"],
+    hdrs = ["context_types.h"],
+)
+
+zkx_cc_library(
+    name = "nvtx_utils",
+    srcs = ["nvtx_utils_stub.cc"],
+    hdrs = ["nvtx_utils.h"],
+)
+
+zkx_cc_library(
+    name = "profiler_collection",
+    srcs = ["profiler_collection.cc"],
+    hdrs = ["profiler_collection.h"],
+    deps = [
+        ":profiler_interface",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_google_absl//absl/status",
+    ],
+)
+
+zkx_cc_library(
+    name = "profiler_controller",
+    srcs = ["profiler_controller.cc"],
+    hdrs = ["profiler_controller.h"],
+    deps = [
+        ":profiler_interface",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+    ],
+)
+
+zkx_cc_library(
+    name = "profiler_factory",
+    srcs = ["profiler_factory.cc"],
+    hdrs = ["profiler_factory.h"],
+    deps = [
+        ":profiler_controller",
+        ":profiler_interface",
+        "//xla/tsl/profiler/protobuf:profiler_options_cc_proto",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/debugging:leak_check",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_library(
+    name = "profiler_interface",
+    hdrs = ["profiler_interface.h"],
+    deps = [
+        "//xla/tsl/platform:status",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+    ],
+)
+
+zkx_cc_library(
+    name = "profiler_lock",
+    srcs = ["profiler_lock.cc"],
+    hdrs = ["profiler_lock.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/util:env_var",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "scoped_annotation",
+    hdrs = ["scoped_annotation.h"],
+    deps = [
+        ":nvtx_utils",
+        "//xla/tsl/profiler/backends/cpu:annotation_stack",
+        "@com_google_absl//absl/base:core_headers",
+    ],
+)
+
+zkx_cc_library(
+    name = "scoped_memory_debug_annotation",
+    srcs = ["scoped_memory_debug_annotation.cc"],
+    hdrs = ["scoped_memory_debug_annotation.h"],
+)
+
+zkx_cc_library(
+    name = "traceme",
+    hdrs = ["traceme.h"],
+    deps = [
+        ":traceme_encode",
+        "//xla/tsl/platform",
+        "//xla/tsl/profiler/backends/cpu:traceme_recorder",
+        "//xla/tsl/profiler/utils:no_init",
+        "//xla/tsl/profiler/utils:time_utils",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "traceme_encode",
+    hdrs = ["traceme_encode.h"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/log:absl_check",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "lib_unittests",
+    srcs = [
+        "profiler_factory_unittest.cc",
+        "profiler_lock_unittest.cc",
+        "scoped_annotation_unittest.cc",
+        "traceme_encode_unittest.cc",
+    ],
+    deps = [
+        ":profiler_factory",
+        ":profiler_interface",
+        ":profiler_lock",
+        ":scoped_annotation",
+        ":traceme_encode",
+        "//xla/tsl/profiler/protobuf:profiler_options_cc_proto",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)

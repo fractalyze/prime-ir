@@ -43,6 +43,7 @@ limitations under the License.
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/hash.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/core/collectives/clique_id.h"
 #include "zkx/core/collectives/collectives.h"
 #include "zkx/core/collectives/communicator.h"
@@ -215,8 +216,7 @@ absl::StatusOr<std::shared_ptr<LockableGpuClique::Lock>> InitializeGpuClique(
   // gives access to clique communicators.
   auto initialize = [&](absl::Span<const RendezvousArg* const> args)
       -> absl::StatusOr<LockableGpuClique::Lock> {
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::TraceMe trace("InitializeGpuClique");
+    tsl::profiler::TraceMe trace("InitializeGpuClique");
 
     CliqueIds clique_ids;
     const auto& subkeys = clique_key.GetSubKeys(nroots);
@@ -370,8 +370,7 @@ absl::StatusOr<std::shared_ptr<LockableGpuClique::Lock>> InitializeGpuClique(
   // gives access to clique communicators.
   auto split = [&](absl::Span<const RankPair* const> rank_pairs)
       -> absl::StatusOr<LockableGpuClique::Lock> {
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // tsl::profiler::TraceMe trace("SplitGpuClique");
+    tsl::profiler::TraceMe trace("SplitGpuClique");
 
     // Collect mapping from ranks in parent clique to ranks in a new clique.
     absl::btree_map<RankId, RankId> rank_mapping;
@@ -472,14 +471,12 @@ absl::StatusOr<std::shared_ptr<LockableGpuClique::Lock>> AcquireGpuClique(
           << "; acquired_cliques=" << acquired_cliques.size()
           << "; max_nchannels=" << max_nchannels;
 
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] {
-  //   return tsl::profiler::TraceMeEncode(
-  //       "AcquireGpuClique", {{"rank", rank.value()},
-  //                            {"num_local_participants",
-  //                            num_local_participants},
-  //                            {"clique_key", clique_key.ToString()}});
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    return tsl::profiler::TraceMeEncode(
+        "AcquireGpuClique", {{"rank", rank.value()},
+                             {"num_local_participants", num_local_participants},
+                             {"clique_key", clique_key.ToString()}});
+  });
 
   // Get the clique lock via the rendezvous to guarantee that all clique
   // members participate in ZKX run.
@@ -493,8 +490,7 @@ absl::StatusOr<std::shared_ptr<LockableGpuClique::Lock>> AcquireGpuClique(
       Rendezvous<absl::StatusOr<LockableGpuClique::Lock>>(
           rendezvous_name, rendezvous_key, num_local_participants,
           [&] {
-            // TODO(chokobole): Uncomment this. Dependency: Profiler
-            // tsl::profiler::TraceMe trace("LockGpuClique");
+            tsl::profiler::TraceMe trace("LockGpuClique");
             ProcessGpuCliques& cliques = GetProcessGpuCliques();
 
             // Returns nullptr if we do not have a clique for `clique_key`.

@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "xla/tsl/platform/numbers.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
 #include "zkx/service/heap_simulator/heap_simulator.h"
 
 namespace zkx {
@@ -722,11 +723,10 @@ absl::StatusOr<HloSchedule> ScheduleModule(
     const ModuleSchedulerAlgorithm& algorithm,
     const absl::flat_hash_set<std::string_view>& execution_threads,
     int64_t* peak_memory) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::ScopedAnnotation annotation([&] {
-  //   return absl::StrFormat("ZkxMemoryScheduler:#module=%s,program_id=%d#",
-  //                          module->name(), module->unique_id());
-  // });
+  tsl::profiler::ScopedAnnotation annotation([&] {
+    return absl::StrFormat("ZkxMemoryScheduler:#module=%s,program_id=%d#",
+                           module->name(), module->unique_id());
+  });
   TF_ASSIGN_OR_RETURN(std::unique_ptr<TuplePointsToAnalysis> points_to_analysis,
                       TuplePointsToAnalysis::Run(module));
   TF_ASSIGN_OR_RETURN(std::unique_ptr<HloAliasAnalysis> alias_analysis,

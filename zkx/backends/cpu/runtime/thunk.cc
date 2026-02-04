@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "absl/debugging/leak_check.h"
 
+#include "xla/tsl/profiler/lib/traceme_encode.h"
 #include "zkx/backends/cpu/collectives/in_process_collectives.h"
 #include "zkx/service/cpu/cpu_executable_run_options.h"
 
@@ -107,6 +108,14 @@ Thunk::ExecuteSession::ExecuteSession(int64_t max_workers,
     : lock_(std::make_shared<std::nullopt_t>(std::nullopt)),
       max_workers_(max_workers),
       split_threshold_(split_threshold) {}
+
+// Encodes thunk info into the TraceMe compatible format.
+std::string Thunk::TraceMeEncode() const {
+  return tsl::profiler::TraceMeEncode(info_.op_name,
+                                      {{"hlo_op", info_.op_name},
+                                       {"hlo_module", info_.module_name},
+                                       {"program_id", info_.module_id}});
+}
 
 ThunkSequence::ThunkSequence(std::unique_ptr<Thunk> thunk) {
   push_back(std::move(thunk));

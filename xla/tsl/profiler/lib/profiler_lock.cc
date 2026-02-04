@@ -1,0 +1,73 @@
+/* Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+Copyright 2026 The ZKX Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+#include "xla/tsl/profiler/lib/profiler_lock.h"
+
+#include <atomic>
+
+#include "absl/base/optimization.h"
+#include "absl/status/statusor.h"
+
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/util/env_var.h"
+
+namespace tsl::profiler {
+namespace {
+
+// Track whether there's an active profiler session.
+// Prevents another profiler session from creating ProfilerInterface(s).
+std::atomic<int> g_session_active = ATOMIC_VAR_INIT(0);
+
+// g_session_active implementation must be lock-free for faster execution of
+// the ProfilerLock API.
+static_assert(ATOMIC_INT_LOCK_FREE == 2, "Assumed atomic<int> was lock free");
+
+}  // namespace
+
+// static
+bool ProfilerLock::HasActiveSession() {
+  return g_session_active.load(std::memory_order_relaxed) != 0;
+}
+
+// static
+absl::StatusOr<ProfilerLock> ProfilerLock::Acquire() {
+  // Use environment variable to permanently lock the profiler.
+  // This allows running ZKX under an external profiling tool with all
+  // built-in profiling disabled.
+  static bool zkx_profiler_disabled = [] {
+    bool disabled = false;
+    ReadBoolFromEnvVar("ZKX_DISABLE_PROFILING", false, &disabled).IgnoreError();
+    return disabled;
+  }();
+  if (ABSL_PREDICT_FALSE(zkx_profiler_disabled)) {
+    return absl::AlreadyExistsError(
+        "ZKX Profiler is permanently disabled by env var "
+        "ZKX_DISABLE_PROFILING.");
+  }
+  int already_active = g_session_active.exchange(1, std::memory_order_acq_rel);
+  if (already_active) {
+    return absl::AlreadyExistsError(kProfilerLockContention);
+  }
+  return ProfilerLock(/*active=*/true);
+}
+
+void ProfilerLock::ReleaseIfActive() {
+  if (active_) {
+    g_session_active.store(0, std::memory_order_release);
+    active_ = false;
+  }
+}
+
+}  // namespace tsl::profiler

@@ -21,6 +21,7 @@ limitations under the License.
 #include "absl/memory/memory.h"
 
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 
 namespace zkx::cpu {
 
@@ -39,8 +40,7 @@ CallThunk::CallThunk(Info info, ThunkExecutor called_executor)
 
 tsl::AsyncValueRef<Thunk::ExecuteEvent> CallThunk::Execute(
     const ExecuteParams& params) {
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
+  tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
   return called_executor_.Execute(params);
 }
 

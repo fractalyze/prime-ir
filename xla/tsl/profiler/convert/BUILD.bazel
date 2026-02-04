@@ -1,0 +1,106 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "post_process_single_host_xplane",
+    srcs = ["post_process_single_host_xplane.cc"],
+    hdrs = ["post_process_single_host_xplane.h"],
+    deps = [
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "//xla/tsl/profiler/utils:timestamp_utils",
+        "//xla/tsl/profiler/utils:xplane_schema",
+        "//xla/tsl/profiler/utils:xplane_utils",
+        "@com_google_absl//absl/log",
+    ],
+)
+
+zkx_cc_library(
+    name = "trace_container",
+    srcs = ["trace_container.cc"],
+    hdrs = ["trace_container.h"],
+    deps = [
+        "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
+
+zkx_cc_library(
+    name = "trace_events_to_json",
+    srcs = ["trace_events_to_json.cc"],
+    hdrs = ["trace_events_to_json.h"],
+    deps = [
+        ":trace_container",
+        "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
+        "//xla/tsl/profiler/utils:format_utils",
+        "//xla/tsl/profiler/utils:math_utils",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
+        "@jsoncpp",
+    ],
+)
+
+zkx_cc_library(
+    name = "xplane_to_trace_events",
+    srcs = ["xplane_to_trace_events.cc"],
+    hdrs = ["xplane_to_trace_events.h"],
+    deps = [
+        ":trace_container",
+        "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "//xla/tsl/profiler/utils:tf_xplane_visitor",
+        "//xla/tsl/profiler/utils:trace_utils",
+        "//xla/tsl/profiler/utils:xplane_schema",
+        "//xla/tsl/profiler/utils:xplane_utils",
+        "//xla/tsl/profiler/utils:xplane_visitor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "zkx_op_utils",
+    srcs = ["zkx_op_utils.cc"],
+    hdrs = ["zkx_op_utils.h"],
+    deps = [
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "convert_unittests",
+    srcs = [
+        "trace_container_unittest.cc",
+        "trace_events_to_json_unittest.cc",
+        "xplane_to_trace_events_unittest.cc",
+        "zkx_op_utils_unittest.cc",
+    ],
+    deps = [
+        ":trace_container",
+        ":trace_events_to_json",
+        ":xplane_to_trace_events",
+        ":zkx_op_utils",
+        "//xla/tsl/profiler/protobuf:trace_events_cc_proto",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "//xla/tsl/profiler/utils:trace_utils",
+        "//xla/tsl/profiler/utils:xplane_builder",
+        "//xla/tsl/profiler/utils:xplane_schema",
+        "@jsoncpp",
+    ],
+)

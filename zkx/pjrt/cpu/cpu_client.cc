@@ -25,6 +25,8 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/connected_traceme.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/backends/cpu/codegen/cpu_features.h"
 #include "zkx/backends/cpu/runtime/buffer_allocations.h"
 #include "zkx/backends/cpu/runtime/thread_pool_task_runner.h"
@@ -680,8 +682,7 @@ TfrtCpuClient::CompileInternal(
     const std::vector<const Shape*>& argument_layout_pointers,
     LayoutCanonicalizationCallback layout_canonicalization_callback,
     CompileOptions options) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuClient::Compile");
+  tsl::profiler::TraceMe traceme("TfrtCpuClient::Compile");
   auto input_options = options;
 
   TF_RETURN_IF_ERROR(options.ApplyAllOptionOverrides());
@@ -865,8 +866,7 @@ absl::StatusOr<std::unique_ptr<PjRtBuffer>> TfrtCpuClient::CreateErrorBuffer(
 absl::StatusOr<std::unique_ptr<PjRtBuffer>>
 TfrtCpuClient::CreateUninitializedBuffer(const Shape& shape,
                                          PjRtMemorySpace* memory_space) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuClient::CreateUninitializedBuffer");
+  tsl::profiler::TraceMe traceme("TfrtCpuClient::CreateUninitializedBuffer");
   VLOG(1) << "TfrtCpuClient::CreateUninitializedBuffer: shape: "
           << shape.DebugString()
           << " memory_space: " << memory_space->DebugString();
@@ -944,8 +944,7 @@ absl::StatusOr<std::unique_ptr<PjRtBuffer>> TfrtCpuClient::BufferFromHostBuffer(
     PjRtMemorySpace* memory_space, const Layout* device_layout) {
   CHECK_EQ(memory_space->devices().size(), 1);
   PjRtDevice* device = memory_space->devices().front();
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuClient::BufferFromHostBuffer");
+  tsl::profiler::TraceMe traceme("TfrtCpuClient::BufferFromHostBuffer");
   Shape shape = ShapeUtil::MakeShape(type, dims);
   VLOG(2) << "TfrtCpuClient::BufferFromHostBuffer: shape: " << shape.ToString()
           << " device: " << device->DebugString();
@@ -973,8 +972,7 @@ TfrtCpuClient::BufferFromHostLiteral(const LiteralSlice& literal,
   CHECK_EQ(memory_space->devices().size(), 1);
   PjRtDevice* device = memory_space->devices().front();
 
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuClient::BufferFromHostLiteral");
+  tsl::profiler::TraceMe traceme("TfrtCpuClient::BufferFromHostLiteral");
   VLOG(1) << "TfrtCpuClient::BufferFromHostLiteral: shape: "
           << literal.shape().DebugString()
           << " device: " << device->DebugString();
@@ -1034,8 +1032,7 @@ absl::StatusOr<std::unique_ptr<PjRtBuffer>> TfrtCpuBuffer::CopyToMemorySpace(
     PjRtMemorySpace* dst_memory_space) {
   CHECK_EQ(dst_memory_space->devices().size(), 1);
   PjRtDevice* dst_device = dst_memory_space->devices().front();
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuBuffer::CopyToDevice");
+  tsl::profiler::TraceMe traceme("TfrtCpuBuffer::CopyToDevice");
   // TODO(zhangqiaorjc): Remove this restriction after removing the test that
   // explicitly asserts this.
   if (dst_device == device_) {
@@ -1312,8 +1309,7 @@ absl::StatusOr<PjRtLoadedExecutable::Result> TfrtCpuExecutable::ExecuteHelper(
     const RunId& run_id, const ExecuteOptions& options,
     tsl::AsyncValueRef<CpuEvent> last_collective_launch_event, bool fill_future,
     TfrtCpuDevice* device) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuExecutable::ExecuteHelper");
+  tsl::profiler::TraceMe traceme("TfrtCpuExecutable::ExecuteHelper");
 
   std::shared_ptr<DeviceAssignment> device_assignment;
   if (device == nullptr) {
@@ -1600,9 +1596,8 @@ absl::StatusOr<PjRtLoadedExecutable::Result> TfrtCpuExecutable::ExecuteHelper(
 
       thunks_execute_event = cpu_executable->thunks().Execute(execute_params);
 
-      // TODO(chokobole): Uncomment this. Dependency: Profiler
-      // tsl::profiler::TraceMe trace(
-      //     "ThunkExecutor::Execute (wait for completion)");
+      tsl::profiler::TraceMe trace(
+          "ThunkExecutor::Execute (wait for completion)");
       tsl::BlockUntilReady(thunks_execute_event);
 
     } else {
@@ -1743,9 +1738,8 @@ absl::StatusOr<PjRtLoadedExecutable::Result> TfrtCpuExecutable::ExecuteHelper(
               auto thunks_execute_event =
                   cpu_executable->thunks().Execute(execute_params);
 
-              // TODO(chokobole): Uncomment this. Dependency: Profiler
-              // tsl::profiler::TraceMe trace(
-              //     "ThunkExecutor::Execute (wait for completion)");
+              tsl::profiler::TraceMe trace(
+                  "ThunkExecutor::Execute (wait for completion)");
               tsl::BlockUntilReady(thunks_execute_event);
               status = thunks_execute_event.IsError()
                            ? thunks_execute_event.GetError()
@@ -1840,18 +1834,16 @@ TfrtCpuExecutable::Execute(
     absl::Span<const std::vector<PjRtBuffer*>> argument_handles,
     const ExecuteOptions& options,
     std::optional<std::vector<PjRtFuture<>>>& returned_futures) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuExecutable::Execute");
+  tsl::profiler::TraceMe traceme("TfrtCpuExecutable::Execute");
   if (device_assignment_ == nullptr) {
     return absl::InvalidArgumentError(
         "Execute expects a non-null device_assignment");
   }
 
   RunId run_id;
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMeProducer activity("TfrtCpuExecutable::Execute",
-  //                                         tsl::profiler::ContextType::kPjRt,
-  //                                         run_id.ToInt());
+  tsl::profiler::TraceMeProducer activity("TfrtCpuExecutable::Execute",
+                                          tsl::profiler::ContextType::kPjRt,
+                                          run_id.ToInt());
 
   const int num_addressable_devices = addressable_devices_.size();
 
@@ -1970,8 +1962,7 @@ TfrtCpuExecutable::ExecuteSharded(
     absl::Span<PjRtBuffer* const> argument_handles, PjRtDevice* device,
     const ExecuteOptions& options, std::optional<PjRtFuture<>>& returned_future,
     bool fill_future) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuExecutable::ExecuteSharded");
+  tsl::profiler::TraceMe traceme("TfrtCpuExecutable::ExecuteSharded");
   if (device_assignment_ == nullptr) {
     return absl::InvalidArgumentError(
         "ExecuteShard expects a non-null device_assignment");
@@ -2003,8 +1994,7 @@ TfrtCpuExecutable::ExecutePortable(
     absl::Span<PjRtBuffer* const> argument_handles, PjRtDevice* device,
     const ExecuteOptions& options, std::optional<PjRtFuture<>>& returned_future,
     bool fill_future) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("TfrtCpuExecutable::ExecutePortable");
+  tsl::profiler::TraceMe traceme("TfrtCpuExecutable::ExecutePortable");
   if (device_assignment_ != nullptr) {
     return absl::InvalidArgumentError(
         "ExecutePortable gets a non-portable executable");

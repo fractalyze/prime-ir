@@ -32,6 +32,8 @@ limitations under the License.
 
 #include "xla/tsl/platform/path.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/service/dump.h"
 #include "zkx/service/gpu/buffer_sharing.h"
 #include "zkx/service/gpu/llvm_gpu_backend/nvptx_backend.h"
@@ -274,13 +276,11 @@ NVPTXCompiler::CompileTargetBinary(
   //     absl::StrCat("NVPTXCompiler::CompileTargetBinary - PtxToCubin for ",
   //                  module_name),
   //     !options.is_autotuning_compilation);
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::ScopedAnnotation annotation([&] {
-  //   return absl::StrFormat("ZkxCompileGpuAsm:#module=%s#", module_name);
-  // });
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::TraceMe activity("PTX->CUBIN",
-  //                                 tsl::profiler::TraceMeLevel::kInfo);
+  tsl::profiler::ScopedAnnotation annotation([&] {
+    return absl::StrFormat("ZkxCompileGpuAsm:#module=%s#", module_name);
+  });
+  tsl::profiler::TraceMe activity("PTX->CUBIN",
+                                  tsl::profiler::TraceMeLevel::kInfo);
 
   const auto record_ptx_to_cubin_metric = [&]() {
     // This won't record values for calls that error out (because if they

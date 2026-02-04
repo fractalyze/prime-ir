@@ -58,6 +58,8 @@ limitations under the License.
 #include "xla/tsl/platform/path.h"
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/thread_pool.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/base/logging.h"
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
@@ -295,8 +297,7 @@ void LogDebugOptions(HloModule* hlo_module) {
 absl::Status GpuCompiler::OptimizeHloModule(
     HloModule* hlo_module, se::StreamExecutor* stream_exec,
     const CompileOptions& options, const TargetConfig& gpu_target_config) {
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::TraceMe traceme("GpuCompiler::OptimizeHloModule");
+  tsl::profiler::TraceMe traceme("GpuCompiler::OptimizeHloModule");
 
   CheckNotScheduled(hlo_module);
   LogDebugOptions(hlo_module);
@@ -465,10 +466,9 @@ absl::StatusOr<std::unique_ptr<HloModule>> GpuCompiler::RunHloPasses(
   // XLA_SCOPED_LOGGING_TIMER_IF(
   //     absl::StrCat("GpuCompiler::RunHloPasses for ", module->name()),
   //     !options.is_autotuning_compilation);
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::TraceMe activity(
-  //     [&] { return absl::StrCat("HLO Transforms:", module->name()); },
-  //     tsl::profiler::TraceMeLevel::kInfo);
+  tsl::profiler::TraceMe activity(
+      [&] { return absl::StrCat("HLO Transforms:", module->name()); },
+      tsl::profiler::TraceMeLevel::kInfo);
 
   TF_RETURN_IF_ERROR(OptimizeHloModule(module.get(),
                                        is_deviceless ? nullptr : stream_exec,
@@ -896,8 +896,7 @@ GpuCompiler::CompileToBackendResult(
     HloModule* module, llvm::LLVMContext* llvm_context,
     se::StreamExecutor* executor, const CompileOptions& options,
     const se::DeviceDescription& gpu_device_info) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe traceme("GpuCompiler::CompileToBackendResult");
+  tsl::profiler::TraceMe traceme("GpuCompiler::CompileToBackendResult");
 
   // TODO(chokobole): Uncomment this. Dependency: RunPreSchedulingPasses
   // TF_RETURN_IF_ERROR(RunPreSchedulingPasses(module, executor,
@@ -991,11 +990,10 @@ GpuCompiler::CompileToBackendResult(
 absl::StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
     std::unique_ptr<HloModule> module, se::StreamExecutor* stream_exec,
     const CompileOptions& options) {
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::ScopedAnnotation backend_annotation{[&] {
-  //   return absl::StrFormat("ZkxCompileBackend:#module=%s,program_id=%d#",
-  //                          module->name(), module->unique_id());
-  // }};
+  tsl::profiler::ScopedAnnotation backend_annotation{[&] {
+    return absl::StrFormat("ZkxCompileBackend:#module=%s,program_id=%d#",
+                           module->name(), module->unique_id());
+  }};
 
   // TODO(chokobole): Uncomment this. Dependency: RecordGpuCompilerStacktrace
   // RecordGpuCompilerStacktrace();
@@ -1069,11 +1067,10 @@ absl::StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
   int64_t debug_buffer_assignment_show_max =
       module->config().debug_options().zkx_debug_buffer_assignment_show_max();
 
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::ScopedAnnotation annotation([&] {
-  //   return absl::StrFormat("ZkxCreateGpuExecutable:#module=%s#",
-  //                          module->name());
-  // });
+  tsl::profiler::ScopedAnnotation annotation([&] {
+    return absl::StrFormat("ZkxCreateGpuExecutable:#module=%s#",
+                           module->name());
+  });
   TF_ASSIGN_OR_RETURN(
       auto gpu_executable,
       GpuExecutable::Create(GpuExecutable::Params{
@@ -1141,11 +1138,10 @@ GpuCompiler::CompileAheadOfTime(std::unique_ptr<HloModuleGroup> module_group,
 
   for (std::unique_ptr<HloModule>& module : modules) {
     if (!module->has_schedule()) {
-      // TODO(chokobole): Uncomment this. Dependency: profiler
-      // tsl::profiler::ScopedAnnotation annotation{[&] {
-      //   return absl::StrFormat("ZkxCompile:#module=%s,program_id=%d#",
-      //                          module->name(), module->unique_id());
-      // }};
+      tsl::profiler::ScopedAnnotation annotation{[&] {
+        return absl::StrFormat("ZkxCompile:#module=%s,program_id=%d#",
+                               module->name(), module->unique_id());
+      }};
       CompileOptions compile_options;
       compile_options.device_allocator = options.device_allocator();
       compile_options.target_config = options.target_config();

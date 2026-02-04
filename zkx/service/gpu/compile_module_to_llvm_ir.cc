@@ -27,6 +27,7 @@ limitations under the License.
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_format.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -37,6 +38,7 @@ limitations under the License.
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/path.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/scoped_annotation.h"
 #include "zkx/hlo/analysis/hlo_ordering.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/service/dump.h"
@@ -141,11 +143,10 @@ absl::StatusOr<CompileModuleResults> CompileModuleToLlvmIr(
   }
 
   {
-    // TODO(chokobole): Uncomment this. Dependency: profiler
-    // tsl::profiler::ScopedAnnotation annotation([&] {
-    //   return absl::StrFormat("ZkxBufferAssignment:#module=%s,program_id=%d#",
-    //                          hlo_module->name(), hlo_module->unique_id());
-    // });
+    tsl::profiler::ScopedAnnotation annotation([&] {
+      return absl::StrFormat("ZkxBufferAssignment:#module=%s,program_id=%d#",
+                             hlo_module->name(), hlo_module->unique_id());
+    });
     TF_ASSIGN_OR_RETURN(
         results.buffer_assignment,
         BufferAssigner::Run(
@@ -205,11 +206,10 @@ absl::StatusOr<CompileModuleResults> CompileModuleToLlvmIr(
 
   results.module_name = hlo_module->name();
 
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::ScopedAnnotation annotation([&] {
-  //   return absl::StrFormat("ZkxEmitLlvmIr:#module=%s,program_id=%d#",
-  //                          hlo_module->name(), hlo_module->unique_id());
-  // });
+  tsl::profiler::ScopedAnnotation annotation([&] {
+    return absl::StrFormat("ZkxEmitLlvmIr:#module=%s,program_id=%d#",
+                           hlo_module->name(), hlo_module->unique_id());
+  });
   IrEmitterContext ir_emitter_context(
       hlo_module, results.buffer_assignment.get(),
       results.execution_stream_assignment.get(), platform_name, gpu_device_info,

@@ -476,6 +476,7 @@ zkx_cc_library(
         ":cuda_status",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:statusor",
+        "//xla/tsl/profiler/lib:nvtx_utils",
         "//zkx/stream_executor:activate_context",
         "//zkx/stream_executor:device_memory",
         "//zkx/stream_executor:event",

@@ -29,6 +29,7 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 
 namespace zkx::cpu {
 
@@ -56,8 +57,7 @@ WhileThunk::WhileThunk(Info info, BufferAllocation::Slice cond_buffer,
 
 tsl::AsyncValueRef<Thunk::ExecuteEvent> WhileThunk::Execute(
     const ExecuteParams& params) {
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
+  tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
 
   VLOG(3) << absl::StreamFormat(
       "While: #trip_count=%s",

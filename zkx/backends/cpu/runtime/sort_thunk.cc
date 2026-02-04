@@ -39,6 +39,7 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/backends/cpu/runtime/function_library.h"
 #include "zkx/layout_util.h"
 #include "zkx/primitive_util.h"
@@ -848,8 +849,7 @@ absl::Status SortInplace(absl::Span<se::DeviceMemoryBase> data,
 
 tsl::AsyncValueRef<SortThunk::ExecuteEvent> SortThunk::Execute(
     const ExecuteParams& params) {
-  // TODO(chokobole): Uncomment this. Dependency: profiler
-  // tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
+  tsl::profiler::TraceMe trace([&] { return TraceMeEncode(); });
 
   VLOG(3) << absl::StreamFormat(
       "Sort %d inputs along dimension %d (is_stable=%v)", inputs_.size(),

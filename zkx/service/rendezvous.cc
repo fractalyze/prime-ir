@@ -41,17 +41,15 @@ bool WaitForReadyWithTimeout(RendezvousStateSynchronization& state,
   // Keep checking if the rendezvous is ready inside a loop and update TraceMe
   // annotation to track the rendezvous progress.
   while (state.ready.load() == false) {
-    // TODO(chokobole): Uncomment this. Dependency: Profiler
-    // size_t num_pending = state.num_threads - state.ack.load();
+    size_t num_pending = state.num_threads - state.ack.load();
 
-    // tsl::profiler::TraceMe trace([&] {
-    //   if (num_pending == 0) {
-    //     return absl::StrFormat("Wait for rendezvous callback");
-    //   } else {
-    //     return absl::StrFormat("Wait %d of %d", num_pending,
-    //     state.num_threads);
-    //   }
-    // });
+    tsl::profiler::TraceMe trace([&] {
+      if (num_pending == 0) {
+        return absl::StrFormat("Wait for rendezvous callback");
+      } else {
+        return absl::StrFormat("Wait %d of %d", num_pending, state.num_threads);
+      }
+    });
 
     bool timed_out = state.cv.WaitWithTimeout(&state.mutex, timeout);
     bool ready = state.ready.load();
@@ -82,11 +80,10 @@ void AwaitAndLogIfStuck(RendezvousStateSynchronization& state, int32_t id,
   }
 
   // If we are stuck, log a warning and add a trace annotation.
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  // tsl::profiler::TraceMe trace([&] {
-  //   return absl::StrFormat("Stuck Waiting for %d of %d",
-  //                          state.num_threads - state.ack, state.num_threads);
-  // });
+  tsl::profiler::TraceMe trace([&] {
+    return absl::StrFormat("Stuck Waiting for %d of %d",
+                           state.num_threads - state.ack, state.num_threads);
+  });
 
   // Check if all rendezvous participants arrived to the rendezvous point and
   // incremented `ack` counter. We still can be stuck because the leader is

@@ -41,6 +41,7 @@ limitations under the License.
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 
+#include "xla/tsl/profiler/lib/traceme.h"
 #include "zkx/backends/cpu/collectives/cpu_clique_key.h"
 #include "zkx/backends/cpu/collectives/cpu_cliques.h"
 #include "zkx/backends/cpu/collectives/cpu_collectives.h"
@@ -529,20 +530,17 @@ ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY int64_t __zkx_cpu_runtime_TracingStart(
     const void* /* ExecutableRunOptions*  run_options_ptr*/, const char* name,
     const char* hlo_module, int64_t program_id) {
   VLOG(3) << "TracingStart " << name;
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  //   auto trace_in =
-  //       tsl::profiler::TraceMeEncode(name, {{"hlo_op", name},
-  //                                           {"hlo_module", hlo_module},
-  //                                           {"program_id", program_id}});
-  //   return tsl::profiler::TraceMe::ActivityStart(trace_in);
-  return 0;
+  auto trace_in =
+      tsl::profiler::TraceMeEncode(name, {{"hlo_op", name},
+                                          {"hlo_module", hlo_module},
+                                          {"program_id", program_id}});
+  return tsl::profiler::TraceMe::ActivityStart(trace_in);
 }
 
 ABSL_ATTRIBUTE_NO_SANITIZE_MEMORY void __zkx_cpu_runtime_TracingEnd(
     const void* /* ExecutableRunOptions*  run_options_ptr*/, int64_t id) {
   VLOG(3) << "TracingEnd " << id;
-  // TODO(chokobole): Uncomment this. Dependency: Profiler
-  //   tsl::profiler::TraceMe::ActivityEnd(id);
+  tsl::profiler::TraceMe::ActivityEnd(id);
 }
 
 void* __zkx_cpu_runtime_AcquireInfeedBufferForDequeue(
