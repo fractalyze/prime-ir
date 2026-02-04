@@ -911,24 +911,19 @@ absl::StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
       break;
     }
     case HloOpcode::kGather: {
-      // TODO(chokobole): Uncomment this. Dependency: CreateGather
-      // TF_RET_CHECK(proto.has_gather_dimension_numbers())
-      //     << "Gather instruction should have GatherDimensionNumbers set.";
-      // auto gather_dimension_numbers =
-      // std::make_unique<GatherDimensionNumbers>(
-      //     proto.gather_dimension_numbers());
-      // std::vector<int64_t> gather_slice_sizes;
-      // const auto& slice_sizes = proto.gather_slice_sizes();
-      // gather_slice_sizes.reserve(slice_sizes.size());
-      // for (int64_t bound : slice_sizes) {
-      //   gather_slice_sizes.push_back(bound);
-      // }
-      // instruction = CreateGather(shape, operands(0), operands(1),
-      //                            *gather_dimension_numbers,
-      //                            gather_slice_sizes,
-      //                            proto.indices_are_sorted());
-      return absl::UnimplementedError(
-          "HloInstruction::CreateFromProto: Gather not implemented");
+      TF_RET_CHECK(proto.has_gather_dimension_numbers())
+          << "Gather instruction should have GatherDimensionNumbers set.";
+      auto gather_dimension_numbers = std::make_unique<GatherDimensionNumbers>(
+          proto.gather_dimension_numbers());
+      std::vector<int64_t> gather_slice_sizes;
+      const auto& slice_sizes = proto.gather_slice_sizes();
+      gather_slice_sizes.reserve(slice_sizes.size());
+      for (int64_t bound : slice_sizes) {
+        gather_slice_sizes.push_back(bound);
+      }
+      instruction = CreateGather(shape, operands(0), operands(1),
+                                 *gather_dimension_numbers, gather_slice_sizes,
+                                 proto.indices_are_sorted());
       break;
     }
     case HloOpcode::kScatter: {
@@ -1716,6 +1711,16 @@ std::unique_ptr<HloInstruction> HloInstruction::CreateTuple(
   }
   Shape tuple_shape = ShapeUtil::MakeTupleShapeWithPtrs(element_shapes);
   return CreateVariadic(tuple_shape, HloOpcode::kTuple, elements);
+}
+
+// static
+std::unique_ptr<HloInstruction> HloInstruction::CreateGather(
+    const Shape& shape, HloInstruction* operand, HloInstruction* start_indices,
+    const GatherDimensionNumbers& gather_dim_numbers,
+    absl::Span<const int64_t> slice_sizes, bool indices_are_sorted) {
+  return std::make_unique<HloGatherInstruction>(shape, operand, start_indices,
+                                                gather_dim_numbers, slice_sizes,
+                                                indices_are_sorted);
 }
 
 // static
@@ -4669,6 +4674,14 @@ int64_t HloInstruction::slice_sizes(int64_t dimension) const {
 
 const std::vector<int64_t>& HloInstruction::dynamic_slice_sizes() const {
   return Cast<HloDynamicSliceInstruction>(this)->dynamic_slice_sizes();
+}
+
+const GatherDimensionNumbers& HloInstruction::gather_dimension_numbers() const {
+  return Cast<HloGatherInstruction>(this)->gather_dimension_numbers();
+}
+
+absl::Span<const int64_t> HloInstruction::gather_slice_sizes() const {
+  return Cast<HloGatherInstruction>(this)->gather_slice_sizes();
 }
 
 const ScatterDimensionNumbers& HloInstruction::scatter_dimension_numbers()

@@ -1597,6 +1597,38 @@ absl::StatusOr<ZkxOp> ZkxBuilder::WhileInternal(const Shape& shape,
   return AddInstruction(std::move(instr), HloOpcode::kWhile, {init});
 }
 
+ZkxOp ZkxBuilder::Gather(ZkxOp input, ZkxOp start_indices,
+                         const GatherDimensionNumbers& dimension_numbers,
+                         absl::Span<const int64_t> slice_sizes,
+                         bool indices_are_sorted) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    TF_ASSIGN_OR_RETURN(const Shape* input_shape, GetShapePtr(input));
+    TF_ASSIGN_OR_RETURN(const Shape* start_indices_shape,
+                        GetShapePtr(start_indices));
+    TF_ASSIGN_OR_RETURN(Shape shape, ShapeInference::InferGatherShape(
+                                         *input_shape, *start_indices_shape,
+                                         dimension_numbers, slice_sizes));
+    return GatherInternal(shape, input, start_indices, dimension_numbers,
+                          slice_sizes, indices_are_sorted);
+  });
+}
+
+absl::StatusOr<ZkxOp> ZkxBuilder::GatherInternal(
+    const Shape& shape, ZkxOp input, ZkxOp start_indices,
+    const GatherDimensionNumbers& dimension_numbers,
+    absl::Span<const int64_t> slice_sizes, bool indices_are_sorted) {
+  HloInstructionProto instr;
+  instr.set_indices_are_sorted(indices_are_sorted);
+  *instr.mutable_shape() = shape.ToProto();
+  *instr.mutable_gather_dimension_numbers() = dimension_numbers;
+  for (int64_t bound : slice_sizes) {
+    instr.add_gather_slice_sizes(bound);
+  }
+
+  return AddInstruction(std::move(instr), HloOpcode::kGather,
+                        {input, start_indices});
+}
+
 ZkxOp ZkxBuilder::Scatter(ZkxOp input, ZkxOp scatter_indices, ZkxOp updates,
                           const ZkxComputation& update_computation,
                           const ScatterDimensionNumbers& dimension_numbers,
@@ -2624,6 +2656,13 @@ ZkxOp Conditional(const ZkxOp branch_index,
                   absl::Span<const ZkxOp> branch_operands) {
   return branch_index.builder()->Conditional(branch_index, branch_computations,
                                              branch_operands);
+}
+
+ZkxOp Gather(const ZkxOp input, const ZkxOp start_indices,
+             const GatherDimensionNumbers& dimension_numbers,
+             absl::Span<const int64_t> slice_sizes, bool indices_are_sorted) {
+  return input.builder()->Gather(input, start_indices, dimension_numbers,
+                                 slice_sizes, indices_are_sorted);
 }
 
 ZkxOp Scatter(const ZkxOp input, const ZkxOp scatter_indices,

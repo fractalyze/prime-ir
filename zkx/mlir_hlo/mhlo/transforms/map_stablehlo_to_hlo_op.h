@@ -90,8 +90,7 @@ MAP_STABLEHLO_TO_HLO(DynamicSliceOp)
 MAP_STABLEHLO_TO_HLO(DynamicUpdateSliceOp)
 // TODO(chokobole): Uncomment this. Dependency: stablehlo::EinsumOp
 // MAP_STABLEHLO_TO_HLO(EinsumOp)
-// TODO(chokobole): Uncomment this. Dependency: stablehlo::GatherOp
-// MAP_STABLEHLO_TO_HLO(GatherOp)
+MAP_STABLEHLO_TO_HLO(GatherOp)
 MAP_STABLEHLO_TO_HLO(GetDimensionSizeOp)
 MAP_STABLEHLO_TO_HLO(GetTupleElementOp)
 MAP_STABLEHLO_TO_HLO(IfOp)

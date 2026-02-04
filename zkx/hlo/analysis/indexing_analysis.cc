@@ -1381,6 +1381,70 @@ bool FuseProducerConsumerOutputToInputIndexing(
   return true;
 }
 
+bool IsSimplifiedGather(const HloGatherInstruction* gather) {
+  auto* start_indices = gather->operands()[1];
+  const auto& dims = gather->gather_dimension_numbers();
+  return start_indices->shape().rank() == 2 && dims.index_vector_dim() == 1 &&
+         IsIdentityPermutation(dims.start_index_map()) &&
+         dims.collapsed_slice_dims().empty() && !dims.offset_dims().empty() &&
+         *dims.offset_dims().rbegin() == dims.offset_dims().size();
+}
+
+HloInstructionIndexing ComputeOutputToInputGatherOpIndexing(
+    const HloGatherInstruction* gather, mlir::MLIRContext* mlir_context) {
+  CHECK(IsSimplifiedGather(gather))
+      << "Non-simplified HLO Gather is not supported.";
+  const Shape& operand_shape = gather->operand(0)->shape();
+  const Shape& indices_shape = gather->operand(1)->shape();
+
+  const GatherDimensionNumbers& dimension_numbers =
+      gather->gather_dimension_numbers();
+  int64_t index_vector_length =
+      indices_shape.dimensions(dimension_numbers.index_vector_dim());
+
+  const Shape& output_shape = gather->shape();
+  int64_t output_rank = output_shape.rank();
+
+  mlir::AffineExpr indices_id_dim = getAffineDimExpr(0, mlir_context);
+  std::vector<IndexingMap::Variable> dim_vars =
+      DimVarsFromTensorSizes(output_shape.dimensions());
+  IndexingMap indices_map{
+      mlir::AffineMap::get(
+          output_rank, 1,
+          {indices_id_dim, getAffineSymbolExpr(0, mlir_context)}, mlir_context),
+      dim_vars,
+      {IndexingMap::Variable{{0, index_vector_length - 1}}},
+      /*rt_vars=*/{}};
+
+  std::vector<HLORTVar> rt_vars;
+  std::vector<mlir::AffineExpr> exprs;
+  exprs.reserve(operand_shape.rank());
+  for (auto [operand_dim_id, slice_size] :
+       llvm::enumerate(gather->gather_slice_sizes())) {
+    int64_t output_dim_id = dimension_numbers.offset_dims(operand_dim_id);
+    exprs.push_back(getAffineDimExpr(output_dim_id, mlir_context));
+
+    if (operand_dim_id >= index_vector_length) continue;
+
+    rt_vars.push_back(HLORTVar{
+        Interval{0, operand_shape.dimensions(operand_dim_id) - slice_size},
+        gather->operand(1),
+        mlir::AffineMap::get(
+            output_rank, /*symbolCount=*/0,
+            {indices_id_dim,
+             getAffineConstantExpr(operand_dim_id, mlir_context)},
+            mlir_context)});
+    exprs.back() =
+        exprs.back() + getAffineSymbolExpr(operand_dim_id, mlir_context);
+  }
+  IndexingMap operand_map = FoldRTVarsAndConstructIndexingMap(
+      mlir::AffineMap::get(/*dimCount=*/output_rank,
+                           /*symbolCount=*/index_vector_length, exprs,
+                           mlir_context),
+      std::move(dim_vars), std::move(rt_vars));
+  return HloInstructionIndexing::FromIndexingMaps({operand_map, indices_map});
+}
+
 HloInstructionIndexing ComputeOutputToInputIndexing(const HloInstruction* instr,
                                                     int output_id,
                                                     mlir::MLIRContext* ctx) {
@@ -1414,10 +1478,9 @@ HloInstructionIndexing ComputeOutputToInputIndexing(const HloInstruction* instr,
   if (auto fusion = DynCast<HloFusionInstruction>(instr)) {
     return ComputeOutputToInputFusionOpIndexing(fusion, output_id, ctx);
   }
-  // TODO(chokobole): Uncomment this. Dependency: HloGatherInstruction
-  // if (auto gather = DynCast<HloGatherInstruction>(instr)) {
-  //   return ComputeOutputToInputGatherOpIndexing(gather, ctx);
-  // }
+  if (auto gather = DynCast<HloGatherInstruction>(instr)) {
+    return ComputeOutputToInputGatherOpIndexing(gather, ctx);
+  }
   if (HloIotaInstruction::ClassOf(instr)) {
     return HloInstructionIndexing{};
   }

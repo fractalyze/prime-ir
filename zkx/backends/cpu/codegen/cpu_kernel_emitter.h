@@ -141,6 +141,25 @@ class CpuKernelEmitter final : public KernelEmitter {
       const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value input,
       mlir::ValueRange start_indices);
 
+  absl::StatusOr<mlir::Value> EmitGatherOp(const HloInstruction* instr,
+                                           EmitterLocOpBuilder& b,
+                                           mlir::Value operand,
+                                           mlir::Value start_indices);
+
+  llvm::SmallVector<mlir::Value> LookUpGatherStartValues(
+      EmitterLocOpBuilder& b, mlir::Value start_indices_tensor,
+      llvm::ArrayRef<mlir::Value> batch_idx, int64_t index_vector_dim,
+      const Shape& indices_shape,
+      absl::Span<const int64_t> start_index_map) const;
+
+  llvm::SmallVector<mlir::Value> ComputeGatherOperandIndices(
+      EmitterLocOpBuilder& b, mlir::ValueRange output_indices,
+      llvm::ArrayRef<mlir::Value> start_vals, const Shape& operand_shape,
+      absl::Span<const int64_t> offset_dims,
+      absl::Span<const int64_t> slice_sizes,
+      absl::Span<const int64_t> start_index_map,
+      const absl::flat_hash_set<int64_t>& collapsed_set) const;
+
   absl::StatusOr<mlir::Value> EmitDynamicUpdateSliceOp(
       const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value dest,
       mlir::Value update, mlir::ValueRange start_indices);

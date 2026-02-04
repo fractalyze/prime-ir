@@ -40,6 +40,20 @@ def MHLO_ScatterDimensionNumbers : AttrDef<MHLO_Dialect, "ScatterDimensionNumber
   let hasCustomAssemblyFormat = 1;
 }
 
+def MHLO_GatherDimensionNumbers : AttrDef<MHLO_Dialect, "GatherDimensionNumbers"> {
+  let mnemonic = "gather";
+  let summary = "Attribute that models the dimension information for gather";
+  let parameters = (ins
+      MHLO_Dims:$offsetDims,
+      MHLO_Dims:$collapsedSliceDims,
+      MHLO_Dims:$operandBatchingDims,
+      MHLO_Dims:$startIndicesBatchingDims,
+      MHLO_Dims:$startIndexMap,
+      "int64_t":$indexVectorDim
+  );
+  let hasCustomAssemblyFormat = 1;
+}
+
 // Note: This is an experimental attribute and shouldn't be relied upon for
 // production.
 def MHLO_TypeExtensions : AttrDef<MHLO_Dialect, "TypeExtensions", [

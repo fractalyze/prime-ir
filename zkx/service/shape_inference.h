@@ -311,6 +311,13 @@ class ShapeInference {
       std::optional<PrimitiveType> preferred_element_type,
       absl::Span<const SparsityDescriptor> sparsity = {});
 
+  // Infers the shape produced by a gather operation with the given input shape,
+  // gather indices shape, gather dimension numbers and slice sizes.
+  static absl::StatusOr<Shape> InferGatherShape(
+      const Shape& input_shape, const Shape& start_indices_shape,
+      const GatherDimensionNumbers& gather_dim_numbers,
+      absl::Span<const int64_t> slice_sizes);
+
   // Helper that validates the given input shape, scatter indices shape, updates
   // shape, and scatter dimension numbers that constitute a scatter operation,
   // and returns the result shape of the scatter operation.

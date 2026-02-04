@@ -73,15 +73,12 @@ Attribute convertAttr(Attribute stablehloAttr) {
   // if (auto attr = mlir::dyn_cast<CustomCallApiVersionAttr>(stablehloAttr)) {
   //   RETURN_CONVERTED_ENUM_ATTR(CustomCallApiVersion);
   // }
-  // TODO(chokobole): Uncomment this. Dependency: GatherDimensionNumbersAttr
-  // if (auto attr = mlir::dyn_cast<GatherDimensionNumbersAttr>(stablehloAttr))
-  // {
-  //   return mhlo::GatherDimensionNumbersAttr::get(
-  //       attr.getContext(), attr.getOffsetDims(),
-  //       attr.getCollapsedSliceDims(), attr.getOperandBatchingDims(),
-  //       attr.getStartIndicesBatchingDims(), attr.getStartIndexMap(),
-  //       attr.getIndexVectorDim());
-  // }
+  if (auto attr = mlir::dyn_cast<GatherDimensionNumbersAttr>(stablehloAttr)) {
+    return mhlo::GatherDimensionNumbersAttr::get(
+        attr.getContext(), attr.getOffsetDims(), attr.getCollapsedSliceDims(),
+        attr.getOperandBatchingDims(), attr.getStartIndicesBatchingDims(),
+        attr.getStartIndexMap(), attr.getIndexVectorDim());
+  }
   // TODO(chokobole): Uncomment this. Dependency: OutputOperandAliasAttr
   // if (auto attr = mlir::dyn_cast<OutputOperandAliasAttr>(stablehloAttr)) {
   //   return mhlo::OutputOperandAliasAttr::get(
@@ -205,6 +202,18 @@ public:
 
     rewriter.replaceOp(stablehloOp, hloOp);
     return success();
+  }
+};
+
+// TODO(jeong0982): Remove this specialization once DotGeneralOp is implemented.
+template <>
+class StablehloToHloOpConverter<DotGeneralOp>
+    : public OpConversionPattern<DotGeneralOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult matchAndRewrite(DotGeneralOp op, DotGeneralOp::Adaptor,
+                                ConversionPatternRewriter &) const final {
+    return op.emitError("DotGeneralOp is not yet implemented in ZKX MHLO");
   }
 };
 

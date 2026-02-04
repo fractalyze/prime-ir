@@ -19,6 +19,7 @@ limitations under the License.
 #include <algorithm>
 #include <cstdint>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/strings/str_format.h"
@@ -33,6 +34,8 @@ limitations under the License.
 
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
+#include "zkx/hlo/ir/hlo_casting_utils.h"
+#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/mlir/codegen_utils.h"
 #include "zkx/mlir/mlir_utils.h"
@@ -556,6 +559,114 @@ absl::StatusOr<mlir::Value> ElementalIrEmitter::EmitElementalDot(
   }
   return absl::UnimplementedError(absl::StrFormat(
       "Dot op with rank %d and rank %d is not supported", rank0, rank1));
+}
+
+// NOTE(jeong0982): Not yet wired to a dispatcher. Will be called from
+// MakeElementGenerator once the GPU IR emitter path is ported.
+absl::StatusOr<mlir::Value> ElementalIrEmitter::EmitElementalGather(
+    const HloInstruction* instr, mlir::ValueRange operands) {
+  pass_flag_.enable_lower_affine = true;
+
+  auto* gather = Cast<HloGatherInstruction>(instr);
+  const auto& dim_numbers = gather->gather_dimension_numbers();
+  const Shape& operand_shape = instr->operand(0)->shape();
+  const Shape& indices_shape = instr->operand(1)->shape();
+  absl::Span<const int64_t> offset_dims = dim_numbers.offset_dims();
+  absl::Span<const int64_t> start_index_map = dim_numbers.start_index_map();
+  absl::Span<const int64_t> slice_sizes = gather->gather_slice_sizes();
+  int64_t index_vector_dim = dim_numbers.index_vector_dim();
+
+  mlir::Value operand = operands[0];
+  mlir::Value start_indices_tensor = operands[1];
+
+  // Identify batch dims (output dims not in offset_dims).
+  absl::flat_hash_set<int64_t> offset_dims_set(offset_dims.begin(),
+                                               offset_dims.end());
+  llvm::SmallVector<int64_t> batch_dims;
+  for (int64_t d = 0; d < instr->shape().rank(); ++d) {
+    if (!offset_dims_set.contains(d)) {
+      batch_dims.push_back(d);
+    }
+  }
+
+  absl::flat_hash_set<int64_t> collapsed_set(
+      dim_numbers.collapsed_slice_dims().begin(),
+      dim_numbers.collapsed_slice_dims().end());
+
+  // Build a mapping: operand dim → position in index vector.
+  absl::flat_hash_map<int64_t, int64_t> operand_dim_to_start_index;
+  for (int64_t i = 0; i < static_cast<int64_t>(start_index_map.size()); ++i) {
+    operand_dim_to_start_index[start_index_map[i]] = i;
+  }
+
+  auto output_type =
+      mlir_utils::ShapeToMlirTensorType(instr->shape(), b_->getContext());
+
+  auto generate_op = b_->create<mlir::tensor::GenerateOp>(
+      output_type, mlir::ValueRange{},
+      [&](mlir::OpBuilder& ob, mlir::Location loc,
+          mlir::ValueRange out_indices) {
+        mlir::ImplicitLocOpBuilder gb(loc, ob);
+        auto zero = gb.create<mlir::arith::ConstantIndexOp>(0);
+
+        // 1. Collect batch indices from output indices.
+        llvm::SmallVector<mlir::Value> batch_idx;
+        for (int64_t d : batch_dims) {
+          batch_idx.push_back(out_indices[d]);
+        }
+
+        // 2. Look up start values from start_indices tensor.
+        int64_t num_index_dims = static_cast<int64_t>(start_index_map.size());
+        llvm::SmallVector<mlir::Value> start_vals(num_index_dims);
+        for (int64_t i = 0; i < num_index_dims; ++i) {
+          llvm::SmallVector<mlir::Value> lookup_idx;
+          if (indices_shape.rank() == 1) {
+            lookup_idx.push_back(batch_idx[0]);
+          } else {
+            lookup_idx.assign(batch_idx.begin(), batch_idx.end());
+            if (index_vector_dim < indices_shape.rank()) {
+              auto i_val = gb.create<mlir::arith::ConstantIndexOp>(i);
+              lookup_idx.insert(lookup_idx.begin() + index_vector_dim, i_val);
+            }
+          }
+          auto raw = gb.create<mlir::tensor::ExtractOp>(start_indices_tensor,
+                                                        lookup_idx);
+          start_vals[i] =
+              gb.create<mlir::arith::IndexCastOp>(gb.getIndexType(), raw);
+        }
+
+        // 3. Compute operand indices: clamp start + window offset.
+        int64_t operand_rank = operand_shape.rank();
+        llvm::SmallVector<mlir::Value> operand_indices(operand_rank, zero);
+        int64_t offset_idx = 0;
+        for (int64_t k = 0; k < operand_rank; ++k) {
+          mlir::Value window_idx = zero;
+          if (!collapsed_set.contains(k)) {
+            window_idx = out_indices[offset_dims[offset_idx++]];
+          }
+
+          auto it = operand_dim_to_start_index.find(k);
+          if (it != operand_dim_to_start_index.end()) {
+            int64_t idx = it->second;
+            int64_t max_start = operand_shape.dimensions(k) - slice_sizes[k];
+            auto max_val = gb.create<mlir::arith::ConstantIndexOp>(max_start);
+            // clamped = min(max(start, 0), max_start)
+            auto clamped = gb.create<mlir::arith::MinSIOp>(
+                gb.create<mlir::arith::MaxSIOp>(start_vals[idx], zero),
+                max_val);
+            operand_indices[k] =
+                gb.create<mlir::arith::AddIOp>(clamped, window_idx);
+          } else {
+            operand_indices[k] = window_idx;
+          }
+        }
+
+        // 4. Extract the element from the operand.
+        auto result =
+            gb.create<mlir::tensor::ExtractOp>(operand, operand_indices);
+        gb.create<mlir::tensor::YieldOp>(result);
+      });
+  return generate_op.getResult();
 }
 
 absl::StatusOr<mlir::Value> ElementalIrEmitter::EmitElementalDynamicSlice(

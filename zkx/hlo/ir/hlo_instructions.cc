@@ -3002,6 +3002,123 @@ HloDynamicUpdateSliceInstruction::HloDynamicUpdateSliceInstruction(
   }
 }
 
+HloGatherInstruction::HloGatherInstruction(
+    const Shape& shape, HloInstruction* operand, HloInstruction* start_indices,
+    const GatherDimensionNumbers& gather_dim_numbers,
+    absl::Span<const int64_t> slice_sizes, bool indices_are_sorted)
+    : HloInstruction(HloOpcode::kGather, shape),
+      indices_are_sorted_(indices_are_sorted) {
+  AppendOperand(operand);
+  AppendOperand(start_indices);
+  gather_dimension_numbers_ =
+      std::make_unique<GatherDimensionNumbers>(gather_dim_numbers);
+  absl::c_copy(slice_sizes, std::back_inserter(gather_slice_sizes_));
+}
+
+// static
+std::string HloGatherInstruction::GatherDimensionNumbersToString(
+    const GatherDimensionNumbers& dim_numbers) {
+  StringPrinter printer;
+  PrintGatherDimensionNumbers(&printer, dim_numbers);
+  return std::move(printer).ToString();
+}
+
+// static
+void HloGatherInstruction::PrintGatherDimensionNumbers(
+    Printer* printer, const GatherDimensionNumbers& dim_numbers) {
+  printer->Append("offset_dims={");
+  AppendJoin(printer, dim_numbers.offset_dims(), ",");
+  printer->Append("}, collapsed_slice_dims={");
+  AppendJoin(printer, dim_numbers.collapsed_slice_dims(), ",");
+  printer->Append("}, start_index_map={");
+  AppendJoin(printer, dim_numbers.start_index_map(), ",");
+  if (dim_numbers.operand_batching_dims_size()) {
+    printer->Append("}, operand_batching_dims={");
+    AppendJoin(printer, dim_numbers.operand_batching_dims(), ",");
+  }
+  if (dim_numbers.start_indices_batching_dims_size()) {
+    printer->Append("}, start_indices_batching_dims={");
+    AppendJoin(printer, dim_numbers.start_indices_batching_dims(), ",");
+  }
+  AppendCat(printer, "}, index_vector_dim=", dim_numbers.index_vector_dim());
+}
+
+// static
+GatherDimensionNumbers HloGatherInstruction::MakeGatherDimNumbers(
+    absl::Span<const int64_t> offset_dims,
+    absl::Span<const int64_t> collapsed_slice_dims,
+    absl::Span<const int64_t> start_index_map, int64_t index_vector_dim,
+    absl::Span<const int64_t> operand_batching_dims,
+    absl::Span<const int64_t> start_indices_batching_dims) {
+  GatherDimensionNumbers gather_dim_numbers;
+  for (int64_t output_window_dim : offset_dims) {
+    gather_dim_numbers.add_offset_dims(output_window_dim);
+  }
+  for (int64_t elided_window_dim : collapsed_slice_dims) {
+    gather_dim_numbers.add_collapsed_slice_dims(elided_window_dim);
+  }
+  for (int64_t gather_dim_to_input_dim : start_index_map) {
+    gather_dim_numbers.add_start_index_map(gather_dim_to_input_dim);
+  }
+  for (int64_t operand_batching_dim : operand_batching_dims) {
+    gather_dim_numbers.add_operand_batching_dims(operand_batching_dim);
+  }
+  for (int64_t start_indices_batching_dim : start_indices_batching_dims) {
+    gather_dim_numbers.add_start_indices_batching_dims(
+        start_indices_batching_dim);
+  }
+
+  gather_dim_numbers.set_index_vector_dim(index_vector_dim);
+  return gather_dim_numbers;
+}
+
+HloInstructionProto HloGatherInstruction::ToProto() const {
+  HloInstructionProto proto = HloInstruction::ToProto();
+  *proto.mutable_gather_dimension_numbers() = gather_dimension_numbers();
+  for (int64_t bound : gather_slice_sizes()) {
+    proto.add_gather_slice_sizes(bound);
+  }
+  proto.set_indices_are_sorted(indices_are_sorted());
+  return proto;
+}
+
+void HloGatherInstruction::PrintExtraAttributesImpl(
+    AttributePrinter& printer, const HloPrintOptions& options) const {
+  printer.Next([this](Printer* printer) {
+    PrintGatherDimensionNumbers(printer, gather_dimension_numbers());
+  });
+  printer.Next([this](Printer* printer) {
+    printer->Append("slice_sizes={");
+    AppendJoin(printer, gather_slice_sizes(), ",");
+    printer->Append("}");
+  });
+  if (indices_are_sorted()) {
+    printer.Next(
+        [](Printer* printer) { printer->Append("indices_are_sorted=true"); });
+  }
+}
+
+bool HloGatherInstruction::IdenticalSlowPath(
+    const HloInstruction& other,
+    absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
+        eq_computations) const {
+  const auto& casted_other = static_cast<const HloGatherInstruction&>(other);
+  return protobuf_util::ProtobufEquals(
+             gather_dimension_numbers(),
+             casted_other.gather_dimension_numbers()) &&
+         gather_slice_sizes() == casted_other.gather_slice_sizes() &&
+         indices_are_sorted() == casted_other.indices_are_sorted();
+}
+
+std::unique_ptr<HloInstruction> HloGatherInstruction::CloneWithNewOperandsImpl(
+    const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+    HloCloneContext* context) const {
+  CHECK_EQ(new_operands.size(), 2);
+  return std::make_unique<HloGatherInstruction>(
+      shape, new_operands[0], new_operands[1], gather_dimension_numbers(),
+      gather_slice_sizes(), indices_are_sorted());
+}
+
 HloScatterInstruction::HloScatterInstruction(
     const Shape& shape, absl::Span<HloInstruction* const> args,
     HloComputation* update_computation,

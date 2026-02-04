@@ -196,6 +196,7 @@ absl::StatusOr<ThunkSequence> ThunkEmitter::EmitHloInstruction(
     case HloOpcode::kDynamicUpdateSlice:
     case HloOpcode::kFft:
     case HloOpcode::kFusion:
+    case HloOpcode::kGather:
     case HloOpcode::kInverse:
     case HloOpcode::kIota:
     case HloOpcode::kMap:

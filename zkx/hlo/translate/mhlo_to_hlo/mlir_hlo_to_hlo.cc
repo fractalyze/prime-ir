@@ -176,6 +176,7 @@ bool IsBoundedOrStatic(mlir::Type ty) {
 
 uint32_t Convertuint32_t(uint32_t i) { return i; }
 uint64_t Convertuint64_t(uint64_t i) { return i; }
+bool Convertbool(bool value) { return value; }
 
 std::vector<int64_t> ConvertDenseIntAttr(mlir::DenseIntElementsAttr attr) {
   auto values = attr.getValues<int64_t>();
@@ -290,6 +291,41 @@ zkx::ScatterDimensionNumbers Convert_scatter_dimension_numbers(
                 output.mutable_scatter_dims_to_operand_dims()));
 
   output.set_index_vector_dim(input.getIndexVectorDim());
+  return output;
+}
+
+zkx::GatherDimensionNumbers Convert_dimension_numbers(
+    mlir::mhlo::GatherDimensionNumbersAttr input) {
+  zkx::GatherDimensionNumbers output;
+
+  auto offset_dims = input.getOffsetDims();
+  std::copy(offset_dims.begin(), offset_dims.end(),
+            google::protobuf::RepeatedFieldBackInserter(
+                output.mutable_offset_dims()));
+
+  auto collapsed_slice_dims = input.getCollapsedSliceDims();
+  std::copy(collapsed_slice_dims.begin(), collapsed_slice_dims.end(),
+            google::protobuf::RepeatedFieldBackInserter(
+                output.mutable_collapsed_slice_dims()));
+
+  auto start_index_map = input.getStartIndexMap();
+  std::copy(start_index_map.begin(), start_index_map.end(),
+            google::protobuf::RepeatedFieldBackInserter(
+                output.mutable_start_index_map()));
+
+  output.set_index_vector_dim(input.getIndexVectorDim());
+
+  auto operand_batching_dims = input.getOperandBatchingDims();
+  std::copy(operand_batching_dims.begin(), operand_batching_dims.end(),
+            google::protobuf::RepeatedFieldBackInserter(
+                output.mutable_operand_batching_dims()));
+
+  auto start_indices_batching_dims = input.getStartIndicesBatchingDims();
+  std::copy(start_indices_batching_dims.begin(),
+            start_indices_batching_dims.end(),
+            google::protobuf::RepeatedFieldBackInserter(
+                output.mutable_start_indices_batching_dims()));
+
   return output;
 }
 

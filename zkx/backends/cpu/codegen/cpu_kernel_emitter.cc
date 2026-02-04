@@ -1772,6 +1772,153 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitDynamicUpdateSliceOp(
       /*static_offsets=*/static_offsets, static_sizes, static_strides);
 }
 
+namespace {
+
+struct GatherMetadata {
+  llvm::SmallVector<int64_t> batch_dims;
+  absl::flat_hash_set<int64_t> collapsed_set;
+};
+
+GatherMetadata BuildGatherMetadata(const HloGatherInstruction* gather) {
+  const auto& dim_numbers = gather->gather_dimension_numbers();
+  const Shape& output_shape = gather->shape();
+
+  absl::Span<const int64_t> offset_dims = dim_numbers.offset_dims();
+  absl::Span<const int64_t> collapsed_slice_dims =
+      dim_numbers.collapsed_slice_dims();
+
+  // Identify batch dims (output dims not in offset_dims)
+  absl::flat_hash_set<int64_t> offset_dims_set(offset_dims.begin(),
+                                               offset_dims.end());
+  llvm::SmallVector<int64_t> batch_dims;
+  for (int64_t d = 0; d < output_shape.rank(); ++d) {
+    if (!offset_dims_set.contains(d)) {
+      batch_dims.push_back(d);
+    }
+  }
+
+  absl::flat_hash_set<int64_t> collapsed_set(collapsed_slice_dims.begin(),
+                                             collapsed_slice_dims.end());
+
+  return GatherMetadata{
+      .batch_dims = std::move(batch_dims),
+      .collapsed_set = std::move(collapsed_set),
+  };
+}
+
+}  // namespace
+
+llvm::SmallVector<mlir::Value> CpuKernelEmitter::LookUpGatherStartValues(
+    EmitterLocOpBuilder& b, mlir::Value start_indices_tensor,
+    llvm::ArrayRef<mlir::Value> batch_idx, int64_t index_vector_dim,
+    const Shape& indices_shape,
+    absl::Span<const int64_t> start_index_map) const {
+  int64_t num_index_dims = static_cast<int64_t>(start_index_map.size());
+  llvm::SmallVector<mlir::Value> start_vals(num_index_dims);
+  for (int64_t i = 0; i < num_index_dims; ++i) {
+    llvm::SmallVector<mlir::Value> lookup_idx;
+    if (indices_shape.rank() == 1) {
+      lookup_idx.push_back(batch_idx[0]);
+    } else {
+      lookup_idx.assign(batch_idx.begin(), batch_idx.end());
+      if (index_vector_dim < indices_shape.rank()) {
+        auto i_val = b.create<mlir::arith::ConstantIndexOp>(i);
+        lookup_idx.insert(lookup_idx.begin() + index_vector_dim, i_val);
+      }
+    }
+    auto raw =
+        b.create<mlir::tensor::ExtractOp>(start_indices_tensor, lookup_idx);
+    start_vals[i] = b.create<mlir::arith::IndexCastOp>(b.getIndexType(), raw);
+  }
+  return start_vals;
+}
+
+llvm::SmallVector<mlir::Value> CpuKernelEmitter::ComputeGatherOperandIndices(
+    EmitterLocOpBuilder& b, mlir::ValueRange output_indices,
+    llvm::ArrayRef<mlir::Value> start_vals, const Shape& operand_shape,
+    absl::Span<const int64_t> offset_dims,
+    absl::Span<const int64_t> slice_sizes,
+    absl::Span<const int64_t> start_index_map,
+    const absl::flat_hash_set<int64_t>& collapsed_set) const {
+  // Build a mapping: operand dim -> position in index vector
+  absl::flat_hash_map<int64_t, int64_t> operand_dim_to_start_index;
+  for (int64_t i = 0; i < start_index_map.size(); ++i) {
+    operand_dim_to_start_index[start_index_map[i]] = i;
+  }
+
+  int64_t operand_rank = operand_shape.rank();
+  mlir::Value zero = b.create<mlir::arith::ConstantIndexOp>(0);
+
+  llvm::SmallVector<mlir::Value> operand_indices(operand_rank, zero);
+  int64_t offset_idx = 0;
+  for (int64_t k = 0; k < operand_rank; ++k) {
+    mlir::Value window_idx = zero;
+    if (!collapsed_set.contains(k)) {
+      window_idx = output_indices[offset_dims[offset_idx++]];
+    }
+
+    auto it = operand_dim_to_start_index.find(k);
+    if (it != operand_dim_to_start_index.end()) {
+      int64_t i = it->second;
+      int64_t max_start = operand_shape.dimensions(k) - slice_sizes[k];
+      auto max_val = b.create<mlir::arith::ConstantIndexOp>(max_start);
+      // Clamp the start index to [0, max_start] so the slice never reads
+      // out-of-bounds.  max_start = dim_size - slice_size.
+      //   clamped = min(max(start, 0), max_start)
+      auto clamped = b.create<mlir::arith::MinSIOp>(
+          b.create<mlir::arith::MaxSIOp>(start_vals[i], zero), max_val);
+      operand_indices[k] = b.create<mlir::arith::AddIOp>(clamped, window_idx);
+    } else {
+      operand_indices[k] = window_idx;
+    }
+  }
+  return operand_indices;
+}
+
+absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitGatherOp(
+    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value operand,
+    mlir::Value start_indices_tensor) {
+  pass_flag_.enable_linalg_to_parallel_loops = true;
+  pass_flag_.enable_lower_affine = true;
+
+  auto* gather = Cast<HloGatherInstruction>(instr);
+  const auto& dim_numbers = gather->gather_dimension_numbers();
+  const Shape& operand_shape = instr->operand(0)->shape();
+  const Shape& indices_shape = instr->operand(1)->shape();
+  absl::Span<const int64_t> offset_dims = dim_numbers.offset_dims();
+  absl::Span<const int64_t> start_index_map = dim_numbers.start_index_map();
+  absl::Span<const int64_t> slice_sizes = gather->gather_slice_sizes();
+  int64_t index_vector_dim = dim_numbers.index_vector_dim();
+
+  auto meta = BuildGatherMetadata(gather);
+
+  auto output_type =
+      mlir_utils::ShapeToMlirTensorType(instr->shape(), b.getContext());
+
+  auto generate_op = b.create<mlir::tensor::GenerateOp>(
+      output_type, mlir::ValueRange{},
+      [&](mlir::OpBuilder& ob, mlir::Location loc, mlir::ValueRange indices) {
+        EmitterLocOpBuilder gb(loc, ob);
+
+        llvm::SmallVector<mlir::Value> batch_idx;
+        for (int64_t d : meta.batch_dims) {
+          batch_idx.push_back(indices[d]);
+        }
+
+        auto start_vals = LookUpGatherStartValues(
+            gb, start_indices_tensor, batch_idx, index_vector_dim,
+            indices_shape, start_index_map);
+        auto operand_indices = ComputeGatherOperandIndices(
+            gb, indices, start_vals, operand_shape, offset_dims, slice_sizes,
+            start_index_map, meta.collapsed_set);
+
+        auto result =
+            gb.create<mlir::tensor::ExtractOp>(operand, operand_indices);
+        gb.create<mlir::tensor::YieldOp>(result);
+      });
+  return generate_op.getResult();
+}
+
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitIotaOp(
     const HloInstruction* instr, EmitterLocOpBuilder& b) {
   pass_flag_.enable_linalg_to_parallel_loops = true;
@@ -2360,6 +2507,9 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
             "HloFftInstruction shouldn't have more than 2 arguments");
       }
     }
+    case HloOpcode::kGather:
+      return EmitGatherOp(instr, b, values[instr->operand(0)],
+                          values[instr->operand(1)]);
     case HloOpcode::kFusion: {
       llvm::SmallVector<mlir::Value> operands;
       for (int64_t i = 0; i < instr->operand_count(); ++i) {

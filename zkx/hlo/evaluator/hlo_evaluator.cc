@@ -21,12 +21,15 @@ limitations under the License.
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <string>
 #include <utility>
 #include <variant>
 
+#include "absl/algorithm/container.h"
 #include "absl/base/internal/endian.h"
 #include "absl/cleanup/cleanup.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
 #include "absl/log/log.h"
@@ -46,6 +49,7 @@ limitations under the License.
 #include "zkx/literal_util.h"
 #include "zkx/primitive_util.h"
 #include "zkx/service/compilation_environments.h"
+#include "zkx/service/gather_scatter_utils.h"
 #include "zkx/service/hlo_module_config.h"
 #include "zkx/service/logical_buffer.h"
 #include "zkx/service/pattern_matcher.h"
@@ -1525,9 +1529,392 @@ absl::Status HloEvaluator::HandleFft(const HloInstruction* fft) {
   // return absl::OkStatus();
 }
 
+namespace {
+
+ShapeUtil::IndexIterationSpace IterationSpaceForOutputBatchIndices(
+    const Shape& output_shape, const GatherDimensionNumbers& dim_numbers) {
+  int64_t output_rank = output_shape.dimensions_size();
+  std::vector<int64_t> index_base(output_rank, 0);
+  std::vector<int64_t> index_count;
+  index_count.reserve(output_rank);
+  for (int64_t i = 0; i < output_rank; i++) {
+    bool is_output_batch_dim =
+        !absl::c_binary_search(dim_numbers.offset_dims(), i);
+    index_count.push_back(is_output_batch_dim ? output_shape.dimensions(i) : 1);
+  }
+
+  return {std::move(index_base), std::move(index_count),
+          std::vector<int64_t>(output_rank, 1)};
+}
+
+// Return an ShapeUtil::IndexIterationSpace that iterates over the output slice
+// dimensions while keeping the rest of the output dimensions clamped to 0.
+ShapeUtil::IndexIterationSpace IterationSpaceForOutputOffsetIndices(
+    int64_t output_rank, absl::Span<const int64_t> slice_sizes,
+    const GatherDimensionNumbers& dim_numbers) {
+  std::vector<int64_t> index_base(output_rank, 0);
+  std::vector<int64_t> index_count(output_rank, 1);
+  int64_t slice_sizes_idx = 0;
+  for (int64_t i = 0; i < output_rank; i++) {
+    bool is_output_window_dim =
+        absl::c_binary_search(dim_numbers.offset_dims(), i);
+    if (is_output_window_dim) {
+      while (absl::c_binary_search(dim_numbers.collapsed_slice_dims(),
+                                   slice_sizes_idx)) {
+        slice_sizes_idx++;
+      }
+      index_count[i] = slice_sizes[slice_sizes_idx++];
+    }
+  }
+
+  return {std::move(index_base), std::move(index_count),
+          std::vector<int64_t>(output_rank, 1)};
+}
+
+// This functor computes the contribution of start_indices to an input index
+// corresponding to an output index.  That is, given an output index I, it picks
+// out the batch indices in I and uses them to look up a starting index, G, from
+// the start indices tensor, and expands G into the input space according to
+// start_index_map.
+class OutputBatchIndexToInputIndex {
+ public:
+  // The constructor does some setup work that is amortized across all
+  // iterations.
+  explicit OutputBatchIndexToInputIndex(
+      const GatherDimensionNumbers* dim_numbers, const Shape& input_shape,
+      const Shape& output_shape, const Literal* start_indices)
+      : dim_numbers_(*dim_numbers), start_indices_(*start_indices) {
+    for (int64_t i = 0; i < output_shape.dimensions_size(); i++) {
+      output_dim_is_batch_dims_.push_back(
+          !absl::c_binary_search(dim_numbers_.offset_dims(), i));
+    }
+
+    for (int64_t i = 0; i < input_shape.dimensions_size(); i++) {
+      int64_t index_of_input_dim_in_index_vector =
+          std::distance(dim_numbers_.start_index_map().begin(),
+                        absl::c_find(dim_numbers_.start_index_map(), i));
+      if (index_of_input_dim_in_index_vector ==
+          dim_numbers_.start_index_map_size()) {
+        input_dim_value_to_index_vector_.push_back(-1);
+      } else {
+        input_dim_value_to_index_vector_.push_back(
+            index_of_input_dim_in_index_vector);
+      }
+    }
+
+    index_vector_index_.resize(start_indices_.shape().dimensions_size());
+    input_index_.resize(input_shape.dimensions_size());
+    int64_t index_vector_size =
+        start_indices_.shape().dimensions(dim_numbers_.index_vector_dim());
+    index_vector_.resize(index_vector_size);
+
+    absl::flat_hash_map<int64_t, int64_t> start_indices_dims_to_output_dims =
+        GetStartIndicesDimToOutputDimForExplicitBatchingDims(
+            dim_numbers_.start_indices_batching_dims(),
+            dim_numbers_.index_vector_dim(), dim_numbers_.offset_dims(),
+            start_indices_.shape().rank(), output_shape.rank());
+    for (int64_t i = 0; i < dim_numbers->operand_batching_dims().size(); ++i) {
+      int64_t operand_dim = dim_numbers->operand_batching_dims(i);
+      int64_t start_indices_dim = dim_numbers->start_indices_batching_dims(i);
+      int64_t output_dim = start_indices_dims_to_output_dims[start_indices_dim];
+      explicit_batch_dims_operand_dim_to_output_dim_[operand_dim] = output_dim;
+    }
+  }
+
+  // Returns the contribution of start_indices to the input index corresponding
+  // to output_index.  See gather_inner_loop_body.
+  //
+  // This is conceptually  a stateless transformation from output_index to the
+  // gather input index, but:
+  //
+  //  - Instead of allocating memory to represent the gather input index on
+  //    every invocation we reuse the same storage for the result
+  //    (input_index_), mutating it in place.
+  //  - Instead of allocating buffers for temporary values like
+  //    index_vector_index_ and index_vector on every invocation, we reuse the
+  //    same storage for all invocations.
+  //
+  // This returns a Span into memory owned by the class.
+  absl::StatusOr<absl::Span<const int64_t>> operator()(
+      absl::Span<const int64_t> output_index) {
+    PropagateOutputIndexGatherDimsToIndexVectorIndex(output_index);
+    TF_RETURN_IF_ERROR(FetchIndexVector());
+    PropagateIndexVectorToInputIndex();
+    PropagateExplicitBatchDimsToInputIndex(output_index);
+    return absl::Span<const int64_t>(input_index_);
+  }
+
+ private:
+  // Propagates the batch dimensions from the output index into
+  // index_vector_index_ by mutating index_vector_index_ in place.  Does not
+  // update the dim_numbers.index_vector_dim() dimension -- that's the dimension
+  // we iterate over in FetchIndexVector.
+  void PropagateOutputIndexGatherDimsToIndexVectorIndex(
+      absl::Span<const int64_t> output_index) {
+    int64_t index_vector_index_i = 0;
+    for (int64_t i = 0, e = output_index.size(); i < e; i++) {
+      if (!output_dim_is_batch_dims_[i]) {
+        continue;
+      }
+
+      if (index_vector_index_i == dim_numbers_.index_vector_dim()) {
+        index_vector_index_i++;
+      }
+
+      index_vector_index_[index_vector_index_i++] = output_index[i];
+    }
+  }
+
+  // Populates index_vector_ by iterating over start_indices_ according to
+  // index_vector_index_.
+  absl::Status FetchIndexVector() {
+    int64_t index_vector_dim = dim_numbers_.index_vector_dim();
+    for (int64_t i = 0, e = index_vector_.size(); i < e; i++) {
+      index_vector_index_[index_vector_dim] = i;
+      auto start_index = start_indices_.GetIntegralAsS64(index_vector_index_);
+      TF_RET_CHECK(start_index.has_value());
+      index_vector_[i] = *start_index;
+    }
+    return absl::OkStatus();
+  }
+
+  // Populates input_index_.
+  void PropagateIndexVectorToInputIndex() {
+    for (int64_t i = 0, e = input_index_.size(); i < e; i++) {
+      if (input_dim_value_to_index_vector_[i] != -1) {
+        input_index_[i] = index_vector_[input_dim_value_to_index_vector_[i]];
+      }
+
+      // If input_dim_value_to_index_vector_[i] == -1 then input_index_[i]
+      // remains 0, as set by the constructor.
+    }
+  }
+
+  void PropagateExplicitBatchDimsToInputIndex(
+      absl::Span<const int64_t> output_index) {
+    for (const auto [operand_dim, output_dim] :
+         explicit_batch_dims_operand_dim_to_output_dim_) {
+      input_index_[operand_dim] = output_index[output_dim];
+    }
+  }
+
+  // input_dim_value_to_index_vector_[i] tells us how to compute dimension i of
+  // the input index from the index vector.  See
+  // PropagateIndexVectorToInputIndex.
+  std::vector<int64_t> input_dim_value_to_index_vector_;
+
+  // output_dim_is_batch_dims_[i] is true iff the output index i is a gather
+  // dimension.
+  std::vector<bool> output_dim_is_batch_dims_;
+
+  // The buffer into which we construct an index into start_indices_ to fetch
+  // the index vector.
+  std::vector<int64_t> index_vector_index_;
+
+  // The index vector fetched from start_indices_.
+  std::vector<int64_t> index_vector_;
+
+  // The result computed by this functor.  operator() returns a Span into
+  // this vector.
+  std::vector<int64_t> input_index_;
+
+  absl::flat_hash_map<int64_t, int64_t>
+      explicit_batch_dims_operand_dim_to_output_dim_;
+
+  const GatherDimensionNumbers& dim_numbers_;
+  const Literal& start_indices_;
+};
+
+// This functor computes the contribution of the offset indices in an output
+// index to an input index.  That is, given an output index I it picks out the
+// output offset indices in I and expands it into an index into the input shape.
+class OutputOffsetIndexToInputIndex {
+ public:
+  // The constructor does some setup work that is amortized across all
+  // iterations.
+  explicit OutputOffsetIndexToInputIndex(
+      const GatherDimensionNumbers& dim_numbers, const Shape& input_shape) {
+    CHECK(absl::c_is_sorted(dim_numbers.offset_dims()));
+    int64_t window_dim_count = 0;
+    for (int64_t i = 0; i < input_shape.dimensions_size(); i++) {
+      if (IsCollapsedOrBatchingDim(dim_numbers.collapsed_slice_dims(),
+                                   dim_numbers.operand_batching_dims(), i)) {
+        input_dim_value_to_output_index_.push_back(-1);
+      } else {
+        input_dim_value_to_output_index_.push_back(
+            dim_numbers.offset_dims()[window_dim_count++]);
+      }
+    }
+
+    input_index_.resize(input_shape.dimensions_size());
+  }
+
+  // Returns the contribution of the window indices to the input index
+  // corresponding to output_index.  See gather_inner_loop_body.
+  //
+  // This is conceptually a stateless transformation from output_index to the
+  // window input index, but instead of allocating memory to represent the
+  // gather input index on every invocation we reuse the same storage for the
+  // result (input_index_), mutating it in place.
+  //
+  // This returns a Span into memory owned by the class.
+  absl::StatusOr<absl::Span<const int64_t>> operator()(
+      absl::Span<const int64_t> output_index) {
+    PropagateOutputIndexWindowDimsToInputIndex(output_index);
+    return absl::Span<const int64_t>(input_index_);
+  }
+
+  // Returns for a given 'input_dim' the corresponding output dimension index,
+  // or -1 if 'input_dim' is an elided window dimension.
+  int64_t input_dim_value_to_output_index(int64_t input_dim) {
+    return input_dim_value_to_output_index_[input_dim];
+  }
+
+ private:
+  // Propagates window dimensions from the output index to input_index_ by
+  // mutating input_index_ in place.
+  void PropagateOutputIndexWindowDimsToInputIndex(
+      absl::Span<const int64_t> output_index) {
+    for (int64_t i = 0, e = input_index_.size(); i < e; i++) {
+      if (input_dim_value_to_output_index_[i] != -1) {
+        input_index_[i] = output_index[input_dim_value_to_output_index_[i]];
+      }
+
+      // If input_dim_value_to_index_vector_[i] == -1 then input_index_[i]
+      // remains 0, as set by the constructor.
+    }
+  }
+
+  // input_dim_value_to_index_vector_[i] tells us how to compute dimension i of
+  // the input index from the output index. See
+  // PropagateOutputIndexWindowDimsToInputIndex.
+  std::vector<int64_t> input_dim_value_to_output_index_;
+
+  // The result computed by this functor.  operator() returns a Span into
+  // this vector.
+  std::vector<int64_t> input_index_;
+};
+
+// Reshapes the gather indices input to have a trailing degenerate `1` dimension
+// if necessary.  Hands over the ownership of the newly created literal (if
+// there is one) to `reshaped_start_indices`.
+static absl::StatusOr<std::reference_wrapper<const Literal>>
+ReshapedGatherIndices(int64_t index_vector_dim, const Literal& start_indices,
+                      Literal* reshaped_start_indices) {
+  if (start_indices.shape().dimensions_size() != index_vector_dim) {
+    return std::cref(start_indices);
+  }
+
+  std::vector<int64_t> new_shape(start_indices.shape().dimensions().begin(),
+                                 start_indices.shape().dimensions().end());
+  new_shape.push_back(1);
+  if (start_indices.shape().is_dynamic()) {
+    TF_ASSIGN_OR_RETURN(*reshaped_start_indices,
+                        start_indices.ToStatic().Reshape(new_shape));
+  } else {
+    TF_ASSIGN_OR_RETURN(*reshaped_start_indices,
+                        start_indices.Reshape(new_shape));
+  }
+  return std::cref(*reshaped_start_indices);
+}
+
+}  // namespace
+
 absl::Status HloEvaluator::HandleGather(const HloInstruction* gather) {
-  // TODO(chokobole): Implement this. Dependency: GatherDimensionNumbers
-  return absl::UnimplementedError("HandleGather not implemented");
+  Literal result = Literal::CreateFromShape(gather->shape());
+  const Shape& shape = gather->shape();
+  const GatherDimensionNumbers& dim_numbers =
+      gather->gather_dimension_numbers();
+  const Literal& operand = GetEvaluatedLiteralFor(gather->operand(0));
+  Literal reshaped_start_indices;
+  TF_ASSIGN_OR_RETURN(
+      const Literal& start_indices,
+      ReshapedGatherIndices(dim_numbers.index_vector_dim(),
+                            GetEvaluatedLiteralFor(gather->operand(1)),
+                            &reshaped_start_indices));
+
+  // We iterate over the gather dimensions in the output shape in an outer loop
+  // nest, and iterate over the window dimensions in the output shape in an
+  // inner loop nest.
+
+  ShapeUtil::IndexIterationSpace start_indices_iteration_space =
+      IterationSpaceForOutputBatchIndices(shape, dim_numbers);
+  ShapeUtil::IndexIterationSpace offset_indices_iteration_space =
+      IterationSpaceForOutputOffsetIndices(
+          shape.dimensions_size(), gather->gather_slice_sizes(), dim_numbers);
+
+  // Scratch buffers that hold an index in the output shape and the
+  // corresponding index in the input shape.
+  std::vector<int64_t> input_index(operand.shape().dimensions_size());
+  std::vector<int64_t> output_index(gather->shape().dimensions_size());
+  std::vector<int64_t> input_index_clamped(operand.shape().dimensions_size());
+
+  OutputBatchIndexToInputIndex output_batch_index_to_input_index(
+      &gather->gather_dimension_numbers(), /*input_shape=*/operand.shape(),
+      /*output_shape=*/shape, &start_indices);
+  OutputOffsetIndexToInputIndex output_offset_index_to_input_index(
+      gather->gather_dimension_numbers(), /*input_shape=*/operand.shape());
+
+  const Shape& operand_shape = operand.shape();
+  if (ShapeUtil::IsZeroElementArray(operand_shape)) {
+    evaluated_[gather] = std::move(result);
+    return absl::OkStatus();
+  }
+
+  auto gather_inner_loop_body =
+      [&](absl::Span<const int64_t> output_window_index,
+          absl::Span<const int64_t> input_gather_index,
+          absl::Span<const int64_t> output_gather_index)
+      -> absl::StatusOr<bool> {
+    TF_ASSIGN_OR_RETURN(
+        absl::Span<const int64_t> input_window_index,
+        output_offset_index_to_input_index(output_window_index));
+    for (int i = 0, e = output_index.size(); i < e; i++) {
+      output_index[i] = output_gather_index[i] + output_window_index[i];
+      DCHECK_LT(output_index[i], shape.dimensions(i));
+    }
+    for (int i = 0, e = input_gather_index.size(); i < e; i++) {
+      int64_t output_dim =
+          output_offset_index_to_input_index.input_dim_value_to_output_index(i);
+      // If 'output_dim' is -1, it means 'i' is an elided window dim. This
+      // means we set the iteration index to 0, so for the purpose of the
+      // following calculations we can consider the output dimension size to
+      // be 1.
+      int64_t output_dim_size =
+          output_dim == -1 ? 1 : shape.dimensions(output_dim);
+      // Clamp the gather index so that the gather region fits in the operand.
+      // input_index_clamped[i] = clamp(input_gather_index[i], 0,
+      //                                       operand_shape.dimensions(i) -
+      //                                       output_dim_size);
+      input_index_clamped[i] =
+          std::min(operand_shape.dimensions(i) - output_dim_size,
+                   std::max(int64_t{0}, input_gather_index[i]));
+    }
+    for (int i = 0, e = input_index.size(); i < e; i++) {
+      input_index[i] = input_index_clamped[i] + input_window_index[i];
+      DCHECK_GE(input_index[i], 0);
+      DCHECK_LT(input_index[i], operand_shape.dimensions(i));
+    }
+    result.CopyElementFrom(operand, input_index, output_index);
+    return true;
+  };
+
+  auto gather_outer_loop_body =
+      [&](absl::Span<const int64_t> output_gather_index)
+      -> absl::StatusOr<bool> {
+    TF_ASSIGN_OR_RETURN(absl::Span<const int64_t> input_gather_index,
+                        output_batch_index_to_input_index(output_gather_index));
+    TF_RETURN_IF_ERROR(ShapeUtil::ForEachIndexWithStatus(
+        shape, offset_indices_iteration_space,
+        std::bind(gather_inner_loop_body, std::placeholders::_1,
+                  input_gather_index, output_gather_index)));
+    return true;
+  };
+
+  TF_RETURN_IF_ERROR(ShapeUtil::ForEachIndexWithStatus(
+      shape, start_indices_iteration_space, gather_outer_loop_body));
+  evaluated_[gather] = std::move(result);
+  return absl::OkStatus();
 }
 
 absl::Status HloEvaluator::HandleScatter(const HloInstruction* hlo) {

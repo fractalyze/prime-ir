@@ -1608,15 +1608,11 @@ absl::Status ShapeVerifier::HandleRecvDone(HloInstruction* recv_done) {
 }
 
 absl::Status ShapeVerifier::HandleGather(HloInstruction* gather) {
-  // clang-format off
-  // TODO(chokobole): Uncomment this. Dependency: ShapeInference::InferGatherShape
-  // clang-format on
-  // return CheckShape(
-  //     gather,
-  //     ShapeInference::InferGatherShape(
-  //         gather->operand(0)->shape(), gather->operand(1)->shape(),
-  //         gather->gather_dimension_numbers(), gather->gather_slice_sizes()));
-  return absl::UnimplementedError("HandleGather not supported");
+  return CheckShape(
+      gather,
+      ShapeInference::InferGatherShape(
+          gather->operand(0)->shape(), gather->operand(1)->shape(),
+          gather->gather_dimension_numbers(), gather->gather_slice_sizes()));
 }
 
 absl::Status ShapeVerifier::HandleScatter(HloInstruction* scatter) {

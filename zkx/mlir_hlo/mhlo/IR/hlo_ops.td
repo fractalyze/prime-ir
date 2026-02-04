@@ -1514,6 +1514,44 @@ def MHLO_ReverseOp: MHLO_Op<"reverse",
   let hasFolder = 1;
 }
 
+def MHLO_GatherOp: MHLO_Op<"gather", [InferTensorTypeWithReify, Pure]> {
+  let summary = "Gather operation";
+  let description = [{
+    Gathers slices from `operand` tensor from offsets specified in
+    `start_indices` and produces a `result` tensor.
+
+    See:
+    https://github.com/openxla/stablehlo/blob/main/docs/spec.md#gather
+
+    Example:
+    ```mlir
+    %result = "mhlo.gather"(%operand, %start_indices) {
+      dimension_numbers = #mhlo.gather<
+        offset_dims = [3, 4],
+        collapsed_slice_dims = [1],
+        operand_batching_dims = [0],
+        start_indices_batching_dims = [1],
+        start_index_map = [2, 1],
+        index_vector_dim = 3>,
+      slice_sizes = dense<[0, 2, 2]> : tensor<3xi64>,
+      indices_are_sorted = false
+    } : (tensor<2x3x4x2xi64>, tensor<2x2x3x2xi64>) -> tensor<2x2x3x2x2xi64>
+    ```
+  }];
+
+  let arguments = (ins
+    MHLO_Tensor:$operand,
+    MHLO_IntTensor:$start_indices,
+    MHLO_GatherDimensionNumbers:$dimension_numbers,
+    I64ElementsAttr:$slice_sizes,
+    DefaultValuedOptionalAttr<BoolAttr, "false">:$indices_are_sorted
+  );
+
+  let results = (outs MHLO_Tensor);
+
+  let hasCanonicalizer = 1;
+}
+
 def MHLO_ScatterOp: MHLO_Op<"scatter",
       [SameVariadicOperandSize, RecursiveMemoryEffects,
       DeclareOpInterfaceMethods<InferTypeOpInterface>]> {

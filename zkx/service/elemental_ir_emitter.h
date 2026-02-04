@@ -141,10 +141,8 @@ class ElementalIrEmitter {
   absl::StatusOr<mlir::Value> EmitElementalBroadcast(
       const HloInstruction* instr, mlir::Value input,
       absl::Span<const int64_t> source_dimensions);
-  // TODO(batzor): Uncomment this. Dependency: Gather
-  // absl::StatusOr<mlir::Value> EmitElementalGather(
-  //     const HloInstruction* instr,
-  //     mlir::ValueRange indices);
+  absl::StatusOr<mlir::Value> EmitElementalGather(const HloInstruction* instr,
+                                                  mlir::ValueRange operands);
   absl::StatusOr<mlir::Value> EmitElementalDynamicSlice(
       const HloInstruction* instr, mlir::Value input,
       mlir::ValueRange start_indices);

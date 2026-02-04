@@ -867,6 +867,12 @@ class HloInstruction {
       absl::Span<HloComputation* const> branch_computations,
       absl::Span<HloInstruction* const> branch_computation_args);
 
+  static std::unique_ptr<HloInstruction> CreateGather(
+      const Shape& shape, HloInstruction* operand,
+      HloInstruction* start_indices,
+      const GatherDimensionNumbers& gather_dim_numbers,
+      absl::Span<const int64_t> slice_sizes, bool indices_are_sorted);
+
   static std::unique_ptr<HloInstruction> CreateScatter(
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       HloInstruction* scatter_indices,
@@ -2015,6 +2021,11 @@ class HloInstruction {
 
   // Delegates to HloDynamicSliceInstruction::dynamic_slice_sizes.
   const std::vector<int64_t>& dynamic_slice_sizes() const;
+
+  // Delegates to HloGatherInstruction::gather_dimension_numbers.
+  const GatherDimensionNumbers& gather_dimension_numbers() const;
+  // Delegates to HloGatherInstruction::gather_slice_sizes.
+  absl::Span<const int64_t> gather_slice_sizes() const;
 
   // Delegates to HloScatterInstruction::scatter_dimension_numbers().
   const ScatterDimensionNumbers& scatter_dimension_numbers() const;

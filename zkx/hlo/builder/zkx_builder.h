@@ -570,6 +570,16 @@ class ZkxBuilder {
                     absl::Span<const ZkxComputation* const> branch_computations,
                     absl::Span<const ZkxOp> branch_operands);
 
+  ZkxOp Gather(ZkxOp input, ZkxOp start_indices,
+               const GatherDimensionNumbers& dimension_numbers,
+               absl::Span<const int64_t> slice_sizes,
+               bool indices_are_sorted = false);
+
+  virtual absl::StatusOr<ZkxOp> GatherInternal(
+      const Shape& shape, ZkxOp input, ZkxOp start_indices,
+      const GatherDimensionNumbers& dimension_numbers,
+      absl::Span<const int64_t> slice_sizes, bool indices_are_sorted);
+
   ZkxOp Scatter(ZkxOp input, ZkxOp scatter_indices, ZkxOp updates,
                 const ZkxComputation& update_computation,
                 const ScatterDimensionNumbers& dimension_numbers,
@@ -914,6 +924,10 @@ class ZkxBuilder {
       ZkxOp branch_index,
       absl::Span<const ZkxComputation* const> branch_computations,
       absl::Span<const ZkxOp> branch_operands);
+  friend ZkxOp Gather(ZkxOp input, ZkxOp start_indices,
+                      const GatherDimensionNumbers& dimension_numbers,
+                      absl::Span<const int64_t> slice_sizes,
+                      bool indices_are_sorted);
   friend ZkxOp Scatter(ZkxOp input, ZkxOp scatter_indices, ZkxOp updates,
                        const ZkxComputation& update_computation,
                        const ScatterDimensionNumbers& dimension_numbers,
@@ -1543,6 +1557,12 @@ ZkxOp Conditional(ZkxOp predicate, ZkxOp true_operand,
 ZkxOp Conditional(ZkxOp branch_index,
                   absl::Span<const ZkxComputation* const> branch_computations,
                   absl::Span<const ZkxOp> branch_operands);
+
+// Enqueues a Gather node onto the computation.
+ZkxOp Gather(ZkxOp input, ZkxOp start_indices,
+             const GatherDimensionNumbers& dimension_numbers,
+             absl::Span<const int64_t> slice_sizes,
+             bool indices_are_sorted = false);
 
 // Enqueues a Scatter node onto the computation.
 ZkxOp Scatter(ZkxOp input, ZkxOp scatter_indices, ZkxOp updates,

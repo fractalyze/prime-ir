@@ -3301,6 +3301,185 @@ LogicalResult TupleOp::inferReturnTypes(
 }
 
 //===----------------------------------------------------------------------===//
+// GatherOp
+//===----------------------------------------------------------------------===//
+
+// Converts gather ops to slice ops in case we have a single set of constant
+// indices.
+struct GatherSlice : public OpRewritePattern<GatherOp> {
+  using OpRewritePattern<GatherOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(GatherOp gather,
+                                PatternRewriter &rewriter) const override {
+    DenseIntElementsAttr index;
+    if (!matchPattern(gather.getStartIndices(), m_Constant(&index)))
+      return failure();
+
+    const auto &dnums = gather.getDimensionNumbers();
+    if (dnums.getIndexVectorDim() != 0 || index.getType().getRank() > 1)
+      return failure();
+
+    // TODO(tberghammer): Remove when the verifier catches this case what is
+    // invalid if all previous condition holds.
+    if (index.getNumElements() !=
+        static_cast<int64_t>(dnums.getStartIndexMap().size()))
+      return failure();
+
+    RankedTensorType operandType =
+        dyn_cast<RankedTensorType>(gather->getOperand(0).getType());
+    if (!operandType || !operandType.hasStaticShape())
+      return failure();
+
+    auto sliceEnd =
+        llvm::to_vector<8>(gather.getSliceSizes().getValues<int64_t>());
+    llvm::SmallVector<int64_t, 8> sliceStart(sliceEnd.size(), 0);
+    for (auto it :
+         llvm::zip(dnums.getStartIndexMap(), index.getValues<APInt>())) {
+      int64_t mapIndex = std::get<0>(it);
+      // Clamp the indices within bounds to faithfully mirror gather semantics.
+      int64_t offset =
+          clamp(std::get<1>(it).getSExtValue(), static_cast<int64_t>(0),
+                operandType.getDimSize(mapIndex) - sliceEnd[mapIndex]);
+      sliceStart[mapIndex] += offset;
+      sliceEnd[mapIndex] += offset;
+    }
+
+    llvm::SmallVector<int64_t, 8> sliceStride(sliceEnd.size(), 1);
+    llvm::SmallVector<int64_t, 8> sliceShape(sliceEnd.size());
+    for (size_t i = 0; i < sliceEnd.size(); ++i) {
+      sliceShape[i] = sliceEnd[i] - sliceStart[i];
+    }
+    Type elementType = cast<TensorType>(gather.getType()).getElementType();
+    auto sliceType = RankedTensorType::get(sliceShape, elementType);
+    Value result = rewriter.create<SliceOp>(
+        gather.getLoc(), sliceType, gather.getOperand(),
+        rewriter.getI64TensorAttr(sliceStart),
+        rewriter.getI64TensorAttr(sliceEnd),
+        rewriter.getI64TensorAttr(sliceStride));
+
+    auto collapsedSliceDims = dnums.getCollapsedSliceDims();
+    if (!collapsedSliceDims.empty()) {
+      llvm::SmallVector<int64_t, 8> reshapeShape;
+      for (size_t i = 0; i < sliceShape.size(); ++i) {
+        if (llvm::count(collapsedSliceDims, i) == 0) {
+          reshapeShape.push_back(sliceShape[i]);
+        }
+      }
+      auto reshapeType = RankedTensorType::get(reshapeShape, elementType);
+      result = rewriter.create<ReshapeOp>(gather.getLoc(), reshapeType, result);
+    }
+
+    result.setType(gather.getType());
+    rewriter.replaceOp(gather, result);
+    return success();
+  }
+};
+
+void GatherOp::getCanonicalizationPatterns(RewritePatternSet &results,
+                                           MLIRContext *context) {
+  results.add<GatherSlice>(context);
+}
+
+namespace {
+
+// following https://www.tensorflow.org/xla/operation_semantics#gather
+// The bounds for the output array along dimension i is computed as follows:
+// (1) If i is present in batch_dims (i.e. is equal to batch_dims[k] for some k)
+// then we pick
+// the corresponding dimension bounds out of start_indices.shape, skipping
+// index_vector_dim
+// (i.e. pick start_indices.shape.dims[k] if k < index_vector_dim and
+// start_indices.shape.dims[k+1] otherwise).
+// (2) If i is present in offset_dims (i.e. equal to offset_dims[k] for some k)
+// then we pick
+// the corresponding bound out of slice_sizes after accounting for
+// collapsed_slice_dims
+// (i.e. we pick adjusted_slice_sizes[k] where adjusted_slice_sizes is
+// slice_sizes with the bounds at indices collapsed_slice_dims removed).
+
+void getSliceSizeValues(GatherOp *gather, OpBuilder &builder, Location loc,
+                        ValueRange operands,
+                        SmallVectorImpl<Value> &sliceSizes) {
+  for (int64_t val : gather->getSliceSizes().getValues<int64_t>()) {
+    sliceSizes.push_back(builder.create<arith::ConstantIndexOp>(loc, val));
+  }
+}
+
+template <typename Op>
+LogicalResult reifyGatherShape(Op *op, OpBuilder &builder, ValueRange operands,
+                               SmallVectorImpl<Value> &reifiedReturnShapes) {
+  // No support for unranked gather output shape a.t.m.
+  auto resultTy = mlir::dyn_cast<RankedTensorType>(op->getResult().getType());
+  if (!resultTy)
+    return failure();
+
+  typename Op::Adaptor adaptor(operands);
+  Value startIndices = adaptor.getStartIndices();
+
+  Location loc = op->getLoc();
+  int resultRank = resultTy.getRank();
+  Type shapeElTy = builder.getIndexType();
+  auto toShapeElType = [&](Value v) {
+    return maybeCastTo(builder, loc, v, shapeElTy);
+  };
+
+  SmallVector<Value, 4> sliceSizes;
+  getSliceSizeValues(op, builder, loc, operands, sliceSizes);
+  llvm::transform(sliceSizes, sliceSizes.begin(),
+                  [&](Value v) { return toShapeElType(v); });
+
+  auto getStartIndicesDim = [&](int64_t index) {
+    return toShapeElType(
+        builder.create<tensor::DimOp>(loc, startIndices, index));
+  };
+  SmallVector<Value, 4> shapeValues;
+  auto getSliceDim = [&sliceSizes](int64_t index) -> Value {
+    auto ret = sliceSizes[index];
+    return ret;
+  };
+  hlo::reifyGatherDimSizes(resultRank, getStartIndicesDim, getSliceDim,
+                           op->getDimensionNumbers().getOffsetDims(),
+                           op->getDimensionNumbers().getCollapsedSliceDims(),
+                           op->getDimensionNumbers().getOperandBatchingDims(),
+                           op->getDimensionNumbers().getIndexVectorDim(),
+                           shapeValues);
+
+  Value outputShape = builder.create<tensor::FromElementsOp>(
+      loc, RankedTensorType::get({resultRank}, shapeElTy), shapeValues);
+  reifiedReturnShapes.push_back(outputShape);
+
+  return success();
+}
+
+} // namespace
+
+LogicalResult
+GatherOp::reifyReturnTypeShapes(OpBuilder &builder, ValueRange operands,
+                                SmallVectorImpl<Value> &reifiedReturnShapes) {
+  return reifyGatherShape(this, builder, operands, reifiedReturnShapes);
+}
+
+LogicalResult GatherOp::inferReturnTypeComponents(
+    MLIRContext *context, std::optional<Location> location,
+    ValueShapeRange operands, DictionaryAttr attributes,
+    OpaqueProperties properties, RegionRange regions,
+    SmallVectorImpl<ShapedTypeComponents> &inferredReturnShapes) {
+  GatherOp::Adaptor adaptor(operands, attributes, properties, regions);
+  if (failed(verify1dTensor(location, adaptor.getSliceSizes(), "slice_sizes")))
+    return failure();
+  return hlo::inferGatherOp(
+      location, adaptor.getOperand(), adaptor.getStartIndices(),
+      adaptor.getDimensionNumbers().getOffsetDims(),
+      adaptor.getDimensionNumbers().getCollapsedSliceDims(),
+      adaptor.getDimensionNumbers().getOperandBatchingDims(),
+      adaptor.getDimensionNumbers().getStartIndicesBatchingDims(),
+      adaptor.getDimensionNumbers().getStartIndexMap(),
+      adaptor.getDimensionNumbers().getIndexVectorDim(),
+      llvm::to_vector(adaptor.getSliceSizes().getValues<int64_t>()),
+      inferredReturnShapes);
+}
+
+//===----------------------------------------------------------------------===//
 // ScatterOp
 //===----------------------------------------------------------------------===//
 
@@ -4223,6 +4402,48 @@ Attribute ScatterDimensionNumbersAttr::parse(AsmParser &parser, Type type) {
       parser.getContext(), updateWindowDims, insertedWindowDims,
       inputBatchingDims, scatterIndicesBatchingDims, scatterDimsToOperandDims,
       indexVectorDim);
+}
+
+// Custom printer and parser for GatherDimensionNumbersAttr.
+void GatherDimensionNumbersAttr::print(AsmPrinter &printer) const {
+  printStruct(printer, "gather", std::make_pair("offset_dims", getOffsetDims()),
+              std::make_pair("collapsed_slice_dims", getCollapsedSliceDims()),
+              std::make_pair("operand_batching_dims", getOperandBatchingDims()),
+              std::make_pair("start_indices_batching_dims",
+                             getStartIndicesBatchingDims()),
+              std::make_pair("start_index_map", getStartIndexMap()),
+              std::make_pair("index_vector_dim", getIndexVectorDim()));
+}
+
+Attribute GatherDimensionNumbersAttr::parse(AsmParser &parser, Type type) {
+  if (failed(parser.parseLess()))
+    return {};
+  SmallVector<int64_t> offsetDims;
+  SmallVector<int64_t> collapsedSliceDims;
+  SmallVector<int64_t> operandBatchingDims;
+  SmallVector<int64_t> startIndicesBatchingDims;
+  SmallVector<int64_t> startIndexMap;
+  int64_t indexVectorDim = 0;
+
+  if (failed(parseStruct(
+          parser,
+          {"offset_dims", "collapsed_slice_dims", "operand_batching_dims",
+           "start_indices_batching_dims", "start_index_map",
+           "index_vector_dim"},
+          {[&]() { return parseDims(parser, offsetDims); },
+           [&]() { return parseDims(parser, collapsedSliceDims); },
+           [&]() { return parseDims(parser, operandBatchingDims); },
+           [&]() { return parseDims(parser, startIndicesBatchingDims); },
+           [&]() { return parseDims(parser, startIndexMap); },
+           [&]() { return parser.parseInteger(indexVectorDim); }}))) {
+    parser.emitError(parser.getCurrentLocation())
+        << "failed parsing gather dimension numbers attribute";
+    return {};
+  }
+
+  return GatherDimensionNumbersAttr::get(
+      parser.getContext(), offsetDims, collapsedSliceDims, operandBatchingDims,
+      startIndicesBatchingDims, startIndexMap, indexVectorDim);
 }
 
 //===----------------------------------------------------------------------===//

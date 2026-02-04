@@ -2888,7 +2888,317 @@ absl::Status ValidateScatterDimensionNumbers(
   return absl::OkStatus();
 }
 
+absl::Status ValidateGatherDimensionNumbers(
+    const Shape& input_shape, absl::Span<const int64_t> start_indices_shape,
+    const GatherDimensionNumbers& dim_numbers) {
+  // Validate offset_dims in GatherDimensionNumbers.
+  if (!absl::c_is_sorted(dim_numbers.offset_dims())) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Output window dimensions in gather op must be ascending; got: %s.",
+        absl::StrJoin(dim_numbers.offset_dims(), ", ")));
+  }
+
+  if (absl::c_adjacent_find(dim_numbers.offset_dims()) !=
+      dim_numbers.offset_dims().end()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Output window dimensions in gather op must not repeat; got: %s.",
+        absl::StrJoin(dim_numbers.offset_dims(), ", ")));
+  }
+
+  const int64_t output_offset_dim_count = dim_numbers.offset_dims_size();
+  const int64_t output_shape_rank =
+      output_offset_dim_count + start_indices_shape.size() - 1;
+
+  for (int i = 0; i < dim_numbers.offset_dims_size(); ++i) {
+    int64_t offset_dim = dim_numbers.offset_dims(i);
+    if (offset_dim < 0 || offset_dim >= output_shape_rank) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Offset dimension %d in gather op is out of bounds; got %d, but "
+          "should "
+          "have been in [0,%d).",
+          i, offset_dim, output_shape_rank));
+    }
+  }
+
+  if (!IsUnboundedDynamicSize(
+          start_indices_shape[dim_numbers.index_vector_dim()]) &&
+      dim_numbers.start_index_map_size() !=
+          start_indices_shape[dim_numbers.index_vector_dim()]) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Gather op has %d elements in start_index_map and the "
+        "bound of dimension index_vector_dim=%d of start_indices is "
+        "%d. These two numbers must be equal.",
+        dim_numbers.start_index_map_size(), dim_numbers.index_vector_dim(),
+        start_indices_shape[dim_numbers.index_vector_dim()]));
+  }
+
+  // Validate start_index_map in GatherDimensionNumbers.
+  for (int i = 0; i < dim_numbers.start_index_map_size(); i++) {
+    int64_t operand_dim_for_start_index_i = dim_numbers.start_index_map(i);
+    if (operand_dim_for_start_index_i < 0 ||
+        operand_dim_for_start_index_i >= input_shape.dimensions_size()) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Invalid start_index_map; domain is [0, %d), got: %d->%d.",
+          input_shape.dimensions_size(), i, operand_dim_for_start_index_i));
+    }
+  }
+
+  std::vector<int64_t> sorted_start_index_map(
+      dim_numbers.start_index_map().begin(),
+      dim_numbers.start_index_map().end());
+
+  absl::c_sort(sorted_start_index_map);
+
+  if (absl::c_adjacent_find(sorted_start_index_map) !=
+      sorted_start_index_map.end()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Repeated dimensions are not allowed in start_index_map; "
+        "got: %s.",
+        absl::StrJoin(dim_numbers.start_index_map(), ", ")));
+  }
+
+  // Validate collapsed_slice_dims in GatherDimensionNumbers.
+  for (int64_t collapsed_dim : dim_numbers.collapsed_slice_dims()) {
+    if (collapsed_dim < 0 || collapsed_dim >= input_shape.dimensions_size()) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Invalid collapsed_slice_dims set in gather op; valid range is [0, "
+          "%d), got: %d.",
+          input_shape.dimensions_size(), collapsed_dim));
+    }
+  }
+
+  if (!absl::c_is_sorted(dim_numbers.collapsed_slice_dims())) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "collapsed_slice_dims in gather op must be sorted; got: %s",
+        absl::StrJoin(dim_numbers.collapsed_slice_dims(), ", ")));
+  }
+
+  if (absl::c_adjacent_find(dim_numbers.collapsed_slice_dims()) !=
+      dim_numbers.collapsed_slice_dims().end()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Repeated dimensions not allowed in collapsed_slice_dims in gather op; "
+        "got: %s.",
+        absl::StrJoin(dim_numbers.collapsed_slice_dims(), ", ")));
+  }
+
+  // Validate operand_batching_dims and start_indices_batching_dims are of the
+  // same size.
+  if (dim_numbers.operand_batching_dims_size() !=
+      dim_numbers.start_indices_batching_dims_size()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "operand_batching_dims and start_indices_batching_dims in gather op "
+        "must be of the same size; got: %d and %d.",
+        dim_numbers.operand_batching_dims_size(),
+        dim_numbers.start_indices_batching_dims_size()));
+  }
+
+  // Validate operand_batching_dims in GatherDimensionNumbers.
+  for (int64_t operand_batching_dim : dim_numbers.operand_batching_dims()) {
+    if (operand_batching_dim < 0 ||
+        operand_batching_dim >= input_shape.dimensions_size()) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Invalid operand_batching_dims set in gather op; valid range is [0, "
+          "%d), got: %d.",
+          input_shape.dimensions_size(), operand_batching_dim));
+    }
+  }
+
+  if (!absl::c_is_sorted(dim_numbers.operand_batching_dims())) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "operand_batching_dims in gather op must be sorted; got: %s",
+        absl::StrJoin(dim_numbers.operand_batching_dims(), ", ")));
+  }
+
+  if (absl::c_adjacent_find(dim_numbers.operand_batching_dims()) !=
+      dim_numbers.operand_batching_dims().end()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Repeated dimensions not allowed in operand_batching_dims in gather "
+        "op; "
+        "got: %s.",
+        absl::StrJoin(dim_numbers.operand_batching_dims(), ", ")));
+  }
+
+  // Validate start_indices_batching_dims in GatherDimensionNumbers.
+  for (int i = 0; i < dim_numbers.start_indices_batching_dims_size(); i++) {
+    int64_t start_indices_batching_dim_i =
+        dim_numbers.start_indices_batching_dims(i);
+    if (start_indices_batching_dim_i < 0 ||
+        start_indices_batching_dim_i >= start_indices_shape.size()) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Invalid start_indices_batching_dims; domain is [0, %d), got: "
+          "%d->%d.",
+          start_indices_shape.size(), i, start_indices_batching_dim_i));
+    }
+  }
+
+  std::vector<int64_t> sorted_start_indices_batching_dims(
+      dim_numbers.start_indices_batching_dims().begin(),
+      dim_numbers.start_indices_batching_dims().end());
+
+  absl::c_sort(sorted_start_indices_batching_dims);
+
+  if (absl::c_adjacent_find(sorted_start_indices_batching_dims) !=
+      sorted_start_indices_batching_dims.end()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Repeated dimensions are not allowed in start_indices_batching_dims; "
+        "got: %s.",
+        absl::StrJoin(dim_numbers.start_indices_batching_dims(), ", ")));
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
+
+// static
+absl::StatusOr<Shape> ShapeInference::InferGatherShape(
+    const Shape& input_shape, const Shape& start_indices_shape,
+    const GatherDimensionNumbers& gather_dim_numbers,
+    absl::Span<const int64_t> slice_sizes) {
+  TF_RETURN_IF_ERROR(
+      ExpectArray(input_shape, "input tensor operand of gather op"));
+  TF_RETURN_IF_ERROR(
+      ExpectArray(start_indices_shape, "gather indices operand of gather op"));
+
+  if (!ShapeUtil::ElementIsIntegral(start_indices_shape)) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Gather indices parameter must be an integral tensor; got %s.",
+        ShapeUtil::HumanString(start_indices_shape)));
+  }
+
+  // We implicitly reshape gather indices of shape P[A,B,C] to P[A,B,C,1] if
+  // index_vector_dim is rank(P).  The bounds of this expanded shape is
+  // stored in expanded_start_indices_shape.
+
+  if (start_indices_shape.dimensions_size() <
+          gather_dim_numbers.index_vector_dim() ||
+      gather_dim_numbers.index_vector_dim() < 0) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Gather index leaf dimension must be within [0, rank(start_indices) + "
+        "1). rank(start_indices) is %d and gather index leaf dimension is "
+        "%d.",
+        start_indices_shape.dimensions_size(),
+        gather_dim_numbers.index_vector_dim()));
+  }
+
+  std::vector<int64_t> expanded_start_indices_shape;
+  // Also tracks if an output dimension is dynamic.
+  std::vector<bool> expanded_start_indices_shape_dynamic_dimensions;
+  expanded_start_indices_shape.reserve(start_indices_shape.dimensions_size());
+  expanded_start_indices_shape_dynamic_dimensions.reserve(
+      start_indices_shape.dimensions_size());
+  absl::c_copy(start_indices_shape.dimensions(),
+               std::back_inserter(expanded_start_indices_shape));
+  absl::c_copy(
+      start_indices_shape.dynamic_dimensions(),
+      std::back_inserter(expanded_start_indices_shape_dynamic_dimensions));
+  if (expanded_start_indices_shape.size() ==
+      gather_dim_numbers.index_vector_dim()) {
+    expanded_start_indices_shape.push_back(1);
+    expanded_start_indices_shape_dynamic_dimensions.push_back(false);
+  }
+
+  TF_RETURN_IF_ERROR(ValidateGatherDimensionNumbers(
+      input_shape, expanded_start_indices_shape, gather_dim_numbers));
+
+  if (slice_sizes.size() != input_shape.dimensions_size()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Gather op must have one slice size for every input dimension; got: "
+        "len(slice_sizes)=%lu, input_shape.rank=%d.",
+        slice_sizes.size(), input_shape.dimensions_size()));
+  }
+
+  if (slice_sizes.size() !=
+      gather_dim_numbers.offset_dims_size() +
+          gather_dim_numbers.collapsed_slice_dims_size() +
+          gather_dim_numbers.operand_batching_dims_size()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "All components of the offset index in a gather op must either be a "
+        "offset dimension or explicitly collapsed or explicitly batched; got "
+        "len(slice_sizes)=%lu, output_slice_sizes=%s, collapsed_slice_dims=%s, "
+        "operand_batching_dims=%s.",
+        slice_sizes.size(),
+        absl::StrJoin(gather_dim_numbers.offset_dims(), ","),
+        absl::StrJoin(gather_dim_numbers.collapsed_slice_dims(), ","),
+        absl::StrJoin(gather_dim_numbers.operand_batching_dims(), ",")));
+  }
+
+  for (int64_t i = 0; i < static_cast<int64_t>(slice_sizes.size()); i++) {
+    if (input_shape.is_unbounded_dynamic_dimension(i)) continue;
+    int64_t slice_size = slice_sizes[i];
+    int64_t corresponding_input_size = input_shape.dimensions(i);
+    if (slice_size < 0 || slice_size > corresponding_input_size) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Slice size at index %d in gather op is out of range, must be "
+          "within [0, %d), got %d.",
+          i, corresponding_input_size + 1, slice_size));
+    }
+  }
+
+  for (int64_t i = 0; i < gather_dim_numbers.collapsed_slice_dims_size(); i++) {
+    if (slice_sizes[gather_dim_numbers.collapsed_slice_dims(i)] > 1) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Gather op can only collapse slice dims with bound 1 or 0, but bound "
+          "is %d for index %d at position %d.",
+          slice_sizes[gather_dim_numbers.collapsed_slice_dims(i)],
+          gather_dim_numbers.collapsed_slice_dims(i), i));
+    }
+  }
+
+  for (int64_t i = 0; i < gather_dim_numbers.operand_batching_dims_size();
+       i++) {
+    if (slice_sizes[gather_dim_numbers.operand_batching_dims(i)] > 1) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Gather op can only have operand_batching_dims with bound 1 or 0, "
+          "but bound is %d for index %d at position %d.",
+          slice_sizes[gather_dim_numbers.operand_batching_dims(i)],
+          gather_dim_numbers.operand_batching_dims(i), i));
+    }
+  }
+
+  int64_t result_rank = gather_dim_numbers.offset_dims_size() +
+                        (expanded_start_indices_shape.size() - 1);
+  int64_t offset_dims_seen = 0;
+  int64_t gather_dims_seen = 0;
+  std::vector<int64_t> output_dim_bounds;
+  output_dim_bounds.reserve(result_rank);
+
+  std::vector<bool> output_dim_is_dynamic;
+  output_dim_is_dynamic.reserve(result_rank);
+  for (int64_t i = 0; i < result_rank; i++) {
+    int64_t current_bound;
+    bool dim_dynamic = false;
+    bool is_window_index =
+        absl::c_binary_search(gather_dim_numbers.offset_dims(), i);
+    if (is_window_index) {
+      while (absl::c_binary_search(gather_dim_numbers.collapsed_slice_dims(),
+                                   offset_dims_seen) ||
+             absl::c_binary_search(gather_dim_numbers.operand_batching_dims(),
+                                   offset_dims_seen)) {
+        offset_dims_seen++;
+      }
+      // Gathering an entire dynamic dimension creates dynamic dimension.
+      if (slice_sizes[offset_dims_seen] ==
+          input_shape.dimensions(offset_dims_seen)) {
+        dim_dynamic = input_shape.is_dynamic_dimension(offset_dims_seen);
+      }
+      current_bound = slice_sizes[offset_dims_seen++];
+    } else {
+      if (gather_dims_seen == gather_dim_numbers.index_vector_dim()) {
+        gather_dims_seen++;
+      }
+      // Forward dynamic dimensions from indices.
+      dim_dynamic =
+          expanded_start_indices_shape_dynamic_dimensions[gather_dims_seen];
+
+      current_bound = expanded_start_indices_shape[gather_dims_seen++];
+    }
+    output_dim_is_dynamic.push_back(dim_dynamic);
+    output_dim_bounds.push_back(current_bound);
+  }
+
+  return ShapeUtil::MakeShape(input_shape.element_type(), output_dim_bounds,
+                              output_dim_is_dynamic);
+}
 
 // static
 absl::StatusOr<Shape> ShapeInference::InferScatterShape(

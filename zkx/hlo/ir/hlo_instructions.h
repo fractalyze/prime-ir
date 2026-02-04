@@ -1982,6 +1982,61 @@ class HloDynamicUpdateSliceInstruction : public HloDynamicIndexInstruction {
   }
 };
 
+class HloGatherInstruction : public HloInstruction {
+ public:
+  explicit HloGatherInstruction(
+      const Shape& shape, HloInstruction* operand,
+      HloInstruction* start_indices,
+      const GatherDimensionNumbers& gather_dim_numbers,
+      absl::Span<const int64_t> slice_sizes, bool indices_are_sorted);
+  const GatherDimensionNumbers& gather_dimension_numbers() const {
+    CHECK_NE(gather_dimension_numbers_, nullptr);
+    return *gather_dimension_numbers_;
+  }
+  absl::Span<const int64_t> gather_slice_sizes() const {
+    return gather_slice_sizes_;
+  }
+  bool indices_are_sorted() const { return indices_are_sorted_; }
+  void set_indices_are_sorted(bool indices_are_sorted) {
+    indices_are_sorted_ = indices_are_sorted;
+  }
+  // Returns a serialized representation of this instruction.
+  HloInstructionProto ToProto() const override;
+
+  // Creates an instance of GatherDimensionNumbers.
+  static GatherDimensionNumbers MakeGatherDimNumbers(
+      absl::Span<const int64_t> offset_dims,
+      absl::Span<const int64_t> collapsed_slice_dims,
+      absl::Span<const int64_t> start_index_map, int64_t index_vector_dim,
+      absl::Span<const int64_t> operand_batching_dims = {},
+      absl::Span<const int64_t> start_indices_batching_dims = {});
+  // Returns the dump string of the given gather dimension numbers.
+  static std::string GatherDimensionNumbersToString(
+      const GatherDimensionNumbers& dim_numbers);
+  // Prints the dump string of the given gather dimension numbers.
+  static void PrintGatherDimensionNumbers(
+      Printer* printer, const GatherDimensionNumbers& dim_numbers);
+
+  static bool ClassOf(const HloInstruction* hlo) {
+    return hlo->opcode() == HloOpcode::kGather;
+  }
+
+ private:
+  void PrintExtraAttributesImpl(AttributePrinter& printer,
+                                const HloPrintOptions& options) const override;
+  bool IdenticalSlowPath(
+      const HloInstruction& other,
+      absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
+          eq_computations) const override;
+  std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
+      const Shape& shape, absl::Span<HloInstruction* const> new_operands,
+      HloCloneContext* context) const override;
+
+  std::unique_ptr<GatherDimensionNumbers> gather_dimension_numbers_;
+  std::vector<int64_t> gather_slice_sizes_;
+  bool indices_are_sorted_;
+};
+
 class HloScatterInstruction : public HloInstruction {
  public:
   explicit HloScatterInstruction(

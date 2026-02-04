@@ -3149,10 +3149,58 @@ HloInstruction* HloParserImpl::CreateInstruction(  // NOLINT
       return nullptr;
     }
     case HloOpcode::kGather: {
-      // clang-format off
-      // TODO(chokobole): Implement this. Dependency: HloInstruction::CreateGather
-      // clang-format on
-      return nullptr;
+      std::optional<std::vector<int64_t>> offset_dims;
+      attrs["offset_dims"] = {/*required=*/true, AttrTy::kBracedInt64List,
+                              &offset_dims};
+      std::optional<std::vector<int64_t>> collapsed_slice_dims;
+      attrs["collapsed_slice_dims"] = {
+          /*required=*/true, AttrTy::kBracedInt64List, &collapsed_slice_dims};
+      std::optional<std::vector<int64_t>> start_index_map;
+      attrs["start_index_map"] = {/*required=*/true, AttrTy::kBracedInt64List,
+                                  &start_index_map};
+      std::optional<int64_t> index_vector_dim;
+      attrs["index_vector_dim"] = {/*required=*/true, AttrTy::kInt64,
+                                   &index_vector_dim};
+      std::optional<std::vector<int64_t>> slice_sizes;
+      attrs["slice_sizes"] = {/*required=*/true, AttrTy::kBracedInt64List,
+                              &slice_sizes};
+      std::optional<bool> indices_are_sorted = false;
+      attrs["indices_are_sorted"] = {/*required=*/false, AttrTy::kBool,
+                                     &indices_are_sorted};
+      std::optional<std::vector<int64_t>> operand_batching_dims;
+      attrs["operand_batching_dims"] = {
+          /*required=*/false, AttrTy::kBracedInt64List, &operand_batching_dims};
+      std::optional<std::vector<int64_t>> start_indices_batching_dims;
+      attrs["start_indices_batching_dims"] = {/*required=*/false,
+                                              AttrTy::kBracedInt64List,
+                                              &start_indices_batching_dims};
+
+      if ((!preset_operands &&
+           !ParseOperands(&operands, builder, /*expected_size=*/2)) ||
+          !ParseAttributes(attrs, allow_attributes, shape)) {
+        return nullptr;
+      }
+
+      GatherDimensionNumbers dim_numbers =
+          HloGatherInstruction::MakeGatherDimNumbers(
+              /*offset_dims=*/*offset_dims,
+              /*collapsed_slice_dims=*/*collapsed_slice_dims,
+              /*start_index_map=*/*start_index_map,
+              /*index_vector_dim=*/*index_vector_dim,
+              /*operand_batching_dims=*/
+              operand_batching_dims.value_or(std::vector<int64_t>()),
+              /*start_indices_batching_dims=*/
+              start_indices_batching_dims.value_or(std::vector<int64_t>()));
+      if (!maybe_infer_shape([&] {
+            return ShapeInference::InferGatherShape(operands[0]->shape(),
+                                                    operands[1]->shape(),
+                                                    dim_numbers, *slice_sizes);
+          })) {
+        return nullptr;
+      }
+      return builder->AddInstruction(HloInstruction::CreateGather(
+          *shape, /*operand=*/operands[0], /*start_indices=*/operands[1],
+          dim_numbers, *slice_sizes, indices_are_sorted.value()));
     }
     case HloOpcode::kScatter: {
       std::optional<std::vector<int64_t>> update_window_dims;
