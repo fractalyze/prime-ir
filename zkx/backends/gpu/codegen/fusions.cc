@@ -27,6 +27,7 @@ limitations under the License.
 #include "zkx/backends/gpu/codegen/emitters/loop.h"
 #include "zkx/backends/gpu/codegen/emitters/reduction.h"
 #include "zkx/backends/gpu/codegen/emitters/scatter.h"
+#include "zkx/backends/gpu/codegen/emitters/transpose.h"
 #include "zkx/layout_util.h"
 
 namespace zkx::gpu {
@@ -105,11 +106,8 @@ std::unique_ptr<FusionInterface> GetFusionEmitter(
       return CreateReductionFusion(analysis);
     case HloFusionAnalysis::EmitterFusionKind::kScatter:
       return CreateScatterFusion(analysis);
-    case HloFusionAnalysis::EmitterFusionKind::kTranspose: {
-      // TODO(chokobole): Implement this. Dependency: TransposeFusion
-      // return std::make_unique<TransposeFusion>(analysis);
-      return nullptr;
-    }
+    case HloFusionAnalysis::EmitterFusionKind::kTranspose:
+      return std::make_unique<TransposeFusion>(analysis);
     case HloFusionAnalysis::EmitterFusionKind::kConcatenate:
       return std::make_unique<ConcatenateFusion>(analysis);
     case HloFusionAnalysis::EmitterFusionKind::kTriton:

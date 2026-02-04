@@ -84,6 +84,7 @@ zkx_cc_library(
         "//zkx/backends/gpu/codegen/emitters:loop",
         "//zkx/backends/gpu/codegen/emitters:reduction",
         "//zkx/backends/gpu/codegen/emitters:scatter",
+        "//zkx/backends/gpu/codegen/emitters:transpose",
         "//zkx/hlo/ir:hlo",
         "//zkx/service:buffer_assignment",
         "//zkx/service/gpu:hlo_fusion_analysis",
