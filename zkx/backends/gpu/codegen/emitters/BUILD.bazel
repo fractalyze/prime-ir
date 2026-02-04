@@ -160,6 +160,35 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "input_slices",
+    srcs = ["input_slices.cc"],
+    hdrs = ["input_slices.h"],
+    deps = [
+        ":emitter_base",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/codegen/emitters:computation_partitioner",
+        "//zkx/codegen/emitters:elemental_hlo_to_mlir",
+        "//zkx/codegen/emitters/ir:zkx",
+        "//zkx/hlo/analysis:indexing_analysis",
+        "//zkx/hlo/analysis:indexing_map",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/utils:hlo_traversal",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/service/gpu:launch_dimensions",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
+
+zkx_cc_library(
     name = "loop",
     srcs = ["loop.cc"],
     hdrs = ["loop.h"],

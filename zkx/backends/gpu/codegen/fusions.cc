@@ -24,6 +24,7 @@ limitations under the License.
 
 #include "zkx/backends/gpu/codegen/emitters/concatenate.h"
 #include "zkx/backends/gpu/codegen/emitters/in_place_dynamic_update_slice.h"
+#include "zkx/backends/gpu/codegen/emitters/input_slices.h"
 #include "zkx/backends/gpu/codegen/emitters/loop.h"
 #include "zkx/backends/gpu/codegen/emitters/reduction.h"
 #include "zkx/layout_util.h"
@@ -87,9 +88,7 @@ std::unique_ptr<FusionInterface> GetFusionEmitter(
       return nullptr;
     }
     case HloFusionAnalysis::EmitterFusionKind::kInputSlices:
-      // TODO(chokobole): Implement this. Dependency: InputSlicesFusion
-      // return std::make_unique<InputSlicesFusion>(analysis);
-      return nullptr;
+      return std::make_unique<InputSlicesFusion>(analysis);
     case HloFusionAnalysis::EmitterFusionKind::kLoop: {
       if (IsDynamicUpdateSliceFusion(analysis) &&
           fusion_info.CanEmitDynamicUpdateSliceInPlace()) {
