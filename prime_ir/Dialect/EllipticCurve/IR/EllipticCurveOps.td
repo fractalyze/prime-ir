@@ -31,20 +31,24 @@ include "prime_ir/Dialect/ModArith/IR/ModArithTypes.td"
 include "prime_ir/Utils/CommonTraits.td"
 include "prime_ir/Utils/CommonTypeConstraints.td"
 
-// Base class for elliptic curve operations.
-class EllipticCurve_Op<string mnemonic, list<Trait> traits = []> :
+// Base class for all elliptic curve operations.
+class EllipticCurve_Op_Base<string mnemonic, list<Trait> traits = []> :
   Op<EllipticCurve_Dialect, mnemonic, traits # [Pure]> {
   let cppNamespace = "::mlir::prime_ir::elliptic_curve";
 }
 
+// Base class for elementwise mappable elliptic curve operations.
+class EllipticCurve_Op<string mnemonic, list<Trait> traits = []> :
+  EllipticCurve_Op_Base<mnemonic, traits # ElementwiseMappable.traits>;
+
 class EllipticCurve_UnaryOp<string mnemonic, list<Trait> traits = []> :
-    EllipticCurve_Op<mnemonic, traits # [Pure, ElementwiseMappable]> {
+  EllipticCurve_Op<mnemonic, traits> {
   let arguments = (ins PointLike:$input);
   let results = (outs PointLike:$output);
 }
 
 class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
-  EllipticCurve_Op<mnemonic, traits # [Pure, ElementwiseMappable]>,
+  EllipticCurve_Op<mnemonic, traits>,
   Arguments<(ins PointLike:$lhs, PointLike:$rhs)>,
   Results<(outs PointLike:$output)> {
   let hasVerifier = 1;
@@ -53,7 +57,7 @@ class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
 
 ////////////// POINT INITIALIZATIONS //////////////
 
-def EllipticCurve_ConstantOp : EllipticCurve_Op<"constant", [ConstantLike]> {
+def EllipticCurve_ConstantOp : EllipticCurve_Op_Base<"constant", [ConstantLike]> {
   let summary = "Define a constant elliptic curve point via coordinates";
   let description = [{
     Defines a constant elliptic curve point from integer coordinates. The number of
@@ -96,7 +100,7 @@ def EllipticCurve_ConstantOp : EllipticCurve_Op<"constant", [ConstantLike]> {
 
 }
 
-def EllipticCurve_FromCoordsOp : EllipticCurve_Op<"from_coords"> {
+def EllipticCurve_FromCoordsOp : EllipticCurve_Op_Base<"from_coords"> {
   let summary = "Constructs an elliptic curve point from coordinates";
   let description = [{
     Constructs an elliptic curve point from coordinates in affine(x, y), jacobian(x, y, z), or xyzz(x, y, z², z³) form.
@@ -137,7 +141,7 @@ def EllipticCurve_IsZeroOp : EllipticCurve_Op<"is_zero", [TypesMatchWith<
 
 /////////// POINT EXTRACTION //////////////
 
-def EllipticCurve_ToCoordsOp : EllipticCurve_Op<"to_coords"> {
+def EllipticCurve_ToCoordsOp : EllipticCurve_Op_Base<"to_coords"> {
   let summary = "Extracts coordinates of a point";
   let description = [{
     Extracts coordinates of an elliptic curve point as integers.
@@ -245,7 +249,7 @@ def EllipticCurve_DoubleOp : EllipticCurve_UnaryOp<"double"> {
 ////////////// MSM FUNCTIONS //////////////
 
 // Elliptic curve point scalar multiplication.
-def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [ElementwiseMappable]> {
+def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul"> {
   let summary = "Elliptic curve point scalar multiplication";
   let description = [{
     Computes the product of an elliptic curve point and a scalar prime field value.
@@ -268,7 +272,7 @@ def EllipticCurve_ScalarMulOp : EllipticCurve_Op<"scalar_mul", [ElementwiseMappa
 }
 
 // Elliptic curve point comparison.
-def EllipticCurve_CmpOp : EllipticCurve_Op<"cmp", [SameTypeOperands, Pure, ElementwiseMappable,
+def EllipticCurve_CmpOp : EllipticCurve_Op<"cmp", [SameTypeOperands,
   TypesMatchWith<"result type has i1 element type and same shape as operands", "lhs", "result", "getI1SameShape($_self)">]> {
   let summary = "Elliptic curve point comparison operation";
   let description = [{
@@ -300,7 +304,7 @@ def EllipticCurve_CmpOp : EllipticCurve_Op<"cmp", [SameTypeOperands, Pure, Eleme
 }
 
 // Elliptic curve point scalar multiplication.
-def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
+def EllipticCurve_MSMOp : EllipticCurve_Op_Base<"msm"> {
   let summary = "Elliptic curve multi-scalar multiplication";
   let description = [{
     Computes multi-scalar multiplication (MSM) of elliptic curve points and scalars.
@@ -355,7 +359,7 @@ def EllipticCurve_MSMOp : EllipticCurve_Op<"msm", []> {
   let assemblyFormat = "operands attr-dict `degree` `=` $degree (`window_bits` `=` $windowBits^)? (`parallel` $parallel^)? `:` type($scalars) `,` type($points) `->` type($output)";
 }
 
-def EllipticCurve_ScalarDecompOp : EllipticCurve_Op<"scalar_decomp", [
+def EllipticCurve_ScalarDecompOp : EllipticCurve_Op_Base<"scalar_decomp", [
   TypesMatchWith<
     "bucket_indices and point_indices must have the same size",
     "bucketIndices", "pointIndices", "$_self">,
@@ -400,7 +404,7 @@ def EllipticCurve_ScalarDecompOp : EllipticCurve_Op<"scalar_decomp", [
 
 // Elliptic curve MSM bucket accumulation for GPU.
 // Note that parameters differ from the bucket accumulation inside the other MSMOp.
-def EllipticCurve_BucketAccOp : EllipticCurve_Op<"bucket_acc", []> {
+def EllipticCurve_BucketAccOp : EllipticCurve_Op_Base<"bucket_acc"> {
   let summary = "MSM Bucket Accumulation";
   let description = [{
     Computes the accumulation of points for each bucket given a set of points, sorted point indices, sorted unique bucket indices, and bucket offsets.
@@ -436,7 +440,7 @@ def EllipticCurve_BucketAccOp : EllipticCurve_Op<"bucket_acc", []> {
 }
 
 // Elliptic curve MSM bucket reduction.
-def EllipticCurve_BucketReduceOp : EllipticCurve_Op<"bucket_reduce", [SameOperandsAndResultElementType]> {
+def EllipticCurve_BucketReduceOp : EllipticCurve_Op_Base<"bucket_reduce", [SameOperandsAndResultElementType]> {
   let summary = "MSM Bucket Reduction";
   let description = [{
     Computes the reduction of buckets into windows given all buckets and the scalar field type as an attribute.
@@ -461,7 +465,7 @@ def EllipticCurve_BucketReduceOp : EllipticCurve_Op<"bucket_reduce", [SameOperan
 }
 
 // Elliptic curve MSM window reduction.
-def EllipticCurve_WindowReduceOp : EllipticCurve_Op<"window_reduce", [TypesMatchWith<
+def EllipticCurve_WindowReduceOp : EllipticCurve_Op_Base<"window_reduce", [TypesMatchWith<
   "output type must be the same as the element type of the windows",
   "windows", "output", "getElementTypeOrSelf($_self)">,
   VarPositiveAndBounded<"getBitsPerWindow()", "getScalarType().getStorageBitWidth()">]> {

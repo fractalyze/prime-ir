@@ -28,18 +28,22 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-// Base class for modular operations.
+// Base class for all modular operations.
+class ModArith_Op_Base<string mnemonic, list<Trait> traits = []> :
+  Op<ModArith_Dialect, mnemonic, traits # [Pure]>;
+
+// Base class for elementwise mappable modular operations.
 class ModArith_Op<string mnemonic, list<Trait> traits = []> :
-  Op<ModArith_Dialect, mnemonic, traits #[Pure] # ElementwiseMappable.traits>;
+  ModArith_Op_Base<mnemonic, traits # ElementwiseMappable.traits>;
 
 // Base class for modular arithmetic ops. All ops have one result,
 // and the result type is the same as the operand type.
 class ModArith_ArithOp<string mnemonic, list<Trait> traits = []> :
-    ModArith_Op<mnemonic, traits # [SameOperandsAndResultType]>;
+  ModArith_Op<mnemonic, traits # [SameOperandsAndResultType]>;
 
 // Base class for unary modular arithmetic.
 class ModArith_UnaryOp<string mnemonic, list<Trait> traits = []> :
-    ModArith_ArithOp<mnemonic, traits>,
+  ModArith_ArithOp<mnemonic, traits>,
   Arguments<(ins ModArithLike:$input)>,
   Results<(outs ModArithLike:$output)> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
@@ -53,7 +57,7 @@ class ModArith_BinaryOp<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [ConstantLike, Pure]> {
+def ModArith_ConstantOp : ModArith_Op_Base<"constant", [ConstantLike]> {
   let summary = "Define a constant value via an attribute.";
   let description = [{
     Example:
@@ -74,9 +78,8 @@ def ModArith_ConstantOp : Op<ModArith_Dialect, "constant", [ConstantLike, Pure]>
   let hasFolder = 1;
 }
 
-def ModArith_BitcastOp : Op<ModArith_Dialect, "bitcast", [Pure,
- SameOperandsAndResultShape, AllSameTensorDims<["input", "output"]>,
- DeclareOpInterfaceMethods<CastOpInterface>]> {
+def ModArith_BitcastOp : ModArith_Op_Base<"bitcast", [SameOperandsAndResultShape,
+  AllSameTensorDims<["input", "output"]>, DeclareOpInterfaceMethods<CastOpInterface>]> {
   let summary = "Bitcast between modular types and to/from integer types";
   let description = [{
     Bitcasts between modular types and to/from integer types.
@@ -239,7 +242,7 @@ def ModArith_MontSquareOp : ModArith_UnaryOp<"mont_square"> {
   let hasFolder = 1;
 }
 
-def ModArith_InverseOp : Op<ModArith_Dialect, "inverse", [Pure, SameOperandsAndResultType, Involution]> {
+def ModArith_InverseOp : ModArith_Op_Base<"inverse", [SameOperandsAndResultType, Involution]> {
   let summary = "Modular inverse operation";
   let description = [{
     Computes the modular inverse of a given modular type integer.

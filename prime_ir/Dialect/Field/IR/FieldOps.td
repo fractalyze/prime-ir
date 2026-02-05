@@ -30,18 +30,22 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
-// Base class for field operations.
+// Base class for all field operations.
+class Field_Op_Base<string mnemonic, list<Trait> traits = []> :
+  Op<Field_Dialect, mnemonic, traits # [Pure]>;
+
+// Base class for elementwise mappable field operations.
 class Field_Op<string mnemonic, list<Trait> traits = []> :
-  Op<Field_Dialect, mnemonic, traits #[Pure] # ElementwiseMappable.traits>;
+  Field_Op_Base<mnemonic, traits # ElementwiseMappable.traits>;
 
 // Base class for field arithmetic ops. All ops have one result,
 // and the result type is the same as the operand type.
 class Field_ArithOp<string mnemonic, list<Trait> traits = []> :
-    Field_Op<mnemonic, traits # [SameOperandsAndResultType]>;
+  Field_Op<mnemonic, traits # [SameOperandsAndResultType]>;
 
 // Base class for unary field arithmetic.
 class Field_UnaryOp<string mnemonic, list<Trait> traits = []> :
-    Field_ArithOp<mnemonic, traits>,
+  Field_ArithOp<mnemonic, traits>,
   Arguments<(ins FieldLike:$input)>,
   Results<(outs FieldLike:$output)> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
@@ -55,7 +59,7 @@ class Field_BinaryOp<string mnemonic, list<Trait> traits = []> :
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
+def Field_ConstantOp : Field_Op_Base<"constant", [ConstantLike]> {
   let summary = "Define a constant prime field element via an attribute";
   let description = [{
     Example:
@@ -114,8 +118,7 @@ def Field_ConstantOp : Op<Field_Dialect, "constant", [ConstantLike, Pure]> {
   }];
 }
 
-def Field_BitcastOp : Op<Field_Dialect, "bitcast", [Pure,
- DeclareOpInterfaceMethods<CastOpInterface>]> {
+def Field_BitcastOp : Field_Op_Base<"bitcast", [DeclareOpInterfaceMethods<CastOpInterface>]> {
   let summary = "Bitcast between field types and integer types";
   let description = [{
     Bitcasts between field types (prime or extension) and integer types.
@@ -230,7 +233,7 @@ def Field_FromMontOp : Field_Op<"from_mont", [TypesMatchWith<
 }
 
 // Field multiplicative inverse
-def Field_InverseOp : Field_UnaryOp<"inverse", [Involution]> {
+def Field_InverseOp : Field_Op_Base<"inverse", [SameOperandsAndResultType, Involution]> {
   let summary = "Field multiplicative inverse";
   let description = [{
     Computes the multiplicative inverse of a field element.
@@ -240,6 +243,9 @@ def Field_InverseOp : Field_UnaryOp<"inverse", [Involution]> {
     %inv_a = field.inverse %a : !field.pf<primeModulus>
     ```
   }];
+  let arguments = (ins FieldLike:$input);
+  let results = (outs FieldLike:$output);
+  let assemblyFormat = "operands attr-dict `:` type($output)";
   let hasFolder = 1;
 }
 
@@ -347,7 +353,7 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
   let assemblyFormat = "operands attr-dict `:` type($base) `,` type($exp)";
 }
 
-def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
+def Field_ExtToCoeffsOp : Field_Op_Base<"ext_to_coeffs"> {
   let summary = "Get the coefficients of an extension field element";
   let description = [{
     Gets the coefficient representation of an extension field element.
@@ -374,7 +380,7 @@ def Field_ExtToCoeffsOp : Field_Op<"ext_to_coeffs", [Pure]> {
   let hasVerifier = 1;
 }
 
-def Field_ExtFromCoeffsOp : Field_Op<"ext_from_coeffs", [Pure]> {
+def Field_ExtFromCoeffsOp : Field_Op_Base<"ext_from_coeffs"> {
   let summary = "Constructs extension field element from the coefficients";
   let description = [{
     Constructs extension field element from the coefficients.
