@@ -22,6 +22,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointOperationBaseForward.h"
+#include "prime_ir/Dialect/Field/IR/BinaryFieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/ExtensionFieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/PrimeFieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/TowerFieldConfig.h"
@@ -31,8 +32,9 @@ namespace mlir::prime_ir::field {
 
 class FieldOperation {
 public:
-  using OperationType = TOWER_FIELD_VARIANT(PrimeFieldOperation,
-                                            ExtensionFieldOperation, Op);
+  using OperationType = TOWER_FIELD_VARIANT(ExtensionFieldOperation, Op,
+                                            PrimeFieldOperation,
+                                            BinaryFieldOperation);
 
   FieldOperation() = default;
 
@@ -46,6 +48,10 @@ public:
   FieldOperation(T &&value, Type type) {
     if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
       operation = PrimeFieldOperation(std::forward<T>(value), pfType);
+      return;
+    }
+    if (auto bfType = dyn_cast<BinaryFieldType>(type)) {
+      operation = BinaryFieldOperation(std::forward<T>(value), bfType);
       return;
     }
     createExtFieldOp(std::forward<T>(value), cast<ExtensionFieldType>(type));
@@ -66,6 +72,11 @@ public:
           PrimeFieldOperation::fromUnchecked(std::forward<T>(value), pfType);
       return ret;
     }
+    if (auto bfType = dyn_cast<BinaryFieldType>(type)) {
+      ret.operation =
+          BinaryFieldOperation::fromUnchecked(std::forward<T>(value), bfType);
+      return ret;
+    }
     ret.createRawExtFieldOp(std::forward<T>(value),
                             cast<ExtensionFieldType>(type));
     return ret;
@@ -75,6 +86,11 @@ public:
     if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
       ret.operation =
           PrimeFieldOperation::fromUnchecked(cast<IntegerAttr>(attr), pfType);
+      return ret;
+    }
+    if (auto bfType = dyn_cast<BinaryFieldType>(type)) {
+      ret.operation =
+          BinaryFieldOperation::fromUnchecked(cast<IntegerAttr>(attr), bfType);
       return ret;
     }
     ret.createRawExtFieldOp(cast<DenseIntElementsAttr>(attr),

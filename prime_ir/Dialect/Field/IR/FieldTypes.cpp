@@ -37,7 +37,7 @@ bool isMontgomery(Type type) {
 }
 
 unsigned getIntOrPrimeFieldBitWidth(Type type) {
-  assert(llvm::isa<PrimeFieldType>(type) || llvm::isa<IntegerType>(type));
+  assert((llvm::isa<PrimeFieldType, IntegerType>(type)));
   if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
     return pfType.getStorageBitWidth();
   }
@@ -54,13 +54,12 @@ ParseResult parseColonFieldType(AsmParser &parser, Type &type) {
   if (failed(parser.parseColonType(type)))
     return failure();
 
-  if (isa<PrimeFieldType>(type)) {
-    return success();
-  } else if (isa<ExtensionFieldType>(type)) {
+  if (isa<PrimeFieldType, BinaryFieldType, ExtensionFieldType>(type)) {
     return success();
   }
-  return parser.emitError(parser.getCurrentLocation(),
-                          "expected prime field or extension field type");
+  return parser.emitError(
+      parser.getCurrentLocation(),
+      "expected prime field, binary field, or extension field type");
 }
 
 ParseResult validateAttribute(AsmParser &parser, Type type, Attribute attr,
@@ -174,6 +173,78 @@ ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
 }
 
 //===----------------------------------------------------------------------===//
+// BinaryFieldType
+//===----------------------------------------------------------------------===//
+
+LogicalResult
+BinaryFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
+                        unsigned towerLevel) {
+  if (towerLevel > kMaxTowerLevel) {
+    return emitError() << "binary field tower level must be between 0 and "
+                       << kMaxTowerLevel << ", got " << towerLevel;
+  }
+  return success();
+}
+
+// static
+Type BinaryFieldType::parse(AsmParser &parser) {
+  if (failed(parser.parseLess())) {
+    return nullptr;
+  }
+
+  unsigned towerLevel;
+  if (failed(parser.parseInteger(towerLevel))) {
+    return nullptr;
+  }
+
+  if (towerLevel > kMaxTowerLevel) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "binary field tower level must be between 0 and ")
+        << kMaxTowerLevel;
+    return nullptr;
+  }
+
+  if (failed(parser.parseGreater())) {
+    return nullptr;
+  }
+
+  return BinaryFieldType::get(parser.getContext(), towerLevel);
+}
+
+void BinaryFieldType::print(AsmPrinter &printer) const {
+  printer << "<" << getTowerLevel() << ">";
+}
+
+llvm::TypeSize BinaryFieldType::getTypeSizeInBits(
+    DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return llvm::TypeSize::getFixed(getBitWidth());
+}
+
+uint64_t BinaryFieldType::getABIAlignment(
+    DataLayout const &dataLayout,
+    llvm::ArrayRef<DataLayoutEntryInterface>) const {
+  return dataLayout.getTypeABIAlignment(getStorageType());
+}
+
+TypedAttr BinaryFieldType::createConstantAttr(int64_t c) const {
+  APInt value(getBitWidth(), static_cast<uint64_t>(c));
+  // Mask to valid range
+  value = value.zextOrTrunc(getBitWidth());
+  return IntegerAttr::get(getStorageType(), value);
+}
+
+TypedAttr
+BinaryFieldType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  assert(values.size() == 1);
+  APInt value = values[0].zextOrTrunc(getBitWidth());
+  return IntegerAttr::get(getStorageType(), value);
+}
+
+ShapedType BinaryFieldType::overrideShapedType(ShapedType type) const {
+  return type.clone(getStorageType());
+}
+
+//===----------------------------------------------------------------------===//
 // ExtensionFieldType utilities
 //===----------------------------------------------------------------------===//
 
@@ -266,7 +337,7 @@ ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
   }
 
   // Base field must be either a prime field or an extension field
-  if (!isa<PrimeFieldType>(baseField) && !isa<ExtensionFieldType>(baseField)) {
+  if (!isa<PrimeFieldType, ExtensionFieldType>(baseField)) {
     return emitError() << "base field must be a prime field or extension field";
   }
 
@@ -370,8 +441,7 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
   if (failed(parser.parseType(baseFieldType))) {
     return nullptr;
   }
-  if (!isa<PrimeFieldType>(baseFieldType) &&
-      !isa<ExtensionFieldType>(baseFieldType)) {
+  if (!isa<PrimeFieldType, ExtensionFieldType>(baseFieldType)) {
     parser.emitError(parser.getCurrentLocation(),
                      "base field must be a prime field or extension field");
     return nullptr;

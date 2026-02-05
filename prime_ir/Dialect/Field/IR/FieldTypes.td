@@ -90,6 +90,62 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   let hasCustomAssemblyFormat = 1;
 }
 
+// Binary tower field type definition.
+// This type represents an element in a binary tower field GF(2^(2^level)).
+def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
+  MemRefElementTypeInterface,
+  VectorElementTypeInterface,
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  ]> {
+  let summary = "Binary tower field element type";
+  let description = [{
+    `field.bf<level>` represents an element in a binary tower field GF(2^(2^level)).
+    Binary tower fields are constructed using degree-2 extensions at each level.
+
+    Tower level mapping:
+    - level 0: GF(2)     = 1 bit
+    - level 1: GF(2^2)   = 2 bits
+    - level 2: GF(2^4)   = 4 bits
+    - level 3: GF(2^8)   = 8 bits
+    - level 4: GF(2^16)  = 16 bits
+    - level 5: GF(2^32)  = 32 bits
+    - level 6: GF(2^64)  = 64 bits
+    - level 7: GF(2^128) = 128 bits
+
+    Operations use XOR-based arithmetic (characteristic 2):
+    - Addition and subtraction are both XOR
+    - Negation is identity (-a = a)
+    - Doubling always yields zero (2a = 0)
+
+    Example:
+    ```
+    !BF8 = !field.bf<3>   // GF(2^8), 8-bit elements
+    !BF128 = !field.bf<7> // GF(2^128), 128-bit elements
+    ```
+  }];
+  let parameters = (ins
+    "unsigned": $towerLevel
+  );
+  let extraClassDeclaration = [{
+    /// Returns the bit width of elements in this field (2^towerLevel).
+    unsigned getBitWidth() const { return 1u << getTowerLevel(); }
+
+    /// Returns the integer type used to store elements.
+    IntegerType getStorageType() const {
+      return IntegerType::get(getContext(), getBitWidth());
+    }
+
+    /// Returns the storage bit width.
+    unsigned getStorageBitWidth() const { return getBitWidth(); }
+
+    /// Maximum supported tower level (GF(2^128)).
+    static constexpr unsigned kMaxTowerLevel = 7;
+  }];
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+}
+
 // Unified extension field type definition.
 // This type represents an element in an extension field of degree N (2, 3, or 4).
 // Supports tower extensions where base field can be either a prime field or
@@ -161,10 +217,11 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   let genVerifyDecl = 1;
 }
 
-def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_ExtensionFieldType], "any-field-type">;
+def Field_AnyFieldType : AnyTypeOf<[Field_PrimeFieldType, Field_BinaryFieldType, Field_ExtensionFieldType], "any-field-type">;
 
 def PrimeFieldLike: TypeOrValueSemanticsContainer<Field_PrimeFieldType, "prime-field-like">;
+def BinaryFieldLike: TypeOrValueSemanticsContainer<Field_BinaryFieldType, "binary-field-like">;
 def ExtensionFieldLike: TypeOrValueSemanticsContainer<Field_ExtensionFieldType, "extension-field-like">;
-def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, ExtensionFieldLike.predicate]>, "field-like">;
+def FieldLike : TypeConstraint<Or<[PrimeFieldLike.predicate, BinaryFieldLike.predicate, ExtensionFieldLike.predicate]>, "field-like">;
 
 #endif  // PRIME_IR_DIALECT_FIELD_IR_FIELDTYPES_TD_

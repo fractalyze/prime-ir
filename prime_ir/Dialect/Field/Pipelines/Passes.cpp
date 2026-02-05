@@ -34,7 +34,10 @@ limitations under the License.
 #include "mlir/Transforms/Passes.h"
 #include "prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
+#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldToArith.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
+#include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToARM/SpecializeBinaryFieldToARM.h"
+#include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToX86/SpecializeBinaryFieldToX86.h"
 #include "prime_ir/Dialect/Field/Transforms/FoldFieldLinalgContraction.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
@@ -52,8 +55,30 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   // If we convert elementwise to linalg, tensor folding in ModArithDialect will
   // not work.
   pm.addPass(createFieldToModArith());
+  // Specialize binary field operations to GFNI/PCLMULQDQ if enabled (x86)
+  if (options.specializeGFNI || options.specializePCLMULQDQ) {
+    SpecializeBinaryFieldToX86Options gfniOpts;
+    gfniOpts.useGFNI = options.specializeGFNI;
+    gfniOpts.usePCLMULQDQ = options.specializePCLMULQDQ;
+    pm.addPass(createSpecializeBinaryFieldToX86(gfniOpts));
+  }
+  // Specialize binary field operations to PMULL if enabled (ARM)
+  if (options.specializePMULL) {
+    SpecializeBinaryFieldToARMOptions armOpts;
+    armOpts.usePMULL = options.specializePMULL;
+    pm.addPass(createSpecializeBinaryFieldToARM(armOpts));
+  }
+  // Binary fields lower directly to arith (not through mod_arith)
+  pm.addPass(createBinaryFieldToArith());
+  // Reconcile unrealized casts from binary field specialization and conversion
+  // (e.g., i64 -> bf<6> -> i64 chains from PCLMULQDQ + BinaryFieldToArith)
+  pm.addPass(createReconcileUnrealizedCastsPass());
   pm.addPass(createCanonicalizerPass());
 
+  // LinalgGeneralizeNamedOpsPass uses greedy pattern rewriting with folding.
+  // Must run after BinaryFieldToArith to avoid tensor.from_elements folding
+  // with binary field types (MLIR's folder doesn't understand custom types).
+  pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
   pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
 
@@ -104,6 +129,8 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
   pm.addPass(createFieldToModArith());
+  // Binary fields lower directly to arith (not through mod_arith)
+  pm.addPass(createBinaryFieldToArith());
   pm.addPass(createCanonicalizerPass());
 
   pm.addPass(mod_arith::createModArithToArith());

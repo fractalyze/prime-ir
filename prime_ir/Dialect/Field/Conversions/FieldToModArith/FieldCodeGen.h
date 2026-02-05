@@ -29,8 +29,8 @@ namespace mlir::prime_ir::field {
 
 class FieldCodeGen {
 public:
-  using CodeGenType = TOWER_FIELD_VARIANT(PrimeFieldCodeGen,
-                                          ExtensionFieldCodeGen, CodeGen);
+  using CodeGenType = TOWER_FIELD_VARIANT(ExtensionFieldCodeGen, CodeGen,
+                                          PrimeFieldCodeGen);
 
   template <typename T, typename = std::enable_if_t<
                             !std::is_same_v<std::decay_t<T>, FieldCodeGen> &&

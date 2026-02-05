@@ -45,7 +45,7 @@ LogicalResult verifyMSMPointTypes(OpType op, Type inputType, Type outputType) {
     return op.emitError()
            << "jacobian input points require a jacobian or xyzz output type";
   } else if (isa<XYZZType>(inputType) &&
-             (isa<AffineType>(outputType) || isa<JacobianType>(outputType))) {
+             isa<AffineType, JacobianType>(outputType)) {
     return op.emitError() << "xyzz input points require an xyzz output type";
   }
   return success();
@@ -146,9 +146,7 @@ LogicalResult ToCoordsOp::verify() {
 
 LogicalResult IsZeroOp::verify() {
   Type inputType = getInput().getType();
-  if (isa<AffineType>(getElementTypeOrSelf(inputType)) ||
-      isa<JacobianType>(getElementTypeOrSelf(inputType)) ||
-      isa<XYZZType>(getElementTypeOrSelf(inputType)))
+  if (isa<AffineType, JacobianType, XYZZType>(getElementTypeOrSelf(inputType)))
     return success();
   return emitError() << "invalid input type";
 }
@@ -160,8 +158,7 @@ LogicalResult verifyBinaryOp(OpType op) {
   Type rhsType = getElementTypeOrSelf(op.getRhs().getType());
   Type outputType = getElementTypeOrSelf(op.getType());
   if (isa<AffineType>(lhsType) || isa<AffineType>(rhsType)) {
-    if (lhsType == rhsType &&
-        (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) {
+    if (lhsType == rhsType && isa<JacobianType, XYZZType>(outputType)) {
       // affine, affine -> jacobian
       // affine, affine -> xyzz
       return success();
@@ -188,8 +185,7 @@ LogicalResult SubOp::verify() { return verifyBinaryOp(*this); }
 LogicalResult DoubleOp::verify() {
   Type inputType = getElementTypeOrSelf(getInput());
   Type outputType = getElementTypeOrSelf(getType());
-  if ((isa<AffineType>(inputType) &&
-       (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
+  if ((isa<AffineType>(inputType) && isa<JacobianType, XYZZType>(outputType)) ||
       inputType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same
@@ -199,8 +195,7 @@ LogicalResult DoubleOp::verify() {
 LogicalResult ScalarMulOp::verify() {
   Type pointType = getElementTypeOrSelf(getPoint());
   Type outputType = getElementTypeOrSelf(getType());
-  if ((isa<AffineType>(pointType) &&
-       (isa<JacobianType>(outputType) || isa<XYZZType>(outputType))) ||
+  if ((isa<AffineType>(pointType) && isa<JacobianType, XYZZType>(outputType)) ||
       pointType == outputType)
     return success();
   // TODO(ashjeong): check curves/fields are the same

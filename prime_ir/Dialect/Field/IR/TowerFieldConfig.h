@@ -87,15 +87,16 @@ inline SmallVector<unsigned, 4> getTowerSignature(ExtensionFieldType efType) {
 // clang-format on
 
 // Macro to generate variant type with all tower field types.
-// Expands to: std::variant<PrimeT, QuadraticT, CubicT, ..., Fp24T>
+// Expands to: std::variant<QuadraticT, CubicT, ..., Fp24T, PrimeT, BinaryT>
 // Args:
 //   PrimeT: the prime field type
+//   BinaryT: the binary field type
 //   NON_TOWER_SUFFIX: suffix for non-tower types (e.g.,
 //   ExtensionFieldOperation) TOWER_SUFFIX: suffix for tower types (e.g., Op)
 //
 // clang-format off
-#define TOWER_FIELD_VARIANT(PrimeT, NON_TOWER_SUFFIX, TOWER_SUFFIX)    \
-  std::variant<PrimeT,                                                 \
+#define TOWER_FIELD_VARIANT(NON_TOWER_SUFFIX, TOWER_SUFFIX, ...)       \
+  std::variant<__VA_ARGS__,                                            \
                /* Non-tower extension fields */                        \
                Quadratic##NON_TOWER_SUFFIX,                            \
                Cubic##NON_TOWER_SUFFIX,                                \

@@ -50,6 +50,7 @@ cc_library(
 cc_library(
     name = "Field",
     srcs = [
+        "BinaryFieldOperation.cpp",
         "ExtensionFieldOperation.cpp",
         "FieldAttributes.cpp",
         "FieldDialect.cpp",
@@ -58,6 +59,7 @@ cc_library(
         "FieldTypes.cpp",
     ],
     hdrs = [
+        "BinaryFieldOperation.h",
         "ExtensionFieldOperation.h",
         "FieldAttributes.h",
         "FieldDialect.h",
@@ -92,6 +94,7 @@ cc_library(
         "@llvm-project//mlir:InferTypeOpInterface",
         "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:Support",
+        "@zk_dtypes//zk_dtypes:binary_field_multiplication",
         "@zk_dtypes//zk_dtypes:point_declarations",
     ],
 )

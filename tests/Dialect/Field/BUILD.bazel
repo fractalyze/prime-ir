@@ -24,6 +24,18 @@ glob_lit_tests(
 )
 
 cc_test(
+    name = "BinaryFieldOperationTest",
+    srcs = ["BinaryFieldOperationTest.cpp"],
+    deps = [
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:ZkDtypes",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@zk_dtypes//zk_dtypes:binary_field",
+    ],
+)
+
+cc_test(
     name = "PrimeFieldOperationTest",
     srcs = ["PrimeFieldOperationTest.cpp"],
     deps = [
