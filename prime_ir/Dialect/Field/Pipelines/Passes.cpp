@@ -25,6 +25,7 @@ limitations under the License.
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/SCFToGPU/SCFToGPUPass.h"
 #include "mlir/Conversion/SCFToOpenMP/SCFToOpenMP.h"
+#include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVMPass.h"
 #include "mlir/Dialect/Affine/Passes.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/Transforms/Passes.h"
@@ -98,6 +99,14 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
 
   pm.addPass(affine::createLoopFusionPass());
   pm.addPass(affine::createRaiseMemrefToAffine());
+
+  // Apply affine super-vectorization if enabled
+  if (options.vectorize) {
+    affine::AffineVectorizeOptions vectorizeOpts;
+    vectorizeOpts.vectorSizes = {static_cast<int64_t>(options.vectorSize)};
+    pm.addPass(affine::createAffineVectorize(vectorizeOpts));
+  }
+
   pm.addNestedPass<func::FuncOp>(affine::createLoopUnrollPass());
   pm.addPass(createInlinerPass());
   pm.addPass(affine::createAffineScalarReplacementPass());
@@ -119,6 +128,10 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   pm.addPass(createSCFToControlFlowPass());
   if (options.specializeAVX) {
     pm.addPass(arith_ext::createSpecializeArithToAVX());
+  }
+  // Convert vector ops to LLVM (needed when vectorization is enabled)
+  if (options.vectorize) {
+    pm.addPass(createConvertVectorToLLVMPass());
   }
   pm.addPass(createConvertToLLVMPass());
   pm.addPass(createCanonicalizerPass());
