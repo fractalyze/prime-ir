@@ -1121,6 +1121,30 @@ class IntTest : public BaseIntTest<T>, public CpuKernelEmitterTest {
     expected_literal_ = LiteralUtil::CreateR0<T>(result);
   }
 
+  // Tests partial reduction (2D→1D) to cover scalar init broadcast fix.
+  void SetUpReducePartial() {
+    hlo_text_ = absl::Substitute(R"(
+      %add {
+        %a = $0[] parameter(0)
+        %b = $0[] parameter(1)
+        ROOT %ret = $0[] add(%a, %b)
+      }
+
+      ENTRY %main {
+        %x = $0[2, 3] parameter(0)
+        %init = $0[] parameter(1)
+        ROOT %ret = $0[2] reduce(%x, %init), dimensions={1}, to_apply=%add
+      }
+    )",
+                                 x_typename_);
+
+    // x = [[1, 2, 3], [4, 5, 6]], init = 10
+    // expected = [10+1+2+3, 10+4+5+6] = [16, 25]
+    literals_.push_back(LiteralUtil::CreateR2<T>({{1, 2, 3}, {4, 5, 6}}));
+    literals_.push_back(LiteralUtil::CreateR0<T>(10));
+    expected_literal_ = LiteralUtil::CreateR1<T>({16, 25});
+  }
+
   void SetUpReduceWindow() {
     constexpr static int64_t D0 = 8;
     constexpr static int64_t W = 3;
