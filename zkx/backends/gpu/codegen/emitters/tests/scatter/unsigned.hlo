@@ -1,0 +1,27 @@
+// RUN: fusion_to_mlir %s | emitters_opt -zkx-gpu-test-optimize |\
+// RUN:   FileCheck %s
+// TODO(batzor): Enable test_correctness. The emitter calls scatter_indices
+// unconditionally for all threads before the bounds check, causing OOB reads.
+// XLA has the same pattern but doesn't crash. Needs investigation.
+// DISABLED: test_correctness %s
+
+add {
+  %p0 = s32[] parameter(0)
+  %p1 = s32[] parameter(1)
+  ROOT %sum = s32[] add(%p0, %p1)
+}
+scatter {
+  %operand = s32[10,5]  parameter(0)
+  %indices = u32[24,1] parameter(1)
+  %update = s32[24,2,3] parameter(2)
+
+  ROOT %scatter = s32[10,5] scatter(%operand, %indices, %update),
+      update_window_dims={1,2},
+      inserted_window_dims={},
+      scatter_dims_to_operand_dims={0},
+      index_vector_dim=1,
+      to_apply=add
+}
+// CHECK: %[[PARAM:.*]] = zkx.pure_call @scatter_indices
+// CHECK: %[[INDEX:.*]] = arith.index_castui %[[PARAM]]
+// CHECK: arith.cmpi ule, %[[INDEX]]

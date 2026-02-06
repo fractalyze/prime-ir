@@ -1,0 +1,64 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================*/
+
+load("@rules_cc//cc:defs.bzl", "cc_proto_library")
+load("@rules_proto//proto:defs.bzl", "proto_library")
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "hlo_module_loader",
+    srcs = ["hlo_module_loader.cc"],
+    hdrs = ["hlo_module_loader.h"],
+    deps = [
+        ":run_hlo_module_cc_proto",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:path",
+        "//zkx:debug_options_flags",
+        "//zkx:util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/parser:hlo_parser",
+        "//zkx/service:hlo_cc_proto",
+        "//zkx/service:hlo_module_config",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_googlesource_code_re2//:re2",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "hlo_module_loader_unittest",
+    srcs = ["hlo_module_loader_unittest.cc"],
+    deps = [
+        ":hlo_module_loader",
+        "//zkx/tests:hlo_test_base",
+    ],
+)
+
+proto_library(
+    name = "run_hlo_module_proto",
+    srcs = ["run_hlo_module.proto"],
+    visibility = ["//visibility:public"],
+    deps = ["//zkx:zkx_data_proto"],
+)
+
+cc_proto_library(
+    name = "run_hlo_module_cc_proto",
+    deps = [":run_hlo_module_proto"],
+)

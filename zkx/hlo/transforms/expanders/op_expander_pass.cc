@@ -40,22 +40,24 @@ absl::StatusOr<bool> OpExpanderPass::Run(
                     });
   }
 
-  bool changed = false;
   for (HloInstruction* inst : matching_instructions) {
     TF_ASSIGN_OR_RETURN(HloInstruction * expanded_root,
                         ExpandInstruction(inst));
     if (expanded_root == nullptr) {
       continue;
     }
-    changed = true;
-    TF_ASSIGN_OR_RETURN(bool replaced,
+    TF_ASSIGN_OR_RETURN(bool changed,
                         inst->parent()->ReplaceInstruction(
                             inst, expanded_root, preserve_sharding_,
                             relay_control_dependency_));
-    DCHECK(replaced);
+    DCHECK(changed);
   }
 
-  return changed;
+  // Use !empty() rather than tracking per-expansion changes. Some
+  // ExpandInstruction overrides (e.g. ScatterSimplifier's scalar path) mutate
+  // the module in-place before returning, so a per-instruction `changed` flag
+  // would under-report. This matches the XLA implementation.
+  return !matching_instructions.empty();
 }
 
 }  // namespace zkx

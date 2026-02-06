@@ -1309,6 +1309,28 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "scatter_simplifier",
+    srcs = ["scatter_simplifier.cc"],
+    hdrs = ["scatter_simplifier.h"],
+    deps = [
+        ":call_inliner",
+        ":gather_scatter_utils",
+        ":hlo_creation_utils",
+        "//xla/tsl/platform:statusor",
+        "//zkx:permutation_util",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/transforms/expanders:op_expander_pass",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "scatter_utils",
     srcs = ["scatter_utils.cc"],
     hdrs = ["scatter_utils.h"],
@@ -1580,6 +1602,7 @@ zkx_cc_unittest(
         # "profile_guided_latency_estimator_unittest.cc",
         "rendezvous_unittest.cc",
         "scatter_expander_unittest.cc",
+        "scatter_simplifier_unittest.cc",
         "shape_inference_unittest.cc",
         "sharding_config_unittest.cc",
         "slow_operation_alarm_unittest.cc",
@@ -1613,6 +1636,7 @@ zkx_cc_unittest(
         ":phi_graph",
         ":rendezvous",
         ":scatter_expander",
+        ":scatter_simplifier",
         ":shape_inference",
         ":sharding_config",
         ":slow_operation_alarm",

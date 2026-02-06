@@ -102,6 +102,12 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "array4d",
+    hdrs = ["array4d.h"],
+    deps = [":array"],
+)
+
+zkx_cc_library(
     name = "autotune_result_wrapper",
     srcs = ["autotune_result_wrapper.cc"],
     hdrs = ["autotune_result_wrapper.h"],
@@ -221,6 +227,7 @@ zkx_cc_library(
         ":array",
         ":array2d",
         ":array3d",
+        ":array4d",
         ":maybe_owning",
         ":primitive_util",
         ":shape_tree",

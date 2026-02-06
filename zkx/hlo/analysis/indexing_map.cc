@@ -953,7 +953,7 @@ Interval Interval::FloorDiv(int64_t rhs) const {
 
 bool operator==(const IndexingMap::Variable& lhs,
                 const IndexingMap::Variable& rhs) {
-  return lhs.bounds == rhs.bounds && lhs.name == rhs.name;
+  return lhs.bounds == rhs.bounds;
 }
 
 std::vector<IndexingMap::Variable> DimVarsFromTensorSizes(

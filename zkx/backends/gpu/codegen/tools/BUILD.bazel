@@ -1,0 +1,118 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("//bazel:zkx_cc.bzl", "zkx_cc_binary", "zkx_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "test_lib",
+    testonly = 1,
+    srcs = ["test_lib.cc"],
+    hdrs = ["test_lib.h"],
+    deps = [
+        "//zkx:status_macros",
+        "//zkx/backends/gpu/codegen:fusions",
+        "//zkx/backends/gpu/codegen/emitters:emitter_base",
+        "//zkx/backends/gpu/codegen/emitters/ir:zkx_gpu",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/mlir_hlo/mhlo/IR:mlir_hlo",
+        "//zkx/service/gpu:gpu_device_info_for_tests",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/stream_executor:device_description",
+        "//zkx/tools:hlo_module_loader",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/status:statusor",
+        "@llvm-project//mlir:AffineDialect",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:ComplexDialect",
+        "@llvm-project//mlir:DLTIDialect",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:FuncExtensions",
+        "@llvm-project//mlir:GPUDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:MathDialect",
+        "@llvm-project//mlir:MlirOptLib",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:TensorDialect",
+        "@llvm-project//mlir:VectorDialect",
+    ],
+)
+
+# We want to use this tool for lit tests. Due to hermetic cuda, we need to
+# set linkopts in such a way that dynamic libraries are found, which are
+# symlinked from the lit_lib directory.
+zkx_cc_binary(
+    name = "fusion_to_mlir",
+    testonly = 1,
+    srcs = ["fusion_to_mlir.cc"],
+    linkopts = ["-Wl,-rpath,$$ORIGIN/../lit_lib"],
+    visibility = ["//zkx/backends/gpu/codegen:__subpackages__"],
+    deps = [
+        ":test_lib",
+        "//xla/tsl/platform:statusor",
+        # TODO(batzor): Uncomment this. Dependency: InitMain.
+        # "@tsl//tsl/platform:platform_port",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+zkx_cc_binary(
+    name = "fusion_wrapper",
+    testonly = 1,
+    srcs = ["fusion_wrapper.cc"],
+    visibility = ["//zkx/backends/gpu/codegen:__subpackages__"],
+    deps = [
+        ":test_lib",
+        "//xla/tsl/platform:statusor",
+        # TODO(batzor): Uncomment this. Dependency: InitMain.
+        # "@tsl//tsl/platform:platform_port",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+# We want to use this tool for lit tests. Due to hermetic cuda, we need to
+# set linkopts in such a way that dynamic libraries are found, which are
+# symlinked from the lit_lib directory.
+zkx_cc_binary(
+    name = "test_correctness",
+    testonly = 1,
+    srcs = ["test_correctness.cc"],
+    linkopts = ["-Wl,-rpath,$$ORIGIN/../lit_lib"],
+    visibility = ["//zkx/backends/gpu/codegen:__subpackages__"],
+    deps = [
+        ":test_lib",
+        "//xla/tsl/platform:status",
+        "//xla/tsl/platform:statusor",
+        "//zkx:debug_options_flags",
+        "//zkx:shape_util",
+        "//zkx/hlo/analysis:indexing_analysis",
+        "//zkx/hlo/analysis:indexing_test_utils",
+        "//zkx/service:gpu_plugin",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/tests:hlo_test_base",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@llvm-project//llvm:Support",
+    ],
+)

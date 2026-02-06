@@ -202,30 +202,31 @@ absl::StatusOr<Literal> CreateLiteralForConstrainedUses(
         // }
         break;
       }
-      case HloOpcode::kGather:
       case HloOpcode::kScatter: {
-        // clang-format off
-        // TODO(chokobole): Uncomment this. HloInstruction::gather_dimension_numbers, HloInstruction::scatter_dimension_numbers
-        // clang-format on
+        const Shape& operand_shape = use->operand(0)->shape();
+        auto index_map =
+            use->scatter_dimension_numbers().scatter_dims_to_operand_dims();
+        for (const auto dim_in_operand : index_map) {
+          index_bound = std::min(index_bound,
+                                 operand_shape.dimensions(dim_in_operand) - 1);
+        }
+        needs_sorted_indices |=
+            Cast<const HloScatterInstruction>(use)->indices_are_sorted();
+        break;
+      }
+      case HloOpcode::kGather: {
+        // TODO(chokobole): Uncomment this. Dependency:
+        // HloGatherInstruction, gather_dimension_numbers.
         // const Shape& operand_shape = use->operand(0)->shape();
-        // auto index_map = use->opcode() == HloOpcode::kGather
-        //                      ?
-        //                      use->gather_dimension_numbers().start_index_map()
-        //                      : use->scatter_dimension_numbers()
-        //                            .scatter_dims_to_operand_dims();
+        // auto index_map =
+        //     use->gather_dimension_numbers().start_index_map();
         // for (const auto dim_in_operand : index_map) {
         //   index_bound = std::min(index_bound,
         //                          operand_shape.dimensions(dim_in_operand) -
         //                          1);
         // }
-        if (use->opcode() == HloOpcode::kScatter) {
-          needs_sorted_indices |=
-              Cast<const HloScatterInstruction>(use)->indices_are_sorted();
-        } else {
-          // TODO(chokobole): Uncomment this. HloGatherInstruction
-          // needs_sorted_indices |=
-          //     Cast<const HloGatherInstruction>(use)->indices_are_sorted();
-        }
+        // needs_sorted_indices |=
+        //     Cast<const HloGatherInstruction>(use)->indices_are_sorted();
         break;
       }
       case HloOpcode::kReduce:

@@ -304,12 +304,12 @@ struct RewriteVectorExtract : OpRewritePattern<vector::ExtractOp> {
                                 PatternRewriter& rewriter) const override {
     auto vector = op.getVector();
     auto vector_type = vector.getType();
+    if (vector_type.getRank() < 2) {
+      return rewriter.notifyMatchFailure(op, "the vector is already flat");
+    }
     auto indices =
         vector::getAsValues(rewriter, op.getLoc(), op.getMixedPosition());
     auto linear_index = LinearizeIndex(vector, vector_type, indices, rewriter);
-    if (linear_index == nullptr) {
-      return rewriter.notifyMatchFailure(op, "the vector is already flat");
-    }
     auto vector_1D = rewriter
                          .create<UnrealizedConversionCastOp>(
                              op.getLoc(), GetFlattenedType(vector_type), vector)
@@ -351,12 +351,12 @@ struct RewriteVectorInsert : OpRewritePattern<vector::InsertOp> {
                                 PatternRewriter& rewriter) const override {
     auto vector = op.getDest();
     auto vector_type = vector.getType();
+    if (vector_type.getRank() < 2) {
+      return rewriter.notifyMatchFailure(op, "the vector is already flat");
+    }
     auto indices =
         vector::getAsValues(rewriter, op.getLoc(), op.getMixedPosition());
     auto linear_index = LinearizeIndex(vector, vector_type, indices, rewriter);
-    if (linear_index == nullptr) {
-      return rewriter.notifyMatchFailure(op, "the vector is already flat");
-    }
     mlir::ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     auto vector_1D = b.create<UnrealizedConversionCastOp>(
                           GetFlattenedType(vector_type), vector)

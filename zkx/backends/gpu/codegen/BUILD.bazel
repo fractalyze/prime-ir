@@ -83,6 +83,7 @@ zkx_cc_library(
         "//zkx/backends/gpu/codegen/emitters:in_place_dynamic_update_slice",
         "//zkx/backends/gpu/codegen/emitters:loop",
         "//zkx/backends/gpu/codegen/emitters:reduction",
+        "//zkx/backends/gpu/codegen/emitters:scatter",
         "//zkx/hlo/ir:hlo",
         "//zkx/service:buffer_assignment",
         "//zkx/service/gpu:hlo_fusion_analysis",
