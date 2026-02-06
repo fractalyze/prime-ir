@@ -534,33 +534,24 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
     }
     IntegerType intType = cast<IntegerType>(exp.getType());
 
-    // If `exp` is a constant, unroll the while loop.
+    auto emitBitSerialLoop = [&](Value exp) {
+      return generateBitSerialLoop(
+          b, exp, base, init,
+          [](ImplicitLocOpBuilder &b, Value v) {
+            return b.create<SquareOp>(v);
+          },
+          [](ImplicitLocOpBuilder &b, Value acc, Value v) {
+            return b.create<MulOp>(acc, v);
+          });
+    };
+
+    // Reduce exponent using Fermat's little theorem:
+    // x^(p-1) ≡ 1 (prime field), x^(pᵈ-1) ≡ 1 (extension field)
     if (auto expConstOp = exp.getDefiningOp<arith::ConstantOp>()) {
       APInt cExp = cast<IntegerAttr>(expConstOp.getValue()).getValue();
       cExp = cExp.urem(modulus - 1);
-      APInt cZero = APInt::getZero(cExp.getBitWidth());
-      APInt cOne = cZero + 1;
-
-      // Depending on the type, we need to perform the loop.
-      Value result = init;
-      Value factor = base;
-      APInt currExp = cExp;
-      SmallVector<Value> factors;
-      while (!currExp.isZero()) {
-        if ((currExp & cOne).getBoolValue()) {
-          result = b.create<MulOp>(result, factor);
-        }
-        factor = b.create<SquareOp>(factor);
-        currExp = currExp.lshr(1);
-      }
-      rewriter.replaceOp(op, result);
-      return success();
-    }
-
-    // For prime field, x^(p-1) ≡ 1 mod p, so x^n ≡ x^(n mod (p-1)) mod p
-    // For extension field of degree d, x^(pᵈ-1) ≡ 1 mod pᵈ, so
-    // x^n ≡ x^(n mod (pᵈ-1)) mod pᵈ
-    if (isa<PrimeFieldType>(fieldType)) {
+      exp = b.create<arith::ConstantIntOp>(intType, cExp);
+    } else if (isa<PrimeFieldType>(fieldType)) {
       exp = b.create<arith::RemUIOp>(
           exp, b.create<arith::ConstantIntOp>(intType, modulus - 1));
     } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
@@ -578,13 +569,7 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
           exp, b.create<arith::ConstantIntOp>(intType, order));
     }
 
-    Value result = generateBitSerialLoop(
-        b, exp, base, init,
-        [](ImplicitLocOpBuilder &b, Value v) { return b.create<SquareOp>(v); },
-        [](ImplicitLocOpBuilder &b, Value acc, Value v) {
-          return b.create<MulOp>(acc, v);
-        });
-    rewriter.replaceOp(op, result);
+    rewriter.replaceOp(op, emitBitSerialLoop(exp));
     return success();
   }
 };

@@ -265,6 +265,29 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   }
 };
 
+namespace {
+/// Converts a prime field value to its integer representation.
+/// For field::ConstantOp: extracts the mathematical value via maybeToStandard.
+/// For dynamic values: emits FromMontOp (if Montgomery) + BitcastOp.
+Value fieldPrimeToInteger(ImplicitLocOpBuilder &b, Value fieldVal) {
+  auto pfType = cast<field::PrimeFieldType>(fieldVal.getType());
+  auto intType = pfType.getStorageType();
+
+  if (auto constOp = fieldVal.getDefiningOp<field::ConstantOp>()) {
+    Attribute stdAttr =
+        field::maybeToStandard(constOp.getType(), constOp.getValue());
+    return b.create<arith::ConstantIntOp>(
+        intType, cast<IntegerAttr>(stdAttr).getValue());
+  }
+
+  Value std = pfType.isMontgomery()
+                  ? b.create<field::FromMontOp>(
+                        field::getStandardFormType(pfType), fieldVal)
+                  : fieldVal;
+  return b.create<field::BitcastOp>(TypeRange{intType}, std);
+}
+} // namespace
+
 // Currently implements Double-and-Add algorithm
 // TODO(ashjeong): implement GLV
 struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
@@ -295,22 +318,12 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     }
 
     // Inline implementation: Double-and-Add algorithm
-    auto scalarFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
-    auto scalarIntType = scalarFieldType.getStorageType();
-    Value scalarReduced =
-        scalarFieldType.isMontgomery()
-            ? b.create<field::FromMontOp>(
-                  field::getStandardFormType(scalarFieldType), scalarPF)
-            : scalarPF;
-    Value scalarInt =
-        b.create<field::BitcastOp>(TypeRange{scalarIntType}, scalarReduced);
-
     Value zeroPoint = createZeroPoint(b, outputType);
-
     Value initialPoint = isa<AffineType>(pointType)
                              ? b.create<ConvertPointTypeOp>(outputType, point)
                              : point;
 
+    Value scalarInt = fieldPrimeToInteger(b, scalarPF);
     Value result = generateBitSerialLoop(
         b, scalarInt, initialPoint, zeroPoint,
         [outputType](ImplicitLocOpBuilder &b, Value v) {
