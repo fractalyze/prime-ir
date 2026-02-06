@@ -35,12 +35,13 @@ using DoubleCallback =
 using AccumulateCallback =
     std::function<Value(ImplicitLocOpBuilder &b, Value accumulator, Value val)>;
 
-// Generates an optimized LSB-first binary method loop (double-and-add /
+// Generates an optimized LSB-first binary method (double-and-add /
 // square-and-multiply).
 //
-// This function implements the standard binary method with first-iteration
-// unrolling for efficiency. The algorithm processes the scalar bit-by-bit
-// from least significant to most significant.
+// When `scalar` is defined by an arith::ConstantOp, the loop is fully
+// unrolled into straight-line IR without scf::WhileOp or scf::IfOp.
+// When `scalar` is dynamic, a runtime scf::WhileOp loop with first-iteration
+// unrolling is generated.
 //
 // Algorithm:
 //   result = identity

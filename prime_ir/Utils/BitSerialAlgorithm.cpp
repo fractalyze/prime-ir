@@ -17,12 +17,52 @@ limitations under the License.
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/IR/BuiltinAttributes.h"
 
 namespace mlir::prime_ir {
+
+namespace {
+
+// Generates unrolled straight-line IR for a constant scalar.
+// Uses LSB-first binary method matching the runtime loop structure.
+Value generateConstantUnrolled(ImplicitLocOpBuilder &b, const APInt &scalarVal,
+                               Value base, Value identity,
+                               DoubleCallback &doubleOp,
+                               AccumulateCallback &accumulateOp) {
+  if (scalarVal.isZero()) {
+    return identity;
+  }
+
+  APInt currScalar = scalarVal;
+  APInt one(currScalar.getBitWidth(), 1);
+  Value result = identity;
+  Value factor = base;
+
+  while (!currScalar.isZero()) {
+    if ((currScalar & one).getBoolValue()) {
+      result = accumulateOp(b, result, factor);
+    }
+    currScalar = currScalar.lshr(1);
+    if (!currScalar.isZero()) {
+      factor = doubleOp(b, factor);
+    }
+  }
+
+  return result;
+}
+
+} // namespace
 
 Value generateBitSerialLoop(ImplicitLocOpBuilder &b, Value scalar, Value base,
                             Value identity, DoubleCallback doubleOp,
                             AccumulateCallback accumulateOp) {
+  // If scalar is a compile-time constant, unroll into straight-line IR.
+  if (auto constOp = scalar.getDefiningOp<arith::ConstantOp>()) {
+    APInt scalarVal = cast<IntegerAttr>(constOp.getValue()).getValue();
+    return generateConstantUnrolled(b, scalarVal, base, identity, doubleOp,
+                                    accumulateOp);
+  }
+
   Type scalarType = scalar.getType();
   Type baseType = base.getType();
 
