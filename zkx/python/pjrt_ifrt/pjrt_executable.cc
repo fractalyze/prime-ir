@@ -700,8 +700,7 @@ PjRtLoadedExecutable::Execute(absl::Span<ArrayRef> args,
   //   }
   // }
 
-  // TODO(chokobole): Uncomment this. Dependency: ExecuteContext
-  // auto context = std::make_unique<zkx::ExecuteContext>();
+  auto context = std::make_unique<zkx::ExecuteContext>();
   auto platform_id = pjrt_loaded_executable_->client()->platform_id();
   // TODO(chokobole): Uncomment this. Dependency: FfiLoadedHostCallbacks
   // auto ffi_callbacks = std::make_unique<zkx::FfiLoadedHostCallbacks>();
@@ -732,8 +731,7 @@ PjRtLoadedExecutable::Execute(absl::Span<ArrayRef> args,
     // ffi_callbacks->num_callbacks = callbacks->size();
     // ffi::TypeRegistry::TypeId type_id(FfiLoadedHostCallbacks::id.type_id);
     // CHECK_OK(context->ffi_context().Insert(type_id, ffi_callbacks.get()));
-    // TODO(chokobole): Uncomment this. Dependency: ExecuteContext
-    // opts.context = context.get();
+    opts.context = context.get();
   }
 
   // When using host callbacks on CPU, we need to use synchronous dispatch to

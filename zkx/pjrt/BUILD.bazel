@@ -223,6 +223,7 @@ zkx_cc_library(
         "//xla/tsl/platform:statusor",
         "//zkx:shape_util",
         "//zkx/client:executable_build_options",
+        "//zkx/ffi:execution_context",
         "//zkx/hlo/ir:hlo",
         "//zkx/service:buffer_assignment",
         "//zkx/service:compiler",

@@ -282,11 +282,16 @@ absl::Status ExecuteThunks(
 
   {  // Initialize thunks using prepared resources before execution.
     Thunk::InitializeParams initialize_params{
-        executor, executable_source, &buffer_allocations, main_stream,
-        command_buffer_trace_stream, &collective_params, &collective_cliques,
-        // TODO(chokobole): Uncomment this. Dependency: ffi::ExecutionContext.
-        // run_options->run_options().ffi_execution_context(),
-        run_options->local_device_count(), requires_exclusive_lock_on_gpu};
+        executor,
+        executable_source,
+        &buffer_allocations,
+        main_stream,
+        command_buffer_trace_stream,
+        &collective_params,
+        &collective_cliques,
+        run_options->run_options().ffi_execution_context(),
+        run_options->local_device_count(),
+        requires_exclusive_lock_on_gpu};
 
     tsl::profiler::TraceMe trace([&] { return "Thunks::Initialize"; });
     TF_RETURN_IF_ERROR(thunk_sequence.Initialize(initialize_params));

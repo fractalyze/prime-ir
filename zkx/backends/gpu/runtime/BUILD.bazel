@@ -270,6 +270,7 @@ zkx_cc_library(
         "//zkx/backends/gpu/collectives:gpu_collectives_plugin",
         "//zkx/core/collectives:communicator",
         "//zkx/core/collectives:rank_id",
+        "//zkx/ffi:execution_context",
         "//zkx/hlo/ir:hlo",
         "//zkx/service:buffer_assignment",
         "//zkx/service:global_device_id",

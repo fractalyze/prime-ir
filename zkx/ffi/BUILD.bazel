@@ -1,0 +1,202 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
+
+package(
+    default_visibility = ["//visibility:public"],
+)
+
+zkx_cc_library(
+    name = "attribute_map",
+    srcs = ["attribute_map.cc"],
+    hdrs = ["attribute_map.h"],
+    deps = [
+        ":call_frame",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+zkx_cc_library(
+    name = "call_frame",
+    srcs = ["call_frame.cc"],
+    hdrs = ["call_frame.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:types",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/ffi/api",
+        "//zkx/ffi/api:c_api",
+        "//zkx/ffi/api:c_api_internal",
+        "//zkx/stream_executor:device_memory",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
+    name = "execution_context",
+    srcs = ["execution_context.cc"],
+    hdrs = ["execution_context.h"],
+    deps = [
+        ":type_id_registry",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:function_ref",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "execution_state",
+    srcs = ["execution_state.cc"],
+    hdrs = ["execution_state.h"],
+    deps = [
+        ":type_id_registry",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "ffi",
+    hdrs = ["ffi.h"],
+    deps = [
+        ":execution_context",
+        ":execution_state",
+        "//xla/tsl/concurrency:async_value",
+        "//zkx:executable_run_options",
+        "//zkx:primitive_util",
+        "//zkx:types",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/ffi/api",
+        "//zkx/ffi/api:c_api",
+        "//zkx/ffi/api:c_api_internal",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/stream_executor:device_memory",
+        "//zkx/stream_executor:device_memory_allocator",
+        "//zkx/stream_executor:scratch_allocator",
+        "//zkx/stream_executor:stream",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/base:nullability",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
+    name = "ffi_api",
+    srcs = ["ffi_api.cc"],
+    hdrs = ["ffi_api.h"],
+    deps = [
+        ":call_frame",
+        ":execution_context",
+        ":execution_state",
+        ":type_id_registry",
+        "//xla/tsl/concurrency:async_value",
+        "//xla/tsl/concurrency:ref_count",
+        "//xla/tsl/platform:statusor",
+        "//zkx:executable_run_options",
+        "//zkx/ffi/api",
+        "//zkx/ffi/api:c_api",
+        "//zkx/ffi/api:c_api_internal",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service:platform_util",
+        "//zkx/stream_executor:device_memory",
+        "//zkx/stream_executor:device_memory_allocator",
+        "//zkx/stream_executor:stream",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/numeric:bits",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@eigen_archive//:eigen3",
+    ],
+)
+
+zkx_cc_library(
+    name = "type_id_registry",
+    srcs = ["type_id_registry.cc"],
+    hdrs = ["type_id_registry.h"],
+    deps = [
+        "//xla/tsl/lib/gtl:int_type",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "ffi_unittests",
+    srcs = [
+        "call_frame_unittest.cc",
+        "execution_context_unittest.cc",
+        "execution_state_unittest.cc",
+        "ffi_unittest.cc",
+        "type_id_registry_unittest.cc",
+    ],
+    deps = [
+        ":call_frame",
+        ":execution_context",
+        ":execution_state",
+        ":ffi",
+        ":ffi_api",
+        ":type_id_registry",
+        "//xla/tsl/concurrency:async_value",
+        "//xla/tsl/platform:status",
+        "//xla/tsl/platform:statusor",
+        "//zkx:executable_run_options",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/ffi/api:c_api",
+        "//zkx/stream_executor:device_memory",
+        "//zkx/stream_executor:stream",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:status_matchers",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@eigen_archive//:eigen3",
+    ],
+)

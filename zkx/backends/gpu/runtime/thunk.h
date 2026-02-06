@@ -40,6 +40,7 @@ limitations under the License.
 #include "zkx/core/collectives/communicator.h"
 #include "zkx/core/collectives/rank_id.h"
 #include "zkx/executable_run_options.h"
+#include "zkx/ffi/execution_context.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/service/buffer_assignment.h"
 #include "zkx/service/global_device_id.h"
@@ -334,8 +335,7 @@ class Thunk {
     CollectiveCliques* collective_cliques = nullptr;
 
     // ZKX FFI execution context.
-    // TODO(chokobole): Uncomment this. Dependency: ffi::ExecutionContext.
-    // const ffi::ExecutionContext* ffi_execution_context = nullptr;
+    const ffi::ExecutionContext* ffi_execution_context = nullptr;
 
     // Total local device count.
     int local_device_count = 0;
