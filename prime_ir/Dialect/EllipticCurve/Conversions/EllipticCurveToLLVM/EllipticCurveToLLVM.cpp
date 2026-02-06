@@ -110,6 +110,25 @@ struct ConvertToCoords : public ConvertOpToLLVMPattern<ToCoordsOp> {
   }
 };
 
+struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
+  using ConvertOpToLLVMPattern<BitcastOp>::ConvertOpToLLVMPattern;
+
+  LogicalResult
+  matchAndRewrite(BitcastOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    // For memref/tensor types, use unrealized_conversion_cast which will be
+    // cleaned up by reconcile-unrealized-casts pass. The underlying memory is
+    // the same, just viewed differently.
+    Type convertedOutputType = typeConverter->convertType(op.getType());
+    if (!convertedOutputType) {
+      return op.emitOpError("failed to convert output type");
+    }
+    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
+        op, convertedOutputType, adaptor.getInput());
+    return success();
+  }
+};
+
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.cpp.inc"
 } // namespace
 
@@ -127,6 +146,7 @@ void populateEllipticCurveToLLVMConversionPatterns(
     const LLVMTypeConverter &converter, RewritePatternSet &patterns) {
   patterns.add<
       // clang-format off
+      ConvertBitcast,
       ConvertFromCoords,
       ConvertToCoords
       // clang-format on

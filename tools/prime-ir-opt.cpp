@@ -25,6 +25,7 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
+#include "prime_ir/Dialect/EllipticCurve/Transforms/BufferizableOpInterfaceImpl.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldToArith.h"
 #include "prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
@@ -55,6 +56,8 @@ int main(int argc, char **argv) {
   mlir::prime_ir::field::registerBufferizableOpInterfaceExternalModels(
       registry);
   mlir::prime_ir::mod_arith::registerBufferizableOpInterfaceExternalModels(
+      registry);
+  mlir::prime_ir::elliptic_curve::registerBufferizableOpInterfaceExternalModels(
       registry);
   mlir::prime_ir::arith_ext::registerSpecializeArithToAVXPasses();
   mlir::registerAllDialects(registry);

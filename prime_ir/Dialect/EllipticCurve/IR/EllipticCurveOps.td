@@ -23,6 +23,7 @@ include "mlir/Dialect/Arith/IR/ArithBase.td"
 include "mlir/Dialect/LLVMIR/LLVMTypes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "prime_ir/Dialect/Field/IR/FieldAttributes.td"
@@ -60,22 +61,31 @@ class EllipticCurve_BinaryOp<string mnemonic, list<Trait> traits = []> :
 def EllipticCurve_ConstantOp : EllipticCurve_Op_Base<"constant", [ConstantLike]> {
   let summary = "Define a constant elliptic curve point via coordinates";
   let description = [{
-    Defines a constant elliptic curve point from integer coordinates. The number of
-    provided coordinates must match the point representation:
+    Defines a constant elliptic curve point from integer coordinates using
+    dense attribute syntax. The number of provided coordinates must match
+    the point representation:
     - 2 coordinates for Affine points
     - 3 coordinates for Jacobian points
     - 4 coordinates for XYZZ points
 
-    The resulting point must satisfy the specific curve equation (e.g., y² = x³ + ax + b).
+    For extension fields, each coordinate is an array of coefficients.
+    For tensors, provide an array of points.
 
     Example:
     ```mlir
-    // Affine point (x, y)
-    %0 = elliptic_curve.constant 1, 2 : !elliptic_curve.affine<#curve>
-    // Jacobian point (x, y, z)
-    %1 = elliptic_curve.constant 1, 2, 1 : !elliptic_curve.jacobian<#curve>
-    // XYZZ point (x, y, zz, zzz)
-    %2 = elliptic_curve.constant 1, 2, 1, 1 : !elliptic_curve.xyzz<#curve>
+    // Scalar points (prime field)
+    %0 = elliptic_curve.constant dense<[1, 2]> : !elliptic_curve.affine<#curve>
+    %1 = elliptic_curve.constant dense<[1, 2, 1]> : !elliptic_curve.jacobian<#curve>
+    %2 = elliptic_curve.constant dense<[1, 2, 1, 1]> : !elliptic_curve.xyzz<#curve>
+
+    // Tensor of points
+    %3 = elliptic_curve.constant dense<[[1, 2], [3, 4]]> : tensor<2x!elliptic_curve.affine<#curve>>
+
+    // Extension field (each coordinate is [c0, c1] for degree-2 extension)
+    %4 = elliptic_curve.constant dense<[[1, 2], [3, 4]]> : !elliptic_curve.affine<#g2curve>
+
+    // Tensor of extension field points
+    %5 = elliptic_curve.constant dense<[[[1, 2], [3, 4]], [[5, 6], [7, 8]]]> : tensor<2x!elliptic_curve.affine<#g2curve>>
     ```
   }];
   let arguments = (ins ArrayAttr:$coords);
@@ -511,6 +521,37 @@ def EllipticCurve_ConvertPointTypeOp : EllipticCurve_UnaryOp<"convert_point_type
   }];
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+}
+
+def EllipticCurve_BitcastOp : EllipticCurve_Op_Base<"bitcast", [
+    DeclareOpInterfaceMethods<CastOpInterface>]> {
+  let summary = "Bitcast between field tensor and elliptic curve point tensor";
+  let description = [{
+    Reinterprets a flat tensor of field elements as a tensor of elliptic curve
+    points, or vice versa. The underlying memory layout is reinterpreted without
+    data movement.
+
+    For a point type with K coordinates over a field type F:
+    - `tensor<N*K x !F>` can be cast to `tensor<N x !PointType>` and vice versa
+    - Coordinates are stored contiguously: [x0, y0, z0, x1, y1, z1, ...]
+
+    Example:
+    ```
+    !PF = !field.pf<p:i256>
+    #curve = #elliptic_curve.sw<...> : !PF
+    !jacobian = !elliptic_curve.jacobian<#curve>
+
+    // Field tensor to point tensor (3 coords per jacobian point)
+    %points = elliptic_curve.bitcast %fields : tensor<6x!PF> -> tensor<2x!jacobian>
+
+    // Point tensor to field tensor
+    %fields = elliptic_curve.bitcast %points : tensor<2x!jacobian> -> tensor<6x!PF>
+    ```
+  }];
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$output);
+  let assemblyFormat = "operands attr-dict `:` type($input) `->` type($output)";
+  let hasVerifier = 1;
 }
 
 #endif  // PRIME_IR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEOPS_TD_
