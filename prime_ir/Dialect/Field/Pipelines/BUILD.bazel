@@ -52,5 +52,6 @@ cc_library(
         "@llvm-project//mlir:SCFToGPU",
         "@llvm-project//mlir:SCFToOpenMP",
         "@llvm-project//mlir:Transforms",
+        "@llvm-project//mlir:VectorToLLVM",
     ],
 )

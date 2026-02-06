@@ -1,3 +1,4 @@
+load("@rules_cc//cc:defs.bzl", "cc_test")
 load("@rules_cuda//cuda:defs.bzl", "requires_cuda")
 load("//bazel:lit.bzl", "run_lit_tests")
 
@@ -8,4 +9,19 @@ run_lit_tests(
     ],
     target_compatible_with = requires_cuda(),
     tests = ["sort_pairs_runner.mlir"],
+)
+
+cc_test(
+    name = "BitSerialAlgorithmTest",
+    srcs = ["BitSerialAlgorithmTest.cpp"],
+    deps = [
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/Utils:BitSerialAlgorithm",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:SCFDialect",
+    ],
 )

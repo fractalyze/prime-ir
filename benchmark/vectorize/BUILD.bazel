@@ -15,34 +15,34 @@
 
 load("//benchmark:benchmark.bzl", "prime_ir_benchmark", "prime_ir_mlir_cc_import")
 
-# Scalar (non-vectorized) version
+# Regex: @funcname( -> @vec_funcname(
+CMD = "sed 's/@\\([a-zA-Z0-9_]*\\)(/@vec_\\1(/g' $< > $@"
+
+# Prime field scalar (non-vectorized) version
 prime_ir_mlir_cc_import(
     name = "vectorize_scalar_ciface",
     llc_flags = ["-mcpu=native"],
     mlir_src = "vectorize.mlir",
     prime_ir_opt_flags = [
-        "-field-to-llvm",
+        "-field-to-llvm=bufferize-function-boundaries=true",
     ],
 )
 
-# Generate vectorized source with vec_ prefix to avoid symbol clashes
+# Generate vectorized prime field source with vec_ prefix to avoid symbol clashes
 genrule(
     name = "vectorize_vec_mlir",
     srcs = ["vectorize.mlir"],
     outs = ["vectorize_vec.mlir"],
-    cmd = "sed 's/@\\([a-zA-Z0-9_]*\\)(/@vec_\\1(/g' $< > $@",
+    cmd = CMD,
 )
 
-# Vectorized version using affine-super-vectorize
+# Prime field vectorized version using field-to-llvm vectorize option
 prime_ir_mlir_cc_import(
     name = "vectorize_vec_ciface",
     llc_flags = ["-mcpu=native"],
     mlir_src = ":vectorize_vec_mlir",
     prime_ir_opt_flags = [
-        "-affine-super-vectorize=virtual-vector-size=16",
-        "-field-to-llvm",
-        "-convert-vector-to-llvm",
-        "-convert-arith-to-llvm",
+        "-field-to-llvm=bufferize-function-boundaries=true vectorize=true vector-size=16",
     ],
 )
 
