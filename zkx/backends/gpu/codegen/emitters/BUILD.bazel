@@ -298,6 +298,52 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "transpose",
+    srcs = ["transpose.cc"],
+    hdrs = ["transpose.h"],
+    deps = [
+        ":emitter_base",
+        "//zkx:permutation_util",
+        "//zkx:primitive_util",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/backends/gpu/codegen:fusion_emitter",
+        "//zkx/backends/gpu/codegen/emitters/ir:zkx_gpu",
+        "//zkx/codegen/emitters:computation_partitioner",
+        "//zkx/codegen/emitters:elemental_hlo_to_mlir",
+        "//zkx/hlo/analysis:indexing_analysis",
+        "//zkx/hlo/analysis:indexing_map",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/mlir:mlir_utils",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/service/gpu:ir_emission_utils",
+        "//zkx/service/gpu:launch_dimensions",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/types:span",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "transpose_unittest",
+    srcs = ["transpose_unittest.cc"],
+    deps = [
+        ":transpose",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/tests:hlo_test_base",
+    ],
+)
+
 zkx_cc_unittest(
     name = "emitters_unittests",
     srcs = ["emitter_base_unittest.cc"],
