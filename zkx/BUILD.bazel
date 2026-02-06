@@ -512,6 +512,11 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "union_find",
+    hdrs = ["union_find.h"],
+)
+
+zkx_cc_library(
     name = "window_util",
     srcs = ["window_util.cc"],
     hdrs = ["window_util.h"],
