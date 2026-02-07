@@ -1620,6 +1620,9 @@ class HloInstruction {
   // instruction based on the instruction's existing name.
   void UniquifyName(HloModule* module);
 
+  // Assigns a new unique ID to this instruction from the module's ID pool.
+  void UniquifyId(HloModule* module);
+
   // Clear the unique ID of the instruction so that it can be re-assigned, such
   // as for the purpose of compacting the instruction unique IDs.
   void ClearUniqueIdInternal() { unique_id_ = -1; }

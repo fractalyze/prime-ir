@@ -54,6 +54,20 @@ message DebugOptions {
     ALLCOLLECTIVES = 8;
   }
 
+  // Command buffer command types that can be captured into command buffers.
+  enum CommandBufferCmdType {
+    INVALID = 0;
+    FUSION = 1;
+    // reserved 2;  // CUBLAS (not applicable to ZKX)
+    // reserved 3;  // CUDNN (not applicable to ZKX)
+    COLLECTIVES = 4;
+    CONDITIONAL = 5;
+    WHILE = 6;
+    CUSTOM_CALL = 7;
+    // reserved 8;  // CUBLASLT (not applicable to ZKX)
+    DYNAMIC_SLICE_FUSION = 9;
+  }
+
   enum LibNvJitLinkMode {
     // LibNvJitLink is used if it is available and no buggy version has been
     // detected.
@@ -169,6 +183,9 @@ message DebugOptions {
 
   bool zkx_gpu_enable_approx_costly_collectives = 305;
 
+  // Enable command buffer for specific command types.
+  repeated CommandBufferCmdType zkx_gpu_enable_command_buffer = 258;
+
   // Timeout to terminate on stuck rendezvous.
   int32 zkx_gpu_executable_terminate_timeout_seconds = 328;
 
@@ -211,6 +228,9 @@ message DebugOptions {
 
   // Identify concurrent regions in GPU graphs and execute them concurrently.
   bool zkx_gpu_graph_enable_concurrent_region = 215;
+
+  // Minimum number of commands required to form a command buffer.
+  int32 zkx_gpu_graph_min_graph_size = 208;
 
   bool zkx_gpu_enable_highest_priority_async_stream = 216;
 
@@ -490,6 +510,9 @@ message DebugOptions {
   //                     replica_groups={{0,1,2,3,4,5,6,7}}, dimensions={2},
   //                     backend_config={...}
   //  all-to-all-done = f32[1,4,8]{1,0,2} all-to-all-done(all-to-all-start)
+  // Legacy custom call targets allowed in command buffers.
+  repeated string legacy_command_buffer_custom_call_targets = 314;
+
   bool zkx_syntax_sugar_async_ops = 315;
 
   bool zkx_pjrt_allow_auto_layout_in_hlo = 344;
