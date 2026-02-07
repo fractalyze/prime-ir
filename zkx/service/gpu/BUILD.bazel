@@ -474,6 +474,7 @@ zkx_cc_library(
     srcs = ["ir_emission_utils.cc"],
     hdrs = ["ir_emission_utils.h"],
     deps = [
+        "//xla/tsl/platform:statusor",
         "//zkx:literal",
         "//zkx:primitive_util",
         "//zkx:shape_util",
@@ -483,6 +484,7 @@ zkx_cc_library(
         "//zkx/service:buffer_assignment",
         "//zkx/stream_executor:device_description",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status:statusor",
