@@ -106,11 +106,10 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
   // which will be lowered to an efficient jump table
 
   auto indexValue =
-      builder_.create<arith::IndexCastOp>(builder_.getIndexType(), value_);
+      builder_.create<arith::IndexCastUIOp>(builder_.getIndexType(), value_);
 
   // Create switch with all 256 cases
   SmallVector<int64_t> caseValues;
-  SmallVector<Value> caseResults;
 
   for (int i = 0; i < 256; ++i) {
     caseValues.push_back(i);
@@ -118,15 +117,16 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
 
   // Generate scf.index_switch
   auto switchOp = builder_.create<scf::IndexSwitchOp>(
-      TypeRange{builder_.getI8Type()}, indexValue, caseValues, caseValues.size());
+      TypeRange{builder_.getI8Type()}, indexValue, caseValues,
+      caseValues.size());
 
   // Generate case regions
   for (int i = 0; i < 256; ++i) {
     Region &caseRegion = switchOp.getCaseRegions()[i];
     Block *caseBlock = builder_.createBlock(&caseRegion);
     builder_.setInsertionPointToStart(caseBlock);
-    Value inverseVal = builder_.create<arith::ConstantIntOp>(
-        kBinaryTower8bInverseTable[i], 8);
+    Value inverseVal =
+        builder_.create<arith::ConstantIntOp>(kBinaryTower8bInverseTable[i], 8);
     builder_.create<scf::YieldOp>(inverseVal);
   }
 
