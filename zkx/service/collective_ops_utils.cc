@@ -19,6 +19,8 @@ limitations under the License.
 #include "absl/strings/str_join.h"
 
 #include "xla/tsl/platform/statusor.h"
+#include "zkx/hlo/ir/hlo_casting_utils.h"
+#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/service/pattern_matcher.h"
 #include "zkx/status_macros.h"
 #include "zkx/util.h"
@@ -334,6 +336,67 @@ absl::StatusOr<std::vector<int64_t>> GetParticipantCountsForReplicaGroups(
       return participant_counts;
     }
   }
+}
+
+bool IsNonFusionCollective(const HloInstruction* instruction) {
+  switch (instruction->opcode()) {
+    case HloOpcode::kAllReduce:
+    case HloOpcode::kAllReduceStart:
+    case HloOpcode::kAllReduceDone:
+    case HloOpcode::kAllGather:
+    case HloOpcode::kAllGatherStart:
+    case HloOpcode::kAllGatherDone:
+    case HloOpcode::kAllToAll:
+    case HloOpcode::kCollectiveBroadcast:
+    case HloOpcode::kCollectivePermute:
+    case HloOpcode::kCollectivePermuteStart:
+    case HloOpcode::kCollectivePermuteDone:
+    case HloOpcode::kRaggedAllToAll:
+    case HloOpcode::kReduceScatter:
+      return true;
+    case HloOpcode::kAsyncStart:
+    case HloOpcode::kAsyncUpdate:
+    case HloOpcode::kAsyncDone:
+      return IsNonFusionCollective(instruction->async_wrapped_instruction());
+    case HloOpcode::kSend:
+    case HloOpcode::kRecv:
+      return !Cast<HloSendRecvInstruction>(instruction)->is_host_transfer();
+    default:
+      return false;
+  }
+}
+
+bool IsCollective(const HloInstruction* instruction) {
+  if (IsNonFusionCollective(instruction)) {
+    return true;
+  }
+  if (instruction->opcode() == HloOpcode::kFusion &&
+      instruction->IsCustomFusion()) {
+    for (const auto* inner_inst : instruction->fused_instructions()) {
+      if (IsCollective(inner_inst)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+HloInstruction* IsOrHasCollectiveWithChannelId(HloInstruction* instruction) {
+  if (instruction->opcode() == HloOpcode::kFusion) {
+    for (auto* inner_inst : instruction->fused_instructions()) {
+      if (IsOrHasCollectiveWithChannelId(inner_inst) != nullptr) {
+        return inner_inst;
+      }
+    }
+    return nullptr;
+  }
+  if (DynCast<HloChannelInstruction>(instruction) == nullptr) {
+    return nullptr;
+  }
+  if (IsCollective(instruction) && instruction->channel_id().has_value()) {
+    return instruction;
+  }
+  return nullptr;
 }
 
 }  // namespace zkx
