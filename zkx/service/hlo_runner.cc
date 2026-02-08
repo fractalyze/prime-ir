@@ -352,6 +352,42 @@ absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithDeviceBuffers(
                                     std::move(execution_arguments), profile);
 }
 
+absl::StatusOr<ExecutionOutput> HloRunner::ExecuteAsyncWithDeviceBuffers(
+    OpaqueExecutable* executable,
+    absl::Span<ScopedShapedBuffer const> arguments, se::Stream* stream,
+    ExecutionProfile* profile) {
+  TF_ASSIGN_OR_RETURN(HloRunnerExecutable* const hlo_runner_executable,
+                      HloRunnerExecutable::TryUnwrap(*this, executable));
+  Executable* exec = hlo_runner_executable->executable();
+  UpdateEntryComputationLayout(&exec->module(),
+                               device_shape_representation_fn_);
+
+  std::vector<ExecutionInput> execution_arguments =
+      ExecutionInputsFromScopedShapedBuffers(
+          arguments, exec->module().input_output_alias_config(),
+          backend().default_stream_executor()->device_ordinal(),
+          GetAllocator());
+
+  ServiceExecutableRunOptions service_run_options =
+      GetServiceRunOptionsForDevice(backend().default_device_ordinal(), stream,
+                                    nullptr, RunId(), backend().device_count());
+  service_run_options.mutable_run_options()->set_execution_profile(profile);
+
+  auto options = exec->module().config().debug_options();
+  auto gpu_run_options = std::make_unique<gpu::GpuExecutableRunOptions>();
+  if (options.zkx_gpu_require_exclusive_lock()) {
+    gpu_run_options->set_requires_exclusive_lock_on_gpu();
+  }
+  service_run_options.mutable_run_options()->set_gpu_executable_run_options(
+      gpu_run_options.get());
+
+  TF_ASSIGN_OR_RETURN(
+      ExecutionOutput retval,
+      exec->ExecuteAsyncOnStreamWrapper(&service_run_options,
+                                        std::move(execution_arguments)));
+  return std::move(retval);
+}
+
 absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithMovedDeviceBuffers(
     std::unique_ptr<HloModule> module,
     std::vector<ScopedShapedBuffer> arguments, bool run_hlo_passes,
