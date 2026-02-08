@@ -1772,6 +1772,24 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "value_range",
+    srcs = ["value_range.cc"],
+    hdrs = ["value_range.h"],
+    deps = [
+        ":constant_value",
+        ":hlo_value",
+        "//zkx:comparison_util",
+        "//zkx:primitive_util",
+        "//zkx/hlo/analysis:hlo_alias_analysis",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
     name = "while_util",
     srcs = ["while_util.cc"],
     hdrs = ["while_util.h"],
@@ -1859,6 +1877,7 @@ zkx_cc_unittest(
         # TODO(chokobole): Add unittest. Dependency: PlatformUtil::GetStreamExecutors
         # "shaped_buffer_unittest.cc",
         "stream_pool_unittest.cc",
+        "value_range_unittest.cc",
         "while_util_unittest.cc",
         # TODO(chokobole): Add unittest. Dependency: HloTestBase
         # "zkx_debug_info_manager_unittest.cc",
@@ -1894,6 +1913,7 @@ zkx_cc_unittest(
         ":slow_operation_alarm",
         ":stream_pool",
         ":test_compilation_environment_cc_proto",
+        ":value_range",
         ":while_util",
         "//xla/tsl/platform",
         "//xla/tsl/platform:env",
