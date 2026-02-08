@@ -319,6 +319,21 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "constant_value",
+    srcs = ["constant_value.cc"],
+    hdrs = ["constant_value.h"],
+    deps = [
+        "//zkx:literal",
+        "//zkx:primitive_util",
+        "//zkx:util",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
     name = "collective_ops_utils",
     srcs = ["collective_ops_utils.cc"],
     hdrs = ["collective_ops_utils.h"],
@@ -1807,6 +1822,7 @@ zkx_cc_unittest(
         "call_graph_unittest.cc",
         "call_inliner_unittest.cc",
         "compilation_environments_unittest.cc",
+        "constant_value_unittest.cc",
         "copy_insertion_unittest.cc",
         "custom_call_status_test_c_caller.c",
         "custom_call_status_test_c_caller.h",
@@ -1851,6 +1867,7 @@ zkx_cc_unittest(
         ":call_graph",
         ":call_inliner",
         ":compilation_environments",
+        ":constant_value",
         ":copy_insertion",
         ":cpu_plugin",
         ":custom_call_status",
