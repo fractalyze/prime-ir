@@ -28,6 +28,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "prime_ir/Utils/AssemblyFormatUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
 
 // IWYU pragma: begin_keep
@@ -342,116 +343,315 @@ LogicalResult ConvertPointTypeOp::verify() {
   return success();
 }
 
+//////////////// VERIFY AND CAST BITCAST ////////////////
+
+namespace {
+// Type check helpers for bitcast verification
+// Accepts field types and their lower-level representations (mod_arith and
+// integers) to support lowering pipelines.
+static bool isFieldType(Type t) {
+  return isa<field::PrimeFieldType, field::ExtensionFieldType,
+             mod_arith::ModArithType, IntegerType>(t);
+}
+
+static bool isPointType(Type t) { return isa<PointTypeInterface>(t); }
+} // namespace
+
+// Check if types are compatible for bitcast between field tensor and EC point
+// tensor.
+bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
+  if (inputs.size() != 1 || outputs.size() != 1)
+    return false;
+
+  Type inputType = inputs[0];
+  Type outputType = outputs[0];
+
+  // Both must be shaped types (tensors)
+  auto inputShaped = dyn_cast<ShapedType>(inputType);
+  auto outputShaped = dyn_cast<ShapedType>(outputType);
+  if (!inputShaped || !outputShaped)
+    return false;
+
+  // One must be a field type tensor, the other a point type tensor
+  Type inputElemType = inputShaped.getElementType();
+  Type outputElemType = outputShaped.getElementType();
+
+  PointTypeInterface pointType;
+  ShapedType fieldTensor;
+  ShapedType pointTensor;
+
+  if (isFieldType(inputElemType) && isPointType(outputElemType)) {
+    fieldTensor = inputShaped;
+    pointTensor = outputShaped;
+    pointType = cast<PointTypeInterface>(outputElemType);
+  } else if (isPointType(inputElemType) && isFieldType(outputElemType)) {
+    fieldTensor = outputShaped;
+    pointTensor = inputShaped;
+    pointType = cast<PointTypeInterface>(inputElemType);
+  } else {
+    return false;
+  }
+
+  // Verify shapes are static
+  if (!fieldTensor.hasStaticShape() || !pointTensor.hasStaticShape())
+    return false;
+
+  // Verify element counts match: N*K field elements = N points with K coords
+  unsigned numCoords = pointType.getNumCoords();
+  int64_t fieldCount = fieldTensor.getNumElements();
+  int64_t pointCount = pointTensor.getNumElements();
+
+  // Account for extension field degree
+  Type baseFieldType = pointType.getBaseFieldType();
+  unsigned extDegree = field::getExtensionDegree(baseFieldType);
+
+  // Total field elements = numPoints * numCoords * extDegree
+  return fieldCount == pointCount * numCoords * extDegree;
+}
+
+LogicalResult BitcastOp::verify() {
+  Type inputType = getInput().getType();
+  Type outputType = getOutput().getType();
+
+  if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType}))
+    return success();
+
+  // Provide detailed error messages
+  auto inputShaped = dyn_cast<ShapedType>(inputType);
+  auto outputShaped = dyn_cast<ShapedType>(outputType);
+
+  if (!inputShaped || !outputShaped) {
+    return emitOpError() << "bitcast requires tensor types; got " << inputType
+                         << " and " << outputType;
+  }
+
+  Type inputElemType = inputShaped.getElementType();
+  Type outputElemType = outputShaped.getElementType();
+
+  if (!((isFieldType(inputElemType) && isPointType(outputElemType)) ||
+        (isPointType(inputElemType) && isFieldType(outputElemType)))) {
+    return emitOpError() << "bitcast requires one field tensor and one point "
+                            "tensor; got "
+                         << inputType << " and " << outputType;
+  }
+
+  if (!inputShaped.hasStaticShape() || !outputShaped.hasStaticShape()) {
+    return emitOpError() << "bitcast requires static shapes";
+  }
+
+  return emitOpError() << "element count mismatch between " << inputType
+                       << " and " << outputType;
+}
+
 //////////////// PARSE AND PRINT CONSTANT ////////////////
 
-ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
-                                       OperationState &result) {
-  // TODO(chokobole): Support nested towers of extension fields.
-  SmallVector<SmallVector<APInt>> parsedCoordArrays;
+namespace {
 
-  auto coordinateParser = [&]() -> ParseResult {
-    SmallVector<APInt> coordValues;
+// Helper to get extension field degree if the base field is an extension field.
+// Returns std::nullopt for prime fields.
+// Note: Named differently from field::getExtensionDegree which returns unsigned
+// with a default of 1.
+std::optional<unsigned> getOptionalExtensionDegree(Type baseFieldType) {
+  if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType))
+    return efType.getDegreeOverPrime();
+  return std::nullopt;
+}
 
-    // Check if the coordinate is an extension field element [coeff0, coeff1,
-    // ...] or a single base field integer.
-    if (succeeded(parser.parseOptionalLSquare())) {
-      auto elementParser = [&]() -> ParseResult {
-        APInt val;
-        if (failed(parser.parseInteger(val)))
-          return failure();
-        coordValues.push_back(val);
-        return success();
-      };
+// Helper to create a coordinate attribute from APInt coefficients.
+// For prime fields: creates IntegerAttr
+// For extension fields: creates DenseIntElementsAttr
+Attribute createCoordAttr(Type baseFieldType, ArrayRef<APInt> coeffs) {
+  if (auto pfType = dyn_cast<field::PrimeFieldType>(baseFieldType)) {
+    assert(coeffs.size() == 1 && "prime field should have single coefficient");
+    return IntegerAttr::get(pfType.getStorageType(), coeffs[0]);
+  }
+  auto efType = cast<field::ExtensionFieldType>(baseFieldType);
+  auto tensorType =
+      RankedTensorType::get({static_cast<int64_t>(coeffs.size())},
+                            efType.getBasePrimeField().getStorageType());
+  return DenseIntElementsAttr::get(tensorType, coeffs);
+}
 
-      if (failed(parser.parseCommaSeparatedList(elementParser)) ||
-          failed(parser.parseRSquare())) {
-        return failure();
-      }
-    } else {
-      // Parse as a single base field integer literal.
-      APInt val;
-      if (failed(parser.parseInteger(val)))
-        return failure();
-      coordValues.push_back(val);
+// Helper to reconstruct ArrayAttr structure from flat parsed values.
+// Converts flat values [x0, y0, z0, x1, y1, z1, ...] into
+// ArrayAttr<ArrayAttr<Attr>> where each inner ArrayAttr represents one point.
+FailureOr<ArrayAttr> reconstructCoordsAttr(MLIRContext *ctx,
+                                           ArrayRef<APInt> flatValues,
+                                           PointTypeInterface pointType,
+                                           int64_t numPoints) {
+  Type baseFieldType = pointType.getBaseFieldType();
+  unsigned numCoords = pointType.getNumCoords();
+  unsigned extDegree = getOptionalExtensionDegree(baseFieldType).value_or(1);
+  unsigned valuesPerPoint = numCoords * extDegree;
+
+  if (flatValues.size() != static_cast<size_t>(numPoints) * valuesPerPoint)
+    return failure();
+
+  SmallVector<Attribute> pointAttrs;
+  size_t idx = 0;
+
+  for (int64_t p = 0; p < numPoints; ++p) {
+    SmallVector<Attribute> coordAttrs;
+    for (unsigned c = 0; c < numCoords; ++c) {
+      ArrayRef<APInt> coeffs(flatValues.begin() + idx, extDegree);
+      coordAttrs.push_back(createCoordAttr(baseFieldType, coeffs));
+      idx += extDegree;
     }
+    pointAttrs.push_back(ArrayAttr::get(ctx, coordAttrs));
+  }
 
-    parsedCoordArrays.push_back(std::move(coordValues));
-    return success();
+  return ArrayAttr::get(ctx, pointAttrs);
+}
+
+// Helper: recursively parse dense<[...]> values and track shape.
+// Returns flat list of APInt values and the parsed shape.
+ParseResult parseDenseValues(OpAsmParser &parser,
+                             SmallVector<APInt> &parsedInts,
+                             SmallVector<int64_t> &parsedShape) {
+  auto parseNested = [&](auto &&self, int level = 0) -> ParseResult {
+    int64_t count = 0;
+    auto checkpoint = parser.getCurrentLocation();
+    do {
+      APInt val;
+      OptionalParseResult res = parser.parseOptionalInteger(val);
+      if (res.has_value()) {
+        if (failed(*res))
+          return failure();
+        parsedInts.push_back(std::move(val));
+        ++count;
+      } else if (succeeded(parser.parseOptionalLSquare())) {
+        if (failed(self(self, level + 1)))
+          return failure();
+        ++count;
+      } else {
+        // Neither integer nor nested list - could be empty list or end of list
+        break;
+      }
+    } while (succeeded(parser.parseOptionalComma()));
+
+    if (static_cast<int64_t>(parsedShape.size()) <= level)
+      parsedShape.resize(level + 1);
+    if (parsedShape[level] == 0)
+      parsedShape[level] = count;
+    else if (parsedShape[level] != count)
+      return parser.emitError(checkpoint, "non-uniform array at dimension ")
+             << level;
+    return parser.parseRSquare();
   };
 
-  if (failed(parser.parseCommaSeparatedList(OpAsmParser::Delimiter::None,
-                                            coordinateParser))) {
-    return parser.emitError(parser.getNameLoc(),
-                            "expected comma-separated coordinates (e.g., x, y "
-                            "or [x0, x1], [y0, y1])");
-  }
-  // Parse type
-  Type parsedType;
-  if (failed(parser.parseColon()) || failed(parser.parseType(parsedType))) {
+  if (failed(parser.parseLSquare()) || failed(parseNested(parseNested)))
     return failure();
+  return success();
+}
+
+// Helper to get modulus from base field type
+FailureOr<APInt> getModulusFromBaseField(OpAsmParser &parser,
+                                         Type baseFieldType) {
+  if (auto pfType = dyn_cast<field::PrimeFieldType>(baseFieldType)) {
+    return pfType.getModulus().getValue();
+  }
+  if (auto efType = dyn_cast<field::ExtensionFieldType>(baseFieldType)) {
+    return efType.getBasePrimeField().getModulus().getValue();
+  }
+  parser.emitError(parser.getCurrentLocation(), "unsupported base field type");
+  return failure();
+}
+
+} // namespace
+
+// Unified parsing for EC constants in dense<...> format.
+// Supports both scalar (!jacobian) and tensor (tensor<Nx!jacobian>) types.
+// Format:
+//   Scalar prime field: dense<[x, y, z]> : !jacobian
+//   Scalar ext field:   dense<[[x0, x1], [y0, y1]]> : !affine_ext2
+//   Tensor prime field: dense<[[x0, y0], [x1, y1]]> : tensor<2x!affine>
+//   Tensor ext field:   dense<[[[a0,a1],[b0,b1]], ...]> :
+//   tensor<Nx!affine_ext2>
+ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
+                                       OperationState &result) {
+  // 1. Parse dense<[...]> format
+  if (failed(parser.parseKeyword("dense")) || failed(parser.parseLess()))
+    return failure();
+
+  SmallVector<APInt> parsedInts;
+  SmallVector<int64_t> parsedShape;
+  if (failed(parseDenseValues(parser, parsedInts, parsedShape)))
+    return failure();
+
+  // 2. Parse type
+  Type parsedType;
+  if (failed(parser.parseGreater()) ||
+      failed(parser.parseColonType(parsedType)))
+    return failure();
+
+  // 3. Determine scalar vs tensor and extract point type
+  bool isTensor = isa<ShapedType>(parsedType);
+  int64_t numPoints = 1;
+  PointTypeInterface pointType;
+
+  if (isTensor) {
+    auto shapedType = cast<ShapedType>(parsedType);
+    numPoints = shapedType.getNumElements();
+    pointType = dyn_cast<PointTypeInterface>(shapedType.getElementType());
+    if (!pointType)
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected point type element");
+  } else {
+    pointType = dyn_cast<PointTypeInterface>(parsedType);
+    if (!pointType)
+      return parser.emitError(parser.getCurrentLocation(),
+                              "expected point type");
   }
 
-  Type pointType = getElementTypeOrSelf(parsedType);
-  auto pointTypeInterface = cast<PointTypeInterface>(pointType);
-  if (!pointTypeInterface) {
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected point type, but got ")
-           << parsedType;
+  // 4. Validate shape
+  // Expected shapes:
+  //   Scalar prime field: [numCoords]
+  //   Scalar ext field:   [numCoords, degree]
+  //   Tensor prime field: [numPoints, numCoords]
+  //   Tensor ext field:   [numPoints, numCoords, degree]
+  unsigned numCoords = pointType.getNumCoords();
+  Type baseFieldType = pointType.getBaseFieldType();
+  auto extDegree = getOptionalExtensionDegree(baseFieldType);
+
+  SmallVector<int64_t> expectedShape;
+  if (isTensor) {
+    auto shapedType = cast<ShapedType>(parsedType);
+    expectedShape.append(shapedType.getShape().begin(),
+                         shapedType.getShape().end());
   }
+  expectedShape.push_back(static_cast<int64_t>(numCoords));
+  if (extDegree)
+    expectedShape.push_back(static_cast<int64_t>(*extDegree));
 
-  // Get base field from curve
-  ShortWeierstrassAttr curveAttr =
-      cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr());
-  Type baseFieldType = curveAttr.getBaseField();
-
-  unsigned numCoords = pointTypeInterface.getNumCoords();
-
-  if (parsedCoordArrays.size() != numCoords) {
+  if (expectedShape.size() != parsedShape.size() ||
+      !std::equal(expectedShape.begin(), expectedShape.end(),
+                  parsedShape.begin())) {
     return parser.emitError(parser.getCurrentLocation())
-           << "expected " << numCoords << " coordinates for " << parsedType
-           << " but got " << parsedCoordArrays.size();
+           << "shape mismatch: expected ["
+           << llvm::make_range(expectedShape.begin(), expectedShape.end())
+           << "] but got ["
+           << llvm::make_range(parsedShape.begin(), parsedShape.end()) << "]";
   }
 
-  // Determine if base field is an extension field
-  bool isExtensionField = isa<field::ExtensionFieldType>(baseFieldType);
-  unsigned extensionDegree = 1;
-  if (isExtensionField) {
-    extensionDegree =
-        cast<field::ExtensionFieldType>(baseFieldType).getDegreeOverPrime();
-  }
+  // 5. Validate modular values
+  auto modulusOrErr = getModulusFromBaseField(parser, baseFieldType);
+  if (failed(modulusOrErr))
+    return failure();
+  APInt modulus = *modulusOrErr;
 
-  // Validate and create field attributes
-  SmallVector<Attribute> coordAttrs;
-  for (unsigned i = 0; i < numCoords; ++i) {
-    const auto &coordValues = parsedCoordArrays[i];
-
-    // Validate coordinate format matches base field type
-    if (isExtensionField) {
-      if (coordValues.size() != extensionDegree) {
-        return parser.emitError(parser.getCurrentLocation())
-               << "coordinate " << i << " must have " << extensionDegree
-               << " values for extension field, but got " << coordValues.size();
-      }
-    } else {
-      if (coordValues.size() != 1) {
-        return parser.emitError(parser.getCurrentLocation())
-               << "coordinate " << i
-               << " must be a single integer for prime field, but got "
-               << coordValues.size() << " values";
-      }
-    }
-
-    auto attrOrErr = field::validateAndCreateFieldAttribute(
-        parser, baseFieldType, coordValues);
-
-    if (failed(attrOrErr)) {
+  for (APInt &val : parsedInts) {
+    if (failed(validateModularInteger(parser, modulus, val)))
       return failure();
-    }
-    coordAttrs.push_back(field::maybeToMontgomery(baseFieldType, *attrOrErr));
   }
 
-  result.addAttribute("coords",
-                      ArrayAttr::get(parser.getContext(), coordAttrs));
+  // 6. Reconstruct attribute (always ArrayAttr<ArrayAttr<Attr>>)
+  auto coordsAttr = reconstructCoordsAttr(parser.getContext(), parsedInts,
+                                          pointType, numPoints);
+  if (failed(coordsAttr))
+    return parser.emitError(parser.getCurrentLocation(),
+                            "failed to reconstruct coords attribute");
+
+  result.addAttribute("coords", *coordsAttr);
   result.addTypes(parsedType);
   return success();
 }
@@ -461,24 +661,37 @@ ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
 }
 
 void ConstantOp::print(OpAsmPrinter &p) {
-  p << " ";
-
-  // Get base field type for Montgomery conversion
-  Type pointType = getElementTypeOrSelf(getType());
-  auto pointTypeInterface = cast<PointTypeInterface>(pointType);
-  ShortWeierstrassAttr curveAttr =
-      cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr());
-  Type baseFieldType = curveAttr.getBaseField();
-
+  p << " dense<";
+  Type type = getType();
   auto coords = getCoords();
+  bool isTensor = isa<ShapedType>(type);
+
+  // Unified structure: ArrayAttr<ArrayAttr<Attr>>
+  // - Scalar: [[x, y, z]] -> print as [x, y, z]
+  // - Tensor: [[x0, y0], [x1, y1]] -> print as [[x0, y0], [x1, y1]]
+  if (isTensor) {
+    p << "[";
+  }
+
   for (size_t i = 0; i < coords.size(); ++i) {
     if (i > 0)
       p << ", ";
-    p.printAttributeWithoutType(
-        field::maybeToStandard(baseFieldType, coords[i]));
+    auto pointCoords = cast<ArrayAttr>(coords[i]);
+    p << "[";
+    for (size_t j = 0; j < pointCoords.size(); ++j) {
+      if (j > 0)
+        p << ", ";
+      p.printAttributeWithoutType(pointCoords[j]);
+    }
+    p << "]";
   }
-  p << " : ";
-  p.printType(getType());
+
+  if (isTensor) {
+    p << "]";
+  }
+
+  p << "> : ";
+  p.printType(type);
 }
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
@@ -566,14 +779,16 @@ namespace {
 
 // Extract a FieldOperation from an attribute (IntegerAttr or DenseElementsAttr)
 field::FieldOperation getFieldOpFromAttr(Attribute attr, Type fieldType) {
-  if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
-    return field::FieldOperation::fromUnchecked(intAttr.getValue(), fieldType);
-  }
-  auto denseAttr = cast<DenseIntElementsAttr>(attr);
-  // Use the non-template overload for SmallVector<APInt>
-  auto values = denseAttr.getValues<APInt>();
-  const SmallVector<APInt> coeffs(values.begin(), values.end());
-  return field::FieldOperation::fromUnchecked(coeffs, fieldType);
+  return TypeSwitch<Attribute, field::FieldOperation>(attr)
+      .Case<IntegerAttr>([&](auto intAttr) {
+        return field::FieldOperation::fromUnchecked(intAttr.getValue(),
+                                                    fieldType);
+      })
+      .Case<DenseIntElementsAttr>([&](auto denseAttr) {
+        auto values = denseAttr.template getValues<APInt>();
+        const SmallVector<APInt> coeffs(values.begin(), values.end());
+        return field::FieldOperation::fromUnchecked(coeffs, fieldType);
+      });
 }
 
 // Convert ArrayAttr (coordinates) to PointOperation
@@ -596,42 +811,61 @@ PointOperationBase<Kind> pointOpFromArrayAttr(ArrayAttr coordsAttr,
   return PointOperationBase<Kind>::fromUnchecked(coords, pointType);
 }
 
-// Convert PointOperation to ArrayAttr
+// Convert a single point's coords to ArrayAttr (inner array)
 template <PointKind Kind>
-ArrayAttr pointOpToArrayAttr(MLIRContext *ctx,
-                             const PointOperationBase<Kind> &op) {
-  SmallVector<Attribute> attrs;
+ArrayAttr pointCoordsToArrayAttr(MLIRContext *ctx,
+                                 const PointOperationBase<Kind> &op) {
   Type baseFieldType = op.getPointType().getBaseFieldType();
+  SmallVector<Attribute> attrs;
 
   for (const auto &coord : op.getCoords()) {
-    if (isa<field::PrimeFieldType>(baseFieldType)) {
-      auto pfType = cast<field::PrimeFieldType>(baseFieldType);
-      attrs.push_back(
-          IntegerAttr::get(pfType.getStorageType(), static_cast<APInt>(coord)));
-    } else if (isa<field::ExtensionFieldType>(baseFieldType)) {
-      auto efType = cast<field::ExtensionFieldType>(baseFieldType);
-      auto pfType = cast<field::PrimeFieldType>(efType.getBaseField());
-      SmallVector<APInt> coeffs = static_cast<SmallVector<APInt>>(coord);
-      auto tensorType = RankedTensorType::get(
-          {static_cast<int64_t>(coeffs.size())}, pfType.getStorageType());
-      attrs.push_back(DenseIntElementsAttr::get(tensorType, coeffs));
-    }
+    // PrimeFieldOperation converts to APInt, ExtensionFieldOperation to
+    // SmallVector<APInt>
+    Attribute attr =
+        TypeSwitch<Type, Attribute>(baseFieldType)
+            .template Case<field::PrimeFieldType>([&](auto pfType) {
+              return IntegerAttr::get(pfType.getStorageType(),
+                                      static_cast<APInt>(coord));
+            })
+            .template Case<field::ExtensionFieldType>([&](auto efType) {
+              SmallVector<APInt> coeffs =
+                  static_cast<SmallVector<APInt>>(coord);
+              auto tensorType = RankedTensorType::get(
+                  {static_cast<int64_t>(coeffs.size())},
+                  efType.getBasePrimeField().getStorageType());
+              return DenseIntElementsAttr::get(tensorType, coeffs);
+            });
+    attrs.push_back(attr);
   }
 
   return ArrayAttr::get(ctx, attrs);
 }
 
-// Create a PointOperation from ArrayAttr based on PointKind
+// Convert PointOperation to unified ArrayAttr<ArrayAttr<Attr>> structure
+// Returns ArrayAttr containing single inner ArrayAttr of coordinate attributes
+template <PointKind Kind>
+ArrayAttr pointOpToArrayAttr(MLIRContext *ctx,
+                             const PointOperationBase<Kind> &op) {
+  ArrayAttr pointCoords = pointCoordsToArrayAttr(ctx, op);
+  return ArrayAttr::get(ctx, {pointCoords});
+}
+
+// Create a PointOperation from ArrayAttr based on PointKind.
+// Unified structure: ArrayAttr<ArrayAttr<Attr>> where outer array contains
+// points and inner array contains coordinates per point.
 PointOperation createPointOp(ArrayAttr coordsAttr,
                              PointTypeInterface pointType) {
+  // Extract the inner array (single point) from unified structure
+  ArrayAttr pointCoords = cast<ArrayAttr>(coordsAttr[0]);
+
   unsigned numCoords = pointType.getNumCoords();
   switch (numCoords) {
   case 2:
-    return pointOpFromArrayAttr<PointKind::kAffine>(coordsAttr, pointType);
+    return pointOpFromArrayAttr<PointKind::kAffine>(pointCoords, pointType);
   case 3:
-    return pointOpFromArrayAttr<PointKind::kJacobian>(coordsAttr, pointType);
+    return pointOpFromArrayAttr<PointKind::kJacobian>(pointCoords, pointType);
   case 4:
-    return pointOpFromArrayAttr<PointKind::kXYZZ>(coordsAttr, pointType);
+    return pointOpFromArrayAttr<PointKind::kXYZZ>(pointCoords, pointType);
   default:
     llvm_unreachable("invalid number of coordinates for point type");
   }
@@ -644,6 +878,22 @@ ArrayAttr toArrayAttr(MLIRContext *ctx, const PointOperation &op) {
         return pointOpToArrayAttr(ctx, pointOp);
       },
       op.getOperation());
+}
+
+// Helper to convert PointOperations to ArrayAttr<ArrayAttr<Attr>> for tensor
+// folding.
+ArrayAttr pointOperationsToArrayAttr(MLIRContext *ctx,
+                                     ArrayRef<PointOperation> values) {
+  SmallVector<Attribute> pointAttrs;
+  for (const auto &value : values) {
+    ArrayAttr pointCoords = std::visit(
+        [ctx](const auto &pointOp) -> ArrayAttr {
+          return pointCoordsToArrayAttr(ctx, pointOp);
+        },
+        value.getOperation());
+    pointAttrs.push_back(pointCoords);
+  }
+  return ArrayAttr::get(ctx, pointAttrs);
 }
 
 //===----------------------------------------------------------------------===//
@@ -673,8 +923,7 @@ public:
 
   OpFoldResult getTensorAttr(ShapedType type,
                              ArrayRef<PointOperation> values) const final {
-    // EC points don't support tensor constant folding
-    return {};
+    return pointOperationsToArrayAttr(ctx, values);
   }
 
 protected:
@@ -700,6 +949,25 @@ public:
     return fn(value, outputKind);
   }
 
+  // Fold tensor of points (not a virtual override - called directly from
+  // helper)
+  OpFoldResult foldTensorPoints(ArrayAttr inputAttr,
+                                ShapedType outputType) const {
+    // Each element in inputAttr is a point's coordinates (ArrayAttr)
+    SmallVector<PointOperation, 0> results;
+    results.reserve(inputAttr.size());
+
+    for (Attribute pointAttr : inputAttr) {
+      // Wrap single point in outer ArrayAttr to match unified structure
+      ArrayAttr wrappedPoint =
+          ArrayAttr::get(this->ctx, {cast<ArrayAttr>(pointAttr)});
+      PointOperation inputOp = this->getNativeInput(wrappedPoint);
+      results.push_back(operate(inputOp));
+    }
+
+    return this->getTensorAttr(outputType, results);
+  }
+
 private:
   PointKind outputKind;
   Func fn;
@@ -714,11 +982,15 @@ class GenericEllipticCurveBinaryFolder
     : public BinaryConstantFolder<EllipticCurveConstantFolderConfig>::Delegate {
 public:
   GenericEllipticCurveBinaryFolder(Op *op, Func fn)
-      : op(op), fn(fn),
-        lhsPointType(cast<PointTypeInterface>(op->getLhs().getType())),
-        rhsPointType(cast<PointTypeInterface>(op->getRhs().getType())),
+      : op(op), fn(fn), ctx(op->getContext()),
+        lhsPointType(cast<PointTypeInterface>(
+            getElementTypeOrSelf(op->getLhs().getType()))),
+        rhsPointType(cast<PointTypeInterface>(
+            getElementTypeOrSelf(op->getRhs().getType()))),
         outputKind(static_cast<PointKind>(
-            cast<PointTypeInterface>(op->getType()).getNumCoords() - 2)) {}
+            cast<PointTypeInterface>(getElementTypeOrSelf(op->getType()))
+                .getNumCoords() -
+            2)) {}
 
   // This won't be called directly since we override foldScalar(lhs, rhs)
   PointOperation getNativeInput(ArrayAttr attr) const final {
@@ -726,12 +998,12 @@ public:
   }
 
   OpFoldResult getScalarAttr(const PointOperation &value) const final {
-    return toArrayAttr(op->getContext(), value);
+    return toArrayAttr(ctx, value);
   }
 
   OpFoldResult getTensorAttr(ShapedType type,
                              ArrayRef<PointOperation> values) const final {
-    return {};
+    return pointOperationsToArrayAttr(ctx, values);
   }
 
   PointOperation operate(const PointOperation &lhs,
@@ -752,9 +1024,32 @@ public:
     return getScalarAttr(operate(lhsOp, rhsOp));
   }
 
+  // Fold tensor of points (not a virtual override - called directly from
+  // helper)
+  OpFoldResult foldTensorPoints(ArrayAttr lhsAttr, ArrayAttr rhsAttr,
+                                ShapedType outputType) const {
+    if (lhsAttr.size() != rhsAttr.size())
+      return {};
+
+    SmallVector<PointOperation, 0> results;
+    results.reserve(lhsAttr.size());
+
+    for (auto [lhsPoint, rhsPoint] : llvm::zip(lhsAttr, rhsAttr)) {
+      // Wrap single point in outer ArrayAttr to match unified structure
+      ArrayAttr wrappedLhs = ArrayAttr::get(ctx, {cast<ArrayAttr>(lhsPoint)});
+      ArrayAttr wrappedRhs = ArrayAttr::get(ctx, {cast<ArrayAttr>(rhsPoint)});
+      PointOperation lhsOp = createPointOp(wrappedLhs, lhsPointType);
+      PointOperation rhsOp = createPointOp(wrappedRhs, rhsPointType);
+      results.push_back(operate(lhsOp, rhsOp));
+    }
+
+    return getTensorAttr(outputType, results);
+  }
+
 private:
   Op *const op; // not owned
   Func fn;
+  MLIRContext *ctx; // not owned
   PointTypeInterface lhsPointType;
   PointTypeInterface rhsPointType;
   PointKind outputKind;
@@ -772,16 +1067,25 @@ OpFoldResult foldUnaryPointOp(Op *op, typename Op::FoldAdaptor adaptor,
     return {};
 
   Type inputType = op->getInput().getType();
-  auto inputPointType = dyn_cast<PointTypeInterface>(inputType);
+  Type outputType = op->getType();
+
+  // Use getElementTypeOrSelf to handle both scalar and tensor types
+  auto inputPointType =
+      dyn_cast<PointTypeInterface>(getElementTypeOrSelf(inputType));
   if (!inputPointType)
     return {};
 
-  Type outputType = op->getType();
-  auto outputPointType = cast<PointTypeInterface>(outputType);
+  auto outputPointType =
+      cast<PointTypeInterface>(getElementTypeOrSelf(outputType));
   PointKind outputKind =
       static_cast<PointKind>(outputPointType.getNumCoords() - 2);
 
   GenericUnaryEllipticCurveFolder<Func> folder(inputPointType, outputKind, fn);
+
+  // Check if this is a tensor operation
+  if (auto shapedType = dyn_cast<ShapedType>(outputType)) {
+    return folder.foldTensorPoints(inputAttr, shapedType);
+  }
   return folder.foldScalar(inputAttr);
 }
 
@@ -794,6 +1098,11 @@ OpFoldResult foldBinaryPointOp(Op *op, typename Op::FoldAdaptor adaptor,
     return {};
 
   GenericEllipticCurveBinaryFolder<Op, Func> folder(op, fn);
+
+  // Check if this is a tensor operation
+  if (auto shapedType = dyn_cast<ShapedType>(op->getType())) {
+    return folder.foldTensorPoints(lhsAttr, rhsAttr, shapedType);
+  }
   return folder.foldScalar(lhsAttr, rhsAttr);
 }
 

@@ -32,6 +32,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/BitSerialAlgorithm.h"
+#include "prime_ir/Utils/ConversionUtils.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
@@ -49,31 +50,98 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Type pointType = getElementTypeOrSelf(op.getType());
+    Type resultType = op.getType();
+    Type pointType = getElementTypeOrSelf(resultType);
     auto pointTypeInterface = cast<PointTypeInterface>(pointType);
     Type baseFieldType =
         cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr())
             .getBaseField();
 
     // Convert coordinate attributes to field constants
-    SmallVector<Value> coordValues;
-    for (auto coordAttr : op.getCoords()) {
-      Value coordValue;
-      if (auto intAttr = dyn_cast<IntegerAttr>(coordAttr)) {
-        // Prime field coordinate
-        coordValue = b.create<field::ConstantOp>(baseFieldType, intAttr);
-      } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(coordAttr)) {
-        // Extension field coordinate
-        coordValue = b.create<field::ConstantOp>(baseFieldType, denseAttr);
-      } else {
-        return op.emitError() << "unsupported coordinate attribute type";
+    // Unified structure: ArrayAttr<ArrayAttr<Attr>> where outer array contains
+    // points and inner array contains coordinates per point
+    ArrayAttr coordsAttr = op.getCoords();
+
+    // Helper to create a single point from its coordinate attributes
+    auto createPointFromCoords =
+        [&](ArrayAttr pointCoords) -> FailureOr<Value> {
+      SmallVector<Value> coordValues;
+      for (auto coordAttr : pointCoords) {
+        Value coordValue;
+        if (auto intAttr = dyn_cast<IntegerAttr>(coordAttr)) {
+          // Prime field coordinate
+          coordValue = b.create<field::ConstantOp>(baseFieldType, intAttr);
+        } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(coordAttr)) {
+          // Extension field coordinate
+          coordValue = b.create<field::ConstantOp>(baseFieldType, denseAttr);
+        } else {
+          return failure();
+        }
+        coordValues.push_back(coordValue);
       }
-      coordValues.push_back(coordValue);
+      return fromCoords(b, pointType, coordValues);
+    };
+
+    if (auto shapedType = dyn_cast<ShapedType>(resultType)) {
+      // Tensor constant: create flat integer tensor, bitcast to field tensor,
+      // then bitcast to point tensor
+      unsigned numCoords = pointTypeInterface.getNumCoords();
+      int64_t numPoints = shapedType.getNumElements();
+
+      // Determine extension field degree and get base prime field
+      unsigned extDegree = field::getExtensionDegree(baseFieldType);
+      auto primeFieldType = field::getBasePrimeField(baseFieldType);
+
+      // Collect all coordinate values into a flat vector
+      SmallVector<APInt> flatValues;
+      flatValues.reserve(numPoints * numCoords * extDegree);
+
+      for (auto pointAttr : coordsAttr) {
+        auto pointCoords = cast<ArrayAttr>(pointAttr);
+        for (auto coordAttr : pointCoords) {
+          if (auto intAttr = dyn_cast<IntegerAttr>(coordAttr)) {
+            // Prime field coordinate
+            flatValues.push_back(intAttr.getValue());
+          } else if (auto denseAttr =
+                         dyn_cast<DenseIntElementsAttr>(coordAttr)) {
+            // Extension field coordinate - flatten all coefficients
+            for (const APInt &coeff : denseAttr.getValues<APInt>())
+              flatValues.push_back(coeff);
+          } else {
+            return op.emitError() << "unsupported coordinate attribute type";
+          }
+        }
+      }
+
+      // Create flat integer tensor constant using arith.constant
+      int64_t flatSize = numPoints * numCoords * extDegree;
+      auto intTensorType =
+          RankedTensorType::get({flatSize}, primeFieldType.getStorageType());
+      auto flatDenseAttr = DenseIntElementsAttr::get(intTensorType, flatValues);
+      auto intConstant =
+          b.create<arith::ConstantOp>(intTensorType, flatDenseAttr);
+
+      // Bitcast integer tensor to prime field tensor
+      auto pfTensorType = RankedTensorType::get({flatSize}, primeFieldType);
+      auto pfTensor =
+          b.create<field::BitcastOp>(pfTensorType, intConstant.getResult());
+
+      // Use elliptic_curve.bitcast to convert prime field tensor to point
+      // tensor. This can be properly bufferized unlike
+      // UnrealizedConversionCastOp.
+      Value fieldTensor = pfTensor.getResult();
+      Value tensorResult =
+          b.create<BitcastOp>(shapedType, fieldTensor).getResult();
+      rewriter.replaceOp(op, tensorResult);
+    } else {
+      // Scalar constant: create single point
+      ArrayAttr pointCoords = cast<ArrayAttr>(coordsAttr[0]);
+      auto pointOrFailure = createPointFromCoords(pointCoords);
+      if (failed(pointOrFailure))
+        return op.emitError() << "unsupported coordinate attribute type";
+      rewriter.replaceOp(op, *pointOrFailure);
     }
 
-    // Create point from coordinates
-    Value point = fromCoords(b, op.getType(), coordValues);
-    rewriter.replaceOp(op, point);
     return success();
   }
 };
@@ -513,9 +581,8 @@ struct ConvertBucketAcc : public OpConversionPattern<BucketAccOp> {
           Value bucketOffsetEnd =
               b0.create<tensor::ExtractOp>(bucketOffsets, indexPlusOne);
 
-          // TODO(ashjeong): Replace with linalg::ReduceOp once supported on the
-          // EC level
-          // Aggregate all points per bucket
+          // TODO(ashjeong): Replace with linalg::ReduceOp once supported on
+          // the EC level Aggregate all points per bucket
           auto pointLoop = b0.create<scf::ForOp>(
               /*lowerBound=*/bucketOffsetStart, /*upperBound=*/bucketOffsetEnd,
               /*step=*/one, zeroPoint,
@@ -719,11 +786,13 @@ void EllipticCurveToField::runOnOperation() {
 
   target.addLegalOp<
       // clang-format off
+      BitcastOp,
       FromCoordsOp,
       ToCoordsOp,
       func::FuncOp,
       func::CallOp,
-      func::ReturnOp
+      func::ReturnOp,
+      UnrealizedConversionCastOp
       // clang-format on
       >();
 
@@ -733,6 +802,11 @@ void EllipticCurveToField::runOnOperation() {
 
   // Register ConvertScalarMul with intrinsic mode support
   patterns.add<ConvertScalarMul>(context, intrinsicGenerator.get(), mode);
+  // NOTE: We intentionally do NOT add function signature conversion patterns.
+  // Converting function signatures would require converting all operations that
+  // use EC tensor types (e.g., linalg.reduce), which is beyond the scope of
+  // EC-to-Field. The EC tensor types in function signatures will remain and be
+  // handled by later passes or explicit bitcasts.
 
   patterns.add<
       // clang-format off

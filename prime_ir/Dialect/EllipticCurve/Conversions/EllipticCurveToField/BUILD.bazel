@@ -61,6 +61,7 @@ cc_library(
         "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Utils:BitSerialAlgorithm",
+        "//prime_ir/Utils:ConversionUtils",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BufferizationDialect",
         "@llvm-project//mlir:FuncDialect",
