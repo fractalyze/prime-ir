@@ -547,24 +547,29 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
 
     // Reduce exponent using Fermat's little theorem:
     // x^(p-1) ≡ 1 (prime field), x^(pᵈ-1) ≡ 1 (extension field)
-    if (auto expConstOp = exp.getDefiningOp<arith::ConstantOp>()) {
-      APInt cExp = cast<IntegerAttr>(expConstOp.getValue()).getValue();
-      cExp = cExp.urem(modulus - 1);
-      exp = b.create<arith::ConstantIntOp>(intType, cExp);
-    } else if (isa<PrimeFieldType>(fieldType)) {
-      exp = b.create<arith::RemUIOp>(
-          exp, b.create<arith::ConstantIntOp>(intType, modulus - 1));
-    } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
+    APInt order;
+    if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
       unsigned degreeOverPrime = efType.getDegreeOverPrime();
       modulus = modulus.zext(modBitWidth * degreeOverPrime);
-      APInt order = modulus;
-      for (unsigned i = 1; i < degreeOverPrime; ++i) {
+      order = modulus;
+      for (unsigned i = 1; i < degreeOverPrime; ++i)
         order = order * modulus;
-      }
       order = order - 1;
-      exp = b.create<arith::ExtUIOp>(
-          IntegerType::get(exp.getContext(), order.getBitWidth()), exp);
+    } else {
+      order = modulus - 1;
+    }
+
+    if (auto expConstOp = exp.getDefiningOp<arith::ConstantOp>()) {
+      APInt cExp = cast<IntegerAttr>(expConstOp.getValue()).getValue();
+      cExp = cExp.zext(order.getBitWidth());
+      cExp = cExp.urem(order);
       intType = IntegerType::get(exp.getContext(), order.getBitWidth());
+      exp = b.create<arith::ConstantIntOp>(intType, cExp);
+    } else {
+      if (order.getBitWidth() > intType.getWidth()) {
+        intType = IntegerType::get(exp.getContext(), order.getBitWidth());
+        exp = b.create<arith::ExtUIOp>(intType, exp);
+      }
       exp = b.create<arith::RemUIOp>(
           exp, b.create<arith::ConstantIntOp>(intType, order));
     }

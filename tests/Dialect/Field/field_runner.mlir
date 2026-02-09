@@ -90,4 +90,4 @@ func.func @test_power() {
 // CHECK_TEST_POWER: [6]
 // CHECK_TEST_POWER: [2, 5]
 // CHECK_TEST_POWER: [2, 5]
-// CHECK_TEST_POWER: [3, 4, 2, 5, 3, 4]
+// CHECK_TEST_POWER: [0, 0, 6, 1, 6, 1]
