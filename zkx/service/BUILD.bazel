@@ -1601,6 +1601,32 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "compile_only_service",
+    srcs = ["compile_only_service.cc"],
+    hdrs = ["compile_only_service.h"],
+    deps = [
+        ":backend",
+        ":compiler",
+        ":computation_layout",
+        ":dump",
+        ":platform_util",
+        ":service",
+        "//zkx:debug_options_flags",
+        "//zkx:status_macros",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_module_group",
+        "//zkx/stream_executor",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "shape_inference",
     srcs = ["shape_inference.cc"],
     hdrs = ["shape_inference.h"],
