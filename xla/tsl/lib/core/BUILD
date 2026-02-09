@@ -25,3 +25,12 @@ cc_library(
     ],
     alwayslink = 1,
 )
+
+cc_library(
+    name = "bits",
+    hdrs = ["bits.h"],
+    deps = [
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/numeric:bits",
+    ],
+)

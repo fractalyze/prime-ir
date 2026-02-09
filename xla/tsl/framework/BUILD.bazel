@@ -21,7 +21,50 @@ zkx_cc_library(
     name = "allocator",
     srcs = ["allocator.cc"],
     hdrs = ["allocator.h"],
-    deps = ["@com_google_absl//absl/strings:str_format"],
+    deps = [
+        "//xla/tsl/platform:numa",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:optional",
+    ],
+)
+
+zkx_cc_library(
+    name = "allocator_retry",
+    srcs = ["allocator_retry.cc"],
+    hdrs = ["allocator_retry.h"],
+    deps = [
+        ":metrics",
+        "//xla/tsl/platform:env",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+zkx_cc_library(
+    name = "bfc_allocator",
+    srcs = ["bfc_allocator.cc"],
+    hdrs = ["bfc_allocator.h"],
+    deps = [
+        ":allocator",
+        ":allocator_retry",
+        ":shared_counter",
+        "//xla/tsl/lib/core:bits",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:numbers",
+        "//xla/tsl/profiler/lib:scoped_memory_debug_annotation",
+        "//xla/tsl/profiler/lib:traceme",
+        "//xla/tsl/profiler/utils:trace_filter_utils",
+        "//xla/tsl/protobuf:bfc_memory_map_cc_proto",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+    ],
 )
 
 zkx_cc_library(
@@ -36,6 +79,24 @@ zkx_cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/synchronization",
     ],
+)
+
+zkx_cc_library(
+    name = "device_id",
+    hdrs = ["device_id.h"],
+    deps = ["//xla/tsl/lib/gtl:int_type"],
+)
+
+zkx_cc_library(
+    name = "metrics",
+    srcs = ["metrics.cc"],
+    hdrs = ["metrics.h"],
+    deps = ["//xla/tsl/lib/monitoring:counter"],
+)
+
+zkx_cc_library(
+    name = "shared_counter",
+    hdrs = ["shared_counter.h"],
 )
 
 zkx_cc_unittest(

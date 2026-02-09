@@ -20,6 +20,16 @@ load("@rules_proto//proto:defs.bzl", "proto_library")
 package(default_visibility = ["//visibility:public"])
 
 proto_library(
+    name = "bfc_memory_map_proto",
+    srcs = ["bfc_memory_map.proto"],
+)
+
+cc_proto_library(
+    name = "bfc_memory_map_cc_proto",
+    deps = [":bfc_memory_map_proto"],
+)
+
+proto_library(
     name = "coordination_config_proto",
     srcs = ["coordination_config.proto"],
 )

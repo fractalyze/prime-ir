@@ -150,6 +150,15 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "trace_filter_utils",
+    hdrs = ["trace_filter_utils.h"],
+    deps = [
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:check",
+    ],
+)
+
+zkx_cc_library(
     name = "trace_utils",
     hdrs = ["trace_utils.h"],
     deps = ["@com_google_absl//absl/strings"],
