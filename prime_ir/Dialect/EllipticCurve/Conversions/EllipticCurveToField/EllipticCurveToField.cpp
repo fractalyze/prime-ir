@@ -17,18 +17,21 @@ limitations under the License.
 
 #include <utility>
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/ConversionUtils.h"
+#include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/IntrinsicFunctionGenerator.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Generic.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/PointCodeGen.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/Utils/BitSerialAlgorithm.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
@@ -262,13 +265,37 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
   }
 };
 
+namespace {
+/// Converts a prime field value to its integer representation.
+/// For field::ConstantOp: extracts the mathematical value via maybeToStandard.
+/// For dynamic values: emits FromMontOp (if Montgomery) + BitcastOp.
+Value fieldPrimeToInteger(ImplicitLocOpBuilder &b, Value fieldVal) {
+  auto pfType = cast<field::PrimeFieldType>(fieldVal.getType());
+  auto intType = pfType.getStorageType();
+
+  if (auto constOp = fieldVal.getDefiningOp<field::ConstantOp>()) {
+    Attribute stdAttr =
+        field::maybeToStandard(constOp.getType(), constOp.getValue());
+    return b.create<arith::ConstantIntOp>(
+        intType, cast<IntegerAttr>(stdAttr).getValue());
+  }
+
+  Value std = pfType.isMontgomery()
+                  ? b.create<field::FromMontOp>(
+                        field::getStandardFormType(pfType), fieldVal)
+                  : fieldVal;
+  return b.create<field::BitcastOp>(TypeRange{intType}, std);
+}
+} // namespace
+
 // Currently implements Double-and-Add algorithm
 // TODO(ashjeong): implement GLV
 struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
-  explicit ConvertScalarMul(MLIRContext *context)
-      : OpConversionPattern<ScalarMulOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  ConvertScalarMul(MLIRContext *context,
+                   IntrinsicFunctionGenerator *generator = nullptr,
+                   LoweringMode mode = LoweringMode::Inline)
+      : OpConversionPattern<ScalarMulOp>(context), generator(generator),
+        mode(mode) {}
 
   LogicalResult
   matchAndRewrite(ScalarMulOp op, OpAdaptor adaptor,
@@ -281,89 +308,37 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     Type pointType = op.getPoint().getType();
     Type outputType = op.getType();
 
-    auto scalarFieldType = cast<field::PrimeFieldType>(scalarPF.getType());
-    auto scalarIntType = scalarFieldType.getStorageType();
-    Value scalarReduced =
-        scalarFieldType.isMontgomery()
-            ? b.create<field::FromMontOp>(
-                  field::getStandardFormType(scalarFieldType), scalarPF)
-            : scalarPF;
-    Value scalarInt =
-        b.create<field::BitcastOp>(TypeRange{scalarIntType}, scalarReduced);
+    // Use intrinsic for complex cases (G2 points, etc.)
+    if (generator &&
+        IntrinsicFunctionGenerator::shouldUseIntrinsic(op, pointType, mode)) {
+      Value result = generator->emitScalarMulCall(
+          rewriter, op.getLoc(), pointType, outputType, point, scalarPF);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
 
+    // Inline implementation: Double-and-Add algorithm
     Value zeroPoint = createZeroPoint(b, outputType);
-
     Value initialPoint = isa<AffineType>(pointType)
                              ? b.create<ConvertPointTypeOp>(outputType, point)
                              : point;
 
-    auto arithOne = b.create<arith::ConstantIntOp>(scalarIntType, 1);
-    auto arithZero = b.create<arith::ConstantIntOp>(scalarIntType, 0);
-    auto result = zeroPoint;
-    auto ifOp = b.create<scf::IfOp>(
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ne,
-                                b.create<arith::AndIOp>(scalarInt, arithOne),
-                                arithZero),
-        [&](OpBuilder &builder, Location loc) {
-          ImplicitLocOpBuilder b(loc, builder);
-          Value newResult = b.create<AddOp>(outputType, result, initialPoint);
-          b.create<scf::YieldOp>(newResult);
+    Value scalarInt = fieldPrimeToInteger(b, scalarPF);
+    Value result = generateBitSerialLoop(
+        b, scalarInt, initialPoint, zeroPoint,
+        [outputType](ImplicitLocOpBuilder &b, Value v) {
+          return b.create<DoubleOp>(outputType, v);
         },
-        [&](OpBuilder &builder, Location loc) {
-          ImplicitLocOpBuilder b(loc, builder);
-          b.create<scf::YieldOp>(result);
+        [outputType](ImplicitLocOpBuilder &b, Value acc, Value v) {
+          return b.create<AddOp>(outputType, acc, v);
         });
-    result = ifOp.getResult(0);
-    scalarInt = b.create<arith::ShRUIOp>(scalarInt, arithOne);
-
-    auto whileOp = b.create<scf::WhileOp>(
-        /*resultTypes=*/TypeRange{scalarIntType, outputType, outputType},
-        /*operands=*/ValueRange{scalarInt, initialPoint, result},
-        /*beforeBuilder=*/
-        [&](OpBuilder &beforeBuilder, Location beforeLoc, ValueRange args) {
-          ImplicitLocOpBuilder b(beforeLoc, beforeBuilder);
-          // if `decreasingScalar` > 0, continue
-          Value decreasingScalar = args[0];
-          auto cmpGt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt,
-                                               decreasingScalar, arithZero);
-          b.create<scf::ConditionOp>(cmpGt, args);
-        },
-        /*afterBuilder=*/
-        [&](OpBuilder &afterBuilder, Location afterLoc, ValueRange args) {
-          ImplicitLocOpBuilder b(afterLoc, afterBuilder);
-          Value decreasingScalar = args[0];
-          Value multiplyingPoint = args[1];
-          Value result = args[2];
-
-          // double `multiplyingPoint`
-          Value doubledPoint = b.create<DoubleOp>(outputType, multiplyingPoint);
-          // if `decreasingScalar` % 1 == 1...
-          auto bitAdd = b.create<arith::AndIOp>(decreasingScalar, arithOne);
-          auto cmpEq = b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, bitAdd,
-                                               arithOne);
-          auto ifOp = b.create<scf::IfOp>(
-              cmpEq,
-              // ...then add `doubledPoint` to `result`
-              /*thenBuilder=*/
-              [&](OpBuilder &builder, Location loc) {
-                Value innerResult = builder.create<AddOp>(loc, outputType,
-                                                          result, doubledPoint);
-                builder.create<scf::YieldOp>(loc, innerResult);
-              },
-              /*elseBuilder=*/
-              [&](OpBuilder &builder, Location loc) {
-                builder.create<scf::YieldOp>(loc, result);
-              });
-          // right shift `decreasingScalar` by 1
-          decreasingScalar =
-              b.create<arith::ShRUIOp>(decreasingScalar, arithOne);
-
-          b.create<scf::YieldOp>(
-              ValueRange({decreasingScalar, doubledPoint, ifOp.getResult(0)}));
-        });
-    rewriter.replaceOp(op, whileOp.getResult(2));
+    rewriter.replaceOp(op, result);
     return success();
   }
+
+private:
+  IntrinsicFunctionGenerator *generator;
+  LoweringMode mode;
 };
 
 // Currently implements Pippenger's
@@ -699,6 +674,15 @@ void EllipticCurveToField::runOnOperation() {
   MLIRContext *context = &getContext();
   ModuleOp module = getOperation();
 
+  // Parse lowering mode option
+  LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
+
+  // Create intrinsic function generator if needed
+  std::unique_ptr<IntrinsicFunctionGenerator> intrinsicGenerator;
+  if (mode != LoweringMode::Inline) {
+    intrinsicGenerator = std::make_unique<IntrinsicFunctionGenerator>(module);
+  }
+
   ConversionTarget target(*context);
   target.addIllegalOp<
       // clang-format off
@@ -725,6 +709,7 @@ void EllipticCurveToField::runOnOperation() {
       arith::ArithDialect,
       bufferization::BufferizationDialect,
       field::FieldDialect,
+      func::FuncDialect,
       linalg::LinalgDialect,
       memref::MemRefDialect,
       scf::SCFDialect,
@@ -735,13 +720,20 @@ void EllipticCurveToField::runOnOperation() {
   target.addLegalOp<
       // clang-format off
       FromCoordsOp,
-      ToCoordsOp
+      ToCoordsOp,
+      func::FuncOp,
+      func::CallOp,
+      func::ReturnOp
       // clang-format on
       >();
 
   RewritePatternSet patterns(context);
   linalg::populateLinalgNamedOpsGeneralizationPatterns(patterns);
   rewrites::populateWithGenerated(patterns);
+
+  // Register ConvertScalarMul with intrinsic mode support
+  patterns.add<ConvertScalarMul>(context, intrinsicGenerator.get(), mode);
+
   patterns.add<
       // clang-format off
       ConvertAdd,
@@ -755,7 +747,6 @@ void EllipticCurveToField::runOnOperation() {
       ConvertMSM,
       ConvertNegate,
       ConvertScalarDecomp,
-      ConvertScalarMul,
       ConvertSub,
       ConvertWindowReduce
       // clang-format on

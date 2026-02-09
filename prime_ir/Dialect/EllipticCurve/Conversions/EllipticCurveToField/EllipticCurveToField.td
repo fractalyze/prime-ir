@@ -24,16 +24,35 @@ def EllipticCurveToField : Pass<"elliptic-curve-to-field", "ModuleOp"> {
 
   let description = [{
     This pass lowers the `elliptic_curve` dialect to their `field` equivalents.
+
+    The `lowering-mode` option controls how operations are lowered:
+    - `inline` (default): All operations are expanded inline.
+    - `intrinsic`: Complex operations (scalar_mul) are lowered to function calls
+      instead of inline expansion.
+    - `auto`: Uses heuristics to decide - scalar_mul uses intrinsic mode,
+      while simpler operations (add, double) are inlined for vectorization.
+
+    The intrinsic mode is useful for:
+    - Reducing code size for scalar_mul (double-and-add generates many ops)
+    - Avoiding NVPTX code generation issues with large aggregate returns
+      (See https://github.com/fractalyze/zkx/issues/84)
+    - Maintaining control flow for debugging
   }];
 
   let dependentDialects = [
     "arith::ArithDialect",
     "bufferization::BufferizationDialect",
+    "func::FuncDialect",
     "linalg::LinalgDialect",
     "memref::MemRefDialect",
     "scf::SCFDialect",
     "tensor::TensorDialect",
     "prime_ir::field::FieldDialect",
+  ];
+  let options = [
+    Option<"loweringMode", "lowering-mode", "std::string",
+           /*default=*/"\"inline\"",
+           "Lowering mode: 'inline' (default), 'intrinsic', or 'auto'">,
   ];
 }
 

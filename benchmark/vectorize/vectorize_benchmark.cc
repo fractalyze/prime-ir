@@ -20,27 +20,36 @@ limitations under the License.
 namespace mlir::prime_ir::benchmark {
 namespace {
 
-constexpr int64_t kBufferSize = 1048576; // 1M elements
+constexpr int64_t kBufferSize = 1048576; // 1M elements for prime field
+
+// ==============================================================================
+// Prime field function declarations
+// ==============================================================================
 
 // Scalar versions
-extern "C" void _mlir_ciface_square_buffer(StridedMemRefType<uint32_t, 1> *buf);
-extern "C" void _mlir_ciface_add_buffers(StridedMemRefType<uint32_t, 1> *a,
-                                         StridedMemRefType<uint32_t, 1> *b,
-                                         StridedMemRefType<uint32_t, 1> *c);
-extern "C" void _mlir_ciface_mul_add_buffers(StridedMemRefType<uint32_t, 1> *a,
-                                             StridedMemRefType<uint32_t, 1> *b,
-                                             StridedMemRefType<uint32_t, 1> *c);
+// After buffer-results-to-out-params: (result, input) for single input
+// After buffer-results-to-out-params: (result, a, b) for two inputs
+extern "C" void
+_mlir_ciface_square_buffer(StridedMemRefType<uint32_t, 1> *result,
+                           StridedMemRefType<uint32_t, 1> *input);
+extern "C" void _mlir_ciface_add_buffers(StridedMemRefType<uint32_t, 1> *result,
+                                         StridedMemRefType<uint32_t, 1> *a,
+                                         StridedMemRefType<uint32_t, 1> *b);
+extern "C" void _mlir_ciface_mul_add_buffers(
+    StridedMemRefType<uint32_t, 1> *result, StridedMemRefType<uint32_t, 1> *a,
+    StridedMemRefType<uint32_t, 1> *b, StridedMemRefType<uint32_t, 1> *c);
 
-// Vectorized versions (same functions, different compilation)
+// Vectorized versions (same signature, different compilation)
 extern "C" void
-_mlir_ciface_vec_square_buffer(StridedMemRefType<uint32_t, 1> *buf);
-extern "C" void _mlir_ciface_vec_add_buffers(StridedMemRefType<uint32_t, 1> *a,
-                                             StridedMemRefType<uint32_t, 1> *b,
-                                             StridedMemRefType<uint32_t, 1> *c);
+_mlir_ciface_vec_square_buffer(StridedMemRefType<uint32_t, 1> *result,
+                               StridedMemRefType<uint32_t, 1> *input);
 extern "C" void
-_mlir_ciface_vec_mul_add_buffers(StridedMemRefType<uint32_t, 1> *a,
-                                 StridedMemRefType<uint32_t, 1> *b,
-                                 StridedMemRefType<uint32_t, 1> *c);
+_mlir_ciface_vec_add_buffers(StridedMemRefType<uint32_t, 1> *result,
+                             StridedMemRefType<uint32_t, 1> *a,
+                             StridedMemRefType<uint32_t, 1> *b);
+extern "C" void _mlir_ciface_vec_mul_add_buffers(
+    StridedMemRefType<uint32_t, 1> *result, StridedMemRefType<uint32_t, 1> *a,
+    StridedMemRefType<uint32_t, 1> *b, StridedMemRefType<uint32_t, 1> *c);
 
 void fillWithValue(uint32_t &elem, ArrayRef<int64_t> coords) {
   elem = static_cast<uint32_t>(coords[0] % 1000 + 1);
@@ -48,16 +57,18 @@ void fillWithValue(uint32_t &elem, ArrayRef<int64_t> coords) {
 
 // Square buffer benchmarks
 void BM_square_scalar(::benchmark::State &state) {
-  OwningMemRef<uint32_t, 1> buf({kBufferSize}, {}, fillWithValue);
+  OwningMemRef<uint32_t, 1> input({kBufferSize}, {}, fillWithValue);
+  OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
   for (auto _ : state) {
-    _mlir_ciface_square_buffer(&*buf);
+    _mlir_ciface_square_buffer(&*result, &*input);
   }
 }
 
 void BM_square_vectorized(::benchmark::State &state) {
-  OwningMemRef<uint32_t, 1> buf({kBufferSize}, {}, fillWithValue);
+  OwningMemRef<uint32_t, 1> input({kBufferSize}, {}, fillWithValue);
+  OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
   for (auto _ : state) {
-    _mlir_ciface_vec_square_buffer(&*buf);
+    _mlir_ciface_vec_square_buffer(&*result, &*input);
   }
 }
 
@@ -65,18 +76,18 @@ void BM_square_vectorized(::benchmark::State &state) {
 void BM_add_scalar(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> a({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> b({kBufferSize}, {}, fillWithValue);
-  OwningMemRef<uint32_t, 1> c({kBufferSize}, {}, fillWithValue);
+  OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
   for (auto _ : state) {
-    _mlir_ciface_add_buffers(&*a, &*b, &*c);
+    _mlir_ciface_add_buffers(&*result, &*a, &*b);
   }
 }
 
 void BM_add_vectorized(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> a({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> b({kBufferSize}, {}, fillWithValue);
-  OwningMemRef<uint32_t, 1> c({kBufferSize}, {}, fillWithValue);
+  OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
   for (auto _ : state) {
-    _mlir_ciface_vec_add_buffers(&*a, &*b, &*c);
+    _mlir_ciface_vec_add_buffers(&*result, &*a, &*b);
   }
 }
 
@@ -85,8 +96,9 @@ void BM_mul_add_scalar(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> a({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> b({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> c({kBufferSize}, {}, fillWithValue);
+  OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
   for (auto _ : state) {
-    _mlir_ciface_mul_add_buffers(&*a, &*b, &*c);
+    _mlir_ciface_mul_add_buffers(&*result, &*a, &*b, &*c);
   }
 }
 
@@ -94,8 +106,9 @@ void BM_mul_add_vectorized(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> a({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> b({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> c({kBufferSize}, {}, fillWithValue);
+  OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
   for (auto _ : state) {
-    _mlir_ciface_vec_mul_add_buffers(&*a, &*b, &*c);
+    _mlir_ciface_vec_mul_add_buffers(&*result, &*a, &*b, &*c);
   }
 }
 
@@ -109,20 +122,20 @@ BENCHMARK(BM_mul_add_vectorized)->Unit(::benchmark::kMillisecond);
 } // namespace
 } // namespace mlir::prime_ir::benchmark
 
-// 2026-01-24T11:44:54+00:00
+// 2026-02-05T08:46:00+00:00
 // Run on (32 X 624 MHz CPU s)
 // CPU Caches:
 //   L1 Data 48 KiB (x16)
 //   L1 Instruction 32 KiB (x16)
 //   L2 Unified 1024 KiB (x16)
 //   L3 Unified 98304 KiB (x2)
-// Load Average: 1.50, 1.08, 3.59
+// Load Average: 1.08, 7.58, 12.29
 // ----------------------------------------------------------------
 // Benchmark                      Time             CPU   Iterations
 // ----------------------------------------------------------------
-// BM_square_scalar             487 ms          486 ms            2
-// BM_square_vectorized        77.6 ms         77.6 ms            9
-// BM_add_scalar                238 ms          238 ms            3
-// BM_add_vectorized           87.7 ms         87.6 ms            8
-// BM_mul_add_scalar            714 ms          714 ms            1
-// BM_mul_add_vectorized        123 ms          123 ms            6
+// BM_square_scalar           0.581 ms        0.581 ms         1191
+// BM_square_vectorized       0.583 ms        0.582 ms         1215
+// BM_add_scalar              0.387 ms        0.387 ms         1782
+// BM_add_vectorized          0.387 ms        0.387 ms         1811
+// BM_mul_add_scalar          0.847 ms        0.847 ms          824
+// BM_mul_add_vectorized      0.845 ms        0.845 ms          825

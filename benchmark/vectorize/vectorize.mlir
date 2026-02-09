@@ -13,46 +13,31 @@
 // limitations under the License.
 // ==============================================================================
 
-// Simple field operations benchmark to test affine-super-vectorize
+// Prime field operations benchmark using tensor-based operations
+// This file contains only prime field ops which can be safely vectorized
+// Iteration is handled by the C++ benchmark framework, not the MLIR code
 
 !pf = !field.pf<2013265921 : i32, true>
 
-// Square all elements in a buffer (1M elements, 1000 iterations)
-func.func @square_buffer(%buffer: memref<1048576x!pf>) attributes { llvm.emit_c_interface } {
-  affine.for %iter = 0 to 1000 {
-    affine.for %i = 0 to 1048576 {
-      %val = affine.load %buffer[%i] : memref<1048576x!pf>
-      %sq = field.square %val : !pf
-      affine.store %sq, %buffer[%i] : memref<1048576x!pf>
-    }
-  }
-  return
+// Square all elements in a tensor (1M elements)
+func.func @square_buffer(%input: tensor<1048576x!pf>) -> tensor<1048576x!pf>
+    attributes { llvm.emit_c_interface } {
+  %result = field.square %input : tensor<1048576x!pf>
+  return %result : tensor<1048576x!pf>
 }
 
-// Add two buffers element-wise
-func.func @add_buffers(%a: memref<1048576x!pf>, %b: memref<1048576x!pf>, %c: memref<1048576x!pf>) attributes { llvm.emit_c_interface } {
-  affine.for %iter = 0 to 1000 {
-    affine.for %i = 0 to 1048576 {
-      %va = affine.load %a[%i] : memref<1048576x!pf>
-      %vb = affine.load %b[%i] : memref<1048576x!pf>
-      %sum = field.add %va, %vb : !pf
-      affine.store %sum, %c[%i] : memref<1048576x!pf>
-    }
-  }
-  return
+// Add two tensors element-wise
+func.func @add_buffers(%a: tensor<1048576x!pf>, %b: tensor<1048576x!pf>) -> tensor<1048576x!pf>
+    attributes { llvm.emit_c_interface } {
+  %result = field.add %a, %b : tensor<1048576x!pf>
+  return %result : tensor<1048576x!pf>
 }
 
-// Multiply-accumulate: c[i] = a[i] * b[i] + c[i]
-func.func @mul_add_buffers(%a: memref<1048576x!pf>, %b: memref<1048576x!pf>, %c: memref<1048576x!pf>) attributes { llvm.emit_c_interface } {
-  affine.for %iter = 0 to 1000 {
-    affine.for %i = 0 to 1048576 {
-      %va = affine.load %a[%i] : memref<1048576x!pf>
-      %vb = affine.load %b[%i] : memref<1048576x!pf>
-      %vc = affine.load %c[%i] : memref<1048576x!pf>
-      %prod = field.mul %va, %vb : !pf
-      %sum = field.add %prod, %vc : !pf
-      affine.store %sum, %c[%i] : memref<1048576x!pf>
-    }
-  }
-  return
+// Multiply-accumulate: result = a * b + c
+func.func @mul_add_buffers(%a: tensor<1048576x!pf>, %b: tensor<1048576x!pf>,
+                           %c: tensor<1048576x!pf>) -> tensor<1048576x!pf>
+    attributes { llvm.emit_c_interface } {
+  %prod = field.mul %a, %b : tensor<1048576x!pf>
+  %result = field.add %prod, %c : tensor<1048576x!pf>
+  return %result : tensor<1048576x!pf>
 }

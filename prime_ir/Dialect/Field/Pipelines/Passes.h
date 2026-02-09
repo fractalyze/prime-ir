@@ -65,6 +65,15 @@ struct FieldToLLVMOptions : public PassPipelineOptions<FieldToLLVMOptions> {
       *this, "hoist-static-allocs", llvm::cl::desc("Hoist static allocs"),
       llvm::cl::init(true)};
 
+  PassOptions::Option<bool> vectorize{
+      *this, "vectorize", llvm::cl::desc("Enable affine super-vectorization"),
+      llvm::cl::init(false)};
+
+  PassOptions::Option<unsigned> vectorSize{
+      *this, "vector-size",
+      llvm::cl::desc("Vector size for super-vectorization"),
+      llvm::cl::init(16)};
+
   // Projects out the options for `OneShotBufferizePass`.
   bufferization::OneShotBufferizePassOptions bufferizationOptions() const {
     bufferization::OneShotBufferizePassOptions opts{};

@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
@@ -37,12 +38,14 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldCodeGen.h"
+#include "prime_ir/Dialect/Field/Conversions/FieldToModArith/IntrinsicFunctionGenerator.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
+#include "prime_ir/Utils/BitSerialAlgorithm.h"
 #include "prime_ir/Utils/BuilderContext.h"
 #include "prime_ir/Utils/ConversionUtils.h"
 #include "prime_ir/Utils/ShapedTypeConverter.h"
@@ -292,8 +295,11 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
 };
 
 struct ConvertInverse : public OpConversionPattern<InverseOp> {
-  ConvertInverse(const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern<InverseOp>(typeConverter, context) {
+  ConvertInverse(const TypeConverter &converter, MLIRContext *context,
+                 IntrinsicFunctionGenerator *generator = nullptr,
+                 LoweringMode mode = LoweringMode::Inline)
+      : OpConversionPattern<InverseOp>(converter, context),
+        generator(generator), mode(mode) {
     setHasBoundedRewriteRecursion(true);
   }
 
@@ -304,10 +310,25 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
     ScopedBuilderContext scopedBuilderContext(&b);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
+
+    // Use intrinsic for quartic extension fields if enabled
+    if (generator &&
+        IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
+      auto efType = cast<ExtensionFieldType>(fieldType);
+      Value result = generator->emitQuarticInverseCall(
+          rewriter, op.getLoc(), efType, adaptor.getInput());
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
     rewriter.replaceOp(op, {codeGen.inverse()});
     return success();
   }
+
+private:
+  IntrinsicFunctionGenerator *generator;
+  LoweringMode mode;
 };
 
 struct ConvertNegate : public OpConversionPattern<NegateOp> {
@@ -389,8 +410,11 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
 };
 
 struct ConvertMul : public OpConversionPattern<MulOp> {
-  ConvertMul(const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern<MulOp>(typeConverter, context) {
+  ConvertMul(const TypeConverter &converter, MLIRContext *context,
+             IntrinsicFunctionGenerator *generator = nullptr,
+             LoweringMode mode = LoweringMode::Inline)
+      : OpConversionPattern<MulOp>(converter, context), generator(generator),
+        mode(mode) {
     setHasBoundedRewriteRecursion(true);
   }
 
@@ -401,16 +425,34 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
     ScopedBuilderContext scopedBuilderContext(&b);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
+
+    // Use intrinsic for quartic extension fields if enabled
+    if (generator &&
+        IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
+      auto efType = cast<ExtensionFieldType>(fieldType);
+      Value result = generator->emitQuarticMulCall(
+          rewriter, op.getLoc(), efType, adaptor.getLhs(), adaptor.getRhs());
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     FieldCodeGen lhsCodeGen(fieldType, adaptor.getLhs(), typeConverter);
     FieldCodeGen rhsCodeGen(fieldType, adaptor.getRhs(), typeConverter);
     rewriter.replaceOp(op, {lhsCodeGen * rhsCodeGen});
     return success();
   }
+
+private:
+  IntrinsicFunctionGenerator *generator;
+  LoweringMode mode;
 };
 
 struct ConvertSquare : public OpConversionPattern<SquareOp> {
-  ConvertSquare(const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern<SquareOp>(typeConverter, context) {
+  ConvertSquare(const TypeConverter &converter, MLIRContext *context,
+                IntrinsicFunctionGenerator *generator = nullptr,
+                LoweringMode mode = LoweringMode::Inline)
+      : OpConversionPattern<SquareOp>(converter, context), generator(generator),
+        mode(mode) {
     setHasBoundedRewriteRecursion(true);
   }
 
@@ -421,10 +463,25 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
     ScopedBuilderContext scopedBuilderContext(&b);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
+
+    // Use intrinsic for quartic extension fields if enabled
+    if (generator &&
+        IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
+      auto efType = cast<ExtensionFieldType>(fieldType);
+      Value result = generator->emitQuarticSquareCall(
+          rewriter, op.getLoc(), efType, adaptor.getInput());
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
     rewriter.replaceOp(op, {codeGen.square()});
     return success();
   }
+
+private:
+  IntrinsicFunctionGenerator *generator;
+  LoweringMode mode;
 };
 
 struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
@@ -477,102 +534,47 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
     }
     IntegerType intType = cast<IntegerType>(exp.getType());
 
-    // If `exp` is a constant, unroll the while loop.
-    if (auto expConstOp = exp.getDefiningOp<arith::ConstantOp>()) {
-      APInt cExp = cast<IntegerAttr>(expConstOp.getValue()).getValue();
-      cExp = cExp.urem(modulus - 1);
-      APInt cZero = APInt::getZero(cExp.getBitWidth());
-      APInt cOne = cZero + 1;
+    auto emitBitSerialLoop = [&](Value exp) {
+      return generateBitSerialLoop(
+          b, exp, base, init,
+          [](ImplicitLocOpBuilder &b, Value v) {
+            return b.create<SquareOp>(v);
+          },
+          [](ImplicitLocOpBuilder &b, Value acc, Value v) {
+            return b.create<MulOp>(acc, v);
+          });
+    };
 
-      // Depending on the type, we need to perform the loop.
-      Value result = init;
-      Value factor = base;
-      APInt currExp = cExp;
-      SmallVector<Value> factors;
-      while (!currExp.isZero()) {
-        if ((currExp & cOne).getBoolValue()) {
-          result = b.create<MulOp>(result, factor);
-        }
-        factor = b.create<SquareOp>(factor);
-        currExp = currExp.lshr(1);
-      }
-      rewriter.replaceOp(op, result);
-      return success();
-    }
-
-    // For prime field, x^(p-1) ≡ 1 mod p, so x^n ≡ x^(n mod (p-1)) mod p
-    // For extension field of degree d, x^(pᵈ-1) ≡ 1 mod pᵈ, so
-    // x^n ≡ x^(n mod (pᵈ-1)) mod pᵈ
-    if (isa<PrimeFieldType>(fieldType)) {
-      exp = b.create<arith::RemUIOp>(
-          exp, b.create<arith::ConstantIntOp>(intType, modulus - 1));
-    } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
+    // Reduce exponent using Fermat's little theorem:
+    // x^(p-1) ≡ 1 (prime field), x^(pᵈ-1) ≡ 1 (extension field)
+    APInt order;
+    if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
       unsigned degreeOverPrime = efType.getDegreeOverPrime();
       modulus = modulus.zext(modBitWidth * degreeOverPrime);
-      APInt order = modulus;
-      for (unsigned i = 1; i < degreeOverPrime; ++i) {
+      order = modulus;
+      for (unsigned i = 1; i < degreeOverPrime; ++i)
         order = order * modulus;
-      }
       order = order - 1;
-      exp = b.create<arith::ExtUIOp>(
-          IntegerType::get(exp.getContext(), order.getBitWidth()), exp);
+    } else {
+      order = modulus - 1;
+    }
+
+    if (auto expConstOp = exp.getDefiningOp<arith::ConstantOp>()) {
+      APInt cExp = cast<IntegerAttr>(expConstOp.getValue()).getValue();
+      cExp = cExp.zext(order.getBitWidth());
+      cExp = cExp.urem(order);
       intType = IntegerType::get(exp.getContext(), order.getBitWidth());
+      exp = b.create<arith::ConstantIntOp>(intType, cExp);
+    } else {
+      if (order.getBitWidth() > intType.getWidth()) {
+        intType = IntegerType::get(exp.getContext(), order.getBitWidth());
+        exp = b.create<arith::ExtUIOp>(intType, exp);
+      }
       exp = b.create<arith::RemUIOp>(
           exp, b.create<arith::ConstantIntOp>(intType, order));
     }
 
-    Value zero = b.create<arith::ConstantIntOp>(intType, 0);
-    Value one = b.create<arith::ConstantIntOp>(intType, 1);
-    Value powerOfP = base;
-    auto ifOp = b.create<scf::IfOp>(
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ne,
-                                b.create<arith::AndIOp>(exp, one), zero),
-        [&](OpBuilder &builder, Location loc) {
-          ImplicitLocOpBuilder b(loc, builder);
-          auto newResult = b.create<MulOp>(init, powerOfP);
-          b.create<scf::YieldOp>(ValueRange{newResult});
-        },
-        [&](OpBuilder &builder, Location loc) {
-          ImplicitLocOpBuilder b(loc, builder);
-          b.create<scf::YieldOp>(ValueRange{init});
-        });
-    exp = b.create<arith::ShRUIOp>(exp, one);
-    init = ifOp.getResult(0);
-    auto whileOp = b.create<scf::WhileOp>(
-        TypeRange{intType, fieldType, fieldType},
-        ValueRange{exp, powerOfP, init},
-        [&](OpBuilder &builder, Location loc, ValueRange args) {
-          ImplicitLocOpBuilder b(loc, builder);
-          auto cond =
-              b.create<arith::CmpIOp>(arith::CmpIPredicate::ugt, args[0], zero);
-          b.create<scf::ConditionOp>(cond, args);
-        },
-        [&](OpBuilder &builder, Location loc, ValueRange args) {
-          ImplicitLocOpBuilder b(loc, builder);
-          auto currExp = args[0];
-          auto currPowerOfP = args[1];
-          auto currResult = args[2];
-
-          auto newPowerOfP = b.create<SquareOp>(currPowerOfP);
-          auto masked = b.create<arith::AndIOp>(currExp, one);
-          auto isOdd =
-              b.create<arith::CmpIOp>(arith::CmpIPredicate::ne, masked, zero);
-          auto ifOp = b.create<scf::IfOp>(
-              isOdd,
-              [&](OpBuilder &builder, Location loc) {
-                ImplicitLocOpBuilder b(loc, builder);
-                auto newResult = b.create<MulOp>(currResult, newPowerOfP);
-                b.create<scf::YieldOp>(ValueRange{newResult});
-              },
-              [&](OpBuilder &builder, Location loc) {
-                ImplicitLocOpBuilder b(loc, builder);
-                b.create<scf::YieldOp>(ValueRange{currResult});
-              });
-          auto shifted = b.create<arith::ShRUIOp>(currExp, one);
-          b.create<scf::YieldOp>(
-              ValueRange{shifted, newPowerOfP, ifOp.getResult(0)});
-        });
-    rewriter.replaceOp(op, whileOp.getResult(2));
+    rewriter.replaceOp(op, emitBitSerialLoop(exp));
     return success();
   }
 };
@@ -684,6 +686,15 @@ void FieldToModArith::runOnOperation() {
   ModuleOp module = getOperation();
   FieldToModArithTypeConverter typeConverter(context);
 
+  // Parse the lowering mode option
+  LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
+
+  // Create intrinsic function generator if needed
+  std::unique_ptr<IntrinsicFunctionGenerator> intrinsicGenerator;
+  if (mode != LoweringMode::Inline) {
+    intrinsicGenerator = std::make_unique<IntrinsicFunctionGenerator>(module);
+  }
+
   ConversionTarget target(*context);
 
   // Mark field operations as dynamically legal if they contain BinaryFieldType
@@ -695,9 +706,16 @@ void FieldToModArith::runOnOperation() {
   // Mark remaining field dialect ops as illegal (prime/extension field ops)
   target.addIllegalDialect<FieldDialect>();
   target.addLegalDialect<mod_arith::ModArithDialect>();
+  target.addLegalDialect<func::FuncDialect>();
+  target.addLegalOp<func::FuncOp, func::CallOp, func::ReturnOp>();
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
+
+  // Register patterns that support intrinsic mode
+  patterns.add<ConvertInverse, ConvertMul, ConvertSquare>(
+      typeConverter, context, intrinsicGenerator.get(), mode);
+
   patterns.add<
       // clang-format off
       ConvertAdd,
@@ -706,11 +724,8 @@ void FieldToModArith::runOnOperation() {
       ConvertCmp,
       ConvertDouble,
       ConvertFromMont,
-      ConvertInverse,
-      ConvertMul,
       ConvertNegate,
       ConvertPowUI,
-      ConvertSquare,
       ConvertSub,
       ConvertToMont,
       ConvertAny<ExtFromCoeffsOp>,
