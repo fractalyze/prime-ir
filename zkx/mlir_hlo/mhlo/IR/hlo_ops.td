@@ -409,6 +409,47 @@ def MHLO_DivOp : MHLO_BinaryElementwiseOp<"divide",
   let hasFolder = 1;
 }
 
+def MHLO_DotGeneralOp : MHLO_ShapedInterfaceOp<"dot_general",
+      [Pure, ConditionallySpeculatable]> {
+  let summary = "DotGeneral operation";
+  let description = [{
+    Computes dot products between slices of `lhs` and slices of `rhs` and
+    produces a `result` tensor.
+
+    See:
+    https://github.com/openxla/stablehlo/blob/main/docs/spec.md#dot_general
+
+    Example:
+    ```mlir
+    %result = "mhlo.dot_general"(%lhs, %rhs) {
+      dot_dimension_numbers = #mhlo.dot<
+        lhs_batching_dimensions = [0],
+        rhs_batching_dimensions = [0],
+        lhs_contracting_dimensions = [2],
+        rhs_contracting_dimensions = [1]
+      >
+    } : (tensor<2x3x4xi32>, tensor<2x4x5xi32>) -> tensor<2x3x5xi32>
+    ```
+  }];
+  let arguments = (ins
+    MHLO_Tensor:$lhs,
+    MHLO_Tensor:$rhs,
+    MHLO_DotDimensionNumbers:$dot_dimension_numbers
+  );
+
+  let results = (outs MHLO_Tensor:$result);
+  let hasVerifier = 1;
+  let hasCustomHLOConverter = 1;
+
+  let extraClassDeclaration = [{
+    static bool isCompatibleReturnTypes(TypeRange l, TypeRange r) {
+      return mlir::hlo::isCompatibleForHloTypeInference(l, r);
+    }
+    /// Interface method for ConditionallySpeculatable.
+    mlir::Speculation::Speculatability getSpeculatability();
+  }];
+}
+
 def MHLO_MaxOp : MHLO_BinaryElementwiseOp<"maximum",
       [Commutative, Pure, HLO_CompatibleOperandsAndResultType]> {
   let summary = "Max operation";

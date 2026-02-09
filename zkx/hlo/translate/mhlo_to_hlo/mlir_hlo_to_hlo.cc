@@ -263,32 +263,19 @@ zkx::ScatterDimensionNumbers Convert_scatter_dimension_numbers(
     mlir::mhlo::ScatterDimensionNumbersAttr input) {
   zkx::ScatterDimensionNumbers output;
 
-  auto update_window_dims = input.getUpdateWindowDims();
-  std::copy(update_window_dims.begin(), update_window_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_update_window_dims()));
+  auto copy_dims = [&](auto dims, auto* out_dims) {
+    std::copy(dims.begin(), dims.end(),
+              google::protobuf::RepeatedFieldBackInserter(out_dims));
+  };
 
-  auto inserted_window_dims = input.getInsertedWindowDims();
-  std::copy(inserted_window_dims.begin(), inserted_window_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_inserted_window_dims()));
-
-  auto input_batching_dims = input.getInputBatchingDims();
-  std::copy(input_batching_dims.begin(), input_batching_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_input_batching_dims()));
-
-  auto scatter_indices_batching_dims = input.getScatterIndicesBatchingDims();
-  std::copy(scatter_indices_batching_dims.begin(),
-            scatter_indices_batching_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_scatter_indices_batching_dims()));
-
-  auto scatter_dims_to_operand_dims = input.getScatterDimsToOperandDims();
-  std::copy(scatter_dims_to_operand_dims.begin(),
-            scatter_dims_to_operand_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_scatter_dims_to_operand_dims()));
+  copy_dims(input.getUpdateWindowDims(), output.mutable_update_window_dims());
+  copy_dims(input.getInsertedWindowDims(),
+            output.mutable_inserted_window_dims());
+  copy_dims(input.getInputBatchingDims(), output.mutable_input_batching_dims());
+  copy_dims(input.getScatterIndicesBatchingDims(),
+            output.mutable_scatter_indices_batching_dims());
+  copy_dims(input.getScatterDimsToOperandDims(),
+            output.mutable_scatter_dims_to_operand_dims());
 
   output.set_index_vector_dim(input.getIndexVectorDim());
   return output;
@@ -298,33 +285,43 @@ zkx::GatherDimensionNumbers Convert_dimension_numbers(
     mlir::mhlo::GatherDimensionNumbersAttr input) {
   zkx::GatherDimensionNumbers output;
 
-  auto offset_dims = input.getOffsetDims();
-  std::copy(offset_dims.begin(), offset_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_offset_dims()));
+  auto copy_dims = [&](auto dims, auto* out_dims) {
+    std::copy(dims.begin(), dims.end(),
+              google::protobuf::RepeatedFieldBackInserter(out_dims));
+  };
 
-  auto collapsed_slice_dims = input.getCollapsedSliceDims();
-  std::copy(collapsed_slice_dims.begin(), collapsed_slice_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_collapsed_slice_dims()));
-
-  auto start_index_map = input.getStartIndexMap();
-  std::copy(start_index_map.begin(), start_index_map.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_start_index_map()));
+  copy_dims(input.getOffsetDims(), output.mutable_offset_dims());
+  copy_dims(input.getCollapsedSliceDims(),
+            output.mutable_collapsed_slice_dims());
+  copy_dims(input.getStartIndexMap(), output.mutable_start_index_map());
 
   output.set_index_vector_dim(input.getIndexVectorDim());
 
-  auto operand_batching_dims = input.getOperandBatchingDims();
-  std::copy(operand_batching_dims.begin(), operand_batching_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_operand_batching_dims()));
+  copy_dims(input.getOperandBatchingDims(),
+            output.mutable_operand_batching_dims());
+  copy_dims(input.getStartIndicesBatchingDims(),
+            output.mutable_start_indices_batching_dims());
 
-  auto start_indices_batching_dims = input.getStartIndicesBatchingDims();
-  std::copy(start_indices_batching_dims.begin(),
-            start_indices_batching_dims.end(),
-            google::protobuf::RepeatedFieldBackInserter(
-                output.mutable_start_indices_batching_dims()));
+  return output;
+}
+
+zkx::DotDimensionNumbers Convert_dot_dimension_numbers(
+    mlir::mhlo::DotDimensionNumbersAttr input) {
+  zkx::DotDimensionNumbers output;
+
+  auto copy_dims = [&](auto dims, auto* out_dims) {
+    std::copy(dims.begin(), dims.end(),
+              google::protobuf::RepeatedFieldBackInserter(out_dims));
+  };
+
+  copy_dims(input.getLhsBatchingDimensions(),
+            output.mutable_lhs_batch_dimensions());
+  copy_dims(input.getRhsBatchingDimensions(),
+            output.mutable_rhs_batch_dimensions());
+  copy_dims(input.getLhsContractingDimensions(),
+            output.mutable_lhs_contracting_dimensions());
+  copy_dims(input.getRhsContractingDimensions(),
+            output.mutable_rhs_contracting_dimensions());
 
   return output;
 }
@@ -975,6 +972,18 @@ LogicalResult ExportZkxOp(ConvertOp op, OpLoweringContext ctx) {
   value_map[op] = zkx::ConvertElementType(
       operand, zkx::mlir_utils::MlirTypeToPrimitiveTypeWithSign(
                    getElementTypeOrSelf(op.getType())));
+  return success();
+}
+
+LogicalResult ExportZkxOp(DotGeneralOp op, OpLoweringContext ctx) {
+  auto& value_map = *ctx.values;
+  zkx::ZkxOp lhs, rhs;
+  if (failed(GetZkxOp(op.getLhs(), value_map, &lhs, op))) return failure();
+  if (failed(GetZkxOp(op.getRhs(), value_map, &rhs, op))) return failure();
+
+  auto dimension_numbers =
+      Convert_dot_dimension_numbers(op.getDotDimensionNumbersAttr());
+  value_map[op] = zkx::DotGeneral(lhs, rhs, dimension_numbers);
   return success();
 }
 

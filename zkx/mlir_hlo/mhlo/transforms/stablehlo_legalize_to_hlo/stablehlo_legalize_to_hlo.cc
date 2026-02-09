@@ -92,6 +92,12 @@ Attribute convertAttr(Attribute stablehloAttr) {
         attr.getScatterIndicesBatchingDims(),
         attr.getScatterDimsToOperandDims(), attr.getIndexVectorDim());
   }
+  if (auto attr = mlir::dyn_cast<DotDimensionNumbersAttr>(stablehloAttr)) {
+    return mhlo::DotDimensionNumbersAttr::get(
+        attr.getContext(), attr.getLhsBatchingDimensions(),
+        attr.getRhsBatchingDimensions(), attr.getLhsContractingDimensions(),
+        attr.getRhsContractingDimensions());
+  }
   if (stablehloAttr.getDialect().getNamespace() ==
       StablehloDialect::getDialectNamespace()) {
     // Our guiding principle is to support all StableHLO functionality in MHLO.
@@ -202,18 +208,6 @@ public:
 
     rewriter.replaceOp(stablehloOp, hloOp);
     return success();
-  }
-};
-
-// TODO(jeong0982): Remove this specialization once DotGeneralOp is implemented.
-template <>
-class StablehloToHloOpConverter<DotGeneralOp>
-    : public OpConversionPattern<DotGeneralOp> {
-public:
-  using OpConversionPattern::OpConversionPattern;
-  LogicalResult matchAndRewrite(DotGeneralOp op, DotGeneralOp::Adaptor,
-                                ConversionPatternRewriter &) const final {
-    return op.emitError("DotGeneralOp is not yet implemented in ZKX MHLO");
   }
 };
 

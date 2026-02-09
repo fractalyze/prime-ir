@@ -76,8 +76,7 @@ MAP_STABLEHLO_TO_HLO(CreateTokenOp)
 // TODO(chokobole): Uncomment this. Dependency: stablehlo::CustomCallOp
 // MAP_STABLEHLO_TO_HLO(CustomCallOp)
 MAP_STABLEHLO_TO_HLO(DivOp)
-// TODO(chokobole): Uncomment this. Dependency: stablehlo::DotGeneralOp
-// MAP_STABLEHLO_TO_HLO(DotGeneralOp)
+MAP_STABLEHLO_TO_HLO(DotGeneralOp)
 // TODO(chokobole): Uncomment this. Dependency: stablehlo::DotOp
 // MAP_STABLEHLO_TO_HLO(DotOp)
 MAP_STABLEHLO_TO_HLO(DynamicBroadcastInDimOp)

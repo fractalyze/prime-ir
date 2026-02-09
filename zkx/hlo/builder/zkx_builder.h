@@ -570,6 +570,13 @@ class ZkxBuilder {
                     absl::Span<const ZkxComputation* const> branch_computations,
                     absl::Span<const ZkxOp> branch_operands);
 
+  ZkxOp DotGeneral(ZkxOp lhs, ZkxOp rhs,
+                   const DotDimensionNumbers& dimension_numbers);
+
+  virtual absl::StatusOr<ZkxOp> DotGeneralInternal(
+      const Shape& shape, ZkxOp lhs, ZkxOp rhs,
+      const DotDimensionNumbers& dimension_numbers);
+
   ZkxOp Gather(ZkxOp input, ZkxOp start_indices,
                const GatherDimensionNumbers& dimension_numbers,
                absl::Span<const int64_t> slice_sizes,
@@ -924,6 +931,8 @@ class ZkxBuilder {
       ZkxOp branch_index,
       absl::Span<const ZkxComputation* const> branch_computations,
       absl::Span<const ZkxOp> branch_operands);
+  friend ZkxOp DotGeneral(ZkxOp lhs, ZkxOp rhs,
+                          const DotDimensionNumbers& dimension_numbers);
   friend ZkxOp Gather(ZkxOp input, ZkxOp start_indices,
                       const GatherDimensionNumbers& dimension_numbers,
                       absl::Span<const int64_t> slice_sizes,
@@ -1557,6 +1566,10 @@ ZkxOp Conditional(ZkxOp predicate, ZkxOp true_operand,
 ZkxOp Conditional(ZkxOp branch_index,
                   absl::Span<const ZkxComputation* const> branch_computations,
                   absl::Span<const ZkxOp> branch_operands);
+
+// Enqueues a DotGeneral node onto the computation.
+ZkxOp DotGeneral(ZkxOp lhs, ZkxOp rhs,
+                 const DotDimensionNumbers& dimension_numbers);
 
 // Enqueues a Gather node onto the computation.
 ZkxOp Gather(ZkxOp input, ZkxOp start_indices,

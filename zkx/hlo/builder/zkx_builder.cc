@@ -1597,6 +1597,28 @@ absl::StatusOr<ZkxOp> ZkxBuilder::WhileInternal(const Shape& shape,
   return AddInstruction(std::move(instr), HloOpcode::kWhile, {init});
 }
 
+ZkxOp ZkxBuilder::DotGeneral(ZkxOp lhs, ZkxOp rhs,
+                             const DotDimensionNumbers& dimension_numbers) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    TF_ASSIGN_OR_RETURN(const Shape* lhs_shape, GetShapePtr(lhs));
+    TF_ASSIGN_OR_RETURN(const Shape* rhs_shape, GetShapePtr(rhs));
+    TF_ASSIGN_OR_RETURN(Shape shape, ShapeInference::InferDotOpShape(
+                                         *lhs_shape, *rhs_shape,
+                                         dimension_numbers, std::nullopt));
+    return DotGeneralInternal(shape, lhs, rhs, dimension_numbers);
+  });
+}
+
+absl::StatusOr<ZkxOp> ZkxBuilder::DotGeneralInternal(
+    const Shape& shape, ZkxOp lhs, ZkxOp rhs,
+    const DotDimensionNumbers& dimension_numbers) {
+  HloInstructionProto instr;
+  *instr.mutable_shape() = shape.ToProto();
+  *instr.mutable_dot_dimension_numbers() = dimension_numbers;
+
+  return AddInstruction(std::move(instr), HloOpcode::kDot, {lhs, rhs});
+}
+
 ZkxOp ZkxBuilder::Gather(ZkxOp input, ZkxOp start_indices,
                          const GatherDimensionNumbers& dimension_numbers,
                          absl::Span<const int64_t> slice_sizes,
@@ -2656,6 +2678,11 @@ ZkxOp Conditional(const ZkxOp branch_index,
                   absl::Span<const ZkxOp> branch_operands) {
   return branch_index.builder()->Conditional(branch_index, branch_computations,
                                              branch_operands);
+}
+
+ZkxOp DotGeneral(const ZkxOp lhs, const ZkxOp rhs,
+                 const DotDimensionNumbers& dimension_numbers) {
+  return lhs.builder()->DotGeneral(lhs, rhs, dimension_numbers);
 }
 
 ZkxOp Gather(const ZkxOp input, const ZkxOp start_indices,

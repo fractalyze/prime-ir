@@ -1158,6 +1158,98 @@ CreateTokenOp::inferReturnTypes(MLIRContext *context,
 }
 
 //===----------------------------------------------------------------------===//
+// DotGeneralOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult DotGeneralOp::verify() {
+  return hlo::verifyDotGeneralOp(
+      getLoc(), getLhs(), getRhs(),
+      getDotDimensionNumbersAttr().getLhsBatchingDimensions(),
+      getDotDimensionNumbersAttr().getRhsBatchingDimensions(),
+      getDotDimensionNumbersAttr().getLhsContractingDimensions(),
+      getDotDimensionNumbersAttr().getRhsContractingDimensions(), getResult());
+}
+
+LogicalResult DotGeneralOp::reifyReturnTypeShapes(
+    OpBuilder &builder, ValueRange operands,
+    SmallVectorImpl<Value> &reifiedReturnShapes) {
+  auto lhsRankedType = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto rhsRankedType = dyn_cast<RankedTensorType>(getRhs().getType());
+  if (!lhsRankedType || !rhsRankedType)
+    return failure();
+
+  Adaptor adaptor(operands);
+  auto dimNumbers = getDotDimensionNumbers();
+  SmallVector<Value> dimensions;
+
+  for (const int64_t lhsDim : dimNumbers.getLhsBatchingDimensions())
+    dimensions.push_back(
+        builder.create<tensor::DimOp>(getLoc(), adaptor.getLhs(), lhsDim));
+
+  for (int64_t i = 0; i < lhsRankedType.getRank(); i++)
+    if (!llvm::is_contained(dimNumbers.getLhsContractingDimensions(), i) &&
+        !llvm::is_contained(dimNumbers.getLhsBatchingDimensions(), i))
+      dimensions.push_back(
+          builder.create<tensor::DimOp>(getLoc(), adaptor.getLhs(), i));
+
+  for (int64_t i = 0; i < rhsRankedType.getRank(); i++)
+    if (!llvm::is_contained(dimNumbers.getRhsContractingDimensions(), i) &&
+        !llvm::is_contained(dimNumbers.getRhsBatchingDimensions(), i))
+      dimensions.push_back(
+          builder.create<tensor::DimOp>(getLoc(), adaptor.getRhs(), i));
+
+  reifiedReturnShapes.push_back(
+      builder.create<tensor::FromElementsOp>(getLoc(), dimensions));
+  return success();
+}
+
+Speculation::Speculatability DotGeneralOp::getSpeculatability() {
+  // Batching and contracting dims must be static, otherwise they could disagree
+  // at runtime.
+  // Other dims follow SpeculatableIfStaticDimInOutputIsStaticInInput.
+
+  auto lhsType = getLhs().getType();
+  auto rhsType = getRhs().getType();
+
+  auto dimensionsAttr = getDotDimensionNumbersAttr();
+  auto lhsBatchingDimensions = dimensionsAttr.getLhsBatchingDimensions();
+  auto lhsContractingDimensions = dimensionsAttr.getLhsContractingDimensions();
+  auto rhsBatchingDimensions = dimensionsAttr.getRhsBatchingDimensions();
+  auto rhsContractingDimensions = dimensionsAttr.getRhsContractingDimensions();
+
+  auto lhsSpecialDimensions = llvm::concat<const int64_t>(
+      lhsBatchingDimensions, lhsContractingDimensions);
+  auto rhsSpecialDimensions = llvm::concat<const int64_t>(
+      rhsBatchingDimensions, rhsContractingDimensions);
+
+  for (auto i : lhsSpecialDimensions)
+    if (lhsType.isDynamicDim(i))
+      return Speculation::NotSpeculatable;
+  for (auto i : rhsSpecialDimensions)
+    if (rhsType.isDynamicDim(i))
+      return Speculation::NotSpeculatable;
+
+  auto resultType = getType();
+  int64_t resultIndex = lhsBatchingDimensions.size();
+  for (int64_t i = 0; i < lhsType.getRank(); i++) {
+    if (llvm::is_contained(lhsSpecialDimensions, i))
+      continue;
+    if (!resultType.isDynamicDim(resultIndex) && lhsType.isDynamicDim(i))
+      return Speculation::NotSpeculatable;
+    resultIndex++;
+  }
+  for (int64_t i = 0; i < rhsType.getRank(); i++) {
+    if (llvm::is_contained(rhsSpecialDimensions, i))
+      continue;
+    if (!resultType.isDynamicDim(resultIndex) && rhsType.isDynamicDim(i))
+      return Speculation::NotSpeculatable;
+    resultIndex++;
+  }
+
+  return Speculation::Speculatable;
+}
+
+//===----------------------------------------------------------------------===//
 // DynamicBroadcastInDimOp
 //===----------------------------------------------------------------------===//
 
@@ -4444,6 +4536,44 @@ Attribute GatherDimensionNumbersAttr::parse(AsmParser &parser, Type type) {
   return GatherDimensionNumbersAttr::get(
       parser.getContext(), offsetDims, collapsedSliceDims, operandBatchingDims,
       startIndicesBatchingDims, startIndexMap, indexVectorDim);
+}
+
+// Custom printer and parser for DotDimensionNumbersAttr.
+void DotDimensionNumbersAttr::print(AsmPrinter &printer) const {
+  printStruct(
+      printer, "dot",
+      std::make_pair("lhs_batching_dimensions", getLhsBatchingDimensions()),
+      std::make_pair("rhs_batching_dimensions", getRhsBatchingDimensions()),
+      std::make_pair("lhs_contracting_dimensions",
+                     getLhsContractingDimensions()),
+      std::make_pair("rhs_contracting_dimensions",
+                     getRhsContractingDimensions()));
+}
+
+Attribute DotDimensionNumbersAttr::parse(AsmParser &parser, Type type) {
+  if (failed(parser.parseLess()))
+    return {};
+  SmallVector<int64_t> lhsBatchingDimensions;
+  SmallVector<int64_t> rhsBatchingDimensions;
+  SmallVector<int64_t> lhsContractingDimensions;
+  SmallVector<int64_t> rhsContractingDimensions;
+
+  if (failed(parseStruct(
+          parser,
+          {"lhs_batching_dimensions", "rhs_batching_dimensions",
+           "lhs_contracting_dimensions", "rhs_contracting_dimensions"},
+          {[&]() { return parseDims(parser, lhsBatchingDimensions); },
+           [&]() { return parseDims(parser, rhsBatchingDimensions); },
+           [&]() { return parseDims(parser, lhsContractingDimensions); },
+           [&]() { return parseDims(parser, rhsContractingDimensions); }}))) {
+    parser.emitError(parser.getCurrentLocation())
+        << "failed parsing dot dimension numbers attribute";
+    return {};
+  }
+
+  return DotDimensionNumbersAttr::get(
+      parser.getContext(), lhsBatchingDimensions, rhsBatchingDimensions,
+      lhsContractingDimensions, rhsContractingDimensions);
 }
 
 //===----------------------------------------------------------------------===//

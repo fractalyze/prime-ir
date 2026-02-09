@@ -26,6 +26,18 @@ def MHLO_Dims : ArrayRefParameter<"int64_t", "Dimension"> {
   let printer = "printDimSizes($_printer, $_self)";
 }
 
+def MHLO_DotDimensionNumbers : AttrDef<MHLO_Dialect, "DotDimensionNumbers"> {
+  let mnemonic = "dot";
+  let summary = "Attribute that models the dimension information for dot.";
+  let parameters = (ins
+      MHLO_Dims:$lhsBatchingDimensions,
+      MHLO_Dims:$rhsBatchingDimensions,
+      MHLO_Dims:$lhsContractingDimensions,
+      MHLO_Dims:$rhsContractingDimensions
+  );
+  let hasCustomAssemblyFormat = 1;
+}
+
 def MHLO_ScatterDimensionNumbers : AttrDef<MHLO_Dialect, "ScatterDimensionNumbers"> {
   let mnemonic = "scatter";
   let summary = "Attribute that models the dimension information for scatter";
