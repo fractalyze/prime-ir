@@ -275,6 +275,12 @@ void AddPasses(mlir::PassManager& pm, CpuKernelEmitter::PassFlag& flag) {
     pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToField());
   }
 
+  if (flag.enable_linalg_generalize_named_ops) {
+    VLOG(2) << "add pass: -linalg-generalize-named-ops";
+    flag.enable_linalg_to_parallel_loops = true;
+    pm.addPass(mlir::createLinalgNamedOpConversionPass());
+  }
+
   maybe_add_elementwise_to_linalg(pm, flag);
 
   if (flag.enable_field_to_arith) {
@@ -1603,17 +1609,30 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitConcatenateOp(
                                           inputs);
 }
 
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitMatrixVectorMultiplicationOp(
+mlir::Value CpuKernelEmitter::CreateZeroInitializedTensor(
+    EmitterLocOpBuilder& b, mlir::RankedTensorType result_type, bool is_field) {
+  llvm::SmallVector<int64_t> shapes(result_type.getShape().begin(),
+                                    result_type.getShape().end());
+  mlir::Value zero;
+  if (is_field) {
+    zero = b.create<mlir::prime_ir::field::ConstantOp>(
+        result_type.getElementType(), 0);
+  } else {
+    zero = mlir_utils::GetConstantOrSplat(
+        b, result_type.getElementType(),
+        b.getZeroAttr(result_type.getElementType()));
+  }
+  auto empty =
+      b.create<mlir::tensor::EmptyOp>(shapes, result_type.getElementType());
+  return b
+      .create<mlir::linalg::FillOp>(mlir::ValueRange{zero},
+                                    mlir::ValueRange{empty})
+      .getResult(0);
+}
+
+absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitSparseMatvecOp(
     const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs,
     mlir::Value rhs) {
-  if (LayoutUtil::IsDenseArray(instr->operand(0)->shape())) {
-    return absl::UnimplementedError(
-        "Dense matrix vector multiplication is not supported");
-  }
-  if (!LayoutUtil::IsCSRArray(instr->operand(0)->shape())) {
-    return absl::UnimplementedError(
-        "Only CSR matrix vector multiplication is supported");
-  }
   pass_flag_.enable_linalg_to_parallel_loops = true;
 
   mlir::MLIRContext* ctx = lhs.getContext();
@@ -1644,7 +1663,7 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitMatrixVectorMultiplicationOp(
           mlir::utils::IteratorType::parallel,
           mlir::utils::IteratorType::reduction,
       },
-      /*doc=*/"matrix vector multiplication",
+      /*doc=*/"sparse matrix vector multiplication",
       /*libraryCall=*/mlir::StringRef(),
       [](mlir::OpBuilder& builder, mlir::Location loc, mlir::ValueRange args) {
         mlir::ImplicitLocOpBuilder b(loc, builder);
@@ -1686,30 +1705,115 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitMatrixVectorMultiplicationOp(
   return generic_op.getResult(0);
 }
 
+absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitDenseMatvecOp(
+    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs,
+    mlir::Value rhs) {
+  pass_flag_.enable_linalg_generalize_named_ops = true;
+
+  const Shape& shape = instr->operand(0)->shape();
+
+  mlir::MLIRContext* ctx = lhs.getContext();
+  auto result_type = mlir::cast<mlir::RankedTensorType>(
+      MakeMlirTensorTypeWithoutLayout(instr->shape(), ctx));
+
+  auto result = CreateZeroInitializedTensor(b, result_type,
+                                            ShapeUtil::ElementIsField(shape));
+
+  return b
+      .create<mlir::linalg::MatvecOp>(mlir::TypeRange{result_type},
+                                      mlir::ValueRange{lhs, rhs},
+                                      mlir::ValueRange{result})
+      .getResult(0);
+}
+
+absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitDenseVecVecDotOp(
+    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs,
+    mlir::Value rhs) {
+  pass_flag_.enable_linalg_generalize_named_ops = true;
+
+  const Shape& shape = instr->operand(0)->shape();
+
+  mlir::MLIRContext* ctx = lhs.getContext();
+  auto result_type = mlir::cast<mlir::RankedTensorType>(
+      MakeMlirTensorTypeWithoutLayout(instr->shape(), ctx));
+
+  auto result = CreateZeroInitializedTensor(b, result_type,
+                                            ShapeUtil::ElementIsField(shape));
+
+  return b
+      .create<mlir::linalg::DotOp>(mlir::TypeRange{result_type},
+                                   mlir::ValueRange{lhs, rhs},
+                                   mlir::ValueRange{result})
+      .getResult(0);
+}
+
+absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitDenseMatmulOp(
+    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs,
+    mlir::Value rhs) {
+  pass_flag_.enable_linalg_generalize_named_ops = true;
+
+  const Shape& shape = instr->operand(0)->shape();
+
+  mlir::MLIRContext* ctx = lhs.getContext();
+  auto result_type = mlir::cast<mlir::RankedTensorType>(
+      MakeMlirTensorTypeWithoutLayout(instr->shape(), ctx));
+
+  auto result = CreateZeroInitializedTensor(b, result_type,
+                                            ShapeUtil::ElementIsField(shape));
+
+  return b
+      .create<mlir::linalg::MatmulOp>(mlir::TypeRange{result_type},
+                                      mlir::ValueRange{lhs, rhs},
+                                      mlir::ValueRange{result})
+      .getResult(0);
+}
+
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitDotOp(
     const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs,
     mlir::Value rhs) {
-  int64_t rank0 = instr->operand(0)->shape().rank();
-  int64_t rank1 = instr->operand(1)->shape().rank();
+  const Shape& lhs_shape = instr->operand(0)->shape();
+  int64_t lhs_rank = lhs_shape.rank();
+  int64_t rhs_rank = instr->operand(1)->shape().rank();
 
-  if (rank0 == 1) {
-    if (rank1 == 1) {
-      return absl::UnimplementedError(
-          "Dot op with vector and vector is not supported");
-    } else if (rank1 == 2) {
-      return absl::UnimplementedError(
-          "Dot op with vector and matrix is not supported");
-    }
-  } else if (rank0 == 2) {
-    if (rank1 == 1) {
-      return EmitMatrixVectorMultiplicationOp(instr, b, lhs, rhs);
-    } else if (rank1 == 2) {
-      return absl::UnimplementedError(
-          "Dot op with matrix and matrix is not supported");
-    }
+  bool is_sparse = !LayoutUtil::IsDenseArray(lhs_shape);
+  if (is_sparse && !LayoutUtil::IsCSRArray(lhs_shape)) {
+    return absl::UnimplementedError(
+        "Only CSR sparse matrix is supported for dot operation");
   }
+
+  if (lhs_rank == 1 && rhs_rank == 1) {
+    // Vector-Vector dot product
+    if (is_sparse) {
+      return absl::UnimplementedError(
+          "Sparse vector dot product is not supported");
+    }
+    return EmitDenseVecVecDotOp(instr, b, lhs, rhs);
+  }
+
+  if (lhs_rank == 2 && rhs_rank == 1) {
+    // Matrix-Vector multiplication
+    if (is_sparse) {
+      return EmitSparseMatvecOp(instr, b, lhs, rhs);
+    }
+    return EmitDenseMatvecOp(instr, b, lhs, rhs);
+  }
+
+  if (lhs_rank == 2 && rhs_rank == 2) {
+    // Matrix-Matrix multiplication
+    if (is_sparse) {
+      return absl::UnimplementedError(
+          "Sparse matrix-matrix multiplication is not supported");
+    }
+    return EmitDenseMatmulOp(instr, b, lhs, rhs);
+  }
+
+  if (lhs_rank == 1 && rhs_rank == 2) {
+    return absl::UnimplementedError(
+        "Vector-Matrix multiplication is not supported");
+  }
+
   return absl::UnimplementedError(absl::StrFormat(
-      "Dot op with rank %d and rank %d is not supported", rank0, rank1));
+      "Dot op with rank %d and rank %d is not supported", lhs_rank, rhs_rank));
 }
 
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitDynamicSliceOp(

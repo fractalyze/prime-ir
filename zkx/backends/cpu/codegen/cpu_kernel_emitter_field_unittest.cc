@@ -158,7 +158,6 @@ TYPED_TEST(FieldR2TensorBinaryTest, Add) { this->SetUpAdd(); }
 
 TYPED_TEST_SUITE(FieldTest, FieldTypes);
 
-// TODO(chokobole): Move this test to cpu_kernel_emitter_int_unittest.cc
 TYPED_TEST(FieldTest, CSRMatrixVectorMultiplication) {
   this->SetUpCSRMatrixVectorMultiplication();
   this->RunAndVerify();
@@ -166,6 +165,21 @@ TYPED_TEST(FieldTest, CSRMatrixVectorMultiplication) {
 
 TYPED_TEST(FieldTest, DynamicUpdateSlice) {
   this->SetUpDynamicUpdateSliceBug();
+  this->RunAndVerify();
+}
+
+TYPED_TEST(FieldTest, MatrixMatrixMultiplication) {
+  this->SetUpDenseMatrixMatrixMultiplication();
+  this->RunAndVerify();
+}
+
+TYPED_TEST(FieldTest, MatrixVectorMultiplication) {
+  this->SetUpDenseMatrixVectorMultiplication();
+  this->RunAndVerify();
+}
+
+TYPED_TEST(FieldTest, VectorVectorMultiplication) {
+  this->SetUpDenseVectorVectorMultiplication();
   this->RunAndVerify();
 }
 

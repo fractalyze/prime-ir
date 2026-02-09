@@ -44,6 +44,7 @@ class CpuKernelEmitter final : public KernelEmitter {
     bool enable_lower_affine = false;
     bool enable_elementwise_to_linalg = false;
     bool enable_tensor_to_linalg = false;
+    bool enable_linalg_generalize_named_ops = false;
     bool enable_linalg_to_parallel_loops = false;
     bool enable_scf_to_cf = false;
     bool enable_expand_strided_metadata = false;
@@ -272,9 +273,34 @@ class CpuKernelEmitter final : public KernelEmitter {
                                                    mlir::Value value2,
                                                    mlir::Value value3);
 
-  absl::StatusOr<mlir::Value> EmitMatrixVectorMultiplicationOp(
-      const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs,
-      mlir::Value rhs);
+  // Helper to create a zero-initialized tensor for reduction operations
+  mlir::Value CreateZeroInitializedTensor(EmitterLocOpBuilder& b,
+                                          mlir::RankedTensorType result_type,
+                                          bool is_field);
+
+  // Sparse CSR matrix-vector multiplication
+  absl::StatusOr<mlir::Value> EmitSparseMatvecOp(const HloInstruction* instr,
+                                                 EmitterLocOpBuilder& b,
+                                                 mlir::Value lhs,
+                                                 mlir::Value rhs);
+
+  // Dense matrix-vector multiplication using linalg::MatvecOp
+  absl::StatusOr<mlir::Value> EmitDenseMatvecOp(const HloInstruction* instr,
+                                                EmitterLocOpBuilder& b,
+                                                mlir::Value lhs,
+                                                mlir::Value rhs);
+
+  // Dense vector-vector dot product using linalg::DotOp
+  absl::StatusOr<mlir::Value> EmitDenseVecVecDotOp(const HloInstruction* instr,
+                                                   EmitterLocOpBuilder& b,
+                                                   mlir::Value lhs,
+                                                   mlir::Value rhs);
+
+  // Dense matrix-matrix multiplication using linalg::MatmulOp
+  absl::StatusOr<mlir::Value> EmitDenseMatmulOp(const HloInstruction* instr,
+                                                EmitterLocOpBuilder& b,
+                                                mlir::Value lhs,
+                                                mlir::Value rhs);
 
   mlir::MLIRContext* const mlir_context_;
   const HloInstruction* const instr_;

@@ -649,24 +649,22 @@ class FieldTest : public CpuKernelEmitterTest {
     )",
                                  x_typename_, M, N, NNZ);
 
-    math::SparseMatrix<F> x = math::SparseMatrix<F>::Random(M, N, NNZ);
+    math::SparseMatrix<F> sparse_matrix =
+        math::SparseMatrix<F>::Random(M, N, NNZ);
 
-    std::vector<uint32_t> x_row_ptrs, x_col_indices;
-    std::vector<F> x_values;
-    x.ToCSR(x_row_ptrs, x_col_indices, x_values);
+    std::vector<uint32_t> row_ptrs, col_indices;
+    std::vector<F> values;
+    sparse_matrix.ToCSR(row_ptrs, col_indices, values);
 
-    TF_ASSERT_OK_AND_ASSIGN(std::vector<uint8_t> x_buffer, x.ToCSRBuffer());
-    std::vector<F> y = base::CreateVector(N, []() { return F::Random(); });
+    TF_ASSERT_OK_AND_ASSIGN(std::vector<uint8_t> csr_buffer,
+                            sparse_matrix.ToCSRBuffer());
+    std::vector<F> vector = CreateRandomVector(N);
 
-    literals_.push_back(LiteralUtil::CreateR1<uint8_t>(x_buffer));
-    literals_.push_back(LiteralUtil::CreateR1<F>(y));
+    literals_.push_back(LiteralUtil::CreateR1<uint8_t>(csr_buffer));
+    literals_.push_back(LiteralUtil::CreateR1<F>(vector));
 
-    std::vector<F> expected(x_row_ptrs.size() - 1);
-    for (int64_t i = 0; i < expected.size(); ++i) {
-      for (int64_t j = x_row_ptrs[i]; j < x_row_ptrs[i + 1]; ++j) {
-        expected[i] += x_values[j] * y[x_col_indices[j]];
-      }
-    }
+    std::vector<F> expected =
+        ComputeCSRMatrixVectorProduct(row_ptrs, col_indices, values, vector);
     expected_literal_ = LiteralUtil::CreateR1<F>(expected);
   }
 
@@ -696,6 +694,155 @@ class FieldTest : public CpuKernelEmitterTest {
       }
     });
     expected_literal_ = LiteralUtil::CreateR1<F>(expected);
+  }
+
+  void SetUpDenseMatrixMatrixMultiplication() {
+    constexpr static int64_t M = 3;
+    constexpr static int64_t K = 4;
+    constexpr static int64_t N = 2;
+
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %lhs = $0[$1, $2] parameter(0)
+        %rhs = $0[$2, $3] parameter(1)
+
+        ROOT %ret = $0[$1, $3] dot(%lhs, %rhs),
+            lhs_contracting_dims={1}, rhs_contracting_dims={0}
+      }
+    )",
+                                 x_typename_, M, K, N);
+
+    Array2D<F> lhs = CreateRandomMatrix(M, K);
+    Array2D<F> rhs = CreateRandomMatrix(K, N);
+
+    literals_.push_back(LiteralUtil::CreateR2FromArray2D(lhs));
+    literals_.push_back(LiteralUtil::CreateR2FromArray2D(rhs));
+
+    Array2D<F> expected = ComputeMatrixMatrixProduct(lhs, rhs);
+    expected_literal_ = LiteralUtil::CreateR2FromArray2D(expected);
+  }
+
+  void SetUpDenseMatrixVectorMultiplication() {
+    constexpr static int64_t M = 4;
+    constexpr static int64_t N = 3;
+
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %matrix = $0[$1, $2] parameter(0)
+        %vector = $0[$2] parameter(1)
+
+        ROOT %ret = $0[$1] dot(%matrix, %vector),
+            lhs_contracting_dims={1}, rhs_contracting_dims={0}
+      }
+    )",
+                                 x_typename_, M, N);
+
+    Array2D<F> matrix = CreateRandomMatrix(M, N);
+    std::vector<F> vector = CreateRandomVector(N);
+
+    literals_.push_back(LiteralUtil::CreateR2FromArray2D(matrix));
+    literals_.push_back(LiteralUtil::CreateR1<F>(absl::MakeSpan(vector)));
+
+    std::vector<F> expected = ComputeMatrixVectorProduct(matrix, vector);
+    expected_literal_ = LiteralUtil::CreateR1<F>(absl::MakeSpan(expected));
+  }
+
+  void SetUpDenseVectorVectorMultiplication() {
+    constexpr static int64_t N = 4;
+
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %lhs = $0[$1] parameter(0)
+        %rhs = $0[$1] parameter(1)
+
+        ROOT %ret = $0[] dot(%lhs, %rhs),
+            lhs_contracting_dims={0}, rhs_contracting_dims={0}
+      }
+    )",
+                                 x_typename_, N);
+
+    std::vector<F> lhs = CreateRandomVector(N);
+    std::vector<F> rhs = CreateRandomVector(N);
+
+    literals_.push_back(LiteralUtil::CreateR1<F>(lhs));
+    literals_.push_back(LiteralUtil::CreateR1<F>(rhs));
+
+    F expected = ComputeDotProduct(lhs, rhs);
+    expected_literal_ = LiteralUtil::CreateR0<F>(expected);
+  }
+
+ private:
+  static std::vector<F> CreateRandomVector(int64_t n) {
+    return base::CreateVector(n, []() { return F::Random(); });
+  }
+
+  static Array2D<F> CreateRandomMatrix(int64_t rows, int64_t cols) {
+    Array2D<F> matrix(rows, cols);
+    for (int64_t i = 0; i < rows; ++i) {
+      for (int64_t j = 0; j < cols; ++j) {
+        matrix({i, j}) = F::Random();
+      }
+    }
+    return matrix;
+  }
+
+  // Computes: sum(lhs[i] * rhs[i])
+  static F ComputeDotProduct(const std::vector<F>& lhs,
+                             const std::vector<F>& rhs) {
+    F result = F::Zero();
+    for (size_t i = 0; i < lhs.size(); ++i) {
+      result += lhs[i] * rhs[i];
+    }
+    return result;
+  }
+
+  // Computes: result[i] = sum_j(matrix[i,j] * vector[j])
+  static std::vector<F> ComputeMatrixVectorProduct(const Array2D<F>& matrix,
+                                                   const std::vector<F>& vec) {
+    int64_t rows = matrix.n1();
+    int64_t cols = matrix.n2();
+    std::vector<F> result(rows);
+    for (int64_t i = 0; i < rows; ++i) {
+      F sum = F::Zero();
+      for (int64_t j = 0; j < cols; ++j) {
+        sum += matrix({i, j}) * vec[j];
+      }
+      result[i] = sum;
+    }
+    return result;
+  }
+
+  // Computes: result[i,j] = sum_k(lhs[i,k] * rhs[k,j])
+  static Array2D<F> ComputeMatrixMatrixProduct(const Array2D<F>& lhs,
+                                               const Array2D<F>& rhs) {
+    int64_t m = lhs.n1();
+    int64_t k = lhs.n2();
+    int64_t n = rhs.n2();
+    Array2D<F> result(m, n);
+    for (int64_t i = 0; i < m; ++i) {
+      for (int64_t j = 0; j < n; ++j) {
+        F sum = F::Zero();
+        for (int64_t l = 0; l < k; ++l) {
+          sum += lhs({i, l}) * rhs({l, j});
+        }
+        result({i, j}) = sum;
+      }
+    }
+    return result;
+  }
+
+  // Computes CSR matrix-vector product
+  static std::vector<F> ComputeCSRMatrixVectorProduct(
+      const std::vector<uint32_t>& row_ptrs,
+      const std::vector<uint32_t>& col_indices, const std::vector<F>& values,
+      const std::vector<F>& vec) {
+    std::vector<F> result(row_ptrs.size() - 1);
+    for (size_t i = 0; i < result.size(); ++i) {
+      for (size_t j = row_ptrs[i]; j < row_ptrs[i + 1]; ++j) {
+        result[i] += values[j] * vec[col_indices[j]];
+      }
+    }
+    return result;
   }
 };
 
