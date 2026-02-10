@@ -51,6 +51,27 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "copy",
+    srcs = ["copy.cc"],
+    hdrs = ["copy.h"],
+    deps = [
+        ":fusion_emitter",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx/backends/gpu/runtime:copy_thunk",
+        "//zkx/backends/gpu/runtime:thunk",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/utils:hlo_traversal",
+        "//zkx/service:buffer_assignment",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/service/gpu:ir_emitter_context",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "fusion_emitter",
     srcs = ["fusion_emitter.cc"],
     hdrs = ["fusion_emitter.h"],
@@ -77,6 +98,7 @@ zkx_cc_library(
     srcs = ["fusions.cc"],
     hdrs = ["fusions.h"],
     deps = [
+        ":copy",
         ":fusion_emitter",
         "//zkx:shape_util",
         "//zkx/backends/gpu/codegen/emitters:concatenate",

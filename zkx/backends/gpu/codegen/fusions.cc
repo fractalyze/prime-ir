@@ -22,6 +22,7 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/strings/match.h"
 
+#include "zkx/backends/gpu/codegen/copy.h"
 #include "zkx/backends/gpu/codegen/emitters/concatenate.h"
 #include "zkx/backends/gpu/codegen/emitters/in_place_dynamic_update_slice.h"
 #include "zkx/backends/gpu/codegen/emitters/input_slices.h"
@@ -57,9 +58,7 @@ std::optional<std::unique_ptr<FusionInterface>> HloFusionInfo::GetCopyFusion()
     }
   }
 
-  // TODO(chokobole): Implement this. Dependency: MemcpyFusion
-  // return std::make_unique<MemcpyFusion>(analysis(), buffer_assignment_);
-  return nullptr;
+  return std::make_unique<MemcpyFusion>(analysis(), buffer_assignment_);
 }
 
 bool HloFusionInfo::CanEmitDynamicUpdateSliceInPlace() const {
