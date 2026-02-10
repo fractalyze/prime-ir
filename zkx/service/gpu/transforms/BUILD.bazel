@@ -175,6 +175,26 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "horizontal_input_fusion",
+    srcs = ["horizontal_input_fusion.cc"],
+    hdrs = ["horizontal_input_fusion.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:hlo_creation_utils",
+        "//zkx/service/gpu:gpu_fusible",
+        "//zkx/stream_executor:device_description",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
 zkx_cc_unittest(
     name = "transforms_unittests",
     srcs = [
