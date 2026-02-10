@@ -99,21 +99,6 @@ class CpuKernelEmitter final : public KernelEmitter {
   absl::StatusOr<mlir::Value> EmitConstantOp(const HloInstruction* instr,
                                              EmitterLocOpBuilder& b);
 
-  absl::StatusOr<mlir::Value> EmitUnaryOp(const HloInstruction* instr,
-                                          EmitterLocOpBuilder& b,
-                                          mlir::Value value);
-
-  absl::StatusOr<mlir::Value> EmitBinaryOp(const HloInstruction* instr,
-                                           EmitterLocOpBuilder& b,
-                                           mlir::Value lhs_value,
-                                           mlir::Value rhs_value);
-
-  absl::StatusOr<mlir::Value> EmitTernaryOp(const HloInstruction* instr,
-                                            EmitterLocOpBuilder& b,
-                                            mlir::Value value1,
-                                            mlir::Value value2,
-                                            mlir::Value value3);
-
   absl::StatusOr<mlir::Value> EmitFftOp(
       const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value,
       mlir::Value twiddle_factor = mlir::Value());
@@ -212,66 +197,6 @@ class CpuKernelEmitter final : public KernelEmitter {
 
   absl::StatusOr<mlir::Value> EmitFieldConstantOp(const HloInstruction* instr,
                                                   EmitterLocOpBuilder& b);
-
-  absl::StatusOr<mlir::Value> EmitPredUnaryOp(const HloInstruction* instr,
-                                              EmitterLocOpBuilder& b,
-                                              mlir::Value value);
-
-  absl::StatusOr<mlir::Value> EmitIntegerUnaryOp(const HloInstruction* instr,
-                                                 EmitterLocOpBuilder& b,
-                                                 mlir::Value value,
-                                                 bool is_signed);
-
-  absl::StatusOr<mlir::Value> EmitFieldUnaryOp(const HloInstruction* instr,
-                                               EmitterLocOpBuilder& b,
-                                               mlir::Value value);
-
-  absl::StatusOr<mlir::Value> EmitEcPointUnaryOp(const HloInstruction* instr,
-                                                 EmitterLocOpBuilder& b,
-                                                 mlir::Value value);
-
-  absl::StatusOr<mlir::Value> EmitPredBinaryOp(const HloInstruction* instr,
-                                               EmitterLocOpBuilder& b,
-                                               mlir::Value lhs_value,
-                                               mlir::Value rhs_value);
-
-  absl::StatusOr<mlir::Value> EmitIntegerBinaryOp(const HloInstruction* instr,
-                                                  EmitterLocOpBuilder& b,
-                                                  mlir::Value lhs_value,
-                                                  mlir::Value rhs_value,
-                                                  bool is_signed);
-
-  absl::StatusOr<mlir::Value> EmitFieldBinaryOp(const HloInstruction* instr,
-                                                EmitterLocOpBuilder& b,
-                                                mlir::Value lhs_value,
-                                                mlir::Value rhs_value);
-
-  absl::StatusOr<mlir::Value> EmitEcPointBinaryOp(const HloInstruction* instr,
-                                                  EmitterLocOpBuilder& b,
-                                                  mlir::Value lhs_value,
-                                                  mlir::Value rhs_value);
-
-  absl::StatusOr<mlir::Value> EmitPredTernaryOp(const HloInstruction* instr,
-                                                EmitterLocOpBuilder& b,
-                                                mlir::Value value1,
-                                                mlir::Value value2,
-                                                mlir::Value value3);
-
-  absl::StatusOr<mlir::Value> EmitIntegerTernaryOp(
-      const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value1,
-      mlir::Value value2, mlir::Value value3, bool is_signed);
-
-  absl::StatusOr<mlir::Value> EmitFieldTernaryOp(const HloInstruction* instr,
-                                                 EmitterLocOpBuilder& b,
-                                                 mlir::Value value1,
-                                                 mlir::Value value2,
-                                                 mlir::Value value3);
-
-  absl::StatusOr<mlir::Value> EmitEcPointTernaryOp(const HloInstruction* instr,
-                                                   EmitterLocOpBuilder& b,
-                                                   mlir::Value value1,
-                                                   mlir::Value value2,
-                                                   mlir::Value value3);
 
   // Helper to create a zero-initialized tensor for reduction operations
   mlir::Value CreateZeroInitializedTensor(EmitterLocOpBuilder& b,
