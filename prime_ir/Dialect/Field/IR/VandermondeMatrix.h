@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef PRIME_IR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_VANDERMONDEMATRIX_H_
-#define PRIME_IR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_VANDERMONDEMATRIX_H_
+#ifndef PRIME_IR_DIALECT_FIELD_IR_VANDERMONDEMATRIX_H_
+#define PRIME_IR_DIALECT_FIELD_IR_VANDERMONDEMATRIX_H_
 
 #include <array>
 
@@ -67,5 +67,4 @@ public:
 
 } // namespace mlir::prime_ir::field
 
-// NOLINTNEXTLINE(whitespace/line_length)
-#endif // PRIME_IR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_VANDERMONDEMATRIX_H_
+#endif // PRIME_IR_DIALECT_FIELD_IR_VANDERMONDEMATRIX_H_
