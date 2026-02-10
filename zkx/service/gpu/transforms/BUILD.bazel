@@ -244,6 +244,24 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "variadic_op_splitter",
+    srcs = ["variadic_op_splitter.cc"],
+    hdrs = ["variadic_op_splitter.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
 zkx_cc_unittest(
     name = "transforms_unittests",
     srcs = [
@@ -256,6 +274,7 @@ zkx_cc_unittest(
         "priority_fusion_unittest.cc",
         "schedule_postprocessing_unittest.cc",
         "scheduling_instruction_annotator_unittest.cc",
+        "variadic_op_splitter_unittest.cc",
     ],
     deps = [
         ":async_collective_annotator",
@@ -267,8 +286,10 @@ zkx_cc_unittest(
         ":priority_fusion",
         ":schedule_postprocessing",
         ":scheduling_instruction_annotator",
+        ":variadic_op_splitter",
         "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
+        "//zkx:literal_util",
         "//zkx:shape_util",
         "//zkx:util",
         "//zkx/hlo/ir:hlo",
