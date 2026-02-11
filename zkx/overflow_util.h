@@ -19,6 +19,8 @@ limitations under the License.
 
 #include <stdint.h>
 
+#include <optional>
+#include <type_traits>
 #include <utility>
 
 #include "absl/base/attributes.h"
@@ -61,6 +63,36 @@ OverflowSafeMultiply(const int64_t x, const int64_t y) {
     }
   }
   return std::make_pair(result, bad);
+#endif
+}
+
+// Computes x + y and returns nullopt if it overflows.
+//
+// x and y must be signed integers.
+template <typename T>
+ABSL_ATTRIBUTE_ALWAYS_INLINE inline std::optional<T> OverflowSafeAdd(T x, T y) {
+  static_assert(std::is_signed<T>::value,
+                "Only implemented for signed numbers T.");
+  static_assert(std::is_integral<T>::value, "Only implemented for integers T.");
+#if ABSL_HAVE_BUILTIN(__builtin_add_overflow)
+  T result;
+  if (ABSL_PREDICT_FALSE(__builtin_add_overflow(x, y, &result))) {
+    return std::nullopt;
+  }
+  return result;
+#else
+  // "Signed integer overflow occurs on integer addition iff the operands have
+  // the same sign and the sum has a sign opposite to that of the operands."
+  // Hacker's Delight 2nd ed, p 28.
+  using U = typename std::make_unsigned<T>::type;
+  const U ux = x;
+  const U uy = y;
+  const U usum = ux + uy;
+  const T sum = usum;
+  if (x >= 0 == y >= 0 && sum >= 0 != x >= 0) {
+    return std::nullopt;
+  }
+  return sum;
 #endif
 }
 
