@@ -862,6 +862,11 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "variant_visitor",
+    hdrs = ["variant_visitor.h"],
+)
+
+zkx_cc_library(
     name = "xfeed_queue",
     hdrs = ["xfeed_queue.h"],
     deps = [
