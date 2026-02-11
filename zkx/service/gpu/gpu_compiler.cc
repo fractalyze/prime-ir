@@ -65,9 +65,11 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/ir/hlo_module_group.h"
+#include "zkx/hlo/transforms/simplifiers/hlo_dce.h"
 #include "zkx/maybe_owning.h"
 #include "zkx/service/buffer_assignment.h"
 #include "zkx/service/call_inliner.h"
+#include "zkx/service/copy_insertion.h"
 #include "zkx/service/dump.h"
 #include "zkx/service/gpu/compile_module_to_llvm_ir.h"
 #include "zkx/service/gpu/execution_stream_assignment.h"
@@ -80,6 +82,7 @@ limitations under the License.
 #include "zkx/service/gpu/ir_emitter_unnested.h"
 #include "zkx/service/gpu/kernel_reuse_cache.h"
 #include "zkx/service/gpu/prepare_hlo_for_ir_emitting_pipeline.h"
+#include "zkx/service/gpu/transforms/command_buffer_scheduling.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
 #include "zkx/service/scatter_simplifier.h"
@@ -561,6 +564,48 @@ absl::StatusOr<std::unique_ptr<HloModule>> GpuCompiler::RunHloPasses(
 }
 
 namespace {
+absl::Status RunPostSchedulingCopyInsertion(
+    HloModule* module,
+    const HloDataflowAnalysis::CanShareBuffer& can_share_buffer) {
+  // We run a separate pass of copy elision here because the sequential ordering
+  // from the HLO schedule potentially allows for more copies to be eliminated.
+  constexpr int64_t kRegionBasedLiveRangeAnalysisLimit = -1;
+  const int64_t kUseRegionBasedLiveRangeAnalysis =
+      module->config()
+              .debug_options()
+              .zkx_gpu_copy_insertion_use_region_analysis()
+          ? kRegionBasedLiveRangeAnalysisLimit
+          : 0;
+  CopyInsertion copy_insertion(can_share_buffer,
+                               kUseRegionBasedLiveRangeAnalysis);
+  TF_RETURN_IF_ERROR(copy_insertion.RemoveUnnecessaryCopies(module));
+
+  // Stash away the schedule during copy insertion, to avoid validation failures
+  // while the module is in flux.
+  HloSchedule saved_schedule = module->schedule();
+  module->clear_schedule();
+
+  // RemoveUnnecessaryCopies only considers interference when determining
+  // whether it is legal to remove a copy. However, copies in the graph may be
+  // necessary for other reason such as preventing a constant from being live
+  // out of the graph. So run AddSpecialCaseCopies to re-insert these copies.
+  TF_RETURN_IF_ERROR(
+      copy_insertion.CopyInsertion::AddSpecialCaseCopies(module));
+
+  TF_RETURN_IF_ERROR(HloDCE().Run(module).status());
+
+  // The passes above can add and remove copies, update the schedule to
+  // account for these transformations. Newly added instructions will be
+  // placed ASAP in the schedule.
+
+  // Update and restore the schedule. The saved schedule has a reference to the
+  // updated HLO module. The saved schedule needs to be updated before restoring
+  // it to the module to avoid validation failures.
+  TF_RETURN_IF_ERROR(saved_schedule.Update());
+  TF_RETURN_IF_ERROR(module->set_schedule(std::move(saved_schedule)));
+
+  return absl::OkStatus();
+}
 
 void NullDiagnosticHandler(const llvm::DiagnosticInfo* diag_info,
                            void* context) {
@@ -932,9 +977,8 @@ GpuCompiler::CompileToBackendResult(
   TF_ASSIGN_OR_RETURN(
       ScheduleMetadata schedule_metadata,
       ScheduleGpuModule(module, pointer_size_, gpu_device_info));
-  // TODO(chokobole): Uncomment this. Dependency: RunPostSchedulingPipelines
-  // TF_RETURN_IF_ERROR(RunPostSchedulingPipelines(
-  //     module, schedule_metadata.scheduler_mem_limit, gpu_device_info));
+  TF_RETURN_IF_ERROR(RunPostSchedulingPipelines(
+      module, schedule_metadata.scheduler_mem_limit, gpu_device_info));
   std::ignore = schedule_metadata;
 
   TF_ASSIGN_OR_RETURN(se::Platform * platform,
@@ -1225,6 +1269,90 @@ absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
   return GpuThunkAotCompilationResult::FromModule(
       &gpu_executable->module(), gpu_executable->buffer_assignment(),
       gpu_executable->text(), gpu_executable->binary());
+}
+
+absl::Status GpuCompiler::RunPostSchedulingPipelines(
+    HloModule* module, int64_t scheduler_mem_limit,
+    const se::DeviceDescription& gpu_device_info) const {
+  TF_RETURN_IF_ERROR(RunPostSchedulingCopyInsertion(
+      module, GetCanShareBuffer(gpu_device_info)));
+  HloPassPipeline main_pipeline("post-scheduling-passes");
+
+  // clang-format off
+// TODO(batzor): Uncomment this. Dependency: GpuConvertAsyncCollectivesToSync
+// // Pipeline for async -> sync conversion on for non-overlapped async ops.
+// {
+//   HloPassPipeline& pipeline =
+//       main_pipeline.AddPass<HloPassPipeline>("async-to-sync-converter");
+
+//   if (module->config()
+//               .debug_options()
+//               .xla_gpu_experimental_pipeline_parallelism_opt_level() ==
+//           DebugOptions::PIPELINE_PARALLELISM_OPT_LEVEL_DISABLE &&
+//       (module->config()
+//            .debug_options()
+//            .xla_gpu_enable_pipelined_collectives() ||
+//        module->config().debug_options().xla_gpu_enable_pipelined_p2p())) {
+//     pipeline.AddPass<PipelinedP2PRewriter>();
+//   }
+//   pipeline.AddPass<GpuConvertAsyncCollectivesToSync>();
+// }
+  // clang-format on
+
+  // clang-format off
+// TODO(batzor): Uncomment this. Dependency: HloRematerialization
+// // Pipeline rematerialization passes with optional host offloading.
+// HloRematerialization::RematerializationSizes sizes;
+// // `HloCostAnalysis` initialization.
+// HloCostAnalysis::Options hlo_cost_analysis_opts =
+//     CreateHloAnalysisOpts(*module, gpu_device_info, ShapeSizeBytesFunction());
+// HloCostAnalysis hlo_cost_analysis(hlo_cost_analysis_opts);
+// // `HloRematerialization` options initialization.
+// HloRematerialization::Options remat_opts = CreateRematOpts(
+//     *module, gpu_device_info, hlo_cost_analysis, scheduler_mem_limit);
+// {
+//   HloPassPipeline& pipeline =
+//       main_pipeline.AddPass<HloPassPipeline>("remat-pipeline");
+
+//   pipeline.AddPass<HloRematerialization>(remat_opts, sizes);
+//   pipeline.AddPass<StreamAttributeAnnotator>(gpu_device_info);
+//   pipeline.AddPass<OptimizationBarrierExpander>();
+// }
+  // clang-format on
+
+  // clang-format off
+// TODO(batzor): Uncomment this. Dependency: FusionWrapper
+// Wrap remaining unfused ops that have no LHLO equivalent in single-op
+// fusions. This needs to happen after rematerialization, because that
+// will insert additional copies.
+// {
+//   HloPassPipeline& pipeline =
+//       main_pipeline.AddPass<HloPassPipeline>("fusion-wrapper");
+//   pipeline.AddPass<FusionWrapper>(gpu_device_info);
+// }
+  // clang-format on
+
+  // Pipeline with passes which wrap a scheduled module into command buffers.
+  {
+    HloPassPipeline& pipeline =
+        main_pipeline.AddPass<HloPassPipeline>("command-buffer-scheduling");
+    pipeline.AddPass<CommandBufferScheduling>(gpu_device_info);
+    // clang-format off
+  // TODO(batzor): Uncomment this. Dependency: SanitizeConstantNames
+  // pipeline.AddPass<SanitizeConstantNames>();
+    // clang-format on
+  }
+
+  // clang-format off
+// TODO(batzor): Uncomment this. Dependency: HloVerifierOpts
+// if (module->config().debug_options().xla_gpu_pgle_accuracy_checker() ==
+//     DebugOptions::PGLE_STRICTNESS_LEVEL_ERROR) {
+//   AddHloVerifier(&main_pipeline,
+//                  module->config().debug_options().xla_ignore_channel_id(),
+//                  HloVerifierOpts{}.VerifyInstructionNameUnchanged());
+// }
+  // clang-format on
+  return main_pipeline.Run(module).status();
 }
 
 absl::Status GpuCompiler::LoadAutotuneResultsFromFile(
