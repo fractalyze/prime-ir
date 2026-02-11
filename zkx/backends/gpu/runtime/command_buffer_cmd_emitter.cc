@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "zkx/backends/gpu/runtime/conditional_thunk.h"
+#include "zkx/backends/gpu/runtime/copy_thunk.h"
 #include "zkx/backends/gpu/runtime/dynamic_slice_thunk.h"
 #include "zkx/backends/gpu/runtime/kernel_thunk.h"
 #include "zkx/backends/gpu/runtime/memset_thunk.h"
@@ -77,13 +78,11 @@ absl::StatusOr<Command> Convert(const KernelThunk& thunk) {
 //       ArgsAccess(thunk.written()), thunk.custom_kernel());
 // }
 
-// TODO(batzor): Uncomment this. Dependency: DeviceToDeviceCopyThunk
-// absl::StatusOr<Command> Convert(const DeviceToDeviceCopyThunk& thunk)
-// {
-//   return std::make_unique<MemcpyDeviceToDeviceCmd>(
-//       thunk.execution_stream_id(), thunk.destination(), thunk.source(),
-//       thunk.size_bytes());
-// }
+absl::StatusOr<Command> Convert(const DeviceToDeviceCopyThunk& thunk) {
+  return std::make_unique<MemcpyDeviceToDeviceCmd>(
+      thunk.execution_stream_id(), thunk.destination(), thunk.source(),
+      thunk.size_bytes());
+}
 
 absl::StatusOr<Command> Convert(const MemzeroThunk& thunk) {
   return std::make_unique<MemzeroCmd>(thunk.execution_stream_id(),
@@ -216,9 +215,8 @@ absl::Status AppendCommands(
   switch (thunk.kind()) {
     case Thunk::Kind::kConditional:
       return append(Convert<ConditionalThunk>(thunk, synchronization_mode));
-    // TODO(batzor): Uncomment this. Dependency: DeviceToDeviceCopyThunk
-    // case Thunk::Kind::kCopy:
-    //   return append(Convert<DeviceToDeviceCopyThunk>(thunk));
+    case Thunk::Kind::kCopy:
+      return append(Convert<DeviceToDeviceCopyThunk>(thunk));
     // TODO(batzor): Uncomment this. Dependency: CustomCallThunk
     // case Thunk::Kind::kCustomCall:
     //   return append(Convert<CustomCallThunk>(thunk));

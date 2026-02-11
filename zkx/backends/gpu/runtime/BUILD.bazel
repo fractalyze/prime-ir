@@ -43,6 +43,7 @@ zkx_cc_library(
     deps = [
         ":command_buffer_cmd",
         ":conditional_thunk",
+        ":copy_thunk",
         ":kernel_thunk",
         ":memset_thunk",
         ":sequential_thunk",
