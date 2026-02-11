@@ -85,6 +85,26 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "horizontal_input_fusion",
+    srcs = ["horizontal_input_fusion.cc"],
+    hdrs = ["horizontal_input_fusion.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:hlo_creation_utils",
+        "//zkx/service/gpu:gpu_fusible",
+        "//zkx/stream_executor:device_description",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "horizontal_loop_fusion",
     srcs = ["horizontal_loop_fusion.cc"],
     hdrs = ["horizontal_loop_fusion.h"],
@@ -182,24 +202,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "schedule_postprocessing",
-    srcs = ["schedule_postprocessing.cc"],
-    hdrs = ["schedule_postprocessing.h"],
-    deps = [
-        "//xla/tsl/platform:errors",
-        "//xla/tsl/platform:statusor",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/ir:hlo_opcode",
-        "//zkx/hlo/pass:hlo_pass_interface",
-        "//zkx/hlo/utils:hlo_query",
-        "//zkx/service/gpu:backend_configs_cc_proto",
-        "//zkx/service/gpu/transforms/collectives:collective_ops_utils",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/container:flat_hash_map",
-    ],
-)
-
-zkx_cc_library(
     name = "priority_fusion",
     srcs = ["priority_fusion.cc"],
     hdrs = ["priority_fusion.h"],
@@ -256,22 +258,20 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "horizontal_input_fusion",
-    srcs = ["horizontal_input_fusion.cc"],
-    hdrs = ["horizontal_input_fusion.h"],
+    name = "schedule_postprocessing",
+    srcs = ["schedule_postprocessing.cc"],
+    hdrs = ["schedule_postprocessing.h"],
     deps = [
+        "//xla/tsl/platform:errors",
         "//xla/tsl/platform:statusor",
-        "//zkx:shape_util",
-        "//zkx:util",
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/ir:hlo_opcode",
         "//zkx/hlo/pass:hlo_pass_interface",
-        "//zkx/service:hlo_creation_utils",
-        "//zkx/service/gpu:gpu_fusible",
-        "//zkx/stream_executor:device_description",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/status:statusor",
+        "//zkx/hlo/utils:hlo_query",
+        "//zkx/service/gpu:backend_configs_cc_proto",
+        "//zkx/service/gpu/transforms/collectives:collective_ops_utils",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
     ],
 )
 
