@@ -397,6 +397,14 @@ void MakeDebugOptionsFlags(std::vector<tsl::Flag>* flag_list,
       "over time. The only 'guarantee', such as it is, is that if you compile "
       "ZKX and dump the optimized HLO for some graph, you should be able to "
       "run it again on the same device with the same build of ZKX."));
+  flag_list->push_back(tsl::Flag(
+      "zkx_unsupported_crash_on_hlo_pass_fix_max_iterations",
+      bool_setter_for(
+          &DebugOptions::
+              set_zkx_unsupported_crash_on_hlo_pass_fix_max_iterations),
+      debug_options->zkx_unsupported_crash_on_hlo_pass_fix_max_iterations(),
+      "Crash if HloPassFix can not converge after a fixed number of "
+      "iterations."));
   flag_list->push_back(
       tsl::Flag("zkx_embed_ir_in_executable",
                 bool_setter_for(&DebugOptions::set_zkx_embed_ir_in_executable),

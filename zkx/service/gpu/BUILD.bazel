@@ -195,6 +195,7 @@ zkx_cc_library(
         ":ir_emitter_context",
         ":ir_emitter_unnested",
         ":kernel_reuse_cache",
+        ":prepare_hlo_for_ir_emitting_pipeline",
         "//xla/tsl/platform:casts",
         "//xla/tsl/platform:cpu_info",
         "//xla/tsl/platform:env",
@@ -750,6 +751,22 @@ zkx_cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_library(
+    name = "prepare_hlo_for_ir_emitting_pipeline",
+    srcs = ["prepare_hlo_for_ir_emitting_pipeline.cc"],
+    hdrs = ["prepare_hlo_for_ir_emitting_pipeline.h"],
+    deps = [
+        "//zkx/hlo/analysis:hlo_dataflow_analysis",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_pipeline",
+        "//zkx/hlo/transforms/simplifiers:hlo_dce",
+        "//zkx/service:copy_insertion",
+        "//zkx/service/gpu/transforms:copy_fusion",
+        "//zkx/service/gpu/transforms:horizontal_loop_fusion",
+        "//zkx/stream_executor:device_description",
     ],
 )
 

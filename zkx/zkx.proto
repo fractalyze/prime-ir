@@ -74,6 +74,16 @@ message DebugOptions {
     PGLE_STRICTNESS_LEVEL_ERROR = 2;
   }
 
+  //--------------------------------------------------------------------------//
+  // ZKX backend-agnostic options.
+  //--------------------------------------------------------------------------//
+  // Crash if HloPassFix can not converge after a fixed number of iterations.
+  bool zkx_unsupported_crash_on_hlo_pass_fix_max_iterations = 363;
+
+  //--------------------------------------------------------------------------//
+  // ZKX:CPU options.
+  //--------------------------------------------------------------------------//
+
   // Use region analysis in copy insertion pass.
   bool zkx_cpu_copy_insertion_use_region_analysis = 337;
 

@@ -76,6 +76,7 @@ limitations under the License.
 #include "zkx/service/gpu/ir_emitter_context.h"
 #include "zkx/service/gpu/ir_emitter_unnested.h"
 #include "zkx/service/gpu/kernel_reuse_cache.h"
+#include "zkx/service/gpu/prepare_hlo_for_ir_emitting_pipeline.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
 #include "zkx/service/slow_operation_alarm.h"
@@ -388,15 +389,11 @@ absl::Status GpuCompiler::OptimizeHloModule(
 // Unlike optimization passes, the passes are necessary for correctness.
 absl::Status GpuCompiler::PrepareHloModuleForIrEmitting(
     HloModule* hlo_module, const se::DeviceDescription& device_description) {
-  // clang-format off
-  // TODO(chokobole): Uncomment this. Dependency: PrepareHloModuleForIrEmittingPipeline
-  // clang-format on
-  // return PrepareHloModuleForIrEmittingPipeline(
-  //            *hlo_module, GetCanShareBuffer(device_description),
-  //            device_description)
-  //     .Run(hlo_module)
-  //     .status();
-  return absl::OkStatus();
+  return PrepareHloModuleForIrEmittingPipeline(
+             *hlo_module, GetCanShareBuffer(device_description),
+             device_description)
+      .Run(hlo_module)
+      .status();
 }
 
 // Returns the TargetConfig, either from the module debug options, or from the
