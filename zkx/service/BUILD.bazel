@@ -291,49 +291,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "compilation_stats",
-    srcs = ["compilation_stats.cc"],
-    hdrs = ["compilation_stats.h"],
-    deps = [
-        "//xla/tsl/platform:env",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-    ],
-)
-
-zkx_cc_library(
-    name = "computation_layout",
-    srcs = ["computation_layout.cc"],
-    hdrs = ["computation_layout.h"],
-    deps = [
-        "//xla/tsl/platform:errors",
-        "//zkx:shape_layout",
-        "//zkx:shape_util",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/hash",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings:str_format",
-    ],
-)
-
-zkx_cc_library(
-    name = "constant_value",
-    srcs = ["constant_value.cc"],
-    hdrs = ["constant_value.h"],
-    deps = [
-        "//zkx:literal",
-        "//zkx:primitive_util",
-        "//zkx:util",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-zkx_cc_library(
     name = "collective_ops_utils",
     srcs = ["collective_ops_utils.cc"],
     hdrs = ["collective_ops_utils.h"],
@@ -368,6 +325,19 @@ zkx_cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_library(
+    name = "compilation_stats",
+    srcs = ["compilation_stats.cc"],
+    hdrs = ["compilation_stats.h"],
+    deps = [
+        "//xla/tsl/platform:env",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
     ],
 )
 
@@ -428,6 +398,21 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "computation_layout",
+    srcs = ["computation_layout.cc"],
+    hdrs = ["computation_layout.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:shape_layout",
+        "//zkx:shape_util",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+zkx_cc_library(
     name = "computation_placer",
     srcs = ["computation_placer.cc"],
     hdrs = ["computation_placer.h"],
@@ -447,6 +432,21 @@ zkx_cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_library(
+    name = "constant_value",
+    srcs = ["constant_value.cc"],
+    hdrs = ["constant_value.h"],
+    deps = [
+        "//zkx:literal",
+        "//zkx:primitive_util",
+        "//zkx:util",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )
 
