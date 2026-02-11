@@ -37,8 +37,10 @@ zkx_cc_library(
     deps = [
         "//zkx/mlir:codegen_utils",
         "//zkx/mlir_hlo/mhlo/IR:mlir_hlo",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:MathDialect",
         "@llvm-project//mlir:Support",
         "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
     ],

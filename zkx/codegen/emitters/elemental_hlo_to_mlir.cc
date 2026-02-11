@@ -567,9 +567,6 @@ SmallVector<Value, 1> MapHloOp(mlir::Type result_type,
       b.getLoc(), result_type, arg_types,
       typename MhloOp::Adaptor(args, std::forward<ExtraArgs>(extra_args)...),
       attributes, &b);
-  if (result.getType().isInteger(1)) {
-    result = b.create<arith::ExtUIOp>(b.getI8Type(), result);
-  }
   return {result};
 }
 
@@ -922,18 +919,8 @@ absl::StatusOr<SmallVector<Value, 1>> HloToMlir(
       return MapElementwiseOp<mhlo::MulOp>(arg_types, operands, builder);
     case HloOpcode::kNegate:
       return MapElementwiseOp<mhlo::NegOp>(arg_types, operands, builder);
-    case HloOpcode::kNot: {
-      if (element_type == PRED) {
-        auto zero =
-            builder.create<arith::ConstantIntOp>(builder.getI8Type(), 0);
-        Value result = builder.create<arith::ExtUIOp>(
-            builder.getI8Type(),
-            builder.create<arith::CmpIOp>(arith::CmpIPredicate::eq, operands[0],
-                                          zero));
-        return {{result}};
-      }
+    case HloOpcode::kNot:
       return MapElementwiseOp<mhlo::NotOp>(arg_types, operands, builder);
-    }
     case HloOpcode::kOr:
       return MapElementwiseOp<mhlo::OrOp>(arg_types, operands, builder);
     case HloOpcode::kPopulationCount:
