@@ -47,8 +47,8 @@ limitations under the License.
 #include "mlir/IR/Types.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 
-#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zkx/codegen/emitters/hlo_to_mlir_op_map.h"
 #include "zkx/codegen/emitters/ir/zkx_ops.h"
 #include "zkx/comparison_util.h"
 #include "zkx/hlo/analysis/indexing_analysis.h"
@@ -542,44 +542,6 @@ absl::StatusOr<SmallVector<Value, 1>> EmitParameter(const HloInstruction* instr,
   return {{value}};
 }
 
-template <typename MhloOp, typename... ExtraArgs>
-SmallVector<Value, 1> MapHloOp(mlir::Type result_type,
-                               llvm::ArrayRef<mlir::Type> arg_types,
-                               llvm::ArrayRef<Value> args,
-                               llvm::ArrayRef<mlir::NamedAttribute> attributes,
-                               ImplicitLocOpBuilder& b,
-                               ExtraArgs&&... extra_args) {
-  if constexpr (std::is_same_v<MhloOp, mhlo::AddOp> ||
-                std::is_same_v<MhloOp, mhlo::SubtractOp> ||
-                std::is_same_v<MhloOp, mhlo::MulOp>) {
-    // In case of affine points, we convert the result type to Jacobian points.
-    // Affine + Affine -> Jacobian
-    // Affine - Affine -> Jacobian
-    // Affine * ScalarField -> Jacobian
-    if (auto affine_type =
-            mlir::dyn_cast<mlir::prime_ir::elliptic_curve::AffineType>(
-                result_type)) {
-      result_type = mlir::prime_ir::elliptic_curve::JacobianType::get(
-          b.getContext(), affine_type.getCurve());
-    }
-  }
-  Value result = mhlo::MhloOpToStdScalarOp::mapOpOfType<MhloOp>(
-      b.getLoc(), result_type, arg_types,
-      typename MhloOp::Adaptor(args, std::forward<ExtraArgs>(extra_args)...),
-      attributes, &b);
-  return {result};
-}
-
-template <typename MhloOp>
-SmallVector<Value, 1> MapElementwiseOp(
-    llvm::ArrayRef<mlir::Type> arg_types, llvm::ArrayRef<Value> args,
-    ImplicitLocOpBuilder& b,
-    llvm::ArrayRef<mlir::NamedAttribute> attributes = std::nullopt) {
-  // We use the last argument's type because of select.
-  return MapHloOp<MhloOp>(args.back().getType(), arg_types, args, attributes,
-                          b);
-}
-
 }  // namespace
 
 SmallVector<Value, 3> ApplyIndexing(const IndexingMap& map_in, ValueRange dims,
@@ -747,35 +709,9 @@ absl::StatusOr<SmallVector<Value, 2>> GetOperands(
   return operands;
 }
 
-absl::StatusOr<SmallVector<Value, 1>> EmitConvert(
-    const HloInstruction* instr, llvm::ArrayRef<mlir::Type> arg_types,
-    ValueRange operands, ImplicitLocOpBuilder& builder) {
-  PrimitiveType element_type = instr->shape().element_type();
-  auto result_type_with_sign = mlir_utils::PrimitiveTypeToMlirTypeWithSign(
-      instr->shape().element_type(), builder.getContext());
-  auto result_element_type = mlir_utils::PrimitiveTypeToMlirType(
-      instr->shape().element_type(), builder.getContext());
-  if (element_type == PRED) {
-    if (mlir::isa<IntegerType>(operands[0].getType())) {
-      Value i1 = builder.create<arith::CmpIOp>(
-          arith::CmpIPredicate::ne, operands[0],
-          builder.create<arith::ConstantIntOp>(operands[0].getType(), 0));
-      return {{builder.create<arith::ExtUIOp>(builder.getI8Type(), i1)
-                   .getResult()}};
-    }
-  }
-  Value out = mhlo::MhloOpToStdScalarOp::mapConvertOpToStdScalarOp(
-      builder.getLoc(), result_type_with_sign, result_element_type, arg_types,
-      operands, /*attributes=*/std::nullopt, &builder);
-  return {{out}};
-}
-
 absl::StatusOr<SmallVector<Value, 1>> EmitIota(const HloInstruction* instr,
                                                ValueRange indices,
                                                ImplicitLocOpBuilder& builder) {
-  auto element_type = instr->shape().element_type();
-  auto result_type_with_sign = mlir_utils::PrimitiveTypeToMlirTypeWithSign(
-      element_type, builder.getContext());
   auto result_element_type = mlir_utils::PrimitiveTypeToMlirType(
       instr->shape().element_type(), builder.getContext());
   auto index = indices[Cast<HloIotaInstruction>(instr)->iota_dimension()];
@@ -783,9 +719,8 @@ absl::StatusOr<SmallVector<Value, 1>> EmitIota(const HloInstruction* instr,
       mlir::DataLayout::closest(builder.getInsertionBlock()->getParentOp())
           .getTypeSizeInBits(index.getType()));
   index = builder.create<arith::IndexCastUIOp>(index_type, index);
-  return {{mhlo::MhloOpToStdScalarOp::mapConvertOpToStdScalarOp(
-      builder.getLoc(), result_type_with_sign, result_element_type,
-      {index_type}, {index}, /*attributes=*/std::nullopt, &builder)}};
+  return {{MapHloOp<mhlo::ConvertOp>(result_element_type, {index_type}, {index},
+                                     /*attributes=*/std::nullopt, builder)}};
 }
 
 absl::StatusOr<SmallVector<Value, 1>> EmitCompare(
@@ -876,27 +811,28 @@ absl::StatusOr<SmallVector<Value, 1>> HloToMlir(
   SmallVector<mlir::NamedAttribute> attributes;
   switch (instr->opcode()) {
     case HloOpcode::kAbs:
-      return {MapHloOp<mhlo::AbsOp>(mlir_utils::PrimitiveTypeToMlirType(
-                                        element_type, builder.getContext()),
-                                    arg_types, operands,
-                                    /*attributes=*/std::nullopt, builder)};
+      return {{MapHloOp<mhlo::AbsOp>(mlir_utils::PrimitiveTypeToMlirType(
+                                         element_type, builder.getContext()),
+                                     arg_types, operands,
+                                     /*attributes=*/std::nullopt, builder)}};
     case HloOpcode::kAdd:
       if (element_type == PRED) {
-        return MapElementwiseOp<mhlo::OrOp>(arg_types, operands, builder);
+        return {{MapElementwiseOp<mhlo::OrOp>(arg_types, operands, builder)}};
       }
-      return MapElementwiseOp<mhlo::AddOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::AddOp>(arg_types, operands, builder)}};
     case HloOpcode::kAnd:
-      return MapElementwiseOp<mhlo::AndOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::AndOp>(arg_types, operands, builder)}};
     case HloOpcode::kClamp:
-      return MapElementwiseOp<mhlo::ClampOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::ClampOp>(arg_types, operands, builder)}};
     case HloOpcode::kClz:
-      return MapElementwiseOp<mhlo::ClzOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::ClzOp>(arg_types, operands, builder)}};
     case HloOpcode::kCompare:
       return EmitCompare(instr, arg_types, operands, builder);
     case HloOpcode::kDivide:
-      return MapElementwiseOp<mhlo::DivOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::DivOp>(arg_types, operands, builder)}};
     case HloOpcode::kInverse:
-      return MapElementwiseOp<mhlo::InverseOp>(arg_types, operands, builder);
+      return {
+          {MapElementwiseOp<mhlo::InverseOp>(arg_types, operands, builder)}};
     case HloOpcode::kMap: {
       auto mapper = call_target_provider(
           instr->called_computations().front()->root_instruction());
@@ -904,62 +840,65 @@ absl::StatusOr<SmallVector<Value, 1>> HloToMlir(
     }
     case HloOpcode::kMaximum:
       if (element_type == PRED) {
-        return MapElementwiseOp<mhlo::OrOp>(arg_types, operands, builder);
+        return {{MapElementwiseOp<mhlo::OrOp>(arg_types, operands, builder)}};
       }
-      return MapElementwiseOp<mhlo::MaxOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::MaxOp>(arg_types, operands, builder)}};
     case HloOpcode::kMinimum:
       if (element_type == PRED) {
-        return MapElementwiseOp<mhlo::AndOp>(arg_types, operands, builder);
+        return {{MapElementwiseOp<mhlo::AndOp>(arg_types, operands, builder)}};
       }
-      return MapElementwiseOp<mhlo::MinOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::MinOp>(arg_types, operands, builder)}};
     case HloOpcode::kMultiply:
       if (element_type == PRED) {
-        return MapElementwiseOp<mhlo::AndOp>(arg_types, operands, builder);
+        return {{MapElementwiseOp<mhlo::AndOp>(arg_types, operands, builder)}};
       }
-      return MapElementwiseOp<mhlo::MulOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::MulOp>(arg_types, operands, builder)}};
     case HloOpcode::kNegate:
-      return MapElementwiseOp<mhlo::NegOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::NegOp>(arg_types, operands, builder)}};
     case HloOpcode::kNot:
-      return MapElementwiseOp<mhlo::NotOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::NotOp>(arg_types, operands, builder)}};
     case HloOpcode::kOr:
-      return MapElementwiseOp<mhlo::OrOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::OrOp>(arg_types, operands, builder)}};
     case HloOpcode::kPopulationCount:
-      return MapHloOp<mhlo::PopulationCountOp>(
+      return {{MapHloOp<mhlo::PopulationCountOp>(
           mlir_utils::PrimitiveTypeToMlirType(element_type,
                                               builder.getContext()),
-          arg_types, operands,
-          /*attributes=*/std::nullopt, builder);
+          arg_types, operands, /*attributes=*/std::nullopt, builder)}};
     case HloOpcode::kPower:
-      return MapElementwiseOp<mhlo::PowOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::PowOp>(arg_types, operands, builder)}};
     case HloOpcode::kRemainder:
-      return MapElementwiseOp<mhlo::RemOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::RemOp>(arg_types, operands, builder)}};
     case HloOpcode::kSelect: {
       operands[0] = builder.createOrFold<arith::TruncIOp>(builder.getI1Type(),
                                                           operands[0]);
-      return MapElementwiseOp<mhlo::SelectOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::SelectOp>(arg_types, operands, builder)}};
     }
     case HloOpcode::kShiftLeft:
-      return MapElementwiseOp<mhlo::ShiftLeftOp>(arg_types, operands, builder);
+      return {
+          {MapElementwiseOp<mhlo::ShiftLeftOp>(arg_types, operands, builder)}};
     case HloOpcode::kShiftRightArithmetic:
-      return MapElementwiseOp<mhlo::ShiftRightArithmeticOp>(arg_types, operands,
-                                                            builder);
+      return {{MapElementwiseOp<mhlo::ShiftRightArithmeticOp>(
+          arg_types, operands, builder)}};
     case HloOpcode::kShiftRightLogical:
-      return MapElementwiseOp<mhlo::ShiftRightLogicalOp>(arg_types, operands,
-                                                         builder);
+      return {{MapElementwiseOp<mhlo::ShiftRightLogicalOp>(arg_types, operands,
+                                                           builder)}};
     case HloOpcode::kSign:
-      return MapElementwiseOp<mhlo::SignOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::SignOp>(arg_types, operands, builder)}};
     case HloOpcode::kSubtract:
-      return MapElementwiseOp<mhlo::SubtractOp>(arg_types, operands, builder);
+      return {
+          {MapElementwiseOp<mhlo::SubtractOp>(arg_types, operands, builder)}};
     case HloOpcode::kXor:
-      return MapElementwiseOp<mhlo::XorOp>(arg_types, operands, builder);
+      return {{MapElementwiseOp<mhlo::XorOp>(arg_types, operands, builder)}};
     case HloOpcode::kBitcastConvert:
-      return MapHloOp<mhlo::BitcastConvertOp>(
+      return {{MapHloOp<mhlo::BitcastConvertOp>(
           mlir_utils::PrimitiveTypeToMlirType(element_type,
                                               builder.getContext()),
-          arg_types, operands,
-          /*attributes=*/std::nullopt, builder);
+          arg_types, operands, /*attributes=*/std::nullopt, builder)}};
     case HloOpcode::kConvert:
-      return EmitConvert(instr, arg_types, operands, builder);
+      return {{MapHloOp<mhlo::ConvertOp>(
+          mlir_utils::PrimitiveTypeToMlirType(element_type,
+                                              builder.getContext()),
+          arg_types, operands, /*attributes=*/std::nullopt, builder)}};
     case HloOpcode::kBitcast:
     case HloOpcode::kCopy:
     case HloOpcode::kSlice:

@@ -71,6 +71,7 @@ template <>
 struct MhloToScalarOp<mhlo::CompareOp> {
   using IOp = arith::CmpIOp;
   using FOp = prime_ir::field::CmpOp;
+  using ECOp = prime_ir::elliptic_curve::CmpOp;
 };
 template <>
 struct MhloToScalarOp<mhlo::AndOp> {
@@ -216,42 +217,38 @@ inline Value mapMhloOpToStdScalarOp(Location loc, ArrayRef<Type> resultTypes,
       loc, resultTypes, argTypes, adaptor.getOperands(), attributes, b);
 }
 
-// Return a constant for v of type t, splat if t is a vector type.
+// Return a constant for v of type t, splat if t is a shaped type.
 inline Value getConstantOrSplat(OpBuilder *b, Location loc, Type t,
                                 Attribute v) {
-  if (VectorType vecType = dyn_cast<VectorType>(t)) {
-    v = SplatElementsAttr::get(vecType, v);
+  if (auto shapedType = dyn_cast<ShapedType>(t)) {
+    v = SplatElementsAttr::get(shapedType, v);
   }
   return b->create<arith::ConstantOp>(loc, t, cast<TypedAttr>(v));
 }
 
-inline Value mapConvertOpToStdScalarOp(Location loc, ArrayRef<Type> targetTypes,
-                                       ArrayRef<Type> resultTypes,
-                                       ArrayRef<Type> argTypes, ValueRange args,
-                                       ArrayRef<NamedAttribute> attributes,
-                                       OpBuilder *b) {
-  assert(targetTypes.size() == 1 && "ConvertOp should return a single result");
+template <>
+inline Value mapMhloOpToStdScalarOp<mhlo::ConvertOp>(
+    Location loc, ArrayRef<Type> resultTypes, ArrayRef<Type> argTypes,
+    mhlo::ConvertOp::Adaptor adaptor, ArrayRef<NamedAttribute> attributes,
+    OpBuilder *b) {
   assert(resultTypes.size() == 1 && "ConvertOp should return a single result");
   assert(argTypes.size() == 1 && "ConvertOp should take a single argument");
-  assert(args.size() == 1 && "ConvertOp should take a single argument");
 
   Type sourceType = getElementTypeOrSelf(argTypes.front());
-  Type targetType = getElementTypeOrSelf(targetTypes.front());
+  Type targetType = getElementTypeOrSelf(resultTypes.front());
+  ValueRange args = adaptor.getOperands();
 
   mlir::ImplicitLocOpBuilder lb(loc, *b);
   if (isa<IntegerType>(sourceType) && isa<IntegerType>(targetType)) {
     return zkx::mlir_utils::ConvertInteger(
         lb, resultTypes, sourceType, targetType, args,
         IsSignedIntegerType{}(sourceType), attributes);
-  } else if (isa<prime_ir::field::PrimeFieldType>(sourceType) ||
-             isa<prime_ir::field::ExtensionFieldType>(sourceType) ||
-             isa<prime_ir::field::PrimeFieldType>(targetType) ||
-             isa<prime_ir::field::ExtensionFieldType>(targetType)) {
+  } else if (isa<prime_ir::field::FieldTypeInterface>(sourceType) ||
+             isa<prime_ir::field::FieldTypeInterface>(targetType)) {
     return zkx::mlir_utils::ConvertField(lb, resultTypes, sourceType,
                                          targetType, args, attributes);
-  } else if (isa<prime_ir::elliptic_curve::AffineType>(sourceType) ||
-             isa<prime_ir::elliptic_curve::JacobianType>(sourceType) ||
-             isa<prime_ir::elliptic_curve::XYZZType>(sourceType)) {
+  } else if (isa<prime_ir::elliptic_curve::PointTypeInterface>(sourceType) ||
+             isa<prime_ir::elliptic_curve::PointTypeInterface>(targetType)) {
     return zkx::mlir_utils::ConvertEcPoint(lb, resultTypes, sourceType,
                                            targetType, args, attributes);
   }
@@ -393,6 +390,19 @@ getCmpPredicate<arith::CmpIPredicate>(
 }
 
 template <>
+inline Value mapMhloOpToStdScalarOp<mhlo::BitcastConvertOp>(
+    Location loc, ArrayRef<Type> resultTypes, ArrayRef<Type> /*argTypes*/,
+    mhlo::BitcastConvertOp::Adaptor adaptor,
+    ArrayRef<NamedAttribute> /*attributes*/, OpBuilder *b) {
+  Value operand = adaptor.getOperand();
+  Type resultType = resultTypes.front();
+  if (operand.getType() == resultType) {
+    return operand;
+  }
+  return b->create<arith::BitcastOp>(loc, resultType, operand);
+}
+
+template <>
 inline Value mapMhloOpToStdScalarOp<mhlo::CompareOp>(
     Location loc, ArrayRef<Type> /*resultTypes*/, ArrayRef<Type> argTypes,
     mhlo::CompareOp::Adaptor adaptor, ArrayRef<NamedAttribute> /*attributes*/,
@@ -426,6 +436,17 @@ inline Value mapMhloOpToStdScalarOp<mhlo::CompareOp>(
     assert(predicate.has_value() && "expected valid comparison direction");
     return b->create<ScalarFOp<mhlo::CompareOp>>(loc, predicate.value(), lhs,
                                                  rhs);
+  } else if (IsEllipticCurveType{}(elementType)) {
+    // Elliptic curve points only support EQ/NE comparisons.
+    if (comparisonDirection != ComparisonDirection::EQ &&
+        comparisonDirection != ComparisonDirection::NE) {
+      return nullptr;
+    }
+    auto predicate =
+        getCmpPredicate<arith::CmpIPredicate>(comparisonDirection, false);
+    assert(predicate.has_value() && "expected valid comparison direction");
+    return b->create<ScalarECOp<mhlo::CompareOp>>(loc, predicate.value(), lhs,
+                                                  rhs);
   }
   return nullptr;
 }
@@ -687,20 +708,11 @@ struct MhloOpToStdScalarOp {
                                  ArrayRef<Type> argTypes, ValueRange args,
                                  ArrayRef<NamedAttribute> attributes,
                                  OpBuilder *b) {
-    static_assert(!std::is_same<MhloOpTy, mhlo::ConvertOp>::value);
     typename MhloOpTy::Adaptor adaptor(args, op->getAttrDictionary(),
                                        op->getPropertiesStorage(),
                                        op->getRegions());
     return mapOpOfType<MhloOpTy>(op.getLoc(), resultTypes, argTypes, adaptor,
                                  attributes, b);
-  }
-  // Overload for mhlo::ConvertOp.
-  static Value mapOpWithArgTypes(mhlo::ConvertOp op, ArrayRef<Type> resultTypes,
-                                 ArrayRef<Type> argTypes, ValueRange args,
-                                 ArrayRef<NamedAttribute> attributes,
-                                 OpBuilder *b) {
-    return impl::mapConvertOpToStdScalarOp(
-        op.getLoc(), op.getType(), resultTypes, argTypes, args, attributes, b);
   }
 
   // Converts mhlo 'op' to linalg and arith ops.
@@ -711,15 +723,6 @@ struct MhloOpToStdScalarOp {
                            ArrayRef<NamedAttribute> attributes, OpBuilder *b) {
     return impl::mapMhloOpToStdScalarOp<MhloOpTy>(loc, resultTypes, argTypes,
                                                   adaptor, attributes, b);
-  }
-
-  static Value
-  mapConvertOpToStdScalarOp(Location loc, ArrayRef<Type> targetTypes,
-                            ArrayRef<Type> resultTypes, ArrayRef<Type> argTypes,
-                            ValueRange args,
-                            ArrayRef<NamedAttribute> attributes, OpBuilder *b) {
-    return impl::mapConvertOpToStdScalarOp(loc, targetTypes, resultTypes,
-                                           argTypes, args, attributes, b);
   }
 };
 
