@@ -148,10 +148,33 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "hlo_constant_folding",
+    srcs = ["hlo_constant_folding.cc"],
+    hdrs = ["hlo_constant_folding.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:literal",
+        "//zkx:shape_util",
+        "//zkx/hlo/evaluator:hlo_evaluator",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:slow_operation_alarm",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/time",
+    ],
+)
+
 zkx_cc_unittest(
     name = "simplifiers_unittests",
     srcs = [
         "flatten_call_graph_unittest.cc",
+        "hlo_constant_folding_unittest.cc",
         "hlo_cse_unittest.cc",
         "hlo_dce_unittest.cc",
         "hlo_memory_scheduler_unittest.cc",
@@ -161,6 +184,7 @@ zkx_cc_unittest(
     ],
     deps = [
         ":flatten_call_graph",
+        ":hlo_constant_folding",
         ":hlo_cse",
         ":hlo_dce",
         ":hlo_memory_scheduler",
@@ -170,6 +194,7 @@ zkx_cc_unittest(
         "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
         "//zkx:comparison_util",
+        "//zkx:literal",
         "//zkx:literal_util",
         "//zkx:primitive_util",
         "//zkx:shape_util",
@@ -193,6 +218,7 @@ zkx_cc_unittest(
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/types:span",
     ],
 )
