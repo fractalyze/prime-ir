@@ -83,6 +83,8 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
 
+  // ModArithToArith must run before bufferization: mod_arith.bitcast verifiers
+  // don't accept memref types, only tensor/scalar types.
   pm.addPass(mod_arith::createModArithToArith());
   pm.addPass(createCanonicalizerPass());
 

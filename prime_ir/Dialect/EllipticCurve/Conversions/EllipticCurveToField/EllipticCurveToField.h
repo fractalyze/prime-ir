@@ -29,6 +29,11 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 // IWYU pragma: end_keep
 
+namespace mlir {
+class RewritePatternSet;
+class TypeConverter;
+} // namespace mlir
+
 namespace mlir::prime_ir::elliptic_curve {
 
 #define GEN_PASS_DECL
@@ -36,6 +41,11 @@ namespace mlir::prime_ir::elliptic_curve {
 
 #define GEN_PASS_REGISTRATION
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h.inc" // NOLINT(build/include)
+
+/// Populate the given list with patterns that convert from EllipticCurve to
+/// Field.
+void populateEllipticCurveToFieldConversionPatterns(
+    RewritePatternSet &patterns);
 
 } // namespace mlir::prime_ir::elliptic_curve
 

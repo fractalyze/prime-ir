@@ -27,6 +27,11 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 // IWYU pragma: end_keep
 
+namespace mlir {
+class RewritePatternSet;
+class TypeConverter;
+} // namespace mlir
+
 namespace mlir::prime_ir::field {
 
 #define GEN_PASS_DECL
@@ -34,6 +39,13 @@ namespace mlir::prime_ir::field {
 
 #define GEN_PASS_REGISTRATION
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc" // NOLINT(build/include)
+
+/// Populate the type conversion for Field to ModArith.
+void populateFieldToModArithTypeConversion(TypeConverter &typeConverter);
+
+/// Populate the given list with patterns that convert from Field to ModArith.
+void populateFieldToModArithConversionPatterns(TypeConverter &typeConverter,
+                                               RewritePatternSet &patterns);
 
 } // namespace mlir::prime_ir::field
 
