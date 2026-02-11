@@ -19,6 +19,18 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
 
+proto_library(
+    name = "run_hlo_module_proto",
+    srcs = ["run_hlo_module.proto"],
+    visibility = ["//visibility:public"],
+    deps = ["//zkx:zkx_data_proto"],
+)
+
+cc_proto_library(
+    name = "run_hlo_module_cc_proto",
+    deps = [":run_hlo_module_proto"],
+)
+
 zkx_cc_library(
     name = "hlo_module_loader",
     srcs = ["hlo_module_loader.cc"],
@@ -43,22 +55,10 @@ zkx_cc_library(
 )
 
 zkx_cc_unittest(
-    name = "hlo_module_loader_unittest",
+    name = "tools_unittests",
     srcs = ["hlo_module_loader_unittest.cc"],
     deps = [
         ":hlo_module_loader",
         "//zkx/tests:hlo_test_base",
     ],
-)
-
-proto_library(
-    name = "run_hlo_module_proto",
-    srcs = ["run_hlo_module.proto"],
-    visibility = ["//visibility:public"],
-    deps = ["//zkx:zkx_data_proto"],
-)
-
-cc_proto_library(
-    name = "run_hlo_module_cc_proto",
-    deps = [":run_hlo_module_proto"],
 )
