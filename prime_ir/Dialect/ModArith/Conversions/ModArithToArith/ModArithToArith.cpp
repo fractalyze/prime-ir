@@ -17,7 +17,10 @@ limitations under the License.
 
 #include <utility>
 
+#include "mlir/Conversion/ConvertToLLVM/ToLLVMInterface.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
@@ -936,63 +939,30 @@ namespace rewrites {
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.cpp.inc"
 } // namespace rewrites
 
-struct ModArithToArith : impl::ModArithToArithBase<ModArithToArith> {
-  using ModArithToArithBase::ModArithToArithBase;
-
-  void runOnOperation() override;
-};
-
-namespace {
-
-// Check if a type contains mod_arith types.
-bool containsModArithType(Type type) {
-  if (isa<ModArithType>(type)) {
-    return true;
-  }
-  if (auto shapedType = dyn_cast<ShapedType>(type)) {
-    return containsModArithType(shapedType.getElementType());
-  }
-  return false;
-}
-
-// Check if a linalg op has mod_arith types.
-bool hasModArithTypes(linalg::LinalgOp op) {
-  return llvm::any_of(op->getOperandTypes(), containsModArithType) ||
-         llvm::any_of(op->getResultTypes(), containsModArithType);
-}
-
-} // namespace
-
-void ModArithToArith::runOnOperation() {
-  MLIRContext *context = &getContext();
-  ModuleOp module = getOperation();
-  ModArithToArithTypeConverter typeConverter(context);
-
-  // Pre-processing: Generalize named linalg ops with mod_arith types.
-  // Named linalg ops (matvec, matmul, dot) have verifiers that expect simple
-  // add/mul ops in their body. When we convert mod_arith to arith, the body
-  // becomes complex (Montgomery reduction, etc.), violating this constraint.
-  // Generalizing to linalg.generic first avoids this issue.
-  IRRewriter rewriter(context);
-  module.walk([&](linalg::LinalgOp op) {
-    if (!isa<linalg::MatvecOp, linalg::MatmulOp, linalg::DotOp>(op)) {
-      return WalkResult::advance();
+void populateModArithToArithTypeConversion(TypeConverter &typeConverter) {
+  typeConverter.addConversion(
+      [](ModArithType type) -> Type { return type.getStorageType(); });
+  typeConverter.addConversion([](ShapedType type) -> std::optional<Type> {
+    if (auto modArithType = dyn_cast<ModArithType>(type.getElementType())) {
+      return ShapedTypeConverter::convertShapedType(
+          type, type.getShape(), modArithType.getStorageType());
     }
-    if (!hasModArithTypes(op)) {
-      return WalkResult::advance();
+    if (auto vectorType = dyn_cast<VectorType>(type.getElementType())) {
+      if (auto modArithType =
+              dyn_cast<ModArithType>(vectorType.getElementType())) {
+        return ShapedTypeConverter::convertShapedType(
+            type, type.getShape(),
+            vectorType.cloneWith(vectorType.getShape(),
+                                 modArithType.getStorageType()));
+      }
     }
-    rewriter.setInsertionPoint(op);
-    if (failed(linalg::generalizeNamedOp(rewriter, op))) {
-      op.emitWarning("failed to generalize named linalg op");
-    }
-    return WalkResult::advance();
+    return std::nullopt;
   });
+}
 
-  ConversionTarget target(*context);
-  target.addIllegalDialect<ModArithDialect>();
-  target.addLegalDialect<arith::ArithDialect>();
-
-  RewritePatternSet patterns(context);
+void populateModArithToArithConversionPatterns(TypeConverter &typeConverter,
+                                               RewritePatternSet &patterns) {
+  MLIRContext *context = patterns.getContext();
   rewrites::populateWithGenerated(patterns);
   patterns.add<
       // clang-format off
@@ -1067,6 +1037,66 @@ void ModArithToArith::runOnOperation() {
       ConvertAny<vector::TransferWriteOp>
       // clang-format on
       >(typeConverter, context);
+}
+
+struct ModArithToArith : impl::ModArithToArithBase<ModArithToArith> {
+  using ModArithToArithBase::ModArithToArithBase;
+
+  void runOnOperation() override;
+};
+
+namespace {
+
+// Check if a type contains mod_arith types.
+bool containsModArithType(Type type) {
+  if (isa<ModArithType>(type)) {
+    return true;
+  }
+  if (auto shapedType = dyn_cast<ShapedType>(type)) {
+    return containsModArithType(shapedType.getElementType());
+  }
+  return false;
+}
+
+// Check if a linalg op has mod_arith types.
+bool hasModArithTypes(linalg::LinalgOp op) {
+  return llvm::any_of(op->getOperandTypes(), containsModArithType) ||
+         llvm::any_of(op->getResultTypes(), containsModArithType);
+}
+
+} // namespace
+
+void ModArithToArith::runOnOperation() {
+  MLIRContext *context = &getContext();
+  ModuleOp module = getOperation();
+  ModArithToArithTypeConverter typeConverter(context);
+
+  // Pre-processing: Generalize named linalg ops with mod_arith types.
+  // Named linalg ops (matvec, matmul, dot) have verifiers that expect simple
+  // add/mul ops in their body. When we convert mod_arith to arith, the body
+  // becomes complex (Montgomery reduction, etc.), violating this constraint.
+  // Generalizing to linalg.generic first avoids this issue.
+  IRRewriter rewriter(context);
+  module.walk([&](linalg::LinalgOp op) {
+    if (!isa<linalg::MatvecOp, linalg::MatmulOp, linalg::DotOp>(op)) {
+      return WalkResult::advance();
+    }
+    if (!hasModArithTypes(op)) {
+      return WalkResult::advance();
+    }
+    rewriter.setInsertionPoint(op);
+    if (failed(linalg::generalizeNamedOp(rewriter, op))) {
+      op.emitWarning("failed to generalize named linalg op");
+    }
+    return WalkResult::advance();
+  });
+
+  ConversionTarget target(*context);
+  target.addIllegalDialect<ModArithDialect>();
+  target.addLegalDialect<arith::ArithDialect>();
+
+  RewritePatternSet patterns(context);
+  populateModArithToArithConversionPatterns(typeConverter, patterns);
 
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
@@ -1131,6 +1161,33 @@ void ModArithToArith::runOnOperation() {
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();
   }
+}
+
+//===----------------------------------------------------------------------===//
+// ConvertToLLVMPatternInterface implementation
+//===----------------------------------------------------------------------===//
+
+struct ModArithToLLVMDialectInterface
+    : public mlir::ConvertToLLVMPatternInterface {
+  using ConvertToLLVMPatternInterface::ConvertToLLVMPatternInterface;
+
+  void loadDependentDialects(MLIRContext *context) const final {
+    context->loadDialect<LLVM::LLVMDialect>();
+    context->loadDialect<arith::ArithDialect>();
+  }
+
+  void populateConvertToLLVMConversionPatterns(
+      ConversionTarget &target, LLVMTypeConverter &typeConverter,
+      RewritePatternSet &patterns) const final {
+    populateModArithToArithTypeConversion(typeConverter);
+    populateModArithToArithConversionPatterns(typeConverter, patterns);
+  }
+};
+
+void registerConvertModArithToLLVMInterface(DialectRegistry &registry) {
+  registry.addExtension(+[](MLIRContext *ctx, ModArithDialect *dialect) {
+    dialect->addInterfaces<ModArithToLLVMDialectInterface>();
+  });
 }
 
 } // namespace mlir::prime_ir::mod_arith

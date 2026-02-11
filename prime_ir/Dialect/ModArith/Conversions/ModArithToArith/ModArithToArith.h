@@ -27,6 +27,12 @@ limitations under the License.
 #include "mlir/Pass/Pass.h"
 // IWYU pragma: end_keep
 
+namespace mlir {
+class DialectRegistry;
+class RewritePatternSet;
+class TypeConverter;
+} // namespace mlir
+
 namespace mlir::prime_ir::mod_arith {
 
 #define GEN_PASS_DECL
@@ -34,6 +40,15 @@ namespace mlir::prime_ir::mod_arith {
 
 #define GEN_PASS_REGISTRATION
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h.inc" // NOLINT(build/include)
+
+/// Populate the type conversion for ModArith to Arith.
+void populateModArithToArithTypeConversion(TypeConverter &typeConverter);
+
+/// Populate the given list with patterns that convert from ModArith to Arith.
+void populateModArithToArithConversionPatterns(TypeConverter &typeConverter,
+                                               RewritePatternSet &patterns);
+
+void registerConvertModArithToLLVMInterface(DialectRegistry &registry);
 
 } // namespace mlir::prime_ir::mod_arith
 

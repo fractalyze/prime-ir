@@ -730,6 +730,34 @@ namespace rewrites {
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.cpp.inc"
 } // namespace rewrites
 
+void populateEllipticCurveToFieldConversionPatterns(
+    RewritePatternSet &patterns) {
+  MLIRContext *context = patterns.getContext();
+  linalg::populateLinalgNamedOpsGeneralizationPatterns(patterns);
+  rewrites::populateWithGenerated(patterns);
+
+  // Register ConvertScalarMul with default inline mode (no intrinsics)
+  patterns.add<ConvertScalarMul>(context);
+
+  patterns.add<
+      // clang-format off
+      ConvertAdd,
+      ConvertBucketAcc,
+      ConvertBucketReduce,
+      ConvertConstant,
+      ConvertCmp,
+      ConvertConvertPointType,
+      ConvertDouble,
+      ConvertIsZero,
+      ConvertMSM,
+      ConvertNegate,
+      ConvertScalarDecomp,
+      ConvertSub,
+      ConvertWindowReduce
+      // clang-format on
+      >(context);
+}
+
 struct EllipticCurveToField
     : impl::EllipticCurveToFieldBase<EllipticCurveToField> {
   using EllipticCurveToFieldBase::EllipticCurveToFieldBase;
