@@ -90,6 +90,7 @@ limitations under the License.
 #include "zkx/backends/cpu/codegen/kernel_api_ir_builder.h"
 #include "zkx/base/bits.h"
 #include "zkx/base/logging.h"
+#include "zkx/codegen/emitters/hlo_to_mlir_op_map.h"
 #include "zkx/codegen/llvm_ir_kernel_source.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
@@ -97,6 +98,7 @@ limitations under the License.
 #include "zkx/literal.h"
 #include "zkx/mlir/codegen_utils.h"
 #include "zkx/mlir/mlir_utils.h"
+#include "zkx/mlir_hlo/mhlo/transforms/map_mhlo_to_scalar_op.h"
 #include "zkx/primitive_util.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
 #include "zkx/shape_util.h"
@@ -104,6 +106,9 @@ limitations under the License.
 namespace zkx::cpu {
 
 namespace {
+
+using zkx::emitters::MapElementwiseOp;
+using zkx::emitters::MapHloOp;
 
 mlir::RankedTensorType MakeMlirTensorTypeWithoutLayout(
     const Shape& shape, mlir::MLIRContext* context) {
@@ -142,43 +147,6 @@ absl::StatusOr<mlir::Value> CreateZeroPoint(EmitterLocOpBuilder& b,
   }
 }
 
-mlir::Value CreateIntegerMaximum(EmitterLocOpBuilder& b, mlir::Value lhs,
-                                 mlir::Value rhs, bool is_signed) {
-  if (is_signed) {
-    return b.create<mlir::arith::MaxSIOp>(lhs, rhs);
-  } else {
-    return b.create<mlir::arith::MaxUIOp>(lhs, rhs);
-  }
-}
-
-mlir::Value CreateIntegerMinimum(EmitterLocOpBuilder& b, mlir::Value lhs,
-                                 mlir::Value rhs, bool is_signed) {
-  if (is_signed) {
-    return b.create<mlir::arith::MinSIOp>(lhs, rhs);
-  } else {
-    return b.create<mlir::arith::MinUIOp>(lhs, rhs);
-  }
-}
-
-mlir::Value CreateFieldCompare(EmitterLocOpBuilder& b,
-                               ComparisonDirection direction, mlir::Value lhs,
-                               mlir::Value rhs) {
-  return b.create<mlir::prime_ir::field::CmpOp>(
-      mlir_utils::CreateMlirArithCmpIPredicate(direction, false), lhs, rhs);
-}
-
-mlir::Value CreateFieldMaximum(EmitterLocOpBuilder& b, mlir::Value lhs,
-                               mlir::Value rhs) {
-  auto ge = CreateFieldCompare(b, ComparisonDirection::kGe, lhs, rhs);
-  return b.create<mlir::arith::SelectOp>(ge, lhs, rhs);
-}
-
-mlir::Value CreateFieldMinimum(EmitterLocOpBuilder& b, mlir::Value lhs,
-                               mlir::Value rhs) {
-  auto le = CreateFieldCompare(b, ComparisonDirection::kLe, lhs, rhs);
-  return b.create<mlir::arith::SelectOp>(le, lhs, rhs);
-}
-
 void LoadMlirDialects(mlir::MLIRContext* mlir_context) {
   mlir_context->loadDialect<
       // clang-format off
@@ -197,7 +165,8 @@ void LoadMlirDialects(mlir::MLIRContext* mlir_context) {
       mlir::prime_ir::field::FieldDialect,
       mlir::prime_ir::mod_arith::ModArithDialect,
       mlir::prime_ir::poly::PolyDialect,
-      mlir::prime_ir::tensor_ext::TensorExtDialect
+      mlir::prime_ir::tensor_ext::TensorExtDialect,
+      mlir::mhlo::MhloDialect
       // clang-format on
       >();
 }
@@ -1000,381 +969,6 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitConstantOp(
   return absl::UnimplementedError(
       absl::StrFormat("Unhandled primitive type: %s",
                       primitive_util::LowercasePrimitiveTypeName(type)));
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitPredUnaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value) {
-  switch (instr->opcode()) {
-    case HloOpcode::kNot:
-      return EmitIntegerUnaryOp(instr, b, value, false);
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled unary pred op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitIntegerUnaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value,
-    bool is_signed) {
-  switch (instr->opcode()) {
-    case HloOpcode::kAbs:
-      return b.create<mlir::math::AbsIOp>(value);
-    case HloOpcode::kBitcastConvert: {
-      mlir::Type ret_type =
-          MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
-      return b.create<mlir::arith::BitcastOp>(ret_type, value);
-    }
-    case HloOpcode::kClz:
-      return b.create<mlir::math::CountLeadingZerosOp>(value);
-    case HloOpcode::kConvert: {
-      mlir::Type ret_type =
-          MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
-      return mlir_utils::ConvertInteger(b, {ret_type}, value.getType(),
-                                        ret_type, {value}, is_signed);
-    }
-    case HloOpcode::kNegate:
-      return b.create<mlir::arith::SubIOp>(
-          mlir_utils::GetConstantOrSplat(
-              b, value.getType(),
-              b.getZeroAttr(getElementTypeOrSelf(value.getType()))),
-          value);
-    case HloOpcode::kNot:
-      return b.create<mlir::arith::XOrIOp>(
-          value,
-          mlir_utils::GetConstantOrSplat(
-              b, value.getType(),
-              b.getIntegerAttr(getElementTypeOrSelf(value.getType()), -1)));
-    case HloOpcode::kPopulationCount:
-      return b.create<mlir::math::CtPopOp>(value);
-    case HloOpcode::kSign:
-      return mlir_utils::SignInteger(b, value);
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled unary integer op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitFieldUnaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value) {
-  switch (instr->opcode()) {
-    case HloOpcode::kConvert: {
-      mlir::Type ret_type =
-          MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
-      return mlir_utils::ConvertField(b, {ret_type}, value.getType(), ret_type,
-                                      {value});
-    }
-    case HloOpcode::kInverse:
-      return b.create<mlir::prime_ir::field::InverseOp>(value);
-    case HloOpcode::kNegate:
-      return b.create<mlir::prime_ir::field::NegateOp>(value);
-
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled unary field op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitEcPointUnaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value) {
-  switch (instr->opcode()) {
-    case HloOpcode::kConvert: {
-      mlir::Type ret_type =
-          MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
-      return mlir_utils::ConvertEcPoint(b, {ret_type}, value.getType(),
-                                        ret_type, {value});
-    }
-    case HloOpcode::kNegate:
-      return b.create<mlir::prime_ir::elliptic_curve::NegateOp>(value);
-
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled unary ec point op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitUnaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value) {
-  Shape shape = instr->operand(0)->shape();
-  PrimitiveType operand_type = shape.element_type();
-  if (operand_type == PRED) {
-    return EmitPredUnaryOp(instr, b, value);
-  } else if (ShapeUtil::ElementIsIntegral(shape)) {
-    if (instr->opcode() == HloOpcode::kConvert) {
-      Shape output_shape = instr->shape();
-      if (ShapeUtil::ElementIsIntegral(output_shape)) {
-        return EmitIntegerUnaryOp(
-            instr, b, value,
-            primitive_util::IsSignedIntegralType(operand_type));
-      } else if (ShapeUtil::ElementIsField(output_shape)) {
-        return EmitFieldUnaryOp(instr, b, value);
-      } else {
-        return absl::InvalidArgumentError(absl::StrFormat(
-            "Unsupported output type for integer convert operation: %s",
-            output_shape.ToString()));
-      }
-    }
-    return EmitIntegerUnaryOp(
-        instr, b, value, primitive_util::IsSignedIntegralType(operand_type));
-  } else if (ShapeUtil::ElementIsField(shape)) {
-    return EmitFieldUnaryOp(instr, b, value);
-  } else if (ShapeUtil::ElementIsEcPoint(shape)) {
-    return EmitEcPointUnaryOp(instr, b, value);
-  }
-  return absl::UnimplementedError(absl::StrFormat(
-      "Unhandled primitive type: %s",
-      primitive_util::LowercasePrimitiveTypeName(operand_type)));
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitPredBinaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs_value,
-    mlir::Value rhs_value) {
-  switch (instr->opcode()) {
-    case HloOpcode::kAnd:
-    case HloOpcode::kCompare:
-    case HloOpcode::kOr:
-    case HloOpcode::kXor:
-      return EmitIntegerBinaryOp(instr, b, lhs_value, rhs_value, false);
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled binary pred op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitIntegerBinaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs_value,
-    mlir::Value rhs_value, bool is_signed) {
-  switch (instr->opcode()) {
-    // TODO(jingyue): add the "nsw" attribute for signed types.
-    case HloOpcode::kAdd:
-      return b.create<mlir::arith::AddIOp>(lhs_value, rhs_value);
-    case HloOpcode::kAnd:
-      return b.create<mlir::arith::AndIOp>(lhs_value, rhs_value);
-    case HloOpcode::kCompare:
-      return b.create<mlir::arith::CmpIOp>(
-          mlir_utils::CreateMlirArithCmpIPredicate(
-              instr->comparison_direction(), is_signed),
-          lhs_value, rhs_value);
-    case HloOpcode::kDivide:
-      return mlir_utils::DivideInteger(b, lhs_value, rhs_value, is_signed);
-    case HloOpcode::kMaximum:
-      return CreateIntegerMaximum(b, lhs_value, rhs_value, is_signed);
-    case HloOpcode::kMinimum:
-      return CreateIntegerMinimum(b, lhs_value, rhs_value, is_signed);
-    case HloOpcode::kMultiply:
-      return b.create<mlir::arith::MulIOp>(lhs_value, rhs_value);
-    case HloOpcode::kOr:
-      return b.create<mlir::arith::OrIOp>(lhs_value, rhs_value);
-    case HloOpcode::kPower: {
-      pass_flag_.enable_linalg_to_parallel_loops = true;
-
-      auto output = b.create<mlir::tensor::EmptyOp>(
-          MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext()),
-          mlir::ValueRange{});
-      return b
-          .create<mlir::linalg::MapOp>(
-              mlir::ValueRange{lhs_value, rhs_value}, output,
-              [is_signed](mlir::OpBuilder& nested_b, mlir::Location loc,
-                          mlir::ValueRange loop_vars) {
-                mlir::ImplicitLocOpBuilder b(loc, nested_b);
-                mlir::Value elementwise_result = mlir_utils::PowerInteger(
-                    b, loop_vars[0], loop_vars[1], is_signed);
-                b.create<mlir::linalg::YieldOp>(elementwise_result);
-              })
-          ->getResult(0);
-    }
-    case HloOpcode::kRemainder:
-      return mlir_utils::RemainderInteger(b, lhs_value, rhs_value, is_signed);
-    case HloOpcode::kShiftLeft:
-      return mlir_utils::ShiftLeftInteger(b, lhs_value, rhs_value);
-    case HloOpcode::kShiftRightArithmetic:
-      return mlir_utils::ShiftRightArithmeticInteger(b, lhs_value, rhs_value);
-    case HloOpcode::kShiftRightLogical:
-      return mlir_utils::ShiftRightLogicalInteger(b, lhs_value, rhs_value);
-    case HloOpcode::kSubtract:
-      return b.create<mlir::arith::SubIOp>(lhs_value, rhs_value);
-    case HloOpcode::kXor:
-      return b.create<mlir::arith::XOrIOp>(lhs_value, rhs_value);
-
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled binary integer op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitFieldBinaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs_value,
-    mlir::Value rhs_value) {
-  switch (instr->opcode()) {
-    case HloOpcode::kAdd:
-      return b.create<mlir::prime_ir::field::AddOp>(lhs_value, rhs_value);
-    case HloOpcode::kCompare:
-      return CreateFieldCompare(b, instr->comparison_direction(), lhs_value,
-                                rhs_value);
-    case HloOpcode::kDivide: {
-      auto inv = b.create<mlir::prime_ir::field::InverseOp>(rhs_value);
-      return b.create<mlir::prime_ir::field::MulOp>(lhs_value, inv);
-    }
-    case HloOpcode::kMaximum:
-      return CreateFieldMaximum(b, lhs_value, rhs_value);
-    case HloOpcode::kMinimum:
-      return CreateFieldMinimum(b, lhs_value, rhs_value);
-    case HloOpcode::kMultiply:
-      return b.create<mlir::prime_ir::field::MulOp>(lhs_value, rhs_value);
-    case HloOpcode::kPower: {
-      const PrimitiveType exponent_type =
-          instr->operand(1)->shape().element_type();
-      if (!primitive_util::IsUnsignedIntegralType(exponent_type)) {
-        return absl::InvalidArgumentError(absl::StrFormat(
-            "The exponent for a power operation on a field must be an "
-            "unsigned integer, but got %s",
-            primitive_util::LowercasePrimitiveTypeName(exponent_type)));
-      }
-      return b.create<mlir::prime_ir::field::PowUIOp>(lhs_value.getType(),
-                                                      lhs_value, rhs_value);
-    }
-    case HloOpcode::kSubtract:
-      return b.create<mlir::prime_ir::field::SubOp>(lhs_value, rhs_value);
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled binary field op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitEcPointBinaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs_value,
-    mlir::Value rhs_value) {
-  const Shape& shape = instr->shape();
-  mlir::Type ret_type = MakeMlirTensorTypeWithoutLayout(shape, b.getContext());
-
-  switch (instr->opcode()) {
-    case HloOpcode::kAdd:
-      return b.create<mlir::prime_ir::elliptic_curve::AddOp>(
-          ret_type, lhs_value, rhs_value);
-    case HloOpcode::kCompare:
-      if (instr->comparison_direction() != ComparisonDirection::kEq &&
-          instr->comparison_direction() != ComparisonDirection::kNe) {
-        return absl::InvalidArgumentError(absl::StrFormat(
-            "Unsupported comparison direction for EC points: %s",
-            ComparisonDirectionToString(instr->comparison_direction())));
-      }
-      return b.create<mlir::prime_ir::elliptic_curve::CmpOp>(
-          mlir_utils::CreateMlirArithCmpIPredicate(
-              instr->comparison_direction(), false),
-          lhs_value, rhs_value);
-    case HloOpcode::kMultiply:
-      return b.create<mlir::prime_ir::elliptic_curve::ScalarMulOp>(
-          ret_type, lhs_value, rhs_value);
-    case HloOpcode::kSubtract:
-      return b.create<mlir::prime_ir::elliptic_curve::SubOp>(
-          ret_type, lhs_value, rhs_value);
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled binary ec point op %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitBinaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value lhs_value,
-    mlir::Value rhs_value) {
-  Shape shape = instr->operand(0)->shape();
-  PrimitiveType operand_type = shape.element_type();
-  if (operand_type == PRED) {
-    return EmitPredBinaryOp(instr, b, lhs_value, rhs_value);
-  } else if (ShapeUtil::ElementIsIntegral(shape)) {
-    return EmitIntegerBinaryOp(
-        instr, b, lhs_value, rhs_value,
-        primitive_util::IsSignedIntegralType(operand_type));
-  } else if (ShapeUtil::ElementIsEcPoint(shape) ||
-             ShapeUtil::ElementIsEcPoint(instr->operand(1)->shape())) {
-    return EmitEcPointBinaryOp(instr, b, lhs_value, rhs_value);
-  } else if (ShapeUtil::ElementIsField(shape)) {
-    return EmitFieldBinaryOp(instr, b, lhs_value, rhs_value);
-  }
-  return absl::UnimplementedError(absl::StrFormat(
-      "Unhandled primitive type: %s",
-      primitive_util::LowercasePrimitiveTypeName(operand_type)));
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitPredTernaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value1,
-    mlir::Value value2, mlir::Value value3) {
-  switch (instr->opcode()) {
-    case HloOpcode::kSelect:
-      return EmitIntegerTernaryOp(instr, b, value1, value2, value3, false);
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled ternary pred op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitIntegerTernaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value1,
-    mlir::Value value2, mlir::Value value3, bool is_signed) {
-  switch (instr->opcode()) {
-    case HloOpcode::kClamp:
-      return CreateIntegerMinimum(
-          b,
-          CreateIntegerMaximum(b, /*min=*/value1, /*operand=*/value2,
-                               is_signed),
-          /*max=*/value3, is_signed);
-    case HloOpcode::kSelect:
-      return b.create<mlir::arith::SelectOp>(value1, value2, value3);
-    default:
-      return absl::UnimplementedError(
-          absl::StrFormat("Unhandled ternary integer op: %s",
-                          HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitFieldTernaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value1,
-    mlir::Value value2, mlir::Value value3) {
-  switch (instr->opcode()) {
-    case HloOpcode::kClamp:
-      return CreateFieldMinimum(
-          b, CreateFieldMaximum(b, /*min=*/value1, /*operand=*/value2),
-          /*max=*/value3);
-    case HloOpcode::kSelect:
-      return b.create<mlir::arith::SelectOp>(value1, value2, value3);
-    default:
-      return absl::UnimplementedError(absl::StrFormat(
-          "Unhandled ternary field op: %s", HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitEcPointTernaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value1,
-    mlir::Value value2, mlir::Value value3) {
-  switch (instr->opcode()) {
-    case HloOpcode::kSelect:
-      return b.create<mlir::arith::SelectOp>(value1, value2, value3);
-    default:
-      return absl::UnimplementedError(
-          absl::StrFormat("Unhandled ternary ec point op: %s",
-                          HloOpcodeString(instr->opcode())));
-  }
-}
-
-absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitTernaryOp(
-    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value1,
-    mlir::Value value2, mlir::Value value3) {
-  Shape shape =
-      instr->operand(instr->opcode() == HloOpcode::kSelect ? 1 : 0)->shape();
-  PrimitiveType operand_type = shape.element_type();
-  if (operand_type == PRED) {
-    return EmitPredTernaryOp(instr, b, value1, value2, value3);
-  } else if (ShapeUtil::ElementIsIntegral(shape)) {
-    return EmitIntegerTernaryOp(
-        instr, b, value1, value2, value3,
-        primitive_util::IsSignedIntegralType(operand_type));
-  } else if (ShapeUtil::ElementIsField(shape)) {
-    return EmitFieldTernaryOp(instr, b, value1, value2, value3);
-  } else if (ShapeUtil::ElementIsEcPoint(shape)) {
-    return EmitEcPointTernaryOp(instr, b, value1, value2, value3);
-  }
-  return absl::UnimplementedError(absl::StrFormat(
-      "Unhandled primitive type: %s",
-      primitive_util::LowercasePrimitiveTypeName(operand_type)));
 }
 
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitFftOp(
@@ -2562,49 +2156,13 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
     pass_flag_.enable_elementwise_to_linalg = true;
   }
 
+  // Handle non-elementwise ops first.
   switch (instr->opcode()) {
-    case HloOpcode::kAbs:
-    case HloOpcode::kBitcastConvert:
-    case HloOpcode::kClz:
-    case HloOpcode::kConvert:
-    case HloOpcode::kInverse:
-    case HloOpcode::kNegate:
-    case HloOpcode::kNot:
-    case HloOpcode::kPopulationCount:
-    case HloOpcode::kSign: {
-      enable_flag(instr->operand(0)->shape().element_type());
-      return EmitUnaryOp(instr, b, values[instr->operand(0)]);
-    }
-    case HloOpcode::kAdd:
-    case HloOpcode::kAnd:
-    case HloOpcode::kCompare:
-    case HloOpcode::kDivide:
-    case HloOpcode::kMaximum:
-    case HloOpcode::kMinimum:
-    case HloOpcode::kMultiply:
-    case HloOpcode::kOr:
-    case HloOpcode::kPower:
-    case HloOpcode::kRemainder:
-    case HloOpcode::kShiftLeft:
-    case HloOpcode::kShiftRightArithmetic:
-    case HloOpcode::kShiftRightLogical:
-    case HloOpcode::kSubtract:
-    case HloOpcode::kXor: {
-      enable_flag(instr->operand(0)->shape().element_type());
-      enable_flag(instr->operand(1)->shape().element_type());
-      return EmitBinaryOp(instr, b, values[instr->operand(0)],
-                          values[instr->operand(1)]);
-    }
     case HloOpcode::kBitReverse:
       return EmitBitReverseOp(instr, b, values[instr->operand(0)]);
     case HloOpcode::kBroadcast:
       return EmitBroadcastOp(instr, b, values[instr->operand(0)],
                              instr->dimensions());
-    case HloOpcode::kClamp:
-    case HloOpcode::kSelect:
-      return EmitTernaryOp(instr, b, values[instr->operand(0)],
-                           values[instr->operand(1)],
-                           values[instr->operand(2)]);
     case HloOpcode::kConcatenate: {
       llvm::SmallVector<mlir::Value> inputs;
       for (int64_t i = 0; i < instr->operand_count(); ++i) {
@@ -2701,6 +2259,145 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
       return EmitSliceOp(instr, b, values[instr->operand(0)]);
     case HloOpcode::kTranspose:
       return EmitTransposeOp(instr, b, values[instr->operand(0)]);
+
+    default:
+      break;
+  }
+
+  // Build arg_types (with signedness) and operands generically for all
+  // remaining elementwise ops, mirroring HloToMlir's two-phase structure.
+  llvm::SmallVector<mlir::Type> arg_types;
+  arg_types.reserve(instr->operands().size());
+  llvm::SmallVector<mlir::Value> args;
+  args.reserve(instr->operands().size());
+  for (auto* operand : instr->operands()) {
+    enable_flag(operand->shape().element_type());
+    arg_types.push_back(mlir_utils::PrimitiveTypeToMlirTypeWithSign(
+        operand->shape().element_type(), b.getContext()));
+    args.push_back(values[operand]);
+  }
+
+  PrimitiveType element_type = instr->operand(0)->shape().element_type();
+  mlir::Type result_type =
+      MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
+
+  using namespace mlir::mhlo;
+
+  switch (instr->opcode()) {
+    case HloOpcode::kAbs:
+      return MapHloOp<AbsOp>(args[0].getType(), arg_types, args,
+                             /*attributes=*/std::nullopt, b);
+    case HloOpcode::kAdd:
+      if (element_type == PRED)
+        return MapElementwiseOp<OrOp>(arg_types, args, b);
+      return MapElementwiseOp<AddOp>(arg_types, args, b);
+    case HloOpcode::kAnd:
+      return MapElementwiseOp<AndOp>(arg_types, args, b);
+    case HloOpcode::kBitcastConvert:
+      return MapHloOp<BitcastConvertOp>(result_type, arg_types, args,
+                                        /*attributes=*/std::nullopt, b);
+    case HloOpcode::kClamp:
+      return MapElementwiseOp<ClampOp>(arg_types, args, b);
+    case HloOpcode::kClz:
+      return MapElementwiseOp<ClzOp>(arg_types, args, b);
+    case HloOpcode::kCompare: {
+      auto direction = symbolizeComparisonDirection(
+          ComparisonDirectionToString(instr->comparison_direction()));
+      CompareOp::Properties properties;
+      properties.comparison_direction =
+          ComparisonDirectionAttr::get(b.getContext(), direction.value());
+      return MapHloOp<CompareOp>(b.getI1Type(), arg_types, args,
+                                 /*attributes=*/std::nullopt, b, nullptr,
+                                 properties);
+    }
+    case HloOpcode::kConvert:
+      return MapHloOp<ConvertOp>(result_type, arg_types, args,
+                                 /*attributes=*/std::nullopt, b);
+    case HloOpcode::kDivide:
+      return MapElementwiseOp<DivOp>(arg_types, args, b);
+    case HloOpcode::kInverse:
+      return MapElementwiseOp<InverseOp>(arg_types, args, b);
+    case HloOpcode::kMaximum:
+      if (element_type == PRED)
+        return MapElementwiseOp<OrOp>(arg_types, args, b);
+      return MapElementwiseOp<MaxOp>(arg_types, args, b);
+    case HloOpcode::kMinimum:
+      if (element_type == PRED)
+        return MapElementwiseOp<AndOp>(arg_types, args, b);
+      return MapElementwiseOp<MinOp>(arg_types, args, b);
+    case HloOpcode::kMultiply:
+      if (element_type == PRED)
+        return MapElementwiseOp<AndOp>(arg_types, args, b);
+      return MapElementwiseOp<MulOp>(arg_types, args, b);
+    case HloOpcode::kNegate:
+      return MapElementwiseOp<NegOp>(arg_types, args, b);
+    case HloOpcode::kNot:
+      return MapElementwiseOp<NotOp>(arg_types, args, b);
+    case HloOpcode::kOr:
+      return MapElementwiseOp<OrOp>(arg_types, args, b);
+    case HloOpcode::kPopulationCount:
+      return MapHloOp<PopulationCountOp>(args[0].getType(), arg_types, args,
+                                         /*attributes=*/std::nullopt, b);
+    case HloOpcode::kPower: {
+      // Field Power requires unsigned exponent.
+      if (ShapeUtil::ElementIsField(instr->operand(0)->shape())) {
+        PrimitiveType exponent_type = instr->operand(1)->shape().element_type();
+        if (!primitive_util::IsUnsignedIntegralType(exponent_type)) {
+          return absl::InvalidArgumentError(absl::StrFormat(
+              "The exponent for a power operation on a field must be an "
+              "unsigned integer, but got %s",
+              primitive_util::LowercasePrimitiveTypeName(exponent_type)));
+        }
+      }
+      // Integer Power needs linalg::MapOp wrapper (CPU-specific: the scalar
+      // power loop doesn't vectorize, so we wrap it in linalg::MapOp to get
+      // parallel loops via the -convert-linalg-to-parallel-loops pass).
+      if (ShapeUtil::ElementIsIntegral(instr->operand(0)->shape())) {
+        pass_flag_.enable_linalg_to_parallel_loops = true;
+        bool is_signed = primitive_util::IsSignedIntegralType(element_type);
+        auto output =
+            b.create<mlir::tensor::EmptyOp>(result_type, mlir::ValueRange{});
+        return b
+            .create<mlir::linalg::MapOp>(
+                mlir::ValueRange{args[0], args[1]}, output,
+                [is_signed](mlir::OpBuilder& nested_b, mlir::Location loc,
+                            mlir::ValueRange loop_vars) {
+                  mlir::ImplicitLocOpBuilder b(loc, nested_b);
+                  mlir::Value elementwise_result = mlir_utils::PowerInteger(
+                      b, loop_vars[0], loop_vars[1], is_signed);
+                  b.create<mlir::linalg::YieldOp>(elementwise_result);
+                })
+            ->getResult(0);
+      }
+      return MapElementwiseOp<PowOp>(arg_types, args, b);
+    }
+    case HloOpcode::kRemainder:
+      return MapElementwiseOp<RemOp>(arg_types, args, b);
+    case HloOpcode::kSelect: {
+      // SelectOp expects i1 predicate; truncate if needed.
+      mlir::Type pred_elem_type = mlir::getElementTypeOrSelf(args[0].getType());
+      if (pred_elem_type != b.getI1Type()) {
+        mlir::Type trunc_type;
+        if (auto shaped = mlir::dyn_cast<mlir::ShapedType>(args[0].getType()))
+          trunc_type = shaped.clone(b.getI1Type());
+        else
+          trunc_type = b.getI1Type();
+        args[0] = b.createOrFold<mlir::arith::TruncIOp>(trunc_type, args[0]);
+      }
+      return MapElementwiseOp<SelectOp>(arg_types, args, b);
+    }
+    case HloOpcode::kShiftLeft:
+      return MapElementwiseOp<ShiftLeftOp>(arg_types, args, b);
+    case HloOpcode::kShiftRightArithmetic:
+      return MapElementwiseOp<ShiftRightArithmeticOp>(arg_types, args, b);
+    case HloOpcode::kShiftRightLogical:
+      return MapElementwiseOp<ShiftRightLogicalOp>(arg_types, args, b);
+    case HloOpcode::kSign:
+      return MapElementwiseOp<SignOp>(arg_types, args, b);
+    case HloOpcode::kSubtract:
+      return MapElementwiseOp<SubtractOp>(arg_types, args, b);
+    case HloOpcode::kXor:
+      return MapElementwiseOp<XorOp>(arg_types, args, b);
 
     default:
       return absl::UnimplementedError(

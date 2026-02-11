@@ -293,22 +293,23 @@ Value ConvertField(ImplicitLocOpBuilder& b, ArrayRef<Type> result_types,
       if (dst_width > src_width) {
         Type target_storage_type = pf_element_type.getStorageType();
 
-        if (auto shaped_type = dyn_cast<ShapedType>(source_type)) {
+        if (auto shaped_type = dyn_cast<ShapedType>(current_val.getType())) {
           target_storage_type = shaped_type.clone(target_storage_type);
         }
         current_val =
             b.create<arith::ExtUIOp>(target_storage_type, current_val);
       }
 
+      Type result_type = result_types.front();
       if (pf_element_type.isMontgomery()) {
         Type std_source_type =
-            prime_ir::field::getStandardFormType(target_type);
+            prime_ir::field::getStandardFormType(result_type);
         auto bitcast =
             b.create<prime_ir::field::BitcastOp>(std_source_type, current_val);
-        return b.create<prime_ir::field::ToMontOp>(target_type, bitcast);
+        return b.create<prime_ir::field::ToMontOp>(result_type, bitcast);
       }
 
-      return b.create<prime_ir::field::BitcastOp>(target_type, current_val);
+      return b.create<prime_ir::field::BitcastOp>(result_type, current_val);
     }
   }
 

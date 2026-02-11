@@ -43,11 +43,22 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "hlo_to_mlir_op_map",
+    hdrs = ["hlo_to_mlir_op_map.h"],
+    deps = [
+        "//zkx/mlir_hlo/mhlo/transforms:map_mhlo_to_scalar_op",
+        "@llvm-project//mlir:IR",
+        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+    ],
+)
+
+zkx_cc_library(
     name = "elemental_hlo_to_mlir",
     srcs = ["elemental_hlo_to_mlir.cc"],
     hdrs = ["elemental_hlo_to_mlir.h"],
     deps = [
         ":computation_partitioner",
+        ":hlo_to_mlir_op_map",
         "//xla/tsl/platform:statusor",
         "//zkx:comparison_util",
         "//zkx:primitive_util",
@@ -82,7 +93,6 @@ zkx_cc_library(
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:VectorDialect",
-        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
     ],
 )
 
