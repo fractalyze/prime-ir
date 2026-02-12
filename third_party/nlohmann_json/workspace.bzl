@@ -13,15 +13,27 @@
 # limitations under the License.
 # ==============================================================================
 
+"""Provides the repo macro to import nlohmann/json."""
+
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+NLOHMANN_JSON_VERSION = "3.11.3"
+NLOHMANN_JSON_SHA256 = "a22461d13119ac5c78f205d3df1db13403e58ce1bb1794edc9313677313f4a9d"
+
+def repo():
+    """Imports nlohmann/json."""
+    http_archive(
+        name = "nlohmann_json",
+        sha256 = NLOHMANN_JSON_SHA256,
+        urls = ["https://github.com/nlohmann/json/releases/download/v{version}/include.zip".format(version = NLOHMANN_JSON_VERSION)],
+        build_file_content = """
 load("@rules_cc//cc:defs.bzl", "cc_library")
 
-# PrimeIR-specific benchmark main that wraps zkbench's BenchmarkMain.
 cc_library(
-    name = "benchmark_main",
-    srcs = ["benchmark_main.cc"],
+    name = "json",
+    hdrs = glob(["include/**/*.hpp"]),
+    includes = ["include"],
     visibility = ["//visibility:public"],
-    deps = [
-        "@zkbench_cpp//zkbench:benchmark_main",
-    ],
-    alwayslink = True,
 )
+""",
+    )

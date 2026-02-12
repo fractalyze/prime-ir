@@ -162,14 +162,37 @@ def prime_ir_mlir_cc_import(name, mlir_src, prime_ir_opt_flags = [], llc_flags =
         **kwargs
     )
 
-def prime_ir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags = [], **kwargs):
-    """A rule for running a benchmark test."""
+def prime_ir_benchmark(name, srcs, deps, data = [], copts = [], linkopts = [], tags = [], zkbench = False, **kwargs):
+    """A rule for running a benchmark test.
+
+    Args:
+      name: The name of the benchmark target.
+      srcs: Source files for the benchmark.
+      deps: Dependencies for the benchmark.
+      data: Data dependencies.
+      copts: Compiler options.
+      linkopts: Linker options.
+      tags: Bazel tags.
+      zkbench: If True, use zkbench_reporter for JSON output support.
+               Use --zkbench_out=<file> to write JSON results.
+      **kwargs: Additional arguments to pass to cc_test.
+    """
+
+    # When zkbench=True, use the PrimeIR wrapper that provides main() calling
+    # zkbench::BenchmarkMain() with "prime-ir" and "1.0.0" as implementation/version.
+    benchmark_main = "//benchmark:benchmark_main" if zkbench else "@com_google_benchmark//:benchmark_main"
+
+    zkbench_deps = [
+        "@zkbench_cpp//zkbench:hash",
+        "@zkbench_cpp//zkbench:benchmark_context",
+    ] if zkbench else []
 
     cc_test(
         name = name,
         srcs = srcs,
-        deps = deps + [
-            "@com_google_benchmark//:benchmark_main",
+        deps = deps + zkbench_deps + [
+            benchmark_main,
+            "@com_google_benchmark//:benchmark",
             "@com_google_googletest//:gtest",
             "@llvm-project//mlir:mlir_runner_utils",
             "//prime_ir/Dialect/ModArith/IR:ModArith",
