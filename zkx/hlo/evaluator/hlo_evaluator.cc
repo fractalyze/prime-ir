@@ -23,6 +23,7 @@ limitations under the License.
 #include <atomic>
 #include <functional>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -76,31 +77,33 @@ absl::StatusOr<Literal> Compare(const Shape& shape, Comparison comparison,
         }));
     return std::move(result);
   };
+  constexpr bool kIsOrdered =
+      std::is_arithmetic_v<OperandT> || zk_dtypes::IsComparable<OperandT>;
   switch (comparison.GetDirection()) {
     case ComparisonDirection::kEq:
       return populate([](auto lhs, auto rhs) { return lhs == rhs; });
     case ComparisonDirection::kNe:
       return populate([](auto lhs, auto rhs) { return lhs != rhs; });
     case ComparisonDirection::kGe:
-      if constexpr (zk_dtypes::IsComparable<OperandT>) {
+      if constexpr (kIsOrdered) {
         return populate([](auto lhs, auto rhs) { return lhs >= rhs; });
       }
       break;
     case ComparisonDirection::kGt:
-      if constexpr (zk_dtypes::IsComparable<OperandT>) {
+      if constexpr (kIsOrdered) {
         return populate([](auto lhs, auto rhs) { return lhs > rhs; });
-        break;
       }
+      break;
     case ComparisonDirection::kLe:
-      if constexpr (zk_dtypes::IsComparable<OperandT>) {
+      if constexpr (kIsOrdered) {
         return populate([](auto lhs, auto rhs) { return lhs <= rhs; });
-        break;
       }
+      break;
     case ComparisonDirection::kLt:
-      if constexpr (zk_dtypes::IsComparable<OperandT>) {
+      if constexpr (kIsOrdered) {
         return populate([](auto lhs, auto rhs) { return lhs < rhs; });
-        break;
       }
+      break;
   }
 
   LOG(FATAL) << "unhandled direction for conversion to Comparison: "
