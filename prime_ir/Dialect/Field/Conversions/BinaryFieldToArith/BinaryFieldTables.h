@@ -266,6 +266,7 @@ struct U128 {
 // clang-format off
 // Tower -> Polyval transformation basis (128 x 128-bit vectors)
 // BINARY_TO_POLYVAL_TRANSFORMATION from binius
+// See https://github.com/IrreducibleOSS/binius/blob/47675e1/crates/field/src/polyval.rs#L516-L646
 constexpr U128 kTowerToPolyvalBasis[128] = {
     {0x0000000000000001, 0xc200000000000000}, // [0]
     {0x3eb19c5f1a06b528, 0x21a09a4bf26aadcd}, // [1]
@@ -399,6 +400,7 @@ constexpr U128 kTowerToPolyvalBasis[128] = {
 
 // Polyval -> Tower transformation basis (128 x 128-bit vectors)
 // POLYVAL_TO_BINARY_TRANSFORMATION from binius
+// See https://github.com/IrreducibleOSS/binius/blob/47675e1/crates/field/src/polyval.rs#L654-L784
 constexpr U128 kPolyvalToTowerBasis[128] = {
     {0xa8fc4d30a32dadcc, 0x66e1d645d7eb87dc}, // [0]
     {0xc5675d78c59c1901, 0x53ca87ba77172fd8}, // [1]
