@@ -20,10 +20,10 @@ limitations under the License.
 #include <cstdint>
 #include <string>
 
+#include "absl/base/casts.h"
 #include "absl/status/statusor.h"
 
 #include "zkx/literal.h"
-#include "zkx/util.h"
 
 namespace zkx {
 
