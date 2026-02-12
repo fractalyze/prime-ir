@@ -79,6 +79,23 @@ Type getMontgomeryFormType(Type type) {
   }
 }
 
+namespace {
+
+// Computes the attribute shape for an extension field type, reflecting the
+// tower structure. For simple extensions like ef<2x PF>, returns {2}.
+// For tower extensions like ef<3x ef<2x PF>>, returns {3, 2}.
+SmallVector<int64_t> getExtFieldAttrShape(ExtensionFieldType efType) {
+  SmallVector<int64_t> shape;
+  Type current = efType;
+  while (auto ef = dyn_cast<ExtensionFieldType>(current)) {
+    shape.push_back(static_cast<int64_t>(ef.getDegree()));
+    current = ef.getBaseField();
+  }
+  return shape;
+}
+
+} // namespace
+
 // Helper to validate and create a field attribute using common utility logic.
 // This reuses validateModularInteger to ensure consistent range checking.
 FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
@@ -125,8 +142,9 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
       adjustedValues.push_back(adjusted);
     }
 
+    auto towerShape = getExtFieldAttrShape(efType);
     return DenseElementsAttr::get(
-        RankedTensorType::get({degree}, pfType.getStorageType()),
+        RankedTensorType::get(towerShape, pfType.getStorageType()),
         adjustedValues);
   }
 
@@ -191,9 +209,9 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
                << " coefficients, but expected " << efType.getDegreeOverPrime();
       }
       auto pfType = efType.getBasePrimeField();
+      auto towerShape = getExtFieldAttrShape(efType);
       auto denseAttr = DenseElementsAttr::get(
-          RankedTensorType::get({efType.getDegreeOverPrime()},
-                                pfType.getStorageType()),
+          RankedTensorType::get(towerShape, pfType.getStorageType()),
           parsedInts);
       result.addAttribute("value", maybeToMontgomery(efType, denseAttr));
     } else {
@@ -213,18 +231,30 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
           ArrayRef<int64_t> parsedShape) -> ParseResult {
     auto elementType = getElementTypeOrSelf(parsedType);
     if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-      unsigned degree = efType.getDegreeOverPrime();
-      SmallVector<int64_t> expectedShape(typeShape);
-      expectedShape.push_back(static_cast<int64_t>(degree));
-      if (expectedShape.size() != parsedShape.size() ||
-          !std::equal(expectedShape.begin(), expectedShape.end(),
-                      parsedShape.begin())) {
+      // Accept both flat shape [tensorDims..., degreeOverPrime] and
+      // tower shape [tensorDims..., towerSignature...].
+      auto towerDims = getExtFieldAttrShape(efType);
+      SmallVector<int64_t> expectedTower(typeShape);
+      expectedTower.append(towerDims.begin(), towerDims.end());
+
+      SmallVector<int64_t> expectedFlat(typeShape);
+      expectedFlat.push_back(static_cast<int64_t>(efType.getDegreeOverPrime()));
+
+      bool matchesTower = expectedTower.size() == parsedShape.size() &&
+                          std::equal(expectedTower.begin(), expectedTower.end(),
+                                     parsedShape.begin());
+      bool matchesFlat = expectedFlat.size() == parsedShape.size() &&
+                         std::equal(expectedFlat.begin(), expectedFlat.end(),
+                                    parsedShape.begin());
+
+      if (!matchesTower && !matchesFlat) {
         return parser.emitError(parser.getCurrentLocation(),
                                 "extension field tensor constant shape [")
                << llvm::make_range(parsedShape.begin(), parsedShape.end())
                << "] does not match expected shape [tensor dims: "
                << llvm::make_range(typeShape.begin(), typeShape.end())
-               << ", degree: " << degree << "]";
+               << ", tower dims: "
+               << llvm::make_range(towerDims.begin(), towerDims.end()) << "]";
       }
       return success();
     }
@@ -270,9 +300,10 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
     auto pfType = efType.getBasePrimeField();
-    // For tensor<Nx!EF{d}>, the attribute shape is [N, d].
+    // For tensor<Nx!EF{d}>, the attribute shape is [N, towerDims...].
+    auto towerDims = getExtFieldAttrShape(efType);
     SmallVector<int64_t> attrShape(shapedType.getShape());
-    attrShape.push_back(static_cast<int64_t>(efType.getDegreeOverPrime()));
+    attrShape.append(towerDims.begin(), towerDims.end());
     auto attrType = RankedTensorType::get(attrShape, pfType.getStorageType());
     auto denseElementsAttr = DenseIntElementsAttr::get(attrType, parsedInts);
     result.addAttribute("value", denseElementsAttr);
@@ -913,8 +944,9 @@ public:
 
   OpFoldResult getScalarAttr(const SmallVector<APInt> &coeffs) const final {
     PrimeFieldType baseFieldType = efType.getBasePrimeField();
-    auto tensorType = RankedTensorType::get(
-        {static_cast<int64_t>(coeffs.size())}, baseFieldType.getStorageType());
+    auto towerShape = getExtFieldAttrShape(efType);
+    auto tensorType =
+        RankedTensorType::get(towerShape, baseFieldType.getStorageType());
     return DenseIntElementsAttr::get(tensorType, coeffs);
   }
 
@@ -925,11 +957,11 @@ public:
     for (const auto &coeffs : values) {
       flattenedValues.append(coeffs.begin(), coeffs.end());
     }
-    // Create result attribute with shape [tensor_dims..., degree]
+    // Create result attribute with shape [tensor_dims..., towerDims...]
     PrimeFieldType pfType = efType.getBasePrimeField();
-    unsigned degree = efType.getDegreeOverPrime();
+    auto towerDims = getExtFieldAttrShape(efType);
     SmallVector<int64_t> attrShape(type.getShape());
-    attrShape.push_back(static_cast<int64_t>(degree));
+    attrShape.append(towerDims.begin(), towerDims.end());
     auto attrType = RankedTensorType::get(attrShape, pfType.getStorageType());
     return DenseIntElementsAttr::get(attrType, flattenedValues);
   }
