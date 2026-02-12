@@ -128,3 +128,23 @@ func.func @test_tensor_reshape(%input : tensor<4x!Zp>, %shape: tensor<2xi32>) ->
   // CHECK: return %[[RESHAPE]] : [[T]]
   return %reshape : tensor<2x2x!Zp>
 }
+
+// CHECK-LABEL: @test_lower_collapse_shape
+// CHECK-SAME: (%[[INPUT:.*]]: tensor<2x3xi32>) -> tensor<6xi32> {
+func.func @test_lower_collapse_shape(%input : tensor<2x3x!Zp>) -> tensor<6x!Zp> {
+  // CHECK: %[[RES:.*]] = tensor.collapse_shape %[[INPUT]] {{\[\[}}0, 1{{\]\]}}
+  // CHECK-SAME: tensor<2x3xi32> into tensor<6xi32>
+  // CHECK: return %[[RES]]
+  %res = tensor.collapse_shape %input [[0, 1]] : tensor<2x3x!Zp> into tensor<6x!Zp>
+  return %res : tensor<6x!Zp>
+}
+
+// CHECK-LABEL: @test_lower_expand_shape
+// CHECK-SAME: (%[[INPUT:.*]]: tensor<6xi32>) -> tensor<2x3xi32> {
+func.func @test_lower_expand_shape(%input : tensor<6x!Zp>) -> tensor<2x3x!Zp> {
+  // CHECK: %[[RES:.*]] = tensor.expand_shape %[[INPUT]] {{\[\[}}0, 1{{\]\]}}
+  // CHECK-SAME: tensor<6xi32> into tensor<2x3xi32>
+  // CHECK: return %[[RES]]
+  %res = tensor.expand_shape %input [[0, 1]] output_shape [2, 3] : tensor<6x!Zp> into tensor<2x3x!Zp>
+  return %res : tensor<2x3x!Zp>
+}

@@ -92,6 +92,30 @@ func.func @test_lower_inverse_tensor(%input : !Zpv) -> !Zpv {
   return %res : !Zpv
 }
 
+// CHECK-LABEL: @test_lower_inverse_rank0
+// CHECK-SAME: (%[[INPUT:.*]]: tensor<i32>) -> tensor<i32> {
+func.func @test_lower_inverse_rank0(%input : tensor<!Zp>) -> tensor<!Zp> {
+  // CHECK: %[[SCALAR:.*]] = tensor.extract %[[INPUT]]
+  // CHECK-NOT: mod_arith.inverse
+  // CHECK: %[[RESULT:.*]] = tensor.from_elements
+  // CHECK: return %[[RESULT]]
+  %res = mod_arith.inverse %input : tensor<!Zp>
+  return %res : tensor<!Zp>
+}
+
+// CHECK-LABEL: @test_lower_inverse_rank2
+// CHECK-SAME: (%[[INPUT:.*]]: tensor<2x3xi32>) -> tensor<2x3xi32> {
+func.func @test_lower_inverse_rank2(%input : tensor<2x3x!Zp>) -> tensor<2x3x!Zp> {
+  // CHECK: %[[FLAT:.*]] = tensor.collapse_shape %[[INPUT]] {{\[\[}}0, 1{{\]\]}}
+  // CHECK-SAME: tensor<2x3xi32> into tensor<6xi32>
+  // CHECK-NOT: mod_arith.inverse
+  // CHECK: %[[RESULT:.*]] = tensor.expand_shape %{{.*}} {{\[\[}}0, 1{{\]\]}}
+  // CHECK-SAME: tensor<6xi32> into tensor<2x3xi32>
+  // CHECK: return %[[RESULT]]
+  %res = mod_arith.inverse %input : tensor<2x3x!Zp>
+  return %res : tensor<2x3x!Zp>
+}
+
 // CHECK-LABEL: @test_lower_add
 // CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
 func.func @test_lower_add(%lhs : !Zp, %rhs : !Zp) -> !Zp {
