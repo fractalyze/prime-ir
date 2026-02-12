@@ -29,6 +29,7 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_schedule.h"
 #include "zkx/service/buffer_assignment.h"
 #include "zkx/service/cpu/cpu_executable.h"
+#include "zkx/service/hlo_profile_printer_data.pb.h"
 #include "zkx/service/llvm_compiler.h"
 
 namespace zkx::cpu {
@@ -88,23 +89,21 @@ class CpuAotCompilationOptions : public AotCompilationOptions {
 
 class CpuAotCompilationResult : public AotCompilationResult {
  public:
-  // clang-format off
-  // TODO(chokobole): Add HloProfilePrinterData. Dependency: HloProfilePrinterData
-  // clang-format on
   CpuAotCompilationResult(
       ObjectFileData object_file_data,
       std::vector<cpu_function_runtime::BufferInfo> buffer_infos,
-      int64_t result_buffer_index, std::unique_ptr<HloModule> module)
+      int64_t result_buffer_index, std::unique_ptr<HloModule> module,
+      std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data)
       : object_file_data_(std::move(object_file_data)),
         buffer_infos_(std::move(buffer_infos)),
         result_buffer_index_(result_buffer_index),
-        module_(std::move(module)) {}
+        module_(std::move(module)),
+        hlo_profile_printer_data_(std::move(hlo_profile_printer_data)) {}
   ~CpuAotCompilationResult() override = default;
 
-  // TODO(chokobole): Uncomment this. Dependency: HloProfilePrinterData
-  //   HloProfilePrinterData* hlo_profile_printer_data() const {
-  //     return hlo_profile_printer_data_.get();
-  //   }
+  HloProfilePrinterData* hlo_profile_printer_data() const {
+    return hlo_profile_printer_data_.get();
+  }
 
   const ObjectFileData& object_file_data() const { return object_file_data_; }
   const std::vector<cpu_function_runtime::BufferInfo>& buffer_infos() const {
@@ -135,8 +134,7 @@ class CpuAotCompilationResult : public AotCompilationResult {
 
   // Contains an instance of HloProfilePrinterData if HLO profiling is enabled,
   // otherwise is nullptr.
-  // TODO(chokobole): Uncomment this. Dependency: HloProfilePrinterData
-  //   std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data_;
+  std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data_;
 };
 
 // CPU-targeting implementation of the ZKX Compiler interface.

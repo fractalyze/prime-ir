@@ -122,6 +122,128 @@ absl::Status VerifyLlvmModule(const llvm::Module& llvm_module) {
   return absl::OkStatus();
 }
 
+namespace {
+
+// This visitor records which HLO instructions should have profiling information
+// recorded.
+class CollectProfileCandidates : public DfsHloVisitorWithDefault {
+ public:
+  static absl::StatusOr<absl::flat_hash_map<const HloInstruction*, int64_t>>
+  GetCandidatesForComputation(
+      const HloComputation& computation,
+      const absl::flat_hash_map<const HloInstruction*, int64_t>&
+          assigned_indices) {
+    absl::flat_hash_map<const HloInstruction*, int64_t> hlo_to_profile_idx;
+    CollectProfileCandidates profile_candidates_for_computation(
+        &hlo_to_profile_idx, assigned_indices);
+    TF_RETURN_IF_ERROR(computation.Accept(&profile_candidates_for_computation));
+    return hlo_to_profile_idx;
+  }
+
+ private:
+  CollectProfileCandidates(
+      absl::flat_hash_map<const HloInstruction*, int64_t>* hlo_to_profile_idx,
+      const absl::flat_hash_map<const HloInstruction*, int64_t>&
+          assigned_indices)
+      : hlo_to_profile_idx_(hlo_to_profile_idx),
+        assigned_indices_(assigned_indices) {}
+
+  absl::Status DefaultAction(HloInstruction* hlo_instruction) override {
+    hlo_to_profile_idx_->insert(
+        {hlo_instruction, FindOrDie(assigned_indices_, hlo_instruction)});
+    return absl::OkStatus();
+  }
+
+  absl::Status HandleCall(HloInstruction* call) override {
+    TF_RETURN_IF_ERROR(DefaultAction(call));
+    CollectProfileCandidates candidates_for_call(hlo_to_profile_idx_,
+                                                 assigned_indices_);
+    TF_RETURN_IF_ERROR(call->to_apply()->Accept(&candidates_for_call));
+    return absl::OkStatus();
+  }
+  // Recurse into "conditional" so we can profile inside of it.
+  absl::Status HandleConditional(HloInstruction* conditional) override {
+    TF_RETURN_IF_ERROR(DefaultAction(conditional));
+
+    CollectProfileCandidates candidates_for_true(hlo_to_profile_idx_,
+                                                 assigned_indices_);
+    TF_RETURN_IF_ERROR(
+        conditional->true_computation()->Accept(&candidates_for_true));
+
+    CollectProfileCandidates candidates_for_false(hlo_to_profile_idx_,
+                                                  assigned_indices_);
+    TF_RETURN_IF_ERROR(
+        conditional->false_computation()->Accept(&candidates_for_false));
+
+    return absl::OkStatus();
+  }
+
+  // Skip constants, there is nothing to profile.
+  absl::Status HandleConstant(HloInstruction*) override {
+    return absl::OkStatus();
+  }
+  // Skip parameters, they are a simple load.
+  absl::Status HandleParameter(HloInstruction*) override {
+    return absl::OkStatus();
+  }
+  // It is important to recurse for "while" or else we risk overly coarse
+  // profiling information.
+  absl::Status HandleWhile(HloInstruction* zkx_while) override {
+    TF_RETURN_IF_ERROR(DefaultAction(zkx_while));
+
+    CollectProfileCandidates candidates_for_condition(hlo_to_profile_idx_,
+                                                      assigned_indices_);
+    TF_RETURN_IF_ERROR(
+        zkx_while->while_condition()->Accept(&candidates_for_condition));
+
+    CollectProfileCandidates candidates_for_body(hlo_to_profile_idx_,
+                                                 assigned_indices_);
+    TF_RETURN_IF_ERROR(zkx_while->while_body()->Accept(&candidates_for_body));
+
+    return absl::OkStatus();
+  }
+
+  absl::flat_hash_map<const HloInstruction*, int64_t>* hlo_to_profile_idx_;
+  const absl::flat_hash_map<const HloInstruction*, int64_t>& assigned_indices_;
+};
+
+}  // namespace
+
+absl::Status CreateHloProfilingArtifacts(
+    const HloModule& module,
+    absl::flat_hash_map<const HloInstruction*, int64_t>*
+        instruction_to_profile_idx,
+    absl::flat_hash_map<const HloComputation*, int64_t>*
+        computation_to_profile_idx,
+    std::unique_ptr<HloProfileIndexMap>* hlo_profile_index_map,
+    std::unique_ptr<HloProfilePrinterData>* hlo_profile_printer_data) {
+  *hlo_profile_index_map = std::make_unique<HloProfileIndexMap>(module);
+  const HloComputation& entry_computation = *module.entry_computation();
+
+  TF_ASSIGN_OR_RETURN(
+      *instruction_to_profile_idx,
+      CollectProfileCandidates::GetCandidatesForComputation(
+          entry_computation,
+          (*hlo_profile_index_map)->instruction_to_profile_idx()));
+
+  auto shape_size_bytes = [](const Shape& shape) {
+    // On the cpu, opaques are pointers.
+    if (shape.IsOpaque()) {
+      return static_cast<int64_t>(sizeof(void*));
+    }
+    return ShapeUtil::ByteSizeOf(shape, sizeof(void*));
+  };
+
+  HloCostAnalysis cost_analysis(shape_size_bytes);
+  TF_RETURN_IF_ERROR(entry_computation.Accept(&cost_analysis));
+  *hlo_profile_printer_data = CreateHloProfilePrinterData(
+      **hlo_profile_index_map, cost_analysis, entry_computation.name());
+  *computation_to_profile_idx =
+      (*hlo_profile_index_map)->computation_to_profile_idx();
+
+  return absl::OkStatus();
+}
+
 // Returns a global (per-process) thread pool for ZKX CPU compilation tasks.
 tsl::thread::ThreadPool* GetCompilationThreadPool() {
   // LLVM compilation has a lot of memory-bound pointer chasing and not
@@ -512,18 +634,17 @@ CpuCompiler::CompileCpuExecutable(std::unique_ptr<HloModule> module) {
                                           std::move(jit_compiler_options),
                                           GetCompilationTaskRunner()));
 
-  // TODO(chokobole): Uncomment this. Dependency: CreateHloProfilingArtifacts
-  // absl::flat_hash_map<const HloInstruction*, int64_t>
-  //     instruction_to_profile_idx;
-  // absl::flat_hash_map<const HloComputation*, int64_t>
-  //     computation_to_profile_idx;
-  // std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map;
-  // std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data;
-  // if (module->config().hlo_profiling_enabled()) {
-  //   TF_RETURN_IF_ERROR(CreateHloProfilingArtifacts(
-  //       *module, &instruction_to_profile_idx, &computation_to_profile_idx,
-  //       &hlo_profile_index_map, &hlo_profile_printer_data));
-  // }
+  absl::flat_hash_map<const HloInstruction*, int64_t>
+      instruction_to_profile_idx;
+  absl::flat_hash_map<const HloComputation*, int64_t>
+      computation_to_profile_idx;
+  std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map;
+  std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data;
+  if (module->config().hlo_profiling_enabled()) {
+    TF_RETURN_IF_ERROR(CreateHloProfilingArtifacts(
+        *module, &instruction_to_profile_idx, &computation_to_profile_idx,
+        &hlo_profile_index_map, &hlo_profile_printer_data));
+  }
 
   // Cache these flags here since we'll want to access them after the module's
   // ownership is std::moved.

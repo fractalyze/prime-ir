@@ -101,6 +101,11 @@ constexpr T RoundDownTo(T value, T divisor) {
   return FloorOfRatio(value, divisor) * divisor;
 }
 
+// Given a number of flops executed in an amount of time, produces a string that
+// represents the throughput;
+// e.g. HumanReadableNumFlops(1e9, 1e9) => 1.00GFLOP/s.
+std::string HumanReadableNumFlops(double flops, double nanoseconds);
+
 // Returns a mask with "width" number of least significant bits set.
 template <typename T>
 constexpr inline T LsbMask(int width) {

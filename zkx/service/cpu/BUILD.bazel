@@ -76,6 +76,7 @@ zkx_cc_library(
         "//zkx/service:buffer_value",
         "//zkx/service:copy_insertion",
         "//zkx/service:dump",
+        "//zkx/service:hlo_profile_printer_data_cc_proto",
         "//zkx/service:llvm_compiler",
         "//zkx/service:scatter_expander",
         "//zkx/service/llvm_ir:llvm_command_line_options",

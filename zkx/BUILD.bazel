@@ -317,6 +317,19 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "metric_table_report",
+    srcs = ["metric_table_report.cc"],
+    hdrs = ["metric_table_report.h"],
+    deps = [
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+zkx_cc_library(
     name = "overflow_util",
     hdrs = ["overflow_util.h"],
     deps = ["@com_google_absl//absl/base:core_headers"],
@@ -507,12 +520,14 @@ zkx_cc_library(
         ":status_macros",
         ":zkx_data_cc_proto",
         "//xla/tsl/lib/math:math_util",
+        "//xla/tsl/platform:numbers",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/container:inlined_vector",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
         "@eigen_archive//:eigen3",
     ],

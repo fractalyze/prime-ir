@@ -20,7 +20,10 @@ limitations under the License.
 #include <numeric>
 #include <tuple>
 
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+
+#include "xla/tsl/platform/numbers.h"
 
 namespace zkx {
 
@@ -46,6 +49,30 @@ PaddingConfig MakeNoPaddingConfig(int64_t rank) {
     // dimension->set_interior_padding(0);
   }
   return padding_config;
+}
+
+namespace {
+std::string HumanReadableNumOps(double flops, double nanoseconds,
+                                absl::string_view op_prefix) {
+  if (nanoseconds == 0) {
+    return absl::StrCat("NaN ", op_prefix, "OP/s");
+  }
+  double nano_flops = flops / nanoseconds;
+  std::string throughput =
+      tsl::strings::HumanReadableNum(static_cast<int64_t>(nano_flops * 1e9));
+  absl::string_view sp(throughput);
+  // Use the more common "G(FLOPS)", rather than "B(FLOPS)"
+  if (absl::EndsWith(sp, "B") ||  // Ends in 'B', ignoring case
+      absl::EndsWith(sp, "b")) {
+    *throughput.rbegin() = 'G';
+  }
+  throughput += absl::StrCat(op_prefix, "OP/s");
+  return throughput;
+}
+}  // namespace
+
+std::string HumanReadableNumFlops(double flops, double nanoseconds) {
+  return HumanReadableNumOps(flops, nanoseconds, "FL");
 }
 
 int64_t Product(absl::Span<const int64_t> xs) {

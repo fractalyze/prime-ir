@@ -16,6 +16,12 @@ limitations under the License.
 
 #include "zkx/service/hlo_proto_util.h"
 
+#include "absl/log/log.h"
+
+#include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/statusor.h"
+#include "zkx/service/hlo_verifier.h"
+
 namespace zkx {
 
 HloProto MakeHloProto(const HloModule& module,
@@ -31,6 +37,16 @@ HloProto MakeHloProto(const HloModule& module) {
   HloProto proto;
   proto.mutable_hlo_module()->Swap(&proto_module);
   return proto;
+}
+
+absl::StatusOr<std::unique_ptr<HloModule>> CreateModuleFromProto(
+    const HloModuleProto& proto, const HloModuleConfig& module_config) {
+  VLOG(4) << proto.ShortDebugString();
+  TF_ASSIGN_OR_RETURN(std::unique_ptr<HloModule> module,
+                      HloModule::CreateFromProto(proto, module_config));
+  TF_RETURN_IF_ERROR(
+      HloVerifier(/*layout_sensitive=*/false).Run(module.get()).status());
+  return module;
 }
 
 absl::StatusOr<std::vector<const ShapeProto*>> EntryComputationParameterShapes(

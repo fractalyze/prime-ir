@@ -37,6 +37,12 @@ HloProto MakeHloProto(const HloModule& module,
 // will not be included in the output.
 HloProto MakeHloProto(const HloModule& module);
 
+// Create an HLO state from serialized representation. In addition to
+// creating the proto with HloModule::CreateFromProto(...) it also
+// uses HloVerifier to ensure basic invariants are held.
+absl::StatusOr<std::unique_ptr<HloModule>> CreateModuleFromProto(
+    const HloModuleProto& proto, const HloModuleConfig& module_config);
+
 // Returns the shapes of the parameters of the entry computation. Shape pointers
 // refer to shapes inside of the given HloProto.
 absl::StatusOr<std::vector<const ShapeProto*>> EntryComputationParameterShapes(

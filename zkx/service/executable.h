@@ -33,6 +33,8 @@ limitations under the License.
 
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/service/buffer_assignment.h"
+#include "zkx/service/hlo_execution_profile.h"
+#include "zkx/service/hlo_profile_printer_data.pb.h"
 #include "zkx/service/maybe_owning_device_memory.h"
 #include "zkx/service/service_executable_run_options.h"
 #include "zkx/service/shaped_buffer.h"
@@ -236,6 +238,20 @@ class Executable {
   explicit Executable(std::shared_ptr<HloModule> hlo_module)
       : hlo_module_(std::move(hlo_module)) {}
 
+  // TODO(b/172012028): Remove this constructor.
+  // The hlo_module parameter may be nullptr, if the given executable type
+  // doesn't need it for execution.
+  explicit Executable(
+      std::shared_ptr<HloModule> hlo_module,
+      std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data,
+      std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map)
+      : hlo_module_(std::move(hlo_module)),
+        hlo_profile_printer_data_(std::move(hlo_profile_printer_data)),
+        hlo_profile_index_map_(std::move(hlo_profile_index_map)) {
+    CHECK_EQ(hlo_profile_printer_data_.get() == nullptr,
+             hlo_profile_index_map_.get() == nullptr);
+  }
+
   virtual ~Executable() {}
 
   // Enqueues the compilation result on the provided stream, passing the given
@@ -301,25 +317,22 @@ class Executable {
       const ServiceExecutableRunOptions* run_options,
       std::vector<ExecutionInput> arguments);
 
-  // TODO(chokobole): Uncomment this. Dependency: HloProfilePrinterData
-  // const HloProfilePrinterData& hlo_profile_printer_data() const {
-  //   CHECK(hlo_profiling_enabled());
-  //   return *hlo_profile_printer_data_;
-  // }
+  const HloProfilePrinterData& hlo_profile_printer_data() const {
+    CHECK(hlo_profiling_enabled());
+    return *hlo_profile_printer_data_;
+  }
 
-  // TODO(chokobole): Uncomment this. Dependency: HloProfileIndexMap
-  // const HloProfileIndexMap& hlo_profile_index_map() const {
-  //   CHECK(hlo_profiling_enabled());
-  //   return *hlo_profile_index_map_;
-  // }
+  const HloProfileIndexMap& hlo_profile_index_map() const {
+    CHECK(hlo_profiling_enabled());
+    return *hlo_profile_index_map_;
+  }
 
   // Returns whether this executable was compiled with HLO profiling support
   // enabled. If not, the caller should not expect an hlo_execution_profile
   // passed to ExecuteOnStream above to be populated during execution.
-  // TODO(chokobole): Uncomment this. Dependency: HloProfilePrinterData
-  // bool hlo_profiling_enabled() const {
-  //   return hlo_profile_printer_data_ != nullptr;
-  // }
+  bool hlo_profiling_enabled() const {
+    return hlo_profile_printer_data_ != nullptr;
+  }
 
   HloModule& module() const {
     CHECK_NE(hlo_module_, nullptr);
@@ -411,10 +424,8 @@ class Executable {
   // execution.
   int64_t execution_count_ = 0;
 
-  // TODO(chokobole): Uncomment this. Dependency: HloProfilePrinterData
-  // std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data_;
-  // TODO(chokobole): Uncomment this. Dependency: HloProfileIndexMap
-  // std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map_;
+  std::unique_ptr<HloProfilePrinterData> hlo_profile_printer_data_;
+  std::unique_ptr<HloProfileIndexMap> hlo_profile_index_map_;
 
   // Generic debug information as a string.
   std::string debug_info_;
