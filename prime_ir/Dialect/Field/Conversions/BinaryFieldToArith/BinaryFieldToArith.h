@@ -23,6 +23,11 @@ limitations under the License.
 #include "mlir/Pass/Pass.h"
 // IWYU pragma: end_keep
 
+namespace mlir {
+class RewritePatternSet;
+class TypeConverter;
+} // namespace mlir
+
 namespace mlir::prime_ir::field {
 
 #define GEN_PASS_DECL
@@ -30,6 +35,14 @@ namespace mlir::prime_ir::field {
 
 #define GEN_PASS_REGISTRATION
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldToArith.h.inc" // NOLINT(build/include)
+
+/// Populate the type conversion for BinaryField to Arith.
+void populateBinaryFieldToArithTypeConversion(TypeConverter &typeConverter);
+
+/// Populate the given list with patterns that convert from BinaryField to
+/// Arith.
+void populateBinaryFieldToArithConversionPatterns(
+    TypeConverter &typeConverter, RewritePatternSet &patterns);
 
 } // namespace mlir::prime_ir::field
 

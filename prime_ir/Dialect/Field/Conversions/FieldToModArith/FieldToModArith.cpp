@@ -675,6 +675,108 @@ bool operationContainsBinaryFieldType(Operation *op) {
 
 } // namespace
 
+void populateFieldToModArithTypeConversion(TypeConverter &typeConverter) {
+  typeConverter.addConversion([](PrimeFieldType type) -> Type {
+    return convertPrimeFieldType(type);
+  });
+  typeConverter.addConversion([](ShapedType type) -> std::optional<Type> {
+    if (auto primeFieldType =
+            dyn_cast<PrimeFieldType>(type.getElementType())) {
+      return ShapedTypeConverter::convertShapedType(
+          type, type.getShape(), convertPrimeFieldType(primeFieldType));
+    } else if (auto vectorType =
+                   dyn_cast<VectorType>(type.getElementType())) {
+      if (auto primeFieldType =
+              dyn_cast<PrimeFieldType>(vectorType.getElementType())) {
+        return ShapedTypeConverter::convertShapedType(
+            type, type.getShape(),
+            vectorType.cloneWith(vectorType.getShape(),
+                                 convertPrimeFieldType(primeFieldType)));
+      }
+    }
+    return std::nullopt;
+  });
+}
+
+void populateFieldToModArithConversionPatterns(TypeConverter &typeConverter,
+                                               RewritePatternSet &patterns) {
+  MLIRContext *context = patterns.getContext();
+  rewrites::populateWithGenerated(patterns);
+
+  // Register patterns with default inline mode (no intrinsics)
+  patterns.add<ConvertInverse, ConvertMul, ConvertSquare>(typeConverter,
+                                                          context);
+
+  patterns.add<
+      // clang-format off
+      ConvertAdd,
+      ConvertBitcast,
+      ConvertConstant,
+      ConvertCmp,
+      ConvertDouble,
+      ConvertFromMont,
+      ConvertNegate,
+      ConvertPowUI,
+      ConvertSub,
+      ConvertToMont,
+      ConvertAny<ExtFromCoeffsOp>,
+      ConvertAny<ExtToCoeffsOp>,
+      ConvertAny<affine::AffineForOp>,
+      ConvertAny<affine::AffineLoadOp>,
+      ConvertAny<affine::AffineParallelOp>,
+      ConvertAny<affine::AffineStoreOp>,
+      ConvertAny<affine::AffineYieldOp>,
+      ConvertAny<arith::SelectOp>,
+      ConvertAny<bufferization::AllocTensorOp>,
+      ConvertAny<bufferization::MaterializeInDestinationOp>,
+      ConvertAny<bufferization::ToBufferOp>,
+      ConvertAny<bufferization::ToTensorOp>,
+      ConvertAny<elliptic_curve::BitcastOp>,
+      ConvertAny<elliptic_curve::FromCoordsOp>,
+      ConvertAny<elliptic_curve::ToCoordsOp>,
+      ConvertAny<linalg::BroadcastOp>,
+      ConvertAny<linalg::DotOp>,
+      ConvertAny<linalg::FillOp>,
+      ConvertAny<linalg::GenericOp>,
+      ConvertAny<linalg::MapOp>,
+      ConvertAny<linalg::MatmulOp>,
+      ConvertAny<linalg::MatvecOp>,
+      ConvertAny<linalg::ReduceOp>,
+      ConvertAny<linalg::TransposeOp>,
+      ConvertAny<linalg::YieldOp>,
+      ConvertAny<memref::AllocOp>,
+      ConvertAny<memref::AllocaOp>,
+      ConvertAny<memref::CastOp>,
+      ConvertAny<memref::CopyOp>,
+      ConvertAny<memref::DimOp>,
+      ConvertAny<memref::LoadOp>,
+      ConvertAny<memref::StoreOp>,
+      ConvertAny<memref::SubViewOp>,
+      ConvertAny<memref::ViewOp>,
+      ConvertAny<sparse_tensor::AssembleOp>,
+      ConvertAny<tensor::CastOp>,
+      ConvertAny<tensor::ConcatOp>,
+      ConvertAny<tensor::DimOp>,
+      ConvertAny<tensor::EmptyOp>,
+      ConvertAny<tensor::ExtractOp>,
+      ConvertAny<tensor::ExtractSliceOp>,
+      ConvertAny<tensor::FromElementsOp>,
+      ConvertAny<tensor::GenerateOp>,
+      ConvertAny<tensor::InsertOp>,
+      ConvertAny<tensor::InsertSliceOp>,
+      ConvertAny<tensor::PadOp>,
+      ConvertAny<tensor::ReshapeOp>,
+      ConvertAny<tensor::YieldOp>,
+      ConvertAny<tensor_ext::BitReverseOp>,
+      ConvertAny<ub::PoisonOp>,
+      ConvertAny<vector::BroadcastOp>,
+      ConvertAny<vector::SplatOp>,
+      ConvertAny<vector::TransferReadOp>,
+      ConvertAny<vector::TransferWriteOp>
+      // clang-format on
+      >(typeConverter, context);
+}
+
 struct FieldToModArith : impl::FieldToModArithBase<FieldToModArith> {
   using FieldToModArithBase::FieldToModArithBase;
 

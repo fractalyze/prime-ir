@@ -55,8 +55,10 @@ public:
   }
 };
 
+} // namespace
+
 /// Check if a type contains BinaryFieldType
-bool containsBinaryFieldType(Type type) {
+static bool containsBinaryFieldType(Type type) {
   Type elemType = getElementTypeOrSelf(type);
   return isa<BinaryFieldType>(elemType);
 }
@@ -306,8 +308,49 @@ struct ConvertBinaryFieldBitcast : public OpConversionPattern<BitcastOp> {
 };
 
 //===----------------------------------------------------------------------===//
+// Populate functions
+//===----------------------------------------------------------------------===//
+
+void populateBinaryFieldToArithTypeConversion(TypeConverter &typeConverter) {
+  typeConverter.addConversion(
+      [](BinaryFieldType type) -> Type { return type.getStorageType(); });
+  typeConverter.addConversion([](ShapedType type) -> std::optional<Type> {
+    if (auto bfType = dyn_cast<BinaryFieldType>(type.getElementType())) {
+      return ShapedTypeConverter::convertShapedType(type, type.getShape(),
+                                                    bfType.getStorageType());
+    }
+    return std::nullopt;
+  });
+}
+
+void populateBinaryFieldToArithConversionPatterns(
+    TypeConverter &typeConverter, RewritePatternSet &patterns) {
+  MLIRContext *context = patterns.getContext();
+  patterns.add<
+      // clang-format off
+      ConvertBinaryFieldConstant,
+      ConvertBinaryFieldAdd,
+      ConvertBinaryFieldSub,
+      ConvertBinaryFieldNegate,
+      ConvertBinaryFieldDouble,
+      ConvertBinaryFieldMul,
+      ConvertBinaryFieldSquare,
+      ConvertBinaryFieldInverse,
+      ConvertBinaryFieldCmp,
+      ConvertBinaryFieldUnrealizedCast,
+      ConvertBinaryFieldBitcast,
+      ConvertAny<tensor::ExtractOp>,
+      ConvertAny<tensor::FromElementsOp>,
+      ConvertAny<tensor::InsertOp>
+      // clang-format on
+      >(typeConverter, context);
+}
+
+//===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
+
+namespace {
 
 struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
   using BinaryFieldToArithBase::BinaryFieldToArithBase;

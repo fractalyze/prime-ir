@@ -21,7 +21,7 @@ limitations under the License.
 namespace mlir::prime_ir {
 
 class ShapedTypeConverter : public TypeConverter {
-protected:
+public:
   static Type convertShapedType(ShapedType oldType, ArrayRef<int64_t> shape,
                                 Type elementType);
 };

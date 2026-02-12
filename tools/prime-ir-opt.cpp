@@ -53,6 +53,7 @@ int main(int argc, char **argv) {
   mlir::prime_ir::elliptic_curve::registerConvertEllipticCurveToLLVMInterface(
       registry);
   mlir::prime_ir::field::registerConvertExtFieldToLLVMInterface(registry);
+  mlir::prime_ir::mod_arith::registerConvertModArithToLLVMInterface(registry);
   mlir::prime_ir::field::registerBufferizableOpInterfaceExternalModels(
       registry);
   mlir::prime_ir::mod_arith::registerBufferizableOpInterfaceExternalModels(
