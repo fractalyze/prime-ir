@@ -75,8 +75,8 @@ public:
               std::optional<std::string> alias = getKnownModulusAlias(modulus);
               if (alias) {
                 os << "z_" << *alias;
-                if (!modArithType.isMontgomery()) {
-                  os << "_std";
+                if (modArithType.isMontgomery()) {
+                  os << "_mont";
                 }
                 return AliasResult::FinalAlias;
               }
