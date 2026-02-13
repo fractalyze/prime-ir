@@ -403,10 +403,16 @@ absl::StatusOr<SmallVector<Value, 1>> EmitGather(
                    input_size - slice_size, b);
   }
 
-  // Add offsets.
+  // Add offsets for non-collapsed dimensions only.
+  // collapsed_slice_dims() is guaranteed sorted by the HLO spec.
+  const auto& dnums = instr->gather_dimension_numbers();
+  int offset_index = 0;
   for (int i = 0; i < operand_indices.size(); ++i) {
-    operand_indices[i] =
-        b.createOrFold<arith::AddIOp>(operand_indices[i], indices[i + 1]);
+    if (absl::c_binary_search(dnums.collapsed_slice_dims(), i)) {
+      continue;
+    }
+    operand_indices[i] = b.createOrFold<arith::AddIOp>(
+        operand_indices[i], indices[dnums.offset_dims(offset_index++)]);
   }
 
   return operand_provider(instr, 0, operand_indices);

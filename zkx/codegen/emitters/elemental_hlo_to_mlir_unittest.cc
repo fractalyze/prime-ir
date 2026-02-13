@@ -431,8 +431,7 @@ TEST_F(ElementalHloToMlirTest, ConcatenateUnsigned) {
   )"));
 }
 
-// TODO(chokobole): Enable this test. Dependency: mhlo::GatherOp
-TEST_F(ElementalHloToMlirTest, DISABLED_Gather) {
+TEST_F(ElementalHloToMlirTest, Gather) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {
       operand = s32[33,34] parameter(0)
@@ -483,6 +482,31 @@ TEST_F(ElementalHloToMlirTest, DISABLED_GatherWithImplicitVectorDim) {
     // CHECK:        %[[CLAMPED:.*]] = arith.maxsi %[[CLAMP_HIGH]], %[[C0]]
     // CHECK:        %[[X_IN:.*]] = arith.addi %[[CLAMPED]], %[[Y]]
     // CHECK:        %[[RET:.*]] = tensor.extract %[[ARG0]][%[[X_IN]], %[[Z]]]
+    // CHECK:        return %[[RET]]
+  )"));
+}
+
+TEST_F(ElementalHloToMlirTest, GatherWithCollapsedSliceDims) {
+  TF_EXPECT_OK(Run(R"(
+    ENTRY main {
+      operand = s32[33,34] parameter(0)
+      indices = s32[1806,1] parameter(1)
+      ROOT r = s32[1806,34] gather(operand, indices), offset_dims={1},
+                                 collapsed_slice_dims={0}, start_index_map={0},
+                                 index_vector_dim=1, slice_sizes={1,34}
+    })",
+                   R"(
+    // CHECK:      @main_r(
+    // CHECK-SAME:     %[[ARG0:.*]]: tensor<33x34xi32>,
+    // CHECK-SAME:     %[[ARG1:.*]]: tensor<1806x1xi32>,
+    // CHECK-SAME:     %[[X:.*]]: index {{{.*}}}, %[[Y:.*]]: index {{{.*}}}
+    // CHECK-DAG:    %[[C0:.*]] = arith.constant 0
+    // CHECK-DAG:    %[[C32:.*]] = arith.constant 32
+    // CHECK:        %[[IDX_I32:.*]] = tensor.extract %[[ARG1]][%[[X]], %[[C0]]]
+    // CHECK:        %[[IDX:.*]] = arith.index_cast %[[IDX_I32]] : i32 to index
+    // CHECK:        %[[CLAMP_HIGH:.*]] = arith.minsi %[[IDX]], %[[C32]]
+    // CHECK:        %[[CLAMPED:.*]] = arith.maxsi %[[CLAMP_HIGH]], %[[C0]]
+    // CHECK:        %[[RET:.*]] = tensor.extract %[[ARG0]][%[[CLAMPED]], %[[Y]]]
     // CHECK:        return %[[RET]]
   )"));
 }
