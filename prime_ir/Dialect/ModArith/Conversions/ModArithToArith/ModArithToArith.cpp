@@ -24,6 +24,7 @@ limitations under the License.
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinAttributeInterfaces.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -333,8 +334,39 @@ struct ConvertInverse : public OpConversionPattern<InverseOp> {
 
     BYInverter inverter(b, op.getInput().getType());
     if (auto shapedType = dyn_cast<ShapedType>(op.getInput().getType())) {
-      Value result =
-          inverter.BatchGenerate(adaptor.getInput(), false, shapedType);
+      Value input = adaptor.getInput();
+      auto convertedType = cast<ShapedType>(input.getType());
+      int64_t rank = shapedType.getRank();
+
+      if (rank == 0) {
+        // Rank-0: extract scalar, invert, wrap back.
+        Value scalar = b.create<tensor::ExtractOp>(input);
+        Value inverted = inverter.Generate(scalar, false);
+        Value result = b.create<tensor::FromElementsOp>(convertedType,
+                                                        ValueRange{inverted});
+        rewriter.replaceOp(op, result);
+        return success();
+      }
+
+      // Rank >= 2: flatten to rank-1 via collapse_shape.
+      if (rank > 1) {
+        auto flatType = RankedTensorType::get({shapedType.getNumElements()},
+                                              convertedType.getElementType());
+        SmallVector<ReassociationIndices> reassoc = {
+            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
+        input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
+      }
+
+      auto flatShaped = cast<ShapedType>(input.getType());
+      Value result = inverter.BatchGenerate(input, false, flatShaped);
+
+      // Rank >= 2: restore original shape via expand_shape.
+      if (rank > 1) {
+        SmallVector<ReassociationIndices> reassoc = {
+            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
+        result = b.create<tensor::ExpandShapeOp>(shapedType, result, reassoc);
+      }
+
       rewriter.replaceOp(op, result);
       return success();
     }
@@ -364,8 +396,36 @@ struct ConvertMontInverse : public OpConversionPattern<MontInverseOp> {
 
     BYInverter inverter(b, op.getInput().getType());
     if (auto shapedType = dyn_cast<ShapedType>(op.getInput().getType())) {
-      Value result =
-          inverter.BatchGenerate(adaptor.getInput(), true, shapedType);
+      Value input = adaptor.getInput();
+      auto convertedType = cast<ShapedType>(input.getType());
+      int64_t rank = shapedType.getRank();
+
+      if (rank == 0) {
+        Value scalar = b.create<tensor::ExtractOp>(input);
+        Value inverted = inverter.Generate(scalar, true);
+        Value result = b.create<tensor::FromElementsOp>(convertedType,
+                                                        ValueRange{inverted});
+        rewriter.replaceOp(op, result);
+        return success();
+      }
+
+      if (rank > 1) {
+        auto flatType = RankedTensorType::get({shapedType.getNumElements()},
+                                              convertedType.getElementType());
+        SmallVector<ReassociationIndices> reassoc = {
+            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
+        input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
+      }
+
+      auto flatShaped = cast<ShapedType>(input.getType());
+      Value result = inverter.BatchGenerate(input, true, flatShaped);
+
+      if (rank > 1) {
+        SmallVector<ReassociationIndices> reassoc = {
+            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
+        result = b.create<tensor::ExpandShapeOp>(shapedType, result, reassoc);
+      }
+
       rewriter.replaceOp(op, result);
       return success();
     }
@@ -1047,9 +1107,11 @@ void ModArithToArith::runOnOperation() {
       ConvertAny<memref::ViewOp>,
       ConvertAny<sparse_tensor::AssembleOp>,
       ConvertAny<tensor::CastOp>,
+      ConvertAny<tensor::CollapseShapeOp>,
       ConvertAny<tensor::ConcatOp>,
       ConvertAny<tensor::DimOp>,
       ConvertAny<tensor::EmptyOp>,
+      ConvertAny<tensor::ExpandShapeOp>,
       ConvertAny<tensor::ExtractOp>,
       ConvertAny<tensor::ExtractSliceOp>,
       ConvertAny<tensor::FromElementsOp>,
@@ -1107,9 +1169,11 @@ void ModArithToArith::runOnOperation() {
       memref::ViewOp,
       sparse_tensor::AssembleOp,
       tensor::CastOp,
+      tensor::CollapseShapeOp,
       tensor::ConcatOp,
       tensor::DimOp,
       tensor::EmptyOp,
+      tensor::ExpandShapeOp,
       tensor::ExtractOp,
       tensor::ExtractSliceOp,
       tensor::FromElementsOp,
