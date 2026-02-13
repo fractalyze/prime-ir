@@ -40,6 +40,7 @@ prime_ir_mlir_cc_import(
 prime_ir_benchmark(
     name = "poseidon2_benchmark",
     srcs = ["poseidon2_benchmark.cc"],
+    zkbench = True,
     deps = [
         ":poseidon2_ciface",
         ":poseidon2_packed_ciface",

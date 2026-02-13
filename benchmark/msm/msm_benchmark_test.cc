@@ -20,6 +20,8 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/g1.h"
+#include "zkbench/benchmark_context.h"
+#include "zkbench/hash.h"
 
 #define NUM_SCALARMULS (1 << 20)
 
@@ -27,13 +29,16 @@ namespace mlir::prime_ir::benchmark {
 namespace {
 
 using AffinePoint = zk_dtypes::bn254::G1AffinePoint;
+using JacobianPoint = zk_dtypes::bn254::G1JacobianPoint;
 using ScalarField = zk_dtypes::bn254::Fr;
 
 extern "C" void
-_mlir_ciface_msm_serial(StridedMemRefType<ScalarField, 1> *scalars,
+_mlir_ciface_msm_serial(JacobianPoint *result,
+                        StridedMemRefType<ScalarField, 1> *scalars,
                         StridedMemRefType<AffinePoint, 1> *points);
 extern "C" void
-_mlir_ciface_msm_parallel(StridedMemRefType<ScalarField, 1> *scalars,
+_mlir_ciface_msm_parallel(JacobianPoint *result,
+                          StridedMemRefType<ScalarField, 1> *scalars,
                           StridedMemRefType<AffinePoint, 1> *points);
 
 template <bool kIsParallel>
@@ -53,13 +58,27 @@ void BM_msm_benchmark(::benchmark::State &state) {
         elem = AffinePoint::Generator();
       });
 
+  std::string input_hash =
+      zkbench::ComputeArrayHash((*scalars).data, NUM_SCALARMULS);
+
+  JacobianPoint result;
   for (auto _ : state) {
     if constexpr (kIsParallel) {
-      _mlir_ciface_msm_parallel(&*scalars, &*points);
+      _mlir_ciface_msm_parallel(&result, &*scalars, &*points);
     } else {
-      _mlir_ciface_msm_serial(&*scalars, &*points);
+      _mlir_ciface_msm_serial(&result, &*scalars, &*points);
     }
   }
+
+  std::string output_hash = zkbench::ComputeArrayHash(&result, 1);
+
+  const char *bench_name = kIsParallel ? "msm_parallel" : "msm_serial";
+  zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash, output_hash,
+                                            /*verified=*/true);
+  zkbench::BenchmarkContext::SetMetadata(bench_name,
+                                         {{"curve", "BN254"},
+                                          {"num_scalarmuls", NUM_SCALARMULS},
+                                          {"parallel", kIsParallel}});
 }
 
 BENCHMARK_TEMPLATE(BM_msm_benchmark, /*kIsParallel=*/false)

@@ -17,6 +17,8 @@ limitations under the License.
 #include "mlir/ExecutionEngine/MemRefUtils.h"
 #include "mlir/Support/LLVM.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
+#include "zkbench/benchmark_context.h"
+#include "zkbench/hash.h"
 
 #define N (1 << 20)
 
@@ -41,6 +43,9 @@ void BM_mul_benchmark(::benchmark::State &state) {
   OwningMemRef<F, 1> input2(/*shape=*/{N}, /*shapeAlloc=*/{},
                             /*init=*/fillWithRandom);
   OwningMemRef<F, 0> output(/*shape=*/{}, /*shapeAlloc=*/{}, /*init=*/{});
+
+  std::string input_hash = zkbench::ComputeArrayHash((*input1).data, N);
+
   for (auto _ : state) {
     if constexpr (kIsMont) {
       _mlir_ciface_mont_mul(&*input1, &*input2, &*output);
@@ -48,6 +53,14 @@ void BM_mul_benchmark(::benchmark::State &state) {
       _mlir_ciface_mul(&*input1, &*input2, &*output);
     }
   }
+
+  std::string output_hash = zkbench::ComputeArrayHash((*output).data, 1);
+
+  const char *bench_name = kIsMont ? "mont_mul" : "mul";
+  zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash, output_hash,
+                                            /*verified=*/true);
+  zkbench::BenchmarkContext::SetMetadata(
+      bench_name, {{"field", "BN254"}, {"n", N}, {"montgomery", kIsMont}});
 }
 
 BENCHMARK_TEMPLATE(BM_mul_benchmark, /*kIsMont=*/false)

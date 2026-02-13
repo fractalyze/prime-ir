@@ -17,7 +17,6 @@
 This module configures dependencies for the PrimeIR project.
 """
 
-load("//third_party/benchmark:workspace.bzl", benchmark = "repo")
 load("//third_party/nanobind:workspace.bzl", nanobind = "repo")
 load("//third_party/omp:omp_configure.bzl", "omp_configure")
 load("//third_party/pybind11:workspace.bzl", pybind11 = "repo")
@@ -27,7 +26,6 @@ load("//third_party/robin_map:workspace.bzl", robin_map = "repo")
 def prime_ir_deps():
     omp_configure(name = "local_config_omp")
 
-    benchmark()
     nanobind()
     robin_map()
     pybind11()

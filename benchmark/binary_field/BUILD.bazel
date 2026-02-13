@@ -108,6 +108,7 @@ prime_ir_benchmark(
         "@platforms//cpu:aarch64": ["PRIME_IR_ARM"],
         "//conditions:default": [],
     }),
+    zkbench = True,
     deps = [
         ":bf8_baseline_ciface",
         ":bf_baseline_ciface",

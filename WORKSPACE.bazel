@@ -44,6 +44,14 @@ load("@pypi//:requirements.bzl", "install_deps")
 
 install_deps()
 
+load("//third_party/zkbench_cpp:workspace.bzl", zkbench_cpp = "repo")
+
+zkbench_cpp()
+
+load("@zkbench_cpp//bazel:zkbench_cpp_deps.bzl", "zkbench_cpp_deps")
+
+zkbench_cpp_deps()
+
 load("@zk_dtypes//bazel:zk_dtypes_deps.bzl", "zk_dtypes_deps")
 
 zk_dtypes_deps()
@@ -59,6 +67,11 @@ rules_java_toolchains()
 load("//bazel:prime_ir_deps.bzl", "prime_ir_deps")
 
 prime_ir_deps()
+
+# zkbench-cpp for benchmark JSON output
+load("//third_party/nlohmann_json:workspace.bzl", nlohmann_json = "repo")
+
+nlohmann_json()
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//third_party/llvm-project:workspace.bzl", "LLVM_COMMIT", "LLVM_PATCHES", "LLVM_SHA256")

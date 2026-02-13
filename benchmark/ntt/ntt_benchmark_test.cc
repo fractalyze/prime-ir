@@ -20,6 +20,8 @@ limitations under the License.
 #include "mlir/ExecutionEngine/MemRefUtils.h"
 #include "mlir/Support/LLVM.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
+#include "zkbench/benchmark_context.h"
+#include "zkbench/hash.h"
 
 #define NUM_COEFFS (1 << 20)
 
@@ -42,6 +44,8 @@ void BM_ntt_benchmark(::benchmark::State &state) {
                            /*init=*/fillWithRandom);
 
   OwningMemRef<F, 1> ntt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
+  std::string input_hash = zkbench::ComputeArrayHash((*input).data, NUM_COEFFS);
+
   for (auto _ : state) {
     state.PauseTiming();
     memcpy((*ntt).data, (*input).data, sizeof(F) * NUM_COEFFS);
@@ -53,15 +57,36 @@ void BM_ntt_benchmark(::benchmark::State &state) {
     }
   }
 
+  std::string output_hash = zkbench::ComputeArrayHash((*ntt).data, NUM_COEFFS);
+
   if constexpr (kIsMont) {
     _mlir_ciface_intt_mont(&*ntt);
   } else {
     _mlir_ciface_intt(&*ntt);
   }
 
+  bool verified = true;
   for (int i = 0; i < NUM_COEFFS; i++) {
+    if ((*ntt)[i] != (*input)[i]) {
+      verified = false;
+      break;
+    }
     EXPECT_EQ((*ntt)[i], (*input)[i]);
   }
+
+  // Set throughput (NUM_COEFFS elements per iteration)
+  state.counters["items_per_second"] =
+      ::benchmark::Counter(static_cast<double>(state.iterations()) * NUM_COEFFS,
+                           ::benchmark::Counter::kIsRate);
+
+  // Set zkbench test vectors and metadata
+  const char *bench_name = kIsMont ? "ntt_mont" : "ntt";
+  zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash, output_hash,
+                                            verified);
+  zkbench::BenchmarkContext::SetMetadata(bench_name,
+                                         {{"field", "BN254"},
+                                          {"num_coeffs", NUM_COEFFS},
+                                          {"montgomery", kIsMont}});
 }
 
 template <bool kIsMont>
@@ -77,6 +102,8 @@ void BM_intt_benchmark(::benchmark::State &state) {
     _mlir_ciface_ntt(&*ntt);
   }
 
+  std::string input_hash = zkbench::ComputeArrayHash((*ntt).data, NUM_COEFFS);
+
   OwningMemRef<F, 1> intt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
   for (auto _ : state) {
     state.PauseTiming();
@@ -89,9 +116,30 @@ void BM_intt_benchmark(::benchmark::State &state) {
     }
   }
 
+  std::string output_hash = zkbench::ComputeArrayHash((*intt).data, NUM_COEFFS);
+
+  bool verified = true;
   for (int i = 0; i < NUM_COEFFS; i++) {
+    if ((*intt)[i] != (*input)[i]) {
+      verified = false;
+      break;
+    }
     EXPECT_EQ((*intt)[i], (*input)[i]);
   }
+
+  // Set throughput (NUM_COEFFS elements per iteration)
+  state.counters["items_per_second"] =
+      ::benchmark::Counter(static_cast<double>(state.iterations()) * NUM_COEFFS,
+                           ::benchmark::Counter::kIsRate);
+
+  // Set zkbench test vectors and metadata
+  const char *bench_name = kIsMont ? "intt_mont" : "intt";
+  zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash, output_hash,
+                                            verified);
+  zkbench::BenchmarkContext::SetMetadata(bench_name,
+                                         {{"field", "BN254"},
+                                          {"num_coeffs", NUM_COEFFS},
+                                          {"montgomery", kIsMont}});
 }
 
 BENCHMARK_TEMPLATE(BM_ntt_benchmark, /*kIsMont=*/false)
