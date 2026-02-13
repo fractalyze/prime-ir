@@ -24,6 +24,7 @@ cc_binary(
     srcs = ["mhlo_opt.cc"],
     deps = [
         "//zkx/mlir_hlo/mhlo/IR:mlir_hlo",
+        "//zkx/mlir_hlo/mhlo/transforms:passes",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:AllPassesAndDialects",
         "@llvm-project//mlir:MlirOptLib",

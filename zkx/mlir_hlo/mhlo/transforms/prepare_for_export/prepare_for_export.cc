@@ -64,7 +64,10 @@ void prepareConstantOp(Operation *op, SplatElementsAttr attr) {
     return;
   ShapedType returnType = cast<ShapedType>(op->getResultTypes().front());
   ImplicitLocOpBuilder b(op->getLoc(), op);
-  ConstantOp cst = b.create<ConstantOp>(attr.getSplatValue<Attribute>());
+  auto tensorType = RankedTensorType::get({}, returnType.getElementType());
+  auto reshapedAttr =
+      attr.reshape(RankedTensorType::get({}, attr.getElementType()));
+  ConstantOp cst = b.create<ConstantOp>(tensorType, reshapedAttr);
   auto broadcast =
       b.create<BroadcastInDimOp>(returnType, cst, b.getI64TensorAttr({}));
   if (auto sharding = op->getAttrOfType<StringAttr>(kShardingAttr)) {

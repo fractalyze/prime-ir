@@ -22,9 +22,11 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h"
+#include "zkx/mlir_hlo/mhlo/transforms/passes.h"
 
 int main(int argc, char **argv) {
   mlir::registerAllPasses();
+  mlir::mhlo::registerAllMhloPasses();
 
   mlir::DialectRegistry registry;
   mlir::registerAllDialects(registry);
