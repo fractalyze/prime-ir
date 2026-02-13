@@ -14,14 +14,47 @@
 # ==============================================================================*/
 
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda_is_configured")
-load("//bazel:zkx_cc.bzl", "zkx_cc_binary")
+load("//bazel:zkx_cc.bzl", "zkx_cc_binary", "zkx_cc_library")
 
 package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "stablehlo_utils",
+    srcs = ["stablehlo_utils.cc"],
+    hdrs = ["stablehlo_utils.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:debug_options_flags",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/mlir/utils:error_util",
+        "//zkx/pjrt:mlir_to_hlo",
+        "@com_google_absl//absl/status",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Parser",
+        "@llvm-project//mlir:Support",
+        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
+        "@stablehlo//stablehlo/dialect:register",
+    ],
+)
+
+# Common runtime deps needed by both binaries for CPU/GPU execution.
+RUNNER_RUNTIME_DEPS = [
+    "//zkx/backends/gpu/runtime:command_buffer_cmd",
+    "//zkx/backends/gpu/runtime:command_buffer_cmd_emitter",
+    "//zkx/backends/gpu/runtime:command_buffer_thunk",
+    "//zkx/service:gpu_plugin",
+    "//zkx/service/cpu:cpu_compiler_registerer",
+    "//zkx/service/cpu:cpu_transfer_manager",
+    "//zkx/service/gpu:gpu_compiler",
+    "//zkx/stream_executor/host:host_platform",
+]
 
 zkx_cc_binary(
     name = "stablehlo_runner_main",
     srcs = ["stablehlo_runner_main.cc"],
     deps = [
+        ":stablehlo_utils",
         "//xla/tsl/platform:env",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:statusor",
@@ -33,30 +66,38 @@ zkx_cc_binary(
         "//zkx:shape_util",
         "//zkx:status_macros",
         "//zkx:zkx_data_cc_proto",
-        "//zkx/backends/gpu/runtime:command_buffer_cmd",
-        "//zkx/backends/gpu/runtime:command_buffer_cmd_emitter",
-        "//zkx/backends/gpu/runtime:command_buffer_thunk",
         "//zkx/hlo/ir:hlo",
-        "//zkx/mlir/utils:error_util",
-        "//zkx/pjrt:mlir_to_hlo",
-        "//zkx/service:gpu_plugin",
         "//zkx/service:hlo_runner",
         "//zkx/service:platform_util",
-        "//zkx/service/cpu:cpu_compiler_registerer",
-        "//zkx/service/cpu:cpu_transfer_manager",
-        "//zkx/service/gpu:gpu_compiler",
-        "//zkx/stream_executor/host:host_platform",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
-        "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:Parser",
-        "@llvm-project//mlir:Support",
-        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
-        "@stablehlo//stablehlo/dialect:base",
-        "@stablehlo//stablehlo/dialect:register",
-    ] + if_cuda_is_configured([
+    ] + RUNNER_RUNTIME_DEPS + if_cuda_is_configured([
+        "//zkx/stream_executor/cuda:cuda_platform",
+    ]),
+)
+
+zkx_cc_binary(
+    name = "poseidon2_benchmark",
+    srcs = ["poseidon2_benchmark.cc"],
+    deps = [
+        ":stablehlo_utils",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service:hlo_runner",
+        "//zkx/service:platform_util",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_benchmark//:benchmark",
+        "@zkbench_cpp//zkbench:benchmark_context",
+        "@zkbench_cpp//zkbench:benchmark_main",
+        "@zkbench_cpp//zkbench:hash",
+    ] + RUNNER_RUNTIME_DEPS + if_cuda_is_configured([
         "//zkx/stream_executor/cuda:cuda_platform",
     ]),
 )

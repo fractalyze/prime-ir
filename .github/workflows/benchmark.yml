@@ -1,0 +1,95 @@
+name: Benchmark
+
+permissions: read-all
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark-cpu:
+    runs-on: [self-hosted, zkx]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: false
+
+      - name: Build poseidon2_benchmark (CPU)
+        run: |
+          bazel --bazelrc=.bazelrc.ci build \
+            --config=ci \
+            -c opt \
+            //zkx/tools/stablehlo_runner:poseidon2_benchmark
+
+      - uses: fractalyze/benchmark-action@v1
+        with:
+          benchmark_cmd: |
+            ./bazel-bin/zkx/tools/stablehlo_runner/poseidon2_benchmark \
+              zkx/tools/stablehlo_runner/poseidon2_permutation.stablehlo.mlir \
+              --platform=cpu \
+              --benchmark_repetitions=10 \
+              --benchmark_min_time=0.5s \
+              --zkbench_out=benchmark_results.json
+          implementation: zkx-poseidon2-cpu
+          regression_threshold: "0.10"
+          rolling_window: "5"
+          results_dir: benchmark_data/cpu
+          baseline_path: benchmark_data/cpu/baseline.json
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
+          store_results: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-zkx-poseidon2-cpu
+          path: benchmark_results.json
+          retention-days: 90
+
+  benchmark-gpu:
+    runs-on: [self-hosted, zkx]
+    needs: benchmark-cpu
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: false
+
+      - name: Build poseidon2_benchmark (GPU)
+        run: |
+          bazel --bazelrc=.bazelrc.ci build \
+            --config=ci \
+            --config=cuda_clang \
+            -c opt \
+            //zkx/tools/stablehlo_runner:poseidon2_benchmark
+
+      - uses: fractalyze/benchmark-action@v1
+        with:
+          benchmark_cmd: |
+            ./bazel-bin/zkx/tools/stablehlo_runner/poseidon2_benchmark \
+              zkx/tools/stablehlo_runner/poseidon2_permutation.stablehlo.mlir \
+              --platform=gpu \
+              --benchmark_repetitions=10 \
+              --benchmark_min_time=0.5s \
+              --zkbench_out=benchmark_results.json
+          implementation: zkx-poseidon2-gpu
+          regression_threshold: "0.10"
+          rolling_window: "5"
+          results_dir: benchmark_data/gpu
+          baseline_path: benchmark_data/gpu/baseline.json
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
+          store_results: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-zkx-poseidon2-gpu
+          path: benchmark_results.json
+          retention-days: 90

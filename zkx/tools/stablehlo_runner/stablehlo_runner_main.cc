@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <cstdint>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -25,14 +26,7 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/time/time.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/DialectRegistry.h"
-#include "mlir/Parser/Parser.h"
-#include "mlir/Support/LLVM.h"
 
-#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
-#include "prime_ir/Dialect/Field/IR/FieldDialect.h"
-#include "stablehlo/dialect/Register.h"
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
@@ -41,12 +35,11 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/literal.h"
 #include "zkx/literal_util.h"
-#include "zkx/mlir/utils/error_util.h"
-#include "zkx/pjrt/mlir_to_hlo.h"
 #include "zkx/primitive_util.h"
 #include "zkx/service/hlo_runner.h"
 #include "zkx/service/platform_util.h"
 #include "zkx/shape_util.h"
+#include "zkx/tools/stablehlo_runner/stablehlo_utils.h"
 
 namespace {
 
@@ -78,40 +71,6 @@ struct Options {
 
 namespace zkx {
 namespace {
-
-absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> ParseStablehloModule(
-    std::string_view module_text, mlir::MLIRContext* context) {
-  mlir::DialectRegistry registry;
-  mlir::stablehlo::registerAllDialects(registry);
-  registry.insert<mlir::prime_ir::field::FieldDialect>();
-  registry.insert<mlir::prime_ir::elliptic_curve::EllipticCurveDialect>();
-  context->appendDialectRegistry(registry);
-  context->loadAllAvailableDialects();
-
-  mlir::BaseScopedDiagnosticHandler diagnostic_handler(context);
-  mlir::OwningOpRef<mlir::ModuleOp> module =
-      mlir::parseSourceString<mlir::ModuleOp>(
-          llvm::StringRef(module_text.data(), module_text.size()),
-          mlir::ParserConfig{context});
-  if (!module) {
-    mlir::emitError(mlir::UnknownLoc::get(context))
-        << "Failed to parse StableHLO module";
-    return diagnostic_handler.ConsumeStatus();
-  }
-  return std::move(module);
-}
-
-absl::StatusOr<std::unique_ptr<HloModule>> ConvertStablehloToHloModule(
-    mlir::ModuleOp module) {
-  ZkxComputation computation;
-  TF_RETURN_IF_ERROR(MlirToZkxComputation(
-      module, computation, /*use_tuple_args=*/false, /*return_tuple=*/false,
-      /*use_shardy=*/false));
-  TF_ASSIGN_OR_RETURN(HloModuleConfig config,
-                      HloModule::CreateModuleConfigFromProto(
-                          computation.proto(), GetDebugOptionsFromFlags()));
-  return HloModule::CreateFromProto(computation.proto(), config);
-}
 
 absl::StatusOr<Literal> ParseInputLiteral(const Shape& shape,
                                           std::string_view input_str) {
