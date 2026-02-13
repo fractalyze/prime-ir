@@ -274,6 +274,61 @@ absl::Status IrEmitterUnnested::EmitCopy(const HloInstruction* instr) {
   return absl::OkStatus();
 }
 
+absl::Status IrEmitterUnnested::EmitSlice(const HloInstruction* instr) {
+  const Shape& src_shape = instr->operand(0)->shape();
+
+  // Only support unit strides.
+  for (int64_t i = 0; i < src_shape.rank(); ++i) {
+    if (instr->slice_strides(i) != 1) {
+      return absl::UnimplementedError(
+          "Non-unit stride slice not supported as standalone instruction");
+    }
+  }
+
+  // Check contiguity: for all but the most-major dimension, the slice must
+  // cover the full extent. Otherwise, the slice is non-contiguous in memory
+  // and cannot be emitted as a single memcpy.
+  const auto& minor_to_major = src_shape.layout().minor_to_major();
+  for (int64_t i = 0; i < src_shape.rank() - 1; ++i) {
+    int64_t dim = minor_to_major[i];
+    if (instr->slice_starts(dim) != 0 ||
+        instr->slice_limits(dim) != src_shape.dimensions(dim)) {
+      return absl::UnimplementedError(
+          "Non-contiguous slice not supported as standalone instruction");
+    }
+  }
+
+  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice src_buffer,
+                      GetAllocationSliceForHlo(instr->operand(0)));
+  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice dst_buffer,
+                      GetAllocationSliceForHlo(instr));
+
+  // Compute byte offset. Only the most-major dimension can have non-zero start
+  // (verified by the contiguity check above).
+  int64_t byte_offset = 0;
+  if (src_shape.rank() > 0) {
+    int64_t most_major_dim = minor_to_major.back();
+    int64_t element_size =
+        ShapeUtil::ByteSizeOfPrimitiveType(src_shape.element_type());
+    int64_t stride = 1;
+    for (int64_t i = 0; i < src_shape.rank() - 1; ++i) {
+      stride *= src_shape.dimensions(minor_to_major[i]);
+    }
+    byte_offset = instr->slice_starts(most_major_dim) * stride * element_size;
+  }
+
+  BufferAllocation::Slice adjusted_src(src_buffer.allocation(),
+                                       src_buffer.offset() + byte_offset,
+                                       dst_buffer.size());
+
+  AddThunkToThunkSequence(std::make_unique<DeviceToDeviceCopyThunk>(
+      Thunk::ThunkInfo::WithProfileAnnotation(instr),
+      /*source_buffer=*/adjusted_src,
+      /*destination_buffer=*/dst_buffer,
+      /*mem_size=*/dst_buffer.size()));
+  return absl::OkStatus();
+}
+
 absl::Status IrEmitterUnnested::EmitAsyncCustomCallStart(
     const HloInstruction* instr) {
   // TODO(chokobole): Implement this.
@@ -730,6 +785,8 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
     case HloOpcode::kSendDone:
       return EmitSendDoneThunk(Cast<HloSendDoneInstruction>(instr));
 
+    case HloOpcode::kSlice:
+      return EmitSlice(instr);
     case HloOpcode::kSort:
       // TODO(chokobole): Uncomment this. Dependency: HloSortInstruction.
       // return EmitSort(Cast<HloSortInstruction>(instr));

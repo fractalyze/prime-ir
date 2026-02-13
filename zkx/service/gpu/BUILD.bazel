@@ -145,6 +145,27 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "fusion_pipeline",
+    srcs = ["fusion_pipeline.cc"],
+    hdrs = ["fusion_pipeline.h"],
+    deps = [
+        "//xla/tsl/platform:env",
+        "//zkx:zkx_cc_proto",
+        "//zkx/hlo/pass:hlo_pass_fix",
+        "//zkx/hlo/pass:hlo_pass_pipeline",
+        "//zkx/hlo/transforms/simplifiers:hlo_cse",
+        "//zkx/hlo/transforms/simplifiers:hlo_dce",
+        "//zkx/service:hlo_cost_analysis",
+        "//zkx/service/gpu/model:gpu_hlo_cost_analysis",
+        "//zkx/service/gpu/transforms:horizontal_input_fusion",
+        "//zkx/service/gpu/transforms:horizontal_loop_fusion",
+        "//zkx/service/gpu/transforms:multi_output_fusion",
+        "//zkx/service/gpu/transforms:priority_fusion",
+        "//zkx/stream_executor:device_description",
+    ],
+)
+
 proto_library(
     name = "fusion_process_dump_proto",
     srcs = ["fusion_process_dump.proto"],
@@ -189,9 +210,11 @@ zkx_cc_library(
         ":buffer_sharing",
         ":compile_module_to_llvm_ir",
         ":execution_stream_assignment",
+        ":fusion_pipeline",
         ":gpu_executable",
         ":gpu_hlo_schedule",
         ":gpu_latency_hiding_scheduler",
+        ":hlo_fusion_stats",
         ":ir_emitter_context",
         ":ir_emitter_unnested",
         ":kernel_reuse_cache",
@@ -214,8 +237,10 @@ zkx_cc_library(
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/ir:hlo_module_group",
         "//zkx/service:buffer_assignment",
+        "//zkx/service:call_inliner",
         "//zkx/service:dump",
         "//zkx/service:llvm_compiler",
+        "//zkx/service:scatter_simplifier",
         "//zkx/service:slow_operation_alarm",
         "//zkx/service/llvm_ir:llvm_command_line_options",
         "//zkx/service/llvm_ir:llvm_util",
@@ -482,6 +507,20 @@ zkx_cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
         "@llvm-project//llvm:Support",
+    ],
+)
+
+zkx_cc_library(
+    name = "hlo_fusion_stats",
+    srcs = ["hlo_fusion_stats.cc"],
+    hdrs = ["hlo_fusion_stats.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx/hlo/ir:dfs_hlo_visitor_with_default",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
     ],
 )
 

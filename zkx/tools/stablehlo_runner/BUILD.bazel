@@ -1,0 +1,62 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================*/
+
+load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda_is_configured")
+load("//bazel:zkx_cc.bzl", "zkx_cc_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_binary(
+    name = "stablehlo_runner_main",
+    srcs = ["stablehlo_runner_main.cc"],
+    deps = [
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/util:command_line_flags",
+        "//zkx:debug_options_flags",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:primitive_util",
+        "//zkx:shape_util",
+        "//zkx:status_macros",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/backends/gpu/runtime:command_buffer_cmd",
+        "//zkx/backends/gpu/runtime:command_buffer_cmd_emitter",
+        "//zkx/backends/gpu/runtime:command_buffer_thunk",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/mlir/utils:error_util",
+        "//zkx/pjrt:mlir_to_hlo",
+        "//zkx/service:gpu_plugin",
+        "//zkx/service:hlo_runner",
+        "//zkx/service:platform_util",
+        "//zkx/service/cpu:cpu_compiler_registerer",
+        "//zkx/service/cpu:cpu_transfer_manager",
+        "//zkx/service/gpu:gpu_compiler",
+        "//zkx/stream_executor/host:host_platform",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Parser",
+        "@llvm-project//mlir:Support",
+        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
+        "@stablehlo//stablehlo/dialect:base",
+        "@stablehlo//stablehlo/dialect:register",
+    ] + if_cuda_is_configured([
+        "//zkx/stream_executor/cuda:cuda_platform",
+    ]),
+)

@@ -27,10 +27,12 @@ limitations under the License.
 #include <type_traits>
 #include <utility>
 
+#include "absl/base/casts.h"
 #include "absl/base/optimization.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
 
@@ -660,10 +662,59 @@ inline void UnpackIntN(PrimitiveType input_type, absl::Span<const char> input,
   zkx::UnpackIntN(BitWidth(input_type), input, output);
 }
 
+namespace internal {
+
+// Trait to detect if T has a static FromDecString(std::string_view) method.
+template <typename T, typename = void>
+inline constexpr bool has_from_dec_string_v = false;
+
+template <typename T>
+inline constexpr bool has_from_dec_string_v<
+    T,
+    std::void_t<decltype(T::FromDecString(std::declval<std::string_view>()))>> =
+    true;
+
+// Trait to detect if T has a ToString() method.
+template <typename T, typename = void>
+inline constexpr bool has_to_string_v = false;
+
+template <typename T>
+inline constexpr bool
+    has_to_string_v<T, std::void_t<decltype(std::declval<T>().ToString())>> =
+        true;
+
+}  // namespace internal
+
+template <typename NativeT>
+absl::StatusOr<NativeT> NativeTypeFromDecString(std::string_view str) {
+  if constexpr (internal::has_from_dec_string_v<NativeT>) {
+    return NativeT::FromDecString(str);
+  } else if constexpr (sizeof(NativeT) > 8) {
+    return absl::InvalidArgumentError(
+        "decimal string parsing not supported for this type");
+  } else {
+    static_assert(std::is_trivially_copyable_v<NativeT>,
+                  "SimpleAtoi fallback requires a trivially copyable type");
+    uint64_t raw;
+    if (!absl::SimpleAtoi(str, &raw)) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Failed to parse value: ", str));
+    }
+    if constexpr (sizeof(NativeT) == 1) {
+      return absl::bit_cast<NativeT>(static_cast<uint8_t>(raw));
+    } else if constexpr (sizeof(NativeT) == 2) {
+      return absl::bit_cast<NativeT>(static_cast<uint16_t>(raw));
+    } else if constexpr (sizeof(NativeT) <= 4) {
+      return absl::bit_cast<NativeT>(static_cast<uint32_t>(raw));
+    } else {
+      return absl::bit_cast<NativeT>(static_cast<uint64_t>(raw));
+    }
+  }
+}
+
 template <typename NativeT>
 std::string NativeTypeToString(NativeT value) {
-  constexpr PrimitiveType primitive_type = NativeToPrimitiveType<NativeT>();
-  if constexpr (IsZkDtypesType(primitive_type)) {
+  if constexpr (internal::has_to_string_v<NativeT>) {
     return value.ToString();
   } else {
     return absl::StrCat(value);

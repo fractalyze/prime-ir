@@ -28,6 +28,8 @@ limitations under the License.
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LLVM.h"
 
+#include "prime_ir/IR/Attributes.h"
+#include "prime_ir/Utils/ZkDtypes.h"
 #include "zkx/primitive_util.h"
 
 namespace zkx {
@@ -38,9 +40,29 @@ using mlir::AffineMap;
 template <typename CppType>
 absl::StatusOr<mlir::DenseElementsAttr> CreateDenseAttrFromLiteral(
     const mlir::ShapedType& type, const LiteralBase& literal) {
-  if constexpr (zk_dtypes::IsField<CppType> || zk_dtypes::IsEcPoint<CppType>) {
-    return absl::UnimplementedError(
-        "Not implemented for field or ec point types");
+  auto data_span = literal.data<CppType>();
+  if constexpr (zk_dtypes::IsPrimeField<CppType> ||
+                zk_dtypes::IsBinaryField<CppType>) {
+    // Prime and binary fields: single value converted to APInt.
+    llvm::SmallVector<mlir::APInt> apints;
+    apints.reserve(data_span.size());
+    for (const auto& elem : data_span) {
+      apints.push_back(
+          mlir::prime_ir::convertToAPInt(elem.value(), CppType::kBitWidth));
+    }
+    auto builtin_type = mlir::prime_ir::maybeConvertPrimeIRToBuiltinType(type);
+    return mlir::DenseElementsAttr::get(builtin_type, llvm::ArrayRef(apints));
+  } else if constexpr (zk_dtypes::IsExtensionField<CppType>) {
+    // Extension fields: each element has multiple base field coefficients.
+    llvm::SmallVector<mlir::APInt> apints;
+    for (const auto& elem : data_span) {
+      auto coeffs = mlir::prime_ir::convertToAPInts(elem.values());
+      apints.append(coeffs.begin(), coeffs.end());
+    }
+    auto builtin_type = mlir::prime_ir::maybeConvertPrimeIRToBuiltinType(type);
+    return mlir::DenseElementsAttr::get(builtin_type, llvm::ArrayRef(apints));
+  } else if constexpr (zk_dtypes::IsEcPoint<CppType>) {
+    return absl::UnimplementedError("Not implemented for ec point types");
   } else if constexpr (is_big_int_v<CppType>) {
     // BigInt types need to be converted to APInt for MLIR.
     auto data_span = literal.data<CppType>();
@@ -55,7 +77,6 @@ absl::StatusOr<mlir::DenseElementsAttr> CreateDenseAttrFromLiteral(
     }
     return mlir::DenseElementsAttr::get(type, llvm::ArrayRef(apint_values));
   } else {
-    auto data_span = literal.data<CppType>();
     return mlir::DenseElementsAttr::get(
         type, llvm::ArrayRef(data_span.data(), data_span.size()));
   }
@@ -118,7 +139,8 @@ absl::StatusOr<mlir::DenseElementsAttr> CreateDenseElementsAttrFromLiteral(
       absl::StatusOr<mlir::DenseElementsAttr>>(
       [&](auto primitive_type_constant)
           -> absl::StatusOr<mlir::DenseElementsAttr> {
-        if constexpr (primitive_util::IsArrayType(primitive_type_constant)) {
+        if constexpr (primitive_util::IsArrayType(primitive_type_constant) &&
+                      !primitive_util::IsEcPointType(primitive_type_constant)) {
           return CreateDenseAttrFromLiteral<
               primitive_util::NativeTypeOf<primitive_type_constant>>(type,
                                                                      literal);

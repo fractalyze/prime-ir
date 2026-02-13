@@ -67,18 +67,22 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_module_group.h"
 #include "zkx/maybe_owning.h"
 #include "zkx/service/buffer_assignment.h"
+#include "zkx/service/call_inliner.h"
 #include "zkx/service/dump.h"
 #include "zkx/service/gpu/compile_module_to_llvm_ir.h"
 #include "zkx/service/gpu/execution_stream_assignment.h"
+#include "zkx/service/gpu/fusion_pipeline.h"
 #include "zkx/service/gpu/gpu_executable.h"
 #include "zkx/service/gpu/gpu_hlo_schedule.h"
 #include "zkx/service/gpu/gpu_latency_hiding_scheduler.h"
+#include "zkx/service/gpu/hlo_fusion_stats.h"
 #include "zkx/service/gpu/ir_emitter_context.h"
 #include "zkx/service/gpu/ir_emitter_unnested.h"
 #include "zkx/service/gpu/kernel_reuse_cache.h"
 #include "zkx/service/gpu/prepare_hlo_for_ir_emitting_pipeline.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
+#include "zkx/service/scatter_simplifier.h"
 #include "zkx/service/slow_operation_alarm.h"
 #include "zkx/status_macros.h"
 #include "zkx/stream_executor/platform_manager.h"
@@ -174,6 +178,30 @@ class GpuThunkAotCompilationResult : public AotCompilationResult {
   std::unique_ptr<HloModule> module_;
   CompilationResultProto proto_;
 };
+
+absl::Status RunFusionPasses(HloModule* hlo_module,
+                             const Compiler::TargetConfig& gpu_target_config,
+                             tsl::thread::ThreadPool* thread_pool,
+                             HloCostAnalysis::ShapeSizeFunction shape_size_fn) {
+  const se::DeviceDescription& gpu_device_info =
+      gpu_target_config.device_description;
+
+  TF_RETURN_IF_ERROR(FusionPipeline(hlo_module->config().debug_options(),
+                                    shape_size_fn, thread_pool, gpu_device_info)
+                         .Run(hlo_module)
+                         .status());
+
+  TF_RETURN_IF_ERROR(
+      HorizontalFusionPipeline(gpu_device_info).Run(hlo_module).status());
+
+  if (VLOG_IS_ON(2)) {
+    HloFusionStatsVisitor stats;
+    TF_RETURN_IF_ERROR(hlo_module->entry_computation()->Accept(&stats));
+    VLOG(2) << stats.ToString();
+  }
+
+  return absl::OkStatus();
+}
 
 }  // namespace
 
@@ -351,10 +379,13 @@ absl::Status GpuCompiler::OptimizeHloModule(
   // TODO(chokobole): Uncomment this. Dependency: RunDynamicSliceFusionPasses
   // TF_RETURN_IF_ERROR(RunDynamicSliceFusionPasses(hlo_module, PlatformId()));
 
-  // TODO(chokobole): Uncomment this. Dependency: RunFusionPasses
-  // TF_RETURN_IF_ERROR(RunFusionPasses(hlo_module, gpu_target_config,
-  //                                    thread_pool.get_mutable(),
-  //                                    ShapeSizeBytesFunction()));
+  // TODO(batzor): Remove these after the previous passes are uncommented.
+  TF_RETURN_IF_ERROR(ScatterSimplifier().Run(hlo_module).status());
+  TF_RETURN_IF_ERROR(CallInliner().Run(hlo_module).status());
+
+  TF_RETURN_IF_ERROR(RunFusionPasses(hlo_module, gpu_target_config,
+                                     thread_pool.get_mutable(),
+                                     ShapeSizeBytesFunction()));
   // TODO(chokobole): Uncomment this. Dependency: RunPostFusionPasses
   // TF_RETURN_IF_ERROR(RunPostFusionPasses(
   //     hlo_module, gpu_target_config.device_description, pointer_size_));
@@ -1212,9 +1243,7 @@ absl::Status GpuCompiler::LoadAutotuneResultsFromFile(
   //   });
   //   TF_RETURN_IF_ERROR(status);
   // }
-  // return absl::OkStatus();
-  return absl::UnimplementedError(
-      "not implemented for LoadAutotuneResultsFromFile");
+  return absl::OkStatus();
 }
 
 absl::Status GpuCompiler::SerializeAutotuneResultsToFile(

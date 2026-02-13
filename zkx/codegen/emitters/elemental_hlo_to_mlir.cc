@@ -83,6 +83,8 @@ using mlir::scf::IfOp;
 using mlir::scf::YieldOp;
 
 namespace arith = ::mlir::arith;
+namespace elliptic_curve = ::mlir::prime_ir::elliptic_curve;
+namespace field = ::mlir::prime_ir::field;
 namespace func = ::mlir::func;
 namespace mhlo = ::mlir::mhlo;
 namespace scf = ::mlir::scf;
@@ -655,6 +657,18 @@ absl::StatusOr<SmallVector<Value, 1>> EmitConstant(
   }
 
   if (ShapeUtil::IsEffectiveScalar(instr->shape())) {
+    if (ShapeUtil::ElementIsField(instr->shape())) {
+      auto int_attr = mlir::cast<mlir::DenseIntElementsAttr>(value_attr);
+      auto field_tensor_type = mlir::RankedTensorType::get(
+          instr->shape().dimensions(), result_element_type);
+      auto constant =
+          builder.create<field::ConstantOp>(field_tensor_type, int_attr);
+      return {
+          {builder.create<tensor::ExtractOp>(constant, indices).getResult()}};
+    }
+    if (ShapeUtil::ElementIsEcPoint(instr->shape())) {
+      return absl::UnimplementedError("ec point constant is not supported.");
+    }
     auto val =
         mlir::cast<mlir::TypedAttr>(value_attr.getValues<mlir::Attribute>()[0]);
     return {{builder.create<ConstantOp>(val).getResult()}};
