@@ -26,7 +26,7 @@ TMPDIR=$(mktemp -d)
 trap 'rm -rf "$TMPDIR"' EXIT
 
 echo "=== Building all benchmarks ==="
-bazel --bazelrc=.bazelrc.ci build --config ci //benchmark/...
+bazel --bazelrc=.bazelrc.ci build --config ci -c opt //benchmark/...
 
 targets=(
   "benchmark/ntt/ntt_benchmark_test"

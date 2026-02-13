@@ -5,6 +5,7 @@ permissions: read-all
 on:
   push:
     branches: ["main"]
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,17 +21,17 @@ jobs:
       - name: Run benchmarks
         uses: fractalyze/benchmark-action@v1
         with:
+          implementation: prime-ir
           benchmark_cmd: "bash benchmark/run_benchmarks.sh benchmark_results.json"
-          result_file: benchmark_results.json
+          results_file: benchmark_results.json
           regression_threshold: "0.10"
           rolling_window: "5"
           cpu_load_threshold: "0.80"
           memory_threshold: "0.80"
           store_results: ${{ github.ref == 'refs/heads/main' }}
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          DASHBOARD_TOKEN: ${{ secrets.DASHBOARD_TOKEN }}
-          SLACK_BENCHMARK_WEBHOOK: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
+          slack_benchmark_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
