@@ -188,6 +188,10 @@ message DebugOptions {
   // Enable command buffer for specific command types.
   repeated CommandBufferCmdType zkx_gpu_enable_command_buffer = 258;
 
+  // Enables address computation fusion to optimize dynamic-slice and
+  // dynamic-update-slice operations around library calls.
+  bool zkx_gpu_enable_dynamic_slice_fusion = 355;
+
   // Timeout to terminate on stuck rendezvous.
   int32 zkx_gpu_executable_terminate_timeout_seconds = 328;
 
