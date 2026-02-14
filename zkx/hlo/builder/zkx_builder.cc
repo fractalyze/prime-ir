@@ -69,12 +69,11 @@ void SetProtoIdAndName(T* entry, const std::string& base_name, char separator,
 }
 
 bool InstrIsSetBound(const HloInstructionProto* instr_proto) {
-  // TODO(chokobole): Uncomment this. Dependency: custom_call_target
-  // HloOpcode opcode = StringToHloOpcode(instr_proto->opcode()).value();
-  // if (opcode == HloOpcode::kCustomCall &&
-  //     instr_proto->custom_call_target() == "SetBound") {
-  //   return true;
-  // }
+  HloOpcode opcode = StringToHloOpcode(instr_proto->opcode()).value();
+  if (opcode == HloOpcode::kCustomCall &&
+      instr_proto->custom_call_target() == "SetBound") {
+    return true;
+  }
   return false;
 }
 
@@ -350,11 +349,10 @@ void ZkxBuilder::IsConstantVisitor(const int64_t op_handle, int depth,
       // cannot be constant.  We cannot set is_functional=false in other similar
       // cases since we're already relying on IsConstant to return true.
     case HloOpcode::kCustomCall:
-      // TODO(chokobole): Uncomment this. Dependency: custom_call_target
-      // if (instr.custom_call_target() == "SetBound") {
-      //   // Set bound is considered constant -- the bound is used as the
-      //   value. break;
-      // }
+      if (instr.custom_call_target() == "SetBound") {
+        // Set bound is considered constant -- the bound is used as the value.
+        break;
+      }
       [[fallthrough]];
     case HloOpcode::kWhile:
       // TODO(b/32495713): We aren't checking the condition and body
@@ -1423,6 +1421,144 @@ ZkxOp ZkxBuilder::CreateToken() {
     HloInstructionProto instr;
     *instr.mutable_shape() = ShapeUtil::MakeTokenShape().ToProto();
     return AddInstruction(std::move(instr), HloOpcode::kAfterAll);
+  });
+}
+
+ZkxOp ZkxBuilder::CustomCall(
+    const std::string& call_target_name, absl::Span<const ZkxOp> operands,
+    const Shape& shape, const std::string& opaque,
+    std::optional<absl::Span<const Shape>> operand_shapes_with_layout,
+    bool has_side_effect,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing,
+    const Literal* literal, std::optional<Window> window,
+    CustomCallSchedule schedule, CustomCallApiVersion api_version) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    if (absl::StartsWith(call_target_name, "$")) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Invalid custom_call_target \"%s\": Call targets that start with '$' "
+          "are reserved for internal use.",
+          call_target_name));
+    }
+    if (operand_shapes_with_layout.has_value()) {
+      if (!LayoutUtil::HasLayout(shape)) {
+        return absl::InvalidArgumentError(
+            "Result shape must have layout for custom call with constrained "
+            "layout.");
+      }
+      if (operands.size() != operand_shapes_with_layout->size()) {
+        return absl::InvalidArgumentError(absl::StrFormat(
+            "Must specify a shape with layout for each operand for custom call "
+            "with constrained layout; given %d shapes, expected %d",
+            operand_shapes_with_layout->size(), operands.size()));
+      }
+      int64_t operand_num = 0;
+      for (const Shape& operand_shape : *operand_shapes_with_layout) {
+        if (!LayoutUtil::HasLayout(operand_shape)) {
+          return absl::InvalidArgumentError(absl::StrFormat(
+              "No layout specified for operand %d for custom call with "
+              "constrained layout.",
+              operand_num));
+        }
+        ++operand_num;
+      }
+    }
+    return CustomCallInternal(
+        call_target_name, operands, /*computation=*/nullptr, shape, opaque,
+        operand_shapes_with_layout, has_side_effect, output_operand_aliasing,
+        literal, window, schedule, api_version);
+  });
+}
+
+absl::StatusOr<ZkxOp> ZkxBuilder::CustomCallInternal(
+    const std::string& call_target_name, absl::Span<const ZkxOp> operands,
+    const ZkxComputation* computation, const Shape& shape,
+    const std::string& opaque,
+    std::optional<absl::Span<const Shape>> operand_shapes_with_layout,
+    bool has_side_effect,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing,
+    const Literal* literal, std::optional<Window> window,
+    CustomCallSchedule schedule, CustomCallApiVersion api_version) {
+  HloInstructionProto instr;
+  *instr.mutable_shape() = shape.ToProto();
+  instr.set_custom_call_target(call_target_name);
+  instr.set_backend_config(opaque);
+  if (operand_shapes_with_layout.has_value()) {
+    instr.set_constrain_layout(true);
+    for (const Shape& operand_shape : *operand_shapes_with_layout) {
+      *instr.add_operand_shapes_with_layout() = operand_shape.ToProto();
+    }
+  }
+  if (literal != nullptr) {
+    *instr.mutable_literal() = literal->ToProto();
+  }
+  instr.set_custom_call_has_side_effect(has_side_effect);
+  if (computation != nullptr && !computation->IsNull()) {
+    AddCalledComputation(*computation, &instr);
+  }
+  for (const auto& pair : output_operand_aliasing) {
+    auto aliasing = instr.add_output_operand_aliasing();
+    aliasing->set_operand_index(pair.second.first);
+    for (int64_t index : pair.second.second) {
+      aliasing->add_operand_shape_index(index);
+    }
+    for (int64_t index : pair.first) {
+      aliasing->add_output_shape_index(index);
+    }
+  }
+  if (window.has_value()) {
+    *instr.mutable_window() = *window;
+  }
+  instr.set_custom_call_schedule(schedule);
+  instr.set_custom_call_api_version(api_version);
+  return AddInstruction(std::move(instr), HloOpcode::kCustomCall, operands);
+}
+
+ZkxOp ZkxBuilder::CustomCall(
+    const std::string& call_target_name, absl::Span<const ZkxOp> operands,
+    const ZkxComputation& computation, const Shape& shape,
+    const std::string& opaque,
+    std::optional<absl::Span<const Shape>> operand_shapes_with_layout,
+    bool has_side_effect,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing,
+    const Literal* literal, CustomCallSchedule schedule,
+    CustomCallApiVersion api_version) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    if (absl::StartsWith(call_target_name, "$")) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Invalid custom_call_target \"%s\": Call targets that start with '$' "
+          "are reserved for internal use.",
+          call_target_name));
+    }
+    if (operand_shapes_with_layout.has_value()) {
+      if (!LayoutUtil::HasLayout(shape)) {
+        return absl::InvalidArgumentError(
+            "Result shape must have layout for custom call with constrained "
+            "layout.");
+      }
+      if (operands.size() != operand_shapes_with_layout->size()) {
+        return absl::InvalidArgumentError(absl::StrFormat(
+            "Must specify a shape with layout for each operand for custom call "
+            "with constrained layout; given %d shapes, expected %d",
+            operand_shapes_with_layout->size(), operands.size()));
+      }
+      int64_t operand_num = 0;
+      for (const Shape& operand_shape : *operand_shapes_with_layout) {
+        if (!LayoutUtil::HasLayout(operand_shape)) {
+          return absl::InvalidArgumentError(absl::StrFormat(
+              "No layout specified for operand %d for custom call with "
+              "constrained layout.",
+              operand_num));
+        }
+        ++operand_num;
+      }
+    }
+    return CustomCallInternal(call_target_name, operands, &computation, shape,
+                              opaque, operand_shapes_with_layout,
+                              has_side_effect, output_operand_aliasing, literal,
+                              /*window=*/{}, schedule, api_version);
   });
 }
 
@@ -2506,6 +2642,49 @@ ZkxOp CompositeCall(ZkxBuilder* builder, const ZkxComputation& computation,
                     std::optional<int64_t> version) {
   return builder->CompositeCall(computation, operands, name, attributes,
                                 version);
+}
+
+ZkxOp CustomCall(
+    ZkxBuilder* builder, const std::string& call_target_name,
+    absl::Span<const ZkxOp> operands, const Shape& shape,
+    const std::string& opaque, bool has_side_effect,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing,
+    const Literal* literal, CustomCallSchedule schedule,
+    CustomCallApiVersion api_version) {
+  return builder->CustomCall(call_target_name, operands, shape, opaque,
+                             /*operand_shapes_with_layout=*/std::nullopt,
+                             has_side_effect, output_operand_aliasing, literal,
+                             /*window=*/std::nullopt, schedule, api_version);
+}
+
+ZkxOp CustomCallWithComputation(
+    ZkxBuilder* builder, const std::string& call_target_name,
+    absl::Span<const ZkxOp> operands, const ZkxComputation& computation,
+    const Shape& shape, const std::string& opaque, bool has_side_effect,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing,
+    const Literal* literal, CustomCallSchedule schedule,
+    CustomCallApiVersion api_version) {
+  return builder->CustomCall(
+      call_target_name, operands, computation, shape, opaque,
+      /*operand_shapes_with_layout=*/std::nullopt, has_side_effect,
+      output_operand_aliasing, literal, schedule, api_version);
+}
+
+ZkxOp CustomCallWithLayout(
+    ZkxBuilder* builder, const std::string& call_target_name,
+    absl::Span<const ZkxOp> operands, const Shape& shape,
+    absl::Span<const Shape> operand_shapes_with_layout,
+    const std::string& opaque, bool has_side_effect,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing,
+    const Literal* literal, CustomCallSchedule schedule,
+    CustomCallApiVersion api_version) {
+  return builder->CustomCall(call_target_name, operands, shape, opaque,
+                             operand_shapes_with_layout, has_side_effect,
+                             output_operand_aliasing, literal,
+                             /*window=*/std::nullopt, schedule, api_version);
 }
 
 ZkxOp Add(const ZkxOp lhs, const ZkxOp rhs,

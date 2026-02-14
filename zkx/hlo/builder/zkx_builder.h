@@ -499,6 +499,43 @@ class ZkxBuilder {
                       std::optional<std::string_view> attributes = std::nullopt,
                       std::optional<int64_t> version = std::nullopt);
 
+  ZkxOp CustomCall(
+      const std::string& call_target_name, absl::Span<const ZkxOp> operands,
+      const Shape& shape_with_layout, const std::string& opaque,
+      std::optional<absl::Span<const Shape>> operand_shapes_with_layout,
+      bool has_side_effect,
+      absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+          output_operand_aliasing,
+      const Literal* literal, std::optional<Window> window,
+      CustomCallSchedule schedule, CustomCallApiVersion api_version);
+
+  // Internal version of CustomCall without computation that doesn't do op
+  // specific error handling and expects arguments to be legal. CustomCall
+  // method above calls this method after error handling.
+  virtual absl::StatusOr<ZkxOp> CustomCallInternal(
+      const std::string& call_target_name, absl::Span<const ZkxOp> operands,
+      const ZkxComputation* computation, const Shape& shape_with_layout,
+      const std::string& opaque,
+      std::optional<absl::Span<const Shape>> operand_shapes_with_layout,
+      bool has_side_effect,
+      absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+          output_operand_aliasing,
+      const Literal* literal, std::optional<Window> window,
+      CustomCallSchedule schedule, CustomCallApiVersion api_version);
+
+  // TODO(b/239474321) Remove this overload as it has simply led to code
+  // duplication.
+  ZkxOp CustomCall(
+      const std::string& call_target_name, absl::Span<const ZkxOp> operands,
+      const ZkxComputation& computation, const Shape& shape_with_layout,
+      const std::string& opaque,
+      std::optional<absl::Span<const Shape>> operand_shapes_with_layout,
+      bool has_side_effect,
+      absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+          output_operand_aliasing,
+      const Literal* literal, CustomCallSchedule schedule,
+      CustomCallApiVersion api_version);
+
   ZkxOp Reduce(ZkxOp operand, ZkxOp init_value,
                const ZkxComputation& computation,
                absl::Span<const int64_t> dimensions_to_reduce);
@@ -853,6 +890,31 @@ class ZkxBuilder {
                              std::optional<std::string_view> attributes,
                              std::optional<int64_t> version);
 
+  friend ZkxOp CustomCall(
+      ZkxBuilder* builder, const std::string& call_target_name,
+      absl::Span<const ZkxOp> operands, const Shape& shape,
+      const std::string& opaque, bool has_side_effect,
+      absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+          output_operand_aliasing,
+      const Literal* literal, CustomCallSchedule schedule,
+      CustomCallApiVersion api_version);
+  friend ZkxOp CustomCallWithComputation(
+      ZkxBuilder* builder, const std::string& call_target_name,
+      absl::Span<const ZkxOp> operands, const ZkxComputation& computation,
+      const Shape& shape, const std::string& opaque, bool has_side_effect,
+      absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+          output_operand_aliasing,
+      const Literal* literal, CustomCallSchedule schedule,
+      CustomCallApiVersion api_version);
+  friend ZkxOp CustomCallWithLayout(
+      ZkxBuilder* builder, const std::string& call_target_name,
+      absl::Span<const ZkxOp> operands, const Shape& shape_with_layout,
+      absl::Span<const Shape> operand_shapes_with_layout,
+      const std::string& opaque, bool has_side_effect,
+      absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+          output_operand_aliasing,
+      const Literal* literal, CustomCallSchedule schedule,
+      CustomCallApiVersion api_version);
   friend ZkxOp Add(ZkxOp lhs, ZkxOp rhs,
                    absl::Span<const int64_t> broadcast_dimensions);
   friend ZkxOp Sub(ZkxOp lhs, ZkxOp rhs,
@@ -1371,6 +1433,57 @@ ZkxOp Compare(ZkxOp lhs, ZkxOp rhs,
               absl::Span<const int64_t> broadcast_dimensions,
               ComparisonDirection direction);
 ZkxOp Compare(ZkxOp lhs, ZkxOp rhs, ComparisonDirection direction);
+
+// Enqueues a custom call instruction onto the computation. A custom call
+// invokes code external to ZKX. The |operands| are passed to the external code,
+// and the external code is expected to produce a result of the given
+// |shape|. The exact mechanism is backend-specific. For example, in the CPU
+// backend, a call instruction is emitted which targets a symbol with the name
+// |call_target_name|.  |call_target_name| and |opaque| can arbitrary strings,
+// but |call_target_name| should be short as it may be used in labels. |opaque|
+// can encode arbitrarily large amounts of information. |has_side_effect|
+// specifies whether the instruction can have side effects.
+// |output_operand_aliasing| specifies a list of output/operand buffer pairs
+// that alias each other, where the output buffer is represented as a
+// ShapeIndex, and the operand buffer is represented as the operand index and
+// the ShapeIndex.
+ZkxOp CustomCall(
+    ZkxBuilder* builder, const std::string& call_target_name,
+    absl::Span<const ZkxOp> operands, const Shape& shape,
+    const std::string& opaque = "", bool has_side_effect = false,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing = {},
+    const Literal* literal = nullptr,
+    CustomCallSchedule schedule = CustomCallSchedule::SCHEDULE_NONE,
+    CustomCallApiVersion api_version = API_VERSION_ORIGINAL);
+
+// Overload which constructs a custom call that applies an Zkx computation.
+ZkxOp CustomCallWithComputation(
+    ZkxBuilder* builder, const std::string& call_target_name,
+    absl::Span<const ZkxOp> operands, const ZkxComputation& computation,
+    const Shape& shape, const std::string& opaque = "",
+    bool has_side_effect = false,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing = {},
+    const Literal* literal = nullptr,
+    CustomCallSchedule schedule = CustomCallSchedule::SCHEDULE_NONE,
+    CustomCallApiVersion api_version = API_VERSION_ORIGINAL);
+
+// Overload which constructs a custom call with fixed layouts. The operands will
+// have the layouts specified by |operand_shapes_with_layout| when provided to
+// external code, and the external code is expected to produce a result with the
+// layout specified by |shape_with_layout|. All shapes in |shape_with_layout|
+// and |operand_shapes_with_layout| must have layouts.
+ZkxOp CustomCallWithLayout(
+    ZkxBuilder* builder, const std::string& call_target_name,
+    absl::Span<const ZkxOp> operands, const Shape& shape_with_layout,
+    absl::Span<const Shape> operand_shapes_with_layout,
+    const std::string& opaque = "", bool has_side_effect = false,
+    absl::Span<const std::pair<ShapeIndex, std::pair<int64_t, ShapeIndex>>>
+        output_operand_aliasing = {},
+    const Literal* literal = nullptr,
+    CustomCallSchedule schedule = CustomCallSchedule::SCHEDULE_NONE,
+    CustomCallApiVersion api_version = API_VERSION_ORIGINAL);
 
 // Enqueues a call instruction onto the computation.
 ZkxOp Call(ZkxBuilder* builder, const ZkxComputation& computation,
