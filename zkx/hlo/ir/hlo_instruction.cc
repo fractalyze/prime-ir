@@ -25,6 +25,7 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/ir/hlo_op_metadata.h"
+#include "zkx/hlo/parser/hlo_lexer.h"
 
 namespace zkx {
 
@@ -3211,15 +3212,13 @@ void HloInstruction::PrintWithCanonicalNameMap(
     // In the common case that the backend-config is valid-ish JSON, the parser
     // doesn't need it delimited by quotes, so we can print it without
     // CEsape'ing.  This is much easier to read.
-    // TODO(chokobole): Uncomment this. Dependency: LexesAsJsonDict
-    // if (LexesAsJsonDict(config)) {
-    //   printer->Append(config);
-    // } else {
-    printer->Append("\"");
-    printer->Append(absl::CEscape(config));
-    printer->Append("\"");
-    // TODO(chokobole): Uncomment this. Dependency: LexesAsJsonDict
-    // }
+    if (LexesAsJsonDict(config)) {
+      printer->Append(config);
+    } else {
+      printer->Append("\"");
+      printer->Append(absl::CEscape(config));
+      printer->Append("\"");
+    }
   }
 }
 
@@ -3633,13 +3632,11 @@ std::string FrontendAttributesToString(
   absl::c_sort(sorted_attributes);
   const auto formatter = [](std::string* out,
                             const std::pair<std::string, std::string>& item) {
-    // TODO(chokobole): Uncomment this. Dependency: LexesAsJsonDict
-    // if (LexesAsJsonDict(item.second)) {
-    //   absl::StrAppend(out, item.first, "=", item.second);
-    // } else {
-    absl::StrAppend(out, item.first, "=\"", item.second, "\"");
-    // TODO(chokobole): Uncomment this. Dependency: LexesAsJsonDict
-    // }
+    if (LexesAsJsonDict(item.second)) {
+      absl::StrAppend(out, item.first, "=", item.second);
+    } else {
+      absl::StrAppend(out, item.first, "=\"", item.second, "\"");
+    }
   };
   return absl::StrFormat("{%s}",
                          absl::StrJoin(sorted_attributes, ",", formatter));

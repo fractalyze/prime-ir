@@ -130,6 +130,7 @@ zkx_cc_library(
         "//zkx:util",
         "//zkx:window_util",
         "//zkx/base:logging",
+        "//zkx/hlo/parser:hlo_lexer",
         "//zkx/service:compilation_environments",
         "//zkx/service:computation_layout",
         "//zkx/service:hlo_cc_proto",
