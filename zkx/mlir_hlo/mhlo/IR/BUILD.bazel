@@ -131,6 +131,7 @@ zkx_cc_library(
         "@llvm-project//mlir:SideEffectInterfaces",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
+        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "@prime_ir//prime_ir/Dialect/Field/IR:Field",
         "@prime_ir//prime_ir/IR:Attributes",
         "@stablehlo//stablehlo/dialect:assembly_format",

@@ -1462,6 +1462,26 @@ absl::StatusOr<ZkxOp> ZkxBuilder::RevInternal(
   return AddInstruction(std::move(instr), HloOpcode::kReverse, {operand});
 }
 
+ZkxOp ZkxBuilder::BitReverse(ZkxOp operand,
+                             absl::Span<const int64_t> dimensions) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    TF_ASSIGN_OR_RETURN(const Shape* operand_shape, GetShapePtr(operand));
+    TF_ASSIGN_OR_RETURN(Shape shape, ShapeInference::InferBitReverseShape(
+                                         *operand_shape, dimensions));
+    return BitReverseInternal(shape, operand, dimensions);
+  });
+}
+
+absl::StatusOr<ZkxOp> ZkxBuilder::BitReverseInternal(
+    const Shape& shape, ZkxOp operand, absl::Span<const int64_t> dimensions) {
+  HloInstructionProto instr;
+  *instr.mutable_shape() = shape.ToProto();
+  for (int64_t dim : dimensions) {
+    instr.add_dimensions(dim);
+  }
+  return AddInstruction(std::move(instr), HloOpcode::kBitReverse, {operand});
+}
+
 ZkxOp ZkxBuilder::Sort(absl::Span<const ZkxOp> operands,
                        const ZkxComputation& comparator, int64_t dimension,
                        bool is_stable) {
@@ -2640,6 +2660,10 @@ ZkxOp Transpose(const ZkxOp operand, absl::Span<const int64_t> permutation) {
 
 ZkxOp Rev(const ZkxOp operand, absl::Span<const int64_t> dimensions) {
   return operand.builder()->Rev(operand, dimensions);
+}
+
+ZkxOp BitReverse(const ZkxOp operand, absl::Span<const int64_t> dimensions) {
+  return operand.builder()->BitReverse(operand, dimensions);
 }
 
 ZkxOp Sort(absl::Span<const ZkxOp> operands, const ZkxComputation& comparator,

@@ -1528,6 +1528,33 @@ def MHLO_ReturnOp : MHLO_Op<"return", [Pure, Terminator]> {
   let assemblyFormat = "$results attr-dict (`:` type($results)^)?";
 }
 
+def MHLO_BitReverseOp: MHLO_Op<"bit_reverse",
+      [Pure, HLO_CompatibleOperandsAndResultType]> {
+  let summary = "BitReverse operation";
+  let description = [{
+    Applies bit-reversal permutation to elements along the specified
+    `dimensions` and produces a `result` tensor.
+
+    Each dimension size must be a power of 2. For a dimension of size n,
+    the element at index i is moved to index bit_reverse(i, log₂(n)).
+
+    Example:
+    ```mlir
+    %result = mhlo.bit_reverse %operand, dims = [0] : tensor<8xi32>
+    ```
+  }];
+  let arguments = (ins
+    MHLO_Tensor:$operand,
+    I64ElementsAttr:$dimensions
+  );
+
+  let hasVerifier = 1;
+
+  let results = (outs MHLO_Tensor);
+
+  let hasFolder = 1;
+}
+
 def MHLO_ReverseOp: MHLO_Op<"reverse",
       [Pure, HLO_CompatibleOperandsAndResultType]> {
   let summary = "Reverse operation";

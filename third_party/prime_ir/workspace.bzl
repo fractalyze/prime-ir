@@ -21,8 +21,8 @@ prime_ir provides MLIR dialects for cryptographic computations.
 load("//third_party:repo.bzl", "tf_http_archive", "tf_mirror_urls")
 
 def repo():
-    PRIME_IR_COMMIT = "99ac729546610b05d12959a08a107d865d349e5b"
-    PRIME_IR_SHA256 = "a455f7a00f859580911c6eeb864ca6a2b242aeff1fba3d231debbcafd527876d"
+    PRIME_IR_COMMIT = "868cedcfd212a69018b3fae507dfd9f8a113427a"
+    PRIME_IR_SHA256 = "70ddffc69a57c4c7cb4817b8ec069a5371c93c2885b1f01933156f19081b5201"
     tf_http_archive(
         name = "prime_ir",
         sha256 = PRIME_IR_SHA256,

@@ -48,6 +48,7 @@ limitations under the License.
 #include "stablehlo/dialect/AssemblyFormat.h"
 #include "stablehlo/dialect/TypeInference.h"
 
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/IR/Attributes.h"
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h.inc"
@@ -277,6 +278,7 @@ LogicalResult TypeExtensionsAttr::verifyEncoding(
 
 INFER_RETURN_TYPE_COMPONENTS_FROM_OPERANDS(AddOp)
 INFER_RETURN_TYPE_COMPONENTS_FROM_OPERANDS(AndOp)
+INFER_RETURN_TYPE_COMPONENTS_FROM_OPERANDS(BitReverseOp)
 INFER_RETURN_TYPE_COMPONENTS_FROM_OPERANDS(ClzOp)
 // TODO(chokobole): uncomment this. Dependency: CollectiveBroadcastOp
 // INFER_RETURN_TYPE_COMPONENTS_FROM_OPERANDS(CollectiveBroadcastOp)
@@ -2735,6 +2737,32 @@ void ReshapeOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                             MLIRContext *context) {
   results.add<IdentityBroadcastReshape, IdentityBroadcastInDimReshape,
               EliminateRedundantReshape, EliminateIdentityReshape>(context);
+}
+
+//===----------------------------------------------------------------------===//
+// BitReverseOp
+//===----------------------------------------------------------------------===//
+
+LogicalResult BitReverseOp::verify() {
+  if (failed(verify1dTensor(getLoc(), getDimensions(), "dimensions")))
+    return failure();
+  return hlo::verifyBitReverseOp(
+      getLoc(), getOperand(),
+      llvm::to_vector(getDimensions().getValues<int64_t>()));
+}
+
+OpFoldResult BitReverseOp::fold(FoldAdaptor adaptor) {
+  // No dimensions to bit-reverse.
+  DenseIntElementsAttr dims = getDimensions();
+  if (dims.getNumElements() == 0)
+    return getOperand();
+
+  // Involution: bit_reverse(bit_reverse(x, dims), dims) → x
+  auto input = getOperand().getDefiningOp<BitReverseOp>();
+  if (input && input.getDimensions() == dims)
+    return input.getOperand();
+
+  return {};
 }
 
 //===----------------------------------------------------------------------===//

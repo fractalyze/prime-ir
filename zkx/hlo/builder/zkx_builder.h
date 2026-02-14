@@ -542,6 +542,10 @@ class ZkxBuilder {
   virtual absl::StatusOr<ZkxOp> RevInternal(
       const Shape& shape, ZkxOp operand, absl::Span<const int64_t> dimensions);
 
+  ZkxOp BitReverse(ZkxOp operand, absl::Span<const int64_t> dimensions);
+  virtual absl::StatusOr<ZkxOp> BitReverseInternal(
+      const Shape& shape, ZkxOp operand, absl::Span<const int64_t> dimensions);
+
   ZkxOp Sort(absl::Span<const ZkxOp> operands, const ZkxComputation& comparator,
              int64_t dimension = -1, bool is_stable = false);
   virtual absl::StatusOr<ZkxOp> SortInternal(const Shape& shape,
@@ -909,6 +913,7 @@ class ZkxBuilder {
   friend ZkxOp Neg(ZkxOp operand);
   friend ZkxOp Transpose(ZkxOp operand, absl::Span<const int64_t> permutation);
   friend ZkxOp Rev(ZkxOp operand, absl::Span<const int64_t> dimensions);
+  friend ZkxOp BitReverse(ZkxOp operand, absl::Span<const int64_t> dimensions);
   friend ZkxOp Sort(absl::Span<const ZkxOp> operands,
                     const ZkxComputation& comparator, int64_t dimension,
                     bool is_stable);
@@ -1510,6 +1515,11 @@ ZkxOp Transpose(ZkxOp operand, absl::Span<const int64_t> permutation);
 // elements in the given dimensions is reversed (i.e., the element at index i
 // is moved to index dimension_size - 1 - i).
 ZkxOp Rev(ZkxOp operand, absl::Span<const int64_t> dimensions);
+
+// Enqueues a bit-reverse permutation instruction onto the computation.
+// Applies bit-reversal permutation along the specified dimensions.
+// Each dimension size must be a power of 2.
+ZkxOp BitReverse(ZkxOp operand, absl::Span<const int64_t> dimensions);
 
 // Enqueues a sort instruction onto the computation, using 'comparator' for
 // comparisons. 'comparator' needs to define a strict weak order. 'is_stable'
