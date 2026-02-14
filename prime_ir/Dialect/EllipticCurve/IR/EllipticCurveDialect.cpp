@@ -92,8 +92,8 @@ public:
                 auto fieldType =
                     cast<field::FieldTypeInterface>(swAttr.getBaseField());
                 os << *alias;
-                if (!fieldType.isMontgomery()) {
-                  os << "_std";
+                if (fieldType.isMontgomery()) {
+                  os << "_mont";
                 }
                 return AliasResult::FinalAlias;
               }
