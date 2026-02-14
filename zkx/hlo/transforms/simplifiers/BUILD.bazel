@@ -39,20 +39,19 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "optimize_input_output_buffer_alias",
-    srcs = ["optimize_input_output_buffer_alias.cc"],
-    hdrs = ["optimize_input_output_buffer_alias.h"],
+    name = "hlo_cse",
+    srcs = ["hlo_cse.cc"],
+    hdrs = ["hlo_cse.h"],
     deps = [
         "//xla/tsl/platform:errors",
+        "//zkx:literal",
         "//zkx:shape_util",
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/pass:hlo_pass_interface",
-        "@com_google_absl//absl/algorithm:container",
+        "//zkx/service:hlo_domain_map",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
         "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -70,6 +69,45 @@ zkx_cc_library(
         "//zkx/hlo/pass:hlo_pass_interface",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "hlo_memory_scheduler",
+    srcs = ["hlo_memory_scheduler.cc"],
+    hdrs = ["hlo_memory_scheduler.h"],
+    deps = [
+        "//xla/tsl/platform:numbers",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/profiler/lib:scoped_annotation",
+        "//zkx/hlo/analysis:hlo_alias_analysis",
+        "//zkx/hlo/analysis:tuple_points_to_analysis",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:logical_buffer",
+        "//zkx/service/heap_simulator",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "optimize_input_output_buffer_alias",
+    srcs = ["optimize_input_output_buffer_alias.cc"],
+    hdrs = ["optimize_input_output_buffer_alias.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 
@@ -97,27 +135,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "hlo_memory_scheduler",
-    srcs = ["hlo_memory_scheduler.cc"],
-    hdrs = ["hlo_memory_scheduler.h"],
-    deps = [
-        "//xla/tsl/platform:numbers",
-        "//xla/tsl/platform:statusor",
-        "//xla/tsl/profiler/lib:scoped_annotation",
-        "//zkx/hlo/analysis:hlo_alias_analysis",
-        "//zkx/hlo/analysis:tuple_points_to_analysis",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/pass:hlo_pass_interface",
-        "//zkx/service:logical_buffer",
-        "//zkx/service/heap_simulator",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/status:statusor",
-    ],
-)
-
-zkx_cc_library(
     name = "tuple_simplifier",
     srcs = ["tuple_simplifier.cc"],
     hdrs = ["tuple_simplifier.h"],
@@ -128,23 +145,6 @@ zkx_cc_library(
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/ir:hlo_opcode",
         "//zkx/hlo/pass:hlo_pass_interface",
-    ],
-)
-
-zkx_cc_library(
-    name = "hlo_cse",
-    srcs = ["hlo_cse.cc"],
-    hdrs = ["hlo_cse.h"],
-    deps = [
-        "//xla/tsl/platform:errors",
-        "//zkx:literal",
-        "//zkx:shape_util",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/pass:hlo_pass_interface",
-        "//zkx/service:hlo_domain_map",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/status:statusor",
     ],
 )
 

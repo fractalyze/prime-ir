@@ -19,6 +19,18 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
 
+proto_library(
+    name = "run_hlo_module_proto",
+    srcs = ["run_hlo_module.proto"],
+    visibility = ["//visibility:public"],
+    deps = ["//zkx:zkx_data_proto"],
+)
+
+cc_proto_library(
+    name = "run_hlo_module_cc_proto",
+    deps = [":run_hlo_module_proto"],
+)
+
 zkx_cc_library(
     name = "hlo_module_loader",
     srcs = ["hlo_module_loader.cc"],
@@ -42,23 +54,49 @@ zkx_cc_library(
     ],
 )
 
-zkx_cc_unittest(
-    name = "hlo_module_loader_unittest",
-    srcs = ["hlo_module_loader_unittest.cc"],
+zkx_cc_library(
+    name = "hlo_extractor",
+    srcs = ["hlo_extractor.cc"],
+    hdrs = ["hlo_extractor.h"],
     deps = [
-        ":hlo_module_loader",
-        "//zkx/tests:hlo_test_base",
+        "//xla/tsl/platform:status",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:dfs_hlo_visitor_with_default",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_clone_context",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/transforms/simplifiers:hlo_dce",
+        "//zkx/hlo/transforms/simplifiers:tuple_simplifier",
+        "//zkx/service:call_inliner",
+        "//zkx/service:compilation_environments",
+        "//zkx/service:hlo_module_config",
+        "//zkx/service:hlo_verifier",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 
-proto_library(
-    name = "run_hlo_module_proto",
-    srcs = ["run_hlo_module.proto"],
-    visibility = ["//visibility:public"],
-    deps = ["//zkx:zkx_data_proto"],
-)
-
-cc_proto_library(
-    name = "run_hlo_module_cc_proto",
-    deps = [":run_hlo_module_proto"],
+zkx_cc_unittest(
+    name = "tools_unittests",
+    srcs = [
+        "hlo_extractor_unittest.cc",
+        "hlo_module_loader_unittest.cc",
+    ],
+    deps = [
+        ":hlo_extractor",
+        ":hlo_module_loader",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/parser:hlo_parser",
+        "//zkx/hlo/utils:hlo_matchers",
+        "//zkx/tests:hlo_test_base",
+    ],
 )

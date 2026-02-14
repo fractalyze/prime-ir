@@ -199,6 +199,17 @@ struct RendezvousKey {
   int64_t op_id;
 };
 
+// Returns true if instruction is a collective op that is not a collective
+// fusion.
+bool IsNonFusionCollective(const HloInstruction* instruction);
+
+// Returns true if instruction is a collective op or a collective fusion.
+bool IsCollective(const HloInstruction* instruction);
+
+// Returns the collective instruction if argument is a collective op (or a
+// collective fusion) with channel_id.
+HloInstruction* IsOrHasCollectiveWithChannelId(HloInstruction* instruction);
+
 // When a Send or Recv is annotated with frontend attribute
 // _zkx_send_recv_pipeline="1", asynchronous stream kP2P1 is used to execute the
 // Send or Recv. For all other cases, asynchronous stream kP2P0 is used.
