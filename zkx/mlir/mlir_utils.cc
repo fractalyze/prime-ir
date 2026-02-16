@@ -255,6 +255,22 @@ PrimitiveType GetPrimitiveTypeOfPrimeFieldType(
   return PrimitiveType::PRIMITIVE_TYPE_INVALID;
 }
 
+PrimitiveType GetPrimitiveTypeOfExtFieldType(
+    mlir::prime_ir::field::ExtensionFieldType ext_field_type) {
+#define ZK_DTYPES_CASE(cpp_type, unused, enum, unused2)                  \
+  {                                                                      \
+    mlir::prime_ir::field::ExtensionFieldType this_ext_field_type =      \
+        mlir::cast<mlir::prime_ir::field::ExtensionFieldType>(           \
+            GetMlirExtFieldType<cpp_type>(ext_field_type.getContext())); \
+    if (ext_field_type == this_ext_field_type) {                         \
+      return PrimitiveType::enum;                                        \
+    }                                                                    \
+  }
+  ZK_DTYPES_PUBLIC_EXT_FIELD_TYPE_LIST(ZK_DTYPES_CASE)
+#undef ZK_DTYPES_CASE
+  return PrimitiveType::PRIMITIVE_TYPE_INVALID;
+}
+
 PrimitiveType GetPrimitiveTypeOfAffineType(
     mlir::prime_ir::elliptic_curve::AffineType affine_type) {
 #define ZK_DTYPES_CASE(cpp_type, unused, enum, unused2)             \
@@ -315,6 +331,10 @@ PrimitiveType MlirTypeToPrimitiveTypeWithSign(mlir::Type type) {
   } else if (auto field_type =
                  mlir::dyn_cast<mlir::prime_ir::field::PrimeFieldType>(type)) {
     return GetPrimitiveTypeOfPrimeFieldType(field_type);
+  } else if (auto ext_field_type =
+                 mlir::dyn_cast<mlir::prime_ir::field::ExtensionFieldType>(
+                     type)) {
+    return GetPrimitiveTypeOfExtFieldType(ext_field_type);
   } else if (auto affine_type =
                  mlir::dyn_cast<mlir::prime_ir::elliptic_curve::AffineType>(
                      type)) {

@@ -2135,6 +2135,9 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
   auto enable_flag = [this](PrimitiveType element_type) {
     if (primitive_util::IsFieldType(element_type)) {
       pass_flag_.enable_field_to_arith = true;
+      if (primitive_util::IsExtensionFieldType(element_type)) {
+        pass_flag_.enable_ext_field_to_llvm = true;
+      }
       return;
     } else if (primitive_util::IsEcPointType(element_type)) {
       pass_flag_.enable_elliptic_curve_to_field = true;
