@@ -57,7 +57,7 @@ void ShortWeierstrassAttr::print(AsmPrinter &printer) const {
   Attribute gX = field::maybeToStandard(getBaseField(), getGx());
   Attribute gY = field::maybeToStandard(getBaseField(), getGy());
 
-  printer << '<' << a << ',' << b << '(' << gX << ',' << gY
+  printer << '<' << a << ',' << b << ",(" << gX << ',' << gY
           << ")> : " << getBaseField();
 }
 
