@@ -25,3 +25,21 @@ func.func @test_vector_splat(%input : !PF) -> vector<4x!PF> {
   // CHECK: return %[[SPLAT]] : [[VEC]]
   return %splat : vector<4x!PF>
 }
+
+// CHECK-LABEL: @test_vector_insert
+// CHECK-SAME: (%[[VAL:.*]]: [[ELEM:.*]], %[[VEC:.*]]: [[VEC_TYPE:.*]]) -> [[VEC_TYPE]] {
+func.func @test_vector_insert(%val : !PF, %vec : vector<4x!PF>) -> vector<4x!PF> {
+  // CHECK: %[[RES:.*]] = vector.insert %[[VAL]], %[[VEC]] [2] : [[ELEM]] into [[VEC_TYPE]]
+  %res = vector.insert %val, %vec [2] : !PF into vector<4x!PF>
+  // CHECK: return %[[RES]] : [[VEC_TYPE]]
+  return %res : vector<4x!PF>
+}
+
+// CHECK-LABEL: @test_vector_extract
+// CHECK-SAME: (%[[VEC:.*]]: [[VEC_TYPE:.*]]) -> [[ELEM:.*]] {
+func.func @test_vector_extract(%vec : vector<4x!PF>) -> !PF {
+  // CHECK: %[[RES:.*]] = vector.extract %[[VEC]][1] : [[ELEM]] from [[VEC_TYPE]]
+  %res = vector.extract %vec[1] : !PF from vector<4x!PF>
+  // CHECK: return %[[RES]] : [[ELEM]]
+  return %res : !PF
+}
