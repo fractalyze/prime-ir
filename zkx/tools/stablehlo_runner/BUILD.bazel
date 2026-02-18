@@ -78,6 +78,31 @@ zkx_cc_binary(
 )
 
 zkx_cc_binary(
+    name = "ntt_benchmark",
+    srcs = ["ntt_benchmark.cc"],
+    deps = [
+        ":stablehlo_utils",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service:hlo_runner",
+        "//zkx/service:platform_util",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_benchmark//:benchmark",
+        "@zkbench_cpp//zkbench:benchmark_context",
+        "@zkbench_cpp//zkbench:benchmark_main",
+        "@zkbench_cpp//zkbench:hash",
+    ] + RUNNER_RUNTIME_DEPS + if_cuda_is_configured([
+        "//zkx/stream_executor/cuda:cuda_platform",
+    ]),
+)
+
+zkx_cc_binary(
     name = "poseidon2_benchmark",
     srcs = ["poseidon2_benchmark.cc"],
     deps = [
