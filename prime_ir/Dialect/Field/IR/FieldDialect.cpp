@@ -81,8 +81,8 @@ public:
               std::optional<std::string> alias = getKnownModulusAlias(modulus);
               if (alias) {
                 os << "pf_" << *alias;
-                if (!pfElemType.isMontgomery()) {
-                  os << "_std";
+                if (pfElemType.isMontgomery()) {
+                  os << "_mont";
                 }
                 return AliasResult::FinalAlias;
               }
