@@ -25,3 +25,21 @@ func.func @test_vector_splat(%input : !mod) -> vector<4x!mod> {
   // CHECK: return %[[SPLAT]] : [[VEC]]
   return %splat : vector<4x!mod>
 }
+
+// CHECK-LABEL: @test_vector_insert
+// CHECK-SAME: (%[[VAL:.*]]: [[ELEM:.*]], %[[VEC:.*]]: [[VEC_TYPE:.*]]) -> [[VEC_TYPE]] {
+func.func @test_vector_insert(%val : !mod, %vec : vector<4x!mod>) -> vector<4x!mod> {
+  // CHECK: %[[RES:.*]] = vector.insert %[[VAL]], %[[VEC]] [2] : [[ELEM]] into [[VEC_TYPE]]
+  %res = vector.insert %val, %vec [2] : !mod into vector<4x!mod>
+  // CHECK: return %[[RES]] : [[VEC_TYPE]]
+  return %res : vector<4x!mod>
+}
+
+// CHECK-LABEL: @test_vector_extract
+// CHECK-SAME: (%[[VEC:.*]]: [[VEC_TYPE:.*]]) -> [[ELEM:.*]] {
+func.func @test_vector_extract(%vec : vector<4x!mod>) -> !mod {
+  // CHECK: %[[RES:.*]] = vector.extract %[[VEC]][1] : [[ELEM]] from [[VEC_TYPE]]
+  %res = vector.extract %vec[1] : !mod from vector<4x!mod>
+  // CHECK: return %[[RES]] : [[ELEM]]
+  return %res : !mod
+}

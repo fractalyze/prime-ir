@@ -779,6 +779,8 @@ void FieldToModArith::runOnOperation() {
       ConvertAny<tensor_ext::BitReverseOp>,
       ConvertAny<ub::PoisonOp>,
       ConvertAny<vector::BroadcastOp>,
+      ConvertAny<vector::ExtractOp>,
+      ConvertAny<vector::InsertOp>,
       ConvertAny<vector::SplatOp>,
       ConvertAny<vector::TransferReadOp>,
       ConvertAny<vector::TransferWriteOp>
@@ -841,6 +843,8 @@ void FieldToModArith::runOnOperation() {
       tensor_ext::BitReverseOp,
       ub::PoisonOp,
       vector::BroadcastOp,
+      vector::ExtractOp,
+      vector::InsertOp,
       vector::SplatOp,
       vector::TransferReadOp,
       vector::TransferWriteOp
