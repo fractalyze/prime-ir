@@ -43,7 +43,11 @@ class FieldTest(absltest.TestCase):
           "!field.ef<2x!field.pf<2013265921 : i32, true>, 11 : i32>",
       )
       self.assertEqual(ef2_type.degree, 2)
+      self.assertEqual(ef2_type.degree_over_prime, 2)
+      self.assertFalse(ef2_type.is_tower)
       self.assertEqual(ef2_type.base_field, pf)
+      self.assertEqual(ef2_type.base_prime_field, pf)
+      self.assertIsInstance(ef2_type.base_field, field.PrimeFieldType)
       self.assertEqual(int(ef2_type.non_residue), non_residue_2)
       self.assertTrue(ef2_type.is_montgomery)
 
@@ -56,7 +60,11 @@ class FieldTest(absltest.TestCase):
           "!field.ef<3x!field.pf<2013265921 : i32, true>, 2 : i32>",
       )
       self.assertEqual(ef3_type.degree, 3)
+      self.assertEqual(ef3_type.degree_over_prime, 3)
+      self.assertFalse(ef3_type.is_tower)
       self.assertEqual(ef3_type.base_field, pf)
+      self.assertEqual(ef3_type.base_prime_field, pf)
+      self.assertIsInstance(ef3_type.base_field, field.PrimeFieldType)
       self.assertEqual(int(ef3_type.non_residue), non_residue_3)
       self.assertTrue(ef3_type.is_montgomery)
 
@@ -69,9 +77,38 @@ class FieldTest(absltest.TestCase):
           "!field.ef<4x!field.pf<2013265921 : i32, true>, 11 : i32>",
       )
       self.assertEqual(ef4_type.degree, 4)
+      self.assertEqual(ef4_type.degree_over_prime, 4)
+      self.assertFalse(ef4_type.is_tower)
       self.assertEqual(ef4_type.base_field, pf)
+      self.assertEqual(ef4_type.base_prime_field, pf)
+      self.assertIsInstance(ef4_type.base_field, field.PrimeFieldType)
       self.assertEqual(int(ef4_type.non_residue), non_residue_4)
       self.assertTrue(ef4_type.is_montgomery)
+
+  def testExtensionFieldTowerCreation(self):
+    with Context() as ctx, Location.unknown():
+      field.register_dialect(ctx)
+      pf = _createBabybearType(ctx)
+
+      # Build Fp3 = Fp[x]/(x³ - 2)
+      nr3 = (2 * BABYBEAR_R) % BABYBEAR_MODULUS
+      nr3_attr = _createBabybearAttribute(nr3)
+      ef3 = field.ExtensionFieldType.get(3, pf, nr3_attr)
+      self.assertEqual(ef3.degree, 3)
+      self.assertEqual(ef3.degree_over_prime, 3)
+      self.assertFalse(ef3.is_tower)
+
+      # Build tower: Fp6 = (Fp3)[y]/(y² - 11), degree_over_prime = 3 * 2 = 6
+      # 11 is a QNR in Fp and remains a QNR in Fp3 (odd-degree extension).
+      nr_tower = (11 * BABYBEAR_R) % BABYBEAR_MODULUS
+      nr_tower_attr = _createBabybearAttribute(nr_tower)
+      ef3x2 = field.ExtensionFieldType.get(2, ef3, nr_tower_attr)
+      self.assertEqual(ef3x2.degree, 2)
+      self.assertEqual(ef3x2.degree_over_prime, 6)
+      self.assertTrue(ef3x2.is_tower)
+      self.assertEqual(ef3x2.base_prime_field, pf)
+      self.assertIsInstance(ef3x2.base_field, field.ExtensionFieldType)
+      self.assertEqual(ef3x2.base_field, ef3)
 
 
 if __name__ == "__main__":
