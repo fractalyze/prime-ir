@@ -63,9 +63,8 @@ bool primeIRTypeIsAnExtensionField(MlirType type) {
 MlirType primeIRExtensionFieldTypeGet(MlirContext ctx, unsigned degree,
                                       MlirType baseField,
                                       MlirAttribute nonResidue) {
-  return wrap(ExtensionFieldType::get(
-      unwrap(ctx), degree, llvm::cast<PrimeFieldType>(unwrap(baseField)),
-      llvm::cast<IntegerAttr>(unwrap(nonResidue))));
+  return wrap(ExtensionFieldType::get(unwrap(ctx), degree, unwrap(baseField),
+                                      unwrap(nonResidue)));
 }
 
 unsigned primeIRExtensionFieldTypeGetDegree(MlirType type) {
@@ -82,4 +81,16 @@ MlirAttribute primeIRExtensionFieldTypeGetNonResidue(MlirType type) {
 
 bool primeIRExtensionFieldTypeIsMontgomery(MlirType type) {
   return llvm::cast<ExtensionFieldType>(unwrap(type)).isMontgomery();
+}
+
+unsigned primeIRExtensionFieldTypeGetDegreeOverPrime(MlirType type) {
+  return llvm::cast<ExtensionFieldType>(unwrap(type)).getDegreeOverPrime();
+}
+
+MlirType primeIRExtensionFieldTypeGetBasePrimeField(MlirType type) {
+  return wrap(llvm::cast<ExtensionFieldType>(unwrap(type)).getBasePrimeField());
+}
+
+bool primeIRExtensionFieldTypeIsTower(MlirType type) {
+  return llvm::cast<ExtensionFieldType>(unwrap(type)).isTower();
 }
