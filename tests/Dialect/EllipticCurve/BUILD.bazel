@@ -50,6 +50,21 @@ run_lit_tests(
 )
 
 cc_test(
+    name = "ECRoundTripTest",
+    srcs = ["ECRoundTripTest.cpp"],
+    deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Parser",
+        "@zk_dtypes//zk_dtypes:bn254_g1",
+        "@zk_dtypes//zk_dtypes:bn254_g2",
+    ],
+)
+
+cc_test(
     name = "PointOperationTest",
     srcs = ["PointOperationTest.cpp"],
     deps = [
