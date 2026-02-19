@@ -281,7 +281,7 @@ PrimitiveType GetPrimitiveTypeOfAffineType(
       return PrimitiveType::enum;                                   \
     }                                                               \
   }
-  ZK_DTYPES_PUBLIC_EC_POINT_TYPE_LIST(ZK_DTYPES_CASE)
+  ZK_DTYPES_PUBLIC_AFFINE_POINT_TYPE_LIST(ZK_DTYPES_CASE)
 #undef ZK_DTYPES_CASE
   return PrimitiveType::PRIMITIVE_TYPE_INVALID;
 }
@@ -296,7 +296,7 @@ PrimitiveType GetPrimitiveTypeOfJacobianType(
       return PrimitiveType::enum;                                       \
     }                                                                   \
   }
-  ZK_DTYPES_PUBLIC_EC_POINT_TYPE_LIST(ZK_DTYPES_CASE)
+  ZK_DTYPES_PUBLIC_JACOBIAN_POINT_TYPE_LIST(ZK_DTYPES_CASE)
 #undef ZK_DTYPES_CASE
   return PrimitiveType::PRIMITIVE_TYPE_INVALID;
 }
@@ -311,7 +311,7 @@ PrimitiveType GetPrimitiveTypeOfXYZZType(
       return PrimitiveType::enum;                               \
     }                                                           \
   }
-  ZK_DTYPES_PUBLIC_EC_POINT_TYPE_LIST(ZK_DTYPES_CASE)
+  ZK_DTYPES_PUBLIC_XYZZ_POINT_TYPE_LIST(ZK_DTYPES_CASE)
 #undef ZK_DTYPES_CASE
   return PrimitiveType::PRIMITIVE_TYPE_INVALID;
 }
