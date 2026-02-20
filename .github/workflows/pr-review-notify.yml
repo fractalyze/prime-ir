@@ -10,7 +10,9 @@ on:
 
 jobs:
   notify-review-request:
-    if: github.event_name == 'pull_request'
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.draft == false
     uses: fractalyze/pr-review-bot/.github/workflows/handle-review-request.yml@main
     with:
       pr_url: ${{ github.event.pull_request.html_url }}
