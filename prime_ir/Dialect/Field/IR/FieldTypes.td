@@ -212,6 +212,11 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
                                 ArrayRef<Value> coeffs) const;
     SmallVector<Value> extractCoeffsFromStruct(
         ImplicitLocOpBuilder &builder, Value structValue) const;
+
+    // Returns the attribute shape reflecting the tower structure.
+    // For simple extensions like ef<2x PF>, returns {2}.
+    // For tower extensions like ef<3x ef<2x PF>>, returns {3, 2}.
+    SmallVector<int64_t> getAttrShape() const;
   }];
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
