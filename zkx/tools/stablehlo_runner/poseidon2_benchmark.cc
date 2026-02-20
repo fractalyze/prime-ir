@@ -111,7 +111,7 @@ absl::Status SetupBenchmark(const char* mlir_path,
   zkbench::BenchmarkContext::SetTestVectors(
       "BM_Poseidon2Permutation", input_hash, output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
-      "BM_Poseidon2Permutation", {{"field", "BabyBear"},
+      "BM_Poseidon2Permutation", {{"field", "BabyBearMont"},
                                   {"width", 16},
                                   {"platform", std::string(platform_name)}});
 
