@@ -150,6 +150,8 @@ message DebugOptions {
   // it may lead to deadlocks, crashes or will produce garbage.
   bool zkx_gpu_collectives_use_persistent_cliques = 354;
 
+  bool zkx_gpu_copy_insertion_use_region_analysis = 236;
+
   // Path to directory with cuda/ptx tools and libraries.
   string zkx_gpu_cuda_data_dir = 61;
 

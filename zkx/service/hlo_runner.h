@@ -117,6 +117,15 @@ class HloRunner : public HloRunnerInterface {
       absl::Span<ScopedShapedBuffer const> arguments,
       ExecutionProfile* profile = nullptr);
 
+  // Launches execution on the given stream without synchronizing. The caller
+  // is responsible for calling stream->BlockHostUntilDone() before destroying
+  // the returned ExecutionOutput. Useful for throughput benchmarks that queue
+  // multiple launches before a single sync.
+  absl::StatusOr<ExecutionOutput> ExecuteAsyncWithDeviceBuffers(
+      OpaqueExecutable* executable,
+      absl::Span<ScopedShapedBuffer const> arguments, se::Stream* stream,
+      ExecutionProfile* profile = nullptr);
+
   // As Execute(), but accepts and returns device buffers instead of host
   // buffers.
   //

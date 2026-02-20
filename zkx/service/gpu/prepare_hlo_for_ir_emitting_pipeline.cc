@@ -40,6 +40,8 @@ namespace {
 HloPassPipeline PrepareHloModuleForIrEmittingPipeline(
     HloModule& hlo_module, HloDataflowAnalysis::CanShareBuffer can_share_buffer,
     const se::DeviceDescription& device_description) {
+  const DebugOptions& debug_options = hlo_module.config().debug_options();
+
   // TODO(chokobole): Use |module| once CpuGpuVerifierMetadata and
   // AliasPassthroughParams are ported.
   (void)hlo_module;
@@ -71,15 +73,13 @@ HloPassPipeline PrepareHloModuleForIrEmittingPipeline(
   // TODO(chokobole): Uncomment this. Dependency: LoopScheduleLinearizer
   // pipeline.AddPass<LoopScheduleLinearizer>(can_share_buffer);
 
-  // TODO(chokobole): Uncomment this. Dependency: region analysis flag
-  // if (debug_options.zkx_gpu_copy_insertion_use_region_analysis()) {
-  //   constexpr int64_t kNoRegionBasedLiveRangeAnalysisLimit = -1;
-  //   pipeline.AddPass<CopyInsertion>(can_share_buffer,
-  //                                   kNoRegionBasedLiveRangeAnalysisLimit);
-  // } else {
-  //   pipeline.AddPass<CopyInsertion>(can_share_buffer);
-  // }
-  pipeline.AddPass<CopyInsertion>(can_share_buffer);
+  if (debug_options.zkx_gpu_copy_insertion_use_region_analysis()) {
+    constexpr int64_t kNoRegionBasedLiveRangeAnalysisLimit = -1;
+    pipeline.AddPass<CopyInsertion>(can_share_buffer,
+                                    kNoRegionBasedLiveRangeAnalysisLimit);
+  } else {
+    pipeline.AddPass<CopyInsertion>(can_share_buffer);
+  }
 
   auto& sub_pipeline =
       pipeline.AddPass<HloPassPipeline>("horizontal-loop-fusion-for-copy");
