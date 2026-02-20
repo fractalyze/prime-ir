@@ -49,6 +49,7 @@ extern "C" uint128_t _mlir_ciface_bf128_mul_baseline(uint128_t a, uint128_t b);
 // BF8 Baseline implementations (generic Karatsuba)
 // =============================================================================
 extern "C" uint8_t _mlir_ciface_bf8_mul_baseline(uint8_t a, uint8_t b);
+extern "C" uint8_t _mlir_ciface_bf8_inverse_baseline(uint8_t a);
 
 // =============================================================================
 // x86 PCLMULQDQ specialized implementations
@@ -69,12 +70,18 @@ extern "C" void _mlir_ciface_bf8x16_mul_gfni(MemRef1D16xi8 *a, MemRef1D16xi8 *b,
 #if defined(PRIME_IR_ARM)
 extern "C" uint64_t _mlir_ciface_bf64_mul_arm(uint64_t a, uint64_t b);
 extern "C" uint128_t _mlir_ciface_bf128_mul_arm(uint128_t a, uint128_t b);
+extern "C" uint64_t _mlir_ciface_bf64_square_arm(uint64_t a);
+extern "C" uint128_t _mlir_ciface_bf128_square_arm(uint128_t a);
 
 // BF8 packed 16x PMULL multiplication
 // Uses memref interface for SIMD vectors
 extern "C" void _mlir_ciface_bf8x16_mul_pmull(MemRef1D16xi8 *a,
                                               MemRef1D16xi8 *b,
                                               MemRef1D16xi8 *c);
+
+// BF128 Polyval Montgomery reduction (faster than Tower polynomial)
+extern "C" uint128_t _mlir_ciface_bf128_mul_arm_polyval(uint128_t a,
+                                                        uint128_t b);
 #endif
 
 // =============================================================================
@@ -222,6 +229,43 @@ void BM_bf128_mul_arm(::benchmark::State &state) {
   zkbench::BenchmarkContext::SetMetadata("BM_bf128_mul_arm",
                                          {{"field", "BF128"}, {"arch", "arm"}});
 }
+
+void BM_bf128_mul_arm_polyval(::benchmark::State &state) {
+  auto a = BinaryFieldT7::Random();
+  auto b = BinaryFieldT7::Random();
+  BinaryFieldT7 result;
+
+  for (auto _ : state) {
+    result = _mlir_ciface_bf128_mul_arm_polyval(a.value(), b.value());
+    ::benchmark::DoNotOptimize(result);
+    a += result;
+  }
+  state.SetItemsProcessed(state.iterations());
+}
+
+void BM_bf64_square_arm(::benchmark::State &state) {
+  auto a = BinaryFieldT6::Random();
+  BinaryFieldT6 result;
+
+  for (auto _ : state) {
+    result = _mlir_ciface_bf64_square_arm(a.value());
+    ::benchmark::DoNotOptimize(result);
+    a += result;
+  }
+  state.SetItemsProcessed(state.iterations());
+}
+
+void BM_bf128_square_arm(::benchmark::State &state) {
+  auto a = BinaryFieldT7::Random();
+  BinaryFieldT7 result;
+
+  for (auto _ : state) {
+    result = _mlir_ciface_bf128_square_arm(a.value());
+    ::benchmark::DoNotOptimize(result);
+    a += result;
+  }
+  state.SetItemsProcessed(state.iterations());
+}
 #endif
 
 // =============================================================================
@@ -322,6 +366,26 @@ void BM_bf8x16_mul_pmull(::benchmark::State &state) {
 #endif
 
 // =============================================================================
+// BF8 Inverse Benchmarks
+// =============================================================================
+void BM_bf8_inverse_baseline(::benchmark::State &state) {
+  auto a = BinaryFieldT3::Random();
+  // Ensure non-zero input (inverse of 0 is undefined)
+  if (a.IsZero())
+    a = BinaryFieldT3::One();
+
+  for (auto _ : state) {
+    auto result = _mlir_ciface_bf8_inverse_baseline(a.value());
+    ::benchmark::DoNotOptimize(result);
+    // Chain results to prevent optimization, but keep non-zero
+    a = BinaryFieldT3(result);
+    if (a.IsZero())
+      a = BinaryFieldT3::One();
+  }
+  state.SetItemsProcessed(state.iterations());
+}
+
+// =============================================================================
 // Register benchmarks
 // =============================================================================
 BENCHMARK(BM_bf64_mul_baseline);
@@ -338,6 +402,9 @@ BENCHMARK(BM_bf128_mul_x86);
 #endif
 #if defined(PRIME_IR_ARM)
 BENCHMARK(BM_bf128_mul_arm);
+BENCHMARK(BM_bf128_mul_arm_polyval);
+BENCHMARK(BM_bf64_square_arm);
+BENCHMARK(BM_bf128_square_arm);
 #endif
 
 BENCHMARK(BM_bf8_mul_baseline);
@@ -347,6 +414,8 @@ BENCHMARK(BM_bf8x16_mul_gfni);
 #if defined(PRIME_IR_ARM)
 BENCHMARK(BM_bf8x16_mul_pmull);
 #endif
+
+BENCHMARK(BM_bf8_inverse_baseline);
 
 } // namespace
 } // namespace mlir::prime_ir::benchmark
@@ -372,20 +441,24 @@ BENCHMARK(BM_bf8x16_mul_pmull);
 // clang-format on
 
 // clang-format off
-// 2026-01-28T15:34:01+00:00
+// 2026-01-29T05:20:58+00:00
 // Run on (14 X 24 MHz CPU s)
 // CPU Caches:
 //   L1 Data 64 KiB
 //   L1 Instruction 128 KiB
 //   L2 Unified 4096 KiB (x14)
-// Load Average: 3.41, 3.18, 3.26
-// ----------------------------------------------------------------
-// Benchmark                      Time             CPU   Iterations
-// ----------------------------------------------------------------
-// BM_bf64_mul_baseline         184 ns          180 ns      3857026
-// BM_bf64_mul_arm             5.84 ns         5.83 ns    118151436
-// BM_bf128_mul_baseline        567 ns          565 ns      1250156
-// BM_bf128_mul_arm            7.57 ns         7.56 ns     91668631
-// BM_bf8_mul_baseline         7.41 ns         7.41 ns     94597151
-// BM_bf8x16_mul_pmull         4.02 ns         4.01 ns    172203417
+// Load Average: 22.48, 11.89, 7.08
+// -------------------------------------------------------------------
+// Benchmark                         Time             CPU   Iterations
+// -------------------------------------------------------------------
+// BM_bf64_mul_baseline            192 ns          191 ns      3607225
+// BM_bf64_mul_arm                6.01 ns         6.00 ns    113719438
+// BM_bf128_mul_baseline           613 ns          604 ns      1065676
+// BM_bf128_mul_arm               8.51 ns         8.50 ns     91708263
+// BM_bf128_mul_arm_polyval       12.6 ns         12.5 ns     53374406
+// BM_bf64_square_arm             5.90 ns         5.89 ns    115364965
+// BM_bf128_square_arm            7.89 ns         7.86 ns     88692920
+// BM_bf8_mul_baseline            8.04 ns         8.00 ns     87628156
+// BM_bf8x16_mul_pmull            4.44 ns         4.41 ns    163183857
+// BM_bf8_inverse_baseline        3.44 ns         3.42 ns    566985258
 // clang-format on

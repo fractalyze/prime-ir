@@ -38,3 +38,23 @@ func.func @bf128_mul_arm(%a: i128, %b: i128) -> i128 attributes { llvm.emit_c_in
   %c = builtin.unrealized_conversion_cast %c_bf : !BF128 to i128
   return %c : i128
 }
+
+// =============================================================================
+// Square operations using PMULL
+// =============================================================================
+
+// BF64 square using PMULL
+func.func @bf64_square_arm(%a: i64) -> i64 attributes { llvm.emit_c_interface } {
+  %a_bf = builtin.unrealized_conversion_cast %a : i64 to !BF64
+  %c_bf = field.square %a_bf : !BF64
+  %c = builtin.unrealized_conversion_cast %c_bf : !BF64 to i64
+  return %c : i64
+}
+
+// BF128 square using PMULL
+func.func @bf128_square_arm(%a: i128) -> i128 attributes { llvm.emit_c_interface } {
+  %a_bf = builtin.unrealized_conversion_cast %a : i128 to !BF128
+  %c_bf = field.square %a_bf : !BF128
+  %c = builtin.unrealized_conversion_cast %c_bf : !BF128 to i128
+  return %c : i128
+}
