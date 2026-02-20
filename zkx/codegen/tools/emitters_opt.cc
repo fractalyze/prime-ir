@@ -32,6 +32,7 @@ limitations under the License.
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "mlir/Transforms/Passes.h"
 
+#include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "zkx/backends/gpu/codegen/emitters/emitter_base.h"
 #include "zkx/backends/gpu/codegen/emitters/ir/zkx_gpu_ops.h"
 #include "zkx/backends/gpu/codegen/emitters/transforms/passes.h"
@@ -59,7 +60,8 @@ int main(int argc, char** argv) {
       zkx::ZkxDialect,
       // TODO(chokobole): Uncomment this. Dependency: zkx::cpu::ZkxCpuDialect
     //   zkx::cpu::ZkxCpuDialect,
-      zkx::gpu::ZkxGpuDialect
+      zkx::gpu::ZkxGpuDialect,
+      mlir::prime_ir::field::FieldDialect
       // clang-format on
       >();
   mlir::func::registerAllExtensions(registry);

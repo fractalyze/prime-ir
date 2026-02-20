@@ -469,3 +469,32 @@ module {
 
 // CHECK-LABEL: @apply_indexing_sequence_same_block
 // CHECK-NOT: vector.transfer_read
+
+// -----
+
+!pf = !field.pf<2013265921 : i32, true>
+func.func @vectorize_store_field_type(%arg0: tensor<64x!pf>, %val: !pf) -> tensor<64x!pf> {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %c4 = arith.constant 4 : index
+  %loop = scf.for %j = %c0 to %c4 step %c1 iter_args(%iter = %arg0) -> tensor<64x!pf> {
+    %inserted = tensor.insert %val into %iter[%j] : tensor<64x!pf>
+    scf.yield %inserted : tensor<64x!pf>
+  }
+  return %loop : tensor<64x!pf>
+}
+// CHECK-LABEL: @vectorize_store_field_type
+// CHECK-SAME:     (%[[ARG0:.*]]: tensor{{.*}}, %[[VAL:.*]]:
+// CHECK-DAG:   %[[C0:.*]] = arith.constant 0 : index
+// CHECK:       %[[ZERO:.*]] = field.constant dense<0> : vector<4x!pf
+// CHECK:       %[[V:.*]] = scf.for
+// CHECK-SAME:      (vector<4x!pf
+// CHECK-NEXT:    vector.insert
+// CHECK-NEXT:    scf.yield
+// CHECK:       %[[WRITTEN:.*]] = vector.transfer_write %[[V]], %[[ARG0]][%[[C0]]]
+// CHECK-NEXT:  return %[[WRITTEN]]
+
+// TODO(jeong0982): Add vectorize_store tests for BinaryFieldType and
+// ExtensionFieldType once prime_ir support is complete.
+// - BinaryFieldType: requires updating prime_ir pin (bf type not yet available)
+// - ExtensionFieldType: getZeroAttr crashes in createConstantAttr

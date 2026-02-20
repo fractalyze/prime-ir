@@ -320,8 +320,13 @@ struct VectorizeStore : mlir::OpRewritePattern<mlir::tensor::InsertOp> {
           op, "the instruction does not access contiguous elements");
     }
 
-    auto init =
-        b.create<arith::ConstantOp>(b.getZeroAttr(vector_type)).getResult();
+    auto zero_attr = b.getZeroAttr(vector_type);
+    auto& dialect = vector_type.getElementType().getDialect();
+    auto* materialize_op =
+        dialect.materializeConstant(b, zero_attr, vector_type, b.getLoc());
+    auto init = materialize_op
+                    ? materialize_op->getResult(0)
+                    : b.create<arith::ConstantOp>(zero_attr).getResult();
 
     auto yield_fn = [&](mlir::OpBuilder& yield_b, mlir::Location yield_loc,
                         llvm::ArrayRef<mlir::BlockArgument> bbarg) {

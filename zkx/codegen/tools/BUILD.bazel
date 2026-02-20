@@ -54,5 +54,6 @@ zkx_cc_binary(
         "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:Transforms",
         "@llvm-project//mlir:VectorDialect",
+        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
     ],
 )
