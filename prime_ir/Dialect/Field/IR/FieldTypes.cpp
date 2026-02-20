@@ -576,6 +576,16 @@ unsigned ExtensionFieldType::getTowerDepth() const {
   return 1 + cast<ExtensionFieldType>(baseField).getTowerDepth();
 }
 
+SmallVector<int64_t> ExtensionFieldType::getAttrShape() const {
+  SmallVector<int64_t> shape;
+  Type current = *this;
+  while (auto ef = dyn_cast<ExtensionFieldType>(current)) {
+    shape.push_back(static_cast<int64_t>(ef.getDegree()));
+    current = ef.getBaseField();
+  }
+  return shape;
+}
+
 Type ExtensionFieldType::cloneWith(Type baseField, Attribute element) const {
   return ExtensionFieldType::get(getContext(), getDegree(), baseField, element);
 }
