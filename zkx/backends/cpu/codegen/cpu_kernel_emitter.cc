@@ -254,6 +254,10 @@ void AddPasses(mlir::PassManager& pm, CpuKernelEmitter::PassFlag& flag) {
 
   if (flag.enable_field_to_arith) {
     VLOG(2) << "add pass: -field-to-mod-arith -mod-arith-to-arith";
+    // ModArithToArith may introduce tensor.collapse_shape / expand_shape for
+    // batched inverse on N-D tensors. After bufferization these become
+    // memref.collapse_shape / expand_shape which need expand-strided-metadata.
+    flag.enable_expand_strided_metadata = true;
     pm.addPass(mlir::prime_ir::field::createFieldToModArith());
     pm.addPass(mlir::createCanonicalizerPass());
     pm.addPass(mlir::prime_ir::mod_arith::createModArithToArith());
