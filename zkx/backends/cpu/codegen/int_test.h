@@ -1021,6 +1021,48 @@ class IntTest : public BaseIntTest<T>, public CpuKernelEmitterTest {
     expected_literal_ = LiteralUtil::CreateR3FromArray3D<T>(expected_array);
   }
 
+  // Gather with unbatched scalar index into a 2D tensor.
+  // Reproduces the segfault fixed in LookUpGatherStartValues where
+  // batch_idx is empty and the old rank-1 special case accessed
+  // batch_idx[0] unconditionally.
+  // Equivalent to: jnp.take(operand[4,8], 0, axis=0) → result[8]
+  void SetUpGather() {
+    constexpr static int64_t D0 = 4;
+    constexpr static int64_t D1 = 8;
+
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %operand = $0[$1, $2] parameter(0)
+        %indices = s32[] parameter(1)
+
+        ROOT %ret = $0[$2] gather(%operand, %indices),
+          offset_dims={0},
+          collapsed_slice_dims={0},
+          start_index_map={0},
+          index_vector_dim=0,
+          slice_sizes={1, $2}
+      }
+    )",
+                                 x_typename_, D0, D1);
+
+    Array2D<T> operand_array(D0, D1);
+    for (int64_t i = 0; i < D0; ++i) {
+      for (int64_t j = 0; j < D1; ++j) {
+        operand_array({i, j}) = BaseIntTest<T>::GetRandomValue();
+      }
+    }
+    literals_.push_back(LiteralUtil::CreateR2FromArray2D<T>(operand_array));
+
+    int32_t index = base::Uniform<uint32_t>() % D0;
+    literals_.push_back(LiteralUtil::CreateR0<int32_t>(index));
+
+    std::vector<T> expected_vec(D1);
+    for (int64_t j = 0; j < D1; ++j) {
+      expected_vec[j] = operand_array({index, j});
+    }
+    expected_literal_ = LiteralUtil::CreateR1<T>(expected_vec);
+  }
+
   void SetUpIotaWithD0() { SetUpIotaHelper(0); }
 
   void SetUpIotaWithD1() { SetUpIotaHelper(1); }

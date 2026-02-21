@@ -1518,15 +1518,11 @@ llvm::SmallVector<mlir::Value> CpuKernelEmitter::LookUpGatherStartValues(
   int64_t num_index_dims = static_cast<int64_t>(start_index_map.size());
   llvm::SmallVector<mlir::Value> start_vals(num_index_dims);
   for (int64_t i = 0; i < num_index_dims; ++i) {
-    llvm::SmallVector<mlir::Value> lookup_idx;
-    if (indices_shape.rank() == 1) {
-      lookup_idx.push_back(batch_idx[0]);
-    } else {
-      lookup_idx.assign(batch_idx.begin(), batch_idx.end());
-      if (index_vector_dim < indices_shape.rank()) {
-        auto i_val = b.create<mlir::arith::ConstantIndexOp>(i);
-        lookup_idx.insert(lookup_idx.begin() + index_vector_dim, i_val);
-      }
+    llvm::SmallVector<mlir::Value> lookup_idx(batch_idx.begin(),
+                                              batch_idx.end());
+    if (index_vector_dim < indices_shape.rank()) {
+      auto i_val = b.create<mlir::arith::ConstantIndexOp>(i);
+      lookup_idx.insert(lookup_idx.begin() + index_vector_dim, i_val);
     }
     auto raw =
         b.create<mlir::tensor::ExtractOp>(start_indices_tensor, lookup_idx);
