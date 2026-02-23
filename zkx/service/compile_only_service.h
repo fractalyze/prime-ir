@@ -89,7 +89,7 @@ class CompileOnlyService : public Service {
   // The compiler for the target platform.  This is included in place of
   // the Service::execute_backend_'s compiler, since execute_backend_ is a
   // nullptr in CompileOnlyService.
-  Compiler* compiler_;
+  Compiler* compiler_;  // not owned
 };
 
 }  // namespace zkx

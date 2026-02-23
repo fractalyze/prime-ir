@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <utility>
 
+#include "absl/debugging/leak_check.h"
 #include "absl/log/check.h"
 
 #include "zkx/service/platform_util.h"
@@ -75,7 +76,7 @@ const std::optional<std::set<int>>& LocalClientOptions::allowed_devices()
 
 // static
 ClientLibrary& ClientLibrary::Singleton() {
-  static ClientLibrary* c = new ClientLibrary;
+  static ClientLibrary* c = absl::IgnoreLeak(new ClientLibrary);
   return *c;
 }
 

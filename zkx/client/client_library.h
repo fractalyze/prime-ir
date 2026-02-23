@@ -68,7 +68,7 @@ class LocalClientOptions {
   const std::optional<std::set<int>>& allowed_devices() const;
 
  private:
-  se::Platform* platform_;
+  se::Platform* platform_;  // not owned
   int number_of_replicas_;
   int intra_op_parallelism_threads_;
   std::optional<std::set<int>> allowed_devices_;
