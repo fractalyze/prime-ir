@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run benchmarks
-        uses: fractalyze/benchmark-action@v1
+        uses: fractalyze/benchmark-action@main
         with:
           implementation: prime-ir
           benchmark_cmd: "bash benchmark/run_benchmarks.sh benchmark_results.json"
@@ -31,7 +31,7 @@ jobs:
           store_results: ${{ github.ref == 'refs/heads/main' }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
-          slack_benchmark_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
+          slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
