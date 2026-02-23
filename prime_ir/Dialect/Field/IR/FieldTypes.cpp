@@ -156,6 +156,8 @@ uint64_t PrimeFieldType::getABIAlignment(
 
 bool PrimeFieldType::isMontgomery() const { return getIsMontgomery(); }
 
+SmallVector<int64_t> PrimeFieldType::getAttrShape() const { return {}; }
+
 TypedAttr PrimeFieldType::createConstantAttr(int64_t c) const {
   PrimeFieldOperation pfOp(c, *this);
   return pfOp.getIntegerAttr();
@@ -578,11 +580,9 @@ unsigned ExtensionFieldType::getTowerDepth() const {
 
 SmallVector<int64_t> ExtensionFieldType::getAttrShape() const {
   SmallVector<int64_t> shape;
-  Type current = *this;
-  while (auto ef = dyn_cast<ExtensionFieldType>(current)) {
-    shape.push_back(static_cast<int64_t>(ef.getDegree()));
-    current = ef.getBaseField();
-  }
+  shape.push_back(static_cast<int64_t>(getDegree()));
+  auto baseShape = cast<FieldTypeInterface>(getBaseField()).getAttrShape();
+  shape.append(baseShape.begin(), baseShape.end());
   return shape;
 }
 
