@@ -233,7 +233,7 @@ def Field_FromMontOp : Field_Op<"from_mont", [TypesMatchWith<
 }
 
 // Field multiplicative inverse
-def Field_InverseOp : Field_Op_Base<"inverse", [SameOperandsAndResultType, Involution]> {
+def Field_InverseOp : Field_UnaryOp<"inverse", [Involution]> {
   let summary = "Field multiplicative inverse";
   let description = [{
     Computes the multiplicative inverse of a field element.
@@ -243,9 +243,6 @@ def Field_InverseOp : Field_Op_Base<"inverse", [SameOperandsAndResultType, Invol
     %inv_a = field.inverse %a : !field.pf<primeModulus>
     ```
   }];
-  let arguments = (ins FieldLike:$input);
-  let results = (outs FieldLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
   let hasFolder = 1;
 }
 
