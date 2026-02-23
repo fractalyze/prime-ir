@@ -51,7 +51,7 @@ void PyPrimeFieldType::bindDerived(ClassTy &c) {
 void PyExtensionFieldType::bindDerived(ClassTy &c) {
   c.def_static(
       "get",
-      [](unsigned degree, PyPrimeFieldType &baseField, PyAttribute &nonResidue,
+      [](unsigned degree, PyType &baseField, PyAttribute &nonResidue,
          DefaultingPyMlirContext context) -> PyExtensionFieldType {
         MlirType t = primeIRExtensionFieldTypeGet(context->get(), degree,
                                                   baseField, nonResidue);
@@ -64,14 +64,31 @@ void PyExtensionFieldType::bindDerived(ClassTy &c) {
       [](PyExtensionFieldType &self) -> unsigned {
         return primeIRExtensionFieldTypeGetDegree(self);
       },
-      "Returns the degree of the extension field type");
+      "Returns the immediate extension degree");
+  c.def_prop_ro(
+      "degree_over_prime",
+      [](PyExtensionFieldType &self) -> unsigned {
+        return primeIRExtensionFieldTypeGetDegreeOverPrime(self);
+      },
+      "Returns the total degree over the base prime field");
   c.def_prop_ro(
       "base_field",
-      [](PyExtensionFieldType &self) -> PyPrimeFieldType {
-        return PyPrimeFieldType(self.getContext(),
-                                primeIRExtensionFieldTypeGetBaseField(self));
+      [](PyExtensionFieldType &self) -> nb::object {
+        MlirType baseField = primeIRExtensionFieldTypeGetBaseField(self);
+        if (primeIRTypeIsAnExtensionField(baseField)) {
+          return nb::cast(PyExtensionFieldType(self.getContext(), baseField));
+        }
+        return nb::cast(PyPrimeFieldType(self.getContext(), baseField));
       },
       "Returns the base field of the extension field type");
+  c.def_prop_ro(
+      "base_prime_field",
+      [](PyExtensionFieldType &self) -> PyPrimeFieldType {
+        return PyPrimeFieldType(
+            self.getContext(),
+            primeIRExtensionFieldTypeGetBasePrimeField(self));
+      },
+      "Returns the underlying prime field at the base of the tower");
   c.def_prop_ro(
       "non_residue",
       [](PyExtensionFieldType &self) -> PyIntegerAttribute {
@@ -85,6 +102,12 @@ void PyExtensionFieldType::bindDerived(ClassTy &c) {
         return primeIRExtensionFieldTypeIsMontgomery(self);
       },
       "Returns whether this is a montgomery form");
+  c.def_prop_ro(
+      "is_tower",
+      [](PyExtensionFieldType &self) -> bool {
+        return primeIRExtensionFieldTypeIsTower(self);
+      },
+      "Returns whether this is a tower extension");
 }
 
 void populateIRTypes(nb::module_ &m) {

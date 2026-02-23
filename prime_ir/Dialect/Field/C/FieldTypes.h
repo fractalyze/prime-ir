@@ -74,6 +74,18 @@ primeIRExtensionFieldTypeGetNonResidue(MlirType type);
 // Checks whether the given type is a montgomery form.
 MLIR_CAPI_EXPORTED bool primeIRExtensionFieldTypeIsMontgomery(MlirType type);
 
+// Returns the total degree over the base prime field. For tower extensions
+// (e.g., (Fp2)³), this is the product of all intermediate degrees.
+MLIR_CAPI_EXPORTED unsigned
+primeIRExtensionFieldTypeGetDegreeOverPrime(MlirType type);
+
+// Returns the underlying prime field at the base of the tower.
+MLIR_CAPI_EXPORTED MlirType
+primeIRExtensionFieldTypeGetBasePrimeField(MlirType type);
+
+// Checks whether the base field is an extension field (tower construction).
+MLIR_CAPI_EXPORTED bool primeIRExtensionFieldTypeIsTower(MlirType type);
+
 #ifdef __cplusplus
 }
 #endif
