@@ -5,8 +5,6 @@ name: PR Review Notification
 on:
   pull_request:
     types: [review_requested]
-  issue_comment:
-    types: [created]
 
 jobs:
   notify-review-request:
@@ -21,22 +19,6 @@ jobs:
       repo_name: ${{ github.repository }}
       reviewer_login: ${{ github.event.requested_reviewer.login }}
       requested_by_login: ${{ github.event.sender.login }}
-    secrets:
-      GH_PAT: ${{ secrets.GH_PAT }}
-      PR_REVIEW_SLACK_BOT_TOKEN: ${{ secrets.PR_REVIEW_SLACK_BOT_TOKEN }}
-
-  handle-rerequest-comment:
-    if: >-
-      github.event_name == 'issue_comment'
-      && github.event.issue.pull_request
-      && startsWith(github.event.comment.body, '/re-request')
-    uses: fractalyze/pr-review-bot/.github/workflows/handle-comment-rerequest.yml@main
-    with:
-      comment_body: ${{ github.event.comment.body }}
-      pr_number: ${{ github.event.issue.number }}
-      repo_name: ${{ github.repository }}
-      comment_id: ${{ github.event.comment.id }}
-      sender_login: ${{ github.event.sender.login }}
     secrets:
       GH_PAT: ${{ secrets.GH_PAT }}
       PR_REVIEW_SLACK_BOT_TOKEN: ${{ secrets.PR_REVIEW_SLACK_BOT_TOKEN }}
