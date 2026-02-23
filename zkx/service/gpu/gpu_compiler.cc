@@ -65,6 +65,7 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/ir/hlo_module_group.h"
+#include "zkx/hlo/transforms/expanders/reshape_decomposer.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_dce.h"
 #include "zkx/maybe_owning.h"
 #include "zkx/service/buffer_assignment.h"
@@ -383,6 +384,7 @@ absl::Status GpuCompiler::OptimizeHloModule(
   // TF_RETURN_IF_ERROR(RunDynamicSliceFusionPasses(hlo_module, PlatformId()));
 
   // TODO(batzor): Remove these after the previous passes are uncommented.
+  TF_RETURN_IF_ERROR(ReshapeDecomposer().Run(hlo_module).status());
   TF_RETURN_IF_ERROR(ScatterSimplifier().Run(hlo_module).status());
   TF_RETURN_IF_ERROR(CallInliner().Run(hlo_module).status());
 

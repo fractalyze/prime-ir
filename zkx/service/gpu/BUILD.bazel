@@ -236,6 +236,7 @@ zkx_cc_library(
         "//zkx/hlo/analysis:hlo_dataflow_analysis",
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/ir:hlo_module_group",
+        "//zkx/hlo/transforms/expanders:reshape_decomposer",
         "//zkx/hlo/transforms/simplifiers:hlo_dce",
         "//zkx/service:buffer_assignment",
         "//zkx/service:call_inliner",
