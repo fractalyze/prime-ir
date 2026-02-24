@@ -128,10 +128,7 @@ class GpuCompiler : public LlvmCompiler {
   virtual absl::Status OptimizeHloPostLayoutAssignment(
       HloModule* hlo_module, se::StreamExecutor* stream_exec,
       const CompileOptions& options, const TargetConfig& gpu_target_config,
-      tsl::thread::ThreadPool* thread_pool) {
-    return absl::UnimplementedError(
-        "OptimizeHloPostLayoutAssignment is not implemented.");
-  }
+      tsl::thread::ThreadPool* thread_pool);
 
  private:
   struct CompileResultWithMetadata {
