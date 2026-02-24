@@ -184,6 +184,21 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "instruction_hoister",
+    srcs = ["instruction_hoister.cc"],
+    hdrs = ["instruction_hoister.h"],
+    deps = [
+        "//xla/tsl/platform:status",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "optimize_input_output_buffer_alias",
     srcs = ["optimize_input_output_buffer_alias.cc"],
     hdrs = ["optimize_input_output_buffer_alias.h"],
@@ -279,6 +294,7 @@ zkx_cc_unittest(
         "hlo_cse_unittest.cc",
         "hlo_dce_unittest.cc",
         "hlo_memory_scheduler_unittest.cc",
+        "instruction_hoister_unittest.cc",
         "optimize_input_output_buffer_alias_unittest.cc",
         "root_instruction_sinker_unittest.cc",
         "sub_byte_normalization_unittest.cc",
@@ -295,6 +311,7 @@ zkx_cc_unittest(
         ":hlo_cse",
         ":hlo_dce",
         ":hlo_memory_scheduler",
+        ":instruction_hoister",
         ":optimize_input_output_buffer_alias",
         ":root_instruction_sinker",
         ":sub_byte_normalization",
