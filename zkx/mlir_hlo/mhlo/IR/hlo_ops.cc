@@ -3834,12 +3834,27 @@ struct ScatterFullReplace : public OpRewritePattern<ScatterOp> {
     if (!baseType || !indexType || !updateType)
       return failure();
 
-    // If scatter_indices has zero elements, the scatter is a no-op.
-    // Per StableHLO spec, return the input tensor unchanged.
+    // If scatter_indices has zero elements, scatter overwrites the entire
+    // tensor. Transform it into a map with the combiner function.
     if (!indexType.hasStaticShape() || indexType.getNumElements() > 0)
       return failure();
 
-    rewriter.replaceOp(scatter, scatter.getInputs());
+    // Require the same shape for base and updates. This isn't strictly
+    // necessary, but handling other cases would require turning scatter options
+    // into the appropriate reshapes and transposes.
+    if (!baseType.hasStaticShape() || !updateType.hasStaticShape() ||
+        baseType != updateType)
+      return failure();
+
+    auto dimensions =
+        llvm::to_vector(llvm::seq<int64_t>(0, baseType.getRank()));
+    auto map = rewriter.create<mhlo::MapOp>(
+        scatter.getLoc(), scatter->getResultTypes(),
+        ValueRange{scatter.getInputs()[0], scatter.getUpdates()[0]},
+        rewriter.getI64TensorAttr(dimensions));
+    rewriter.inlineRegionBefore(scatter.getRegion(), map.getRegion(),
+                                map.getRegion().begin());
+    rewriter.replaceOp(scatter, map->getResults());
     return success();
   }
 };
