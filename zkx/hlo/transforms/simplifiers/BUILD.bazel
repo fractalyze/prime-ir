@@ -34,6 +34,25 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "conditional_canonicalizer",
+    srcs = ["conditional_canonicalizer.cc"],
+    hdrs = ["conditional_canonicalizer.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx/base:logging",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "flatten_call_graph",
     srcs = ["flatten_call_graph.cc"],
     hdrs = ["flatten_call_graph.h"],
@@ -219,6 +238,7 @@ zkx_cc_unittest(
     name = "simplifiers_unittests",
     srcs = [
         "broadcast_canonicalizer_unittest.cc",
+        "conditional_canonicalizer_unittest.cc",
         "flatten_call_graph_unittest.cc",
         "hlo_constant_folding_unittest.cc",
         "hlo_cse_unittest.cc",
@@ -232,6 +252,7 @@ zkx_cc_unittest(
     ],
     deps = [
         ":broadcast_canonicalizer",
+        ":conditional_canonicalizer",
         ":flatten_call_graph",
         ":hlo_constant_folding",
         ":hlo_cse",

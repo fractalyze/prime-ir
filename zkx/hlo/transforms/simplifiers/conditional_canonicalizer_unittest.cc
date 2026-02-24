@@ -1,0 +1,105 @@
+/* Copyright 2020 The OpenXLA Authors.
+Copyright 2026 The ZKX Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include "zkx/hlo/transforms/simplifiers/conditional_canonicalizer.h"
+
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
+
+#include "zkx/hlo/ir/hlo_opcode.h"
+#include "zkx/hlo/testlib/hlo_hardware_independent_test_base.h"
+#include "zkx/hlo/utils/hlo_matchers.h"
+#include "zkx/shape_util.h"
+
+namespace zkx {
+namespace {
+
+namespace op = zkx::testing::opcode_matchers;
+
+using ::testing::ElementsAre;
+
+class ConditionalCanonicalizerTest : public HloHardwareIndependentTestBase {
+ protected:
+  ConditionalCanonicalizerTest() {}
+};
+
+TEST_F(ConditionalCanonicalizerTest, DenseArrayConditionalRewrite) {
+  auto module = ParseAndReturnVerifiedModule(R"(
+HloModule _
+true_branch {
+  true_param = (s32[3,2]) parameter(0)
+  ROOT root = s32[] constant(0)
+}
+
+false_branch {
+  false_param = (s32[3,2]) parameter(0)
+  ROOT root = s32[] constant(1)
+}
+
+ENTRY entry {
+  param0 = s32[3,2] parameter(0)
+  branch = pred[] constant(false)
+  param_tuple = (s32[3 ,2]) tuple(param0)
+  ROOT conditional = s32[] conditional(branch, param_tuple, param_tuple),
+    true_computation=true_branch, false_computation=false_branch
+}
+)")
+                    .value();
+  ConditionalCanonicalizer pass;
+  EXPECT_TRUE(pass.Run(module.get()).value());
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              op::GetTupleElement(op::Conditional()));
+}
+
+TEST_F(ConditionalCanonicalizerTest, ArgumentRewrite) {
+  auto module = ParseAndReturnVerifiedModule(R"(
+HloModule CanonicalizeArgumentsToTuples
+true_branch {
+  true_param = s32[3,2] parameter(0)
+  ROOT root = s32[] constant(0)
+}
+
+false_branch {
+  false_param = s32[3,2] parameter(0)
+  ROOT root = s32[] constant(1)
+}
+
+ENTRY entry {
+  param0 = s32[3,2] parameter(0)
+  branch = pred[] parameter(1)
+  ROOT conditional = s32[] conditional(branch, param0, param0),
+    true_computation=true_branch, false_computation=false_branch
+}
+)")
+                    .value();
+  ConditionalCanonicalizer pass;
+  EXPECT_TRUE(pass.Run(module.get()).value());
+
+  EXPECT_THAT(module->entry_computation()->parameter_instruction(0)->users(),
+              ElementsAre(op::Tuple(), op::Tuple()));
+  EXPECT_THAT(module->entry_computation()->parameter_instruction(1)->users(),
+              ElementsAre(op::Conditional()));
+  for (auto* computation : module->computations()) {
+    if (computation == module->entry_computation()) continue;
+    EXPECT_TRUE(computation->parameter_instruction(0)->shape().IsTuple());
+    EXPECT_THAT(computation->root_instruction(), op::Tuple());
+  }
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              op::GetTupleElement(op::Conditional()));
+}
+
+}  // namespace
+}  // namespace zkx
