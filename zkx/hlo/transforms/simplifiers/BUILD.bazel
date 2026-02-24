@@ -170,6 +170,21 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "zero_sized_hlo_elimination",
+    srcs = ["zero_sized_hlo_elimination.cc"],
+    hdrs = ["zero_sized_hlo_elimination.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:literal",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
 zkx_cc_unittest(
     name = "simplifiers_unittests",
     srcs = [
@@ -181,6 +196,7 @@ zkx_cc_unittest(
         "optimize_input_output_buffer_alias_unittest.cc",
         "sub_byte_normalization_unittest.cc",
         "tuple_simplifier_unittest.cc",
+        "zero_sized_hlo_elimination_unittest.cc",
     ],
     deps = [
         ":flatten_call_graph",
@@ -191,6 +207,7 @@ zkx_cc_unittest(
         ":optimize_input_output_buffer_alias",
         ":sub_byte_normalization",
         ":tuple_simplifier",
+        ":zero_sized_hlo_elimination",
         "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
         "//zkx:comparison_util",
