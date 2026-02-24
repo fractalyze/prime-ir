@@ -85,6 +85,23 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "fusion_wrapper",
+    srcs = ["fusion_wrapper.cc"],
+    hdrs = ["fusion_wrapper.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service/gpu:gpu_fusible",
+        "//zkx/stream_executor:device_description",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
     name = "horizontal_input_fusion",
     srcs = ["horizontal_input_fusion.cc"],
     hdrs = ["horizontal_input_fusion.h"],
@@ -298,6 +315,7 @@ zkx_cc_unittest(
     srcs = [
         "async_collective_annotator_unittest.cc",
         "copy_fusion_unittest.cc",
+        "fusion_wrapper_unittest.cc",
         "horizontal_loop_fusion_unittest.cc",
         "layout_assignment_unittest.cc",
         "multi_output_fusion_unittest.cc",
@@ -310,6 +328,7 @@ zkx_cc_unittest(
     deps = [
         ":async_collective_annotator",
         ":copy_fusion",
+        ":fusion_wrapper",
         ":horizontal_loop_fusion",
         ":layout_assignment",
         ":multi_output_fusion",

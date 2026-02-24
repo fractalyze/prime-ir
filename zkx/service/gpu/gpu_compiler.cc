@@ -83,6 +83,7 @@ limitations under the License.
 #include "zkx/service/gpu/kernel_reuse_cache.h"
 #include "zkx/service/gpu/prepare_hlo_for_ir_emitting_pipeline.h"
 #include "zkx/service/gpu/transforms/command_buffer_scheduling.h"
+#include "zkx/service/gpu/transforms/fusion_wrapper.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
 #include "zkx/service/scatter_simplifier.h"
@@ -389,6 +390,13 @@ absl::Status GpuCompiler::OptimizeHloModule(
   TF_RETURN_IF_ERROR(RunFusionPasses(hlo_module, gpu_target_config,
                                      thread_pool.get_mutable(),
                                      ShapeSizeBytesFunction()));
+
+  // Wrap remaining unfused ops that have no standalone GPU emitter in
+  // single-op fusions. Must run after all fusion passes.
+  TF_RETURN_IF_ERROR(FusionWrapper(gpu_target_config.device_description)
+                         .Run(hlo_module)
+                         .status());
+
   // TODO(chokobole): Uncomment this. Dependency: RunPostFusionPasses
   // TF_RETURN_IF_ERROR(RunPostFusionPasses(
   //     hlo_module, gpu_target_config.device_description, pointer_size_));

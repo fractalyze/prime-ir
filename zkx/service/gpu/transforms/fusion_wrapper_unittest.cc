@@ -1,0 +1,226 @@
+/* Copyright 2023 The OpenXLA Authors.
+Copyright 2026 The ZKX Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include "zkx/service/gpu/transforms/fusion_wrapper.h"
+
+#include <optional>
+
+#include <gtest/gtest.h>  // NOLINT(build/include_order)
+
+#include "zkx/hlo/testlib/hlo_hardware_independent_test_base.h"
+#include "zkx/service/gpu/gpu_device_info_for_tests.h"
+
+namespace zkx::gpu {
+namespace {
+
+class FusionWrapperTest : public HloHardwareIndependentTestBase {
+ public:
+  FusionWrapperTest()
+      : device_description_(TestGpuDeviceInfo::RTXA6000DeviceInfo()) {}
+
+ protected:
+  se::DeviceDescription device_description_;
+};
+
+// NOTE: XLA's ConvolutionWorks test is omitted because kConvolution is not
+// present in the ZKX HloOpcode enum.
+
+TEST_F(FusionWrapperTest, SimpleOp) {
+  RunAndFilecheckHloRewrite(R"(
+      HloModule TestModule
+
+      ENTRY TestComputation {
+        p0 = s32[30,41] parameter(0)
+        p1 = s32[30,41] parameter(1)
+        ROOT result = s32[60, 41] concatenate(p0, p1), dimensions={0}
+      })",
+                            FusionWrapper(device_description_), R"(
+// CHECK: %wrapped_concatenate_computation (param_0: s32[30,41], param_1: s32[30,41]) -> s32[60,41] {
+// CHECK:   %param_0 = s32[30,41]{1,0} parameter(0)
+// CHECK:   %param_1 = s32[30,41]{1,0} parameter(1)
+// CHECK:   ROOT %result.1 = s32[60,41]{1,0} concatenate(%param_0, %param_1), dimensions={0}
+// CHECK: }
+
+// CHECK: ENTRY %TestComputation (p0: s32[30,41], p1: s32[30,41]) -> s32[60,41] {
+// CHECK:   %p0 = s32[30,41]{1,0} parameter(0)
+// CHECK:   %p1 = s32[30,41]{1,0} parameter(1)
+// CHECK:   ROOT %wrapped_concatenate = s32[60,41]{1,0} fusion(%p0, %p1), kind=kLoop, calls=%wrapped_concatenate_computation
+// CHECK: })");
+}
+
+TEST_F(FusionWrapperTest, Scatter) {
+  RunAndFilecheckHloRewrite(R"(
+      HloModule ScatterIntoScalar
+
+      update_s32 {
+        lhs = s32[] parameter(0)
+        ROOT rhs = s32[] parameter(1)
+      }
+
+      ENTRY main {
+        parameter.1 = s32[] parameter(0)
+        parameter.2 = s32[0]{0} parameter(1)
+        parameter.3 = s32[] parameter(2)
+        ROOT scatter_ScatterIntoScalar = s32[] scatter(parameter.1, parameter.2, parameter.3),
+            update_window_dims={},
+            inserted_window_dims={},
+            scatter_dims_to_operand_dims={},
+            index_vector_dim=0,
+            to_apply=update_s32
+      })",
+                            FusionWrapper(device_description_), R"(
+// CHECK: wrapped_scatter_computation
+// CHECK:   %[[param_0:.*]] = s32[] parameter(0)
+// CHECK:   %[[param_1:.*]] = s32[0]{0} parameter(1)
+// CHECK:   %[[param_2:.*]] = s32[] parameter(2)
+// CHECK:   ROOT %{{.*}} = s32[] scatter(%[[param_0]], %[[param_1]], %[[param_2]])
+
+// CHECK: ENTRY
+// CHECK:   %[[p0:.*]] = s32[] parameter(0)
+// CHECK:   %[[p1:.*]] = s32[0]{0} parameter(1)
+// CHECK:   %[[p2:.*]] = s32[] parameter(2)
+// CHECK:   ROOT %{{.*}} = s32[] fusion(%[[p0]], %[[p1]], %[[p2]]), kind=kInput, calls=%wrapped_scatter_computation
+// CHECK: })");
+}
+
+TEST_F(FusionWrapperTest, ControlDependency) {
+  RunAndFilecheckHloRewrite(R"(
+      HloModule TestModule
+
+      fusion {
+        ROOT param = s32[] parameter(0)
+      }
+
+      ENTRY main {
+        param = s32[] parameter(0)
+        fusion = s32[] fusion(param), kind=kLoop, calls=fusion
+        constant_one = s32[] constant(1)
+        ROOT add = s32[] add(param, constant_one), control-predecessors={fusion}
+      })",
+                            FusionWrapper(device_description_), R"(
+// CHECK: ROOT %wrapped_add = s32[] fusion(%param.1, %constant_one),
+// CHECK-SAME: control-predecessors={%fusion})");
+}
+
+TEST_F(FusionWrapperTest, Copy) {
+  // Avoid rewriting copies, so that the rematerialization pass
+  // can avoid rematerializing copies inserted by copy-insertion
+  // (the rematerialization could read overwritten data).
+  RunAndFilecheckHloRewrite(R"(
+      HloModule Copy
+
+      ENTRY %main (parameter.1: s32[5]) -> s32[5] {
+        %parameter.1 = s32[5]{0} parameter(0)
+        ROOT %copy.3 = s32[5]{0} copy(s32[5]{0} %parameter.1)
+      })",
+                            FusionWrapper(device_description_),
+                            // No change
+                            std::nullopt);
+}
+
+TEST_F(FusionWrapperTest, While) {
+  RunAndFilecheckHloRewrite(R"(
+      HloModule While
+
+      %body {
+        %parameter.5 = (s32[5]{0}) parameter(0)
+        %constant_8 = s32[] constant(0)
+        %broadcast.9 = s32[5]{0} broadcast(s32[] %constant_8), dimensions={}
+        ROOT %tuple.2 = (s32[5]{0}) tuple(s32[5]{0} %broadcast.9)
+      }
+
+      %cond {
+        %parameter.12 = (s32[5]{0}) parameter(0)
+        ROOT %constant_1 = pred[] constant(false)
+      }
+
+      ENTRY %main (parameter.1: s32[5]) -> (s32[5]) {
+        %parameter.1 = s32[5]{0} parameter(0)
+        %copy.3 = s32[5]{0} copy(s32[5]{0} %parameter.1)
+        %tuple = (s32[5]{0}) tuple(s32[5]{0} %copy.3)
+        ROOT %while.19 = (s32[5]{0}) while((s32[5]{0}) %tuple), condition=%cond, body=%body
+      })",
+                            FusionWrapper(device_description_), R"(
+// CHECK: %wrapped_broadcast_computation {{.*}} {
+// CHECK:  %param_0 = s32[] parameter(0)
+// CHECK:  ROOT %broadcast.0 = s32[5]{0} broadcast(%param_0), dimensions={}
+// CHECK: }
+// CHECK: %body {{.*}} {
+// CHECK:   %parameter.5 = (s32[5]{0}) parameter(0)
+// CHECK:   %constant_8 = s32[] constant(0)
+// CHECK:   %wrapped_broadcast = s32[5]{0} fusion(%constant_8), kind=kLoop, calls=%wrapped_broadcast_computation
+// CHECK:   ROOT %tuple.2 = (s32[5]{0}) tuple(%wrapped_broadcast)
+// CHECK: }
+// CHECK: %cond {{.*}} {
+// CHECK:   %parameter.12 = (s32[5]{0}) parameter(0)
+// CHECK:   ROOT %constant_1 = pred[] constant(false)
+// CHECK: }
+// CHECK: ENTRY %main {{.*}} {
+// CHECK:   %parameter.1 = s32[5]{0} parameter(0)
+// CHECK:   %copy.3 = s32[5]{0} copy(%parameter.1)
+// CHECK:   %tuple = (s32[5]{0}) tuple(%copy.3)
+// CHECK:   ROOT %while.19 = (s32[5]{0}) while(%tuple), condition=%cond, body=%body
+// CHECK: })");
+}
+
+// NOTE: Unlike XLA's original recursive approach, using
+// MakeNonfusionComputations() also visits while-body computations called from
+// within fusions, so the broadcast inside the while body gets wrapped.
+TEST_F(FusionWrapperTest, WhileInFusion) {
+  RunAndFilecheckHloRewrite(R"(
+      HloModule While
+
+      %body {
+        %parameter.5 = (s32[5]{0}) parameter(0)
+        %constant_8 = s32[] constant(0)
+        %broadcast.9 = s32[5]{0} broadcast(s32[] %constant_8), dimensions={}
+        ROOT %tuple.2 = (s32[5]{0}) tuple(s32[5]{0} %broadcast.9)
+      }
+
+      %cond {
+        %parameter.12 = (s32[5]{0}) parameter(0)
+        ROOT %constant_1 = pred[] constant(false)
+      }
+
+      %fusion {
+        %parameter.1 = s32[5]{0} parameter(0)
+        %copy.3 = s32[5]{0} copy(s32[5]{0} %parameter.1)
+        %tuple = (s32[5]{0}) tuple(s32[5]{0} %copy.3)
+        ROOT %while.19 = (s32[5]{0}) while((s32[5]{0}) %tuple), condition=%cond, body=%body
+      }
+
+      ENTRY %main (parameter.1: s32[5]) -> (s32[5]) {
+        %parameter.1 = s32[5]{0} parameter(0)
+        ROOT %fusion = (s32[5]{0}) fusion(s32[5]{0} %parameter.1), kind=kLoop, calls=%fusion
+      })",
+                            FusionWrapper(device_description_), R"(
+// CHECK: %wrapped_broadcast_computation {{.*}} {
+// CHECK:   %param_0 = s32[] parameter(0)
+// CHECK:   ROOT %broadcast.0 = s32[5]{0} broadcast(%param_0), dimensions={}
+// CHECK: }
+// CHECK: %body {{.*}} {
+// CHECK:   %parameter.5 = (s32[5]{0}) parameter(0)
+// CHECK:   %constant_8 = s32[] constant(0)
+// CHECK:   %wrapped_broadcast = s32[5]{0} fusion(%constant_8), kind=kLoop, calls=%wrapped_broadcast_computation
+// CHECK:   ROOT %tuple.2 = (s32[5]{0}) tuple(%wrapped_broadcast)
+// CHECK: })");
+}
+
+// NOTE: XLA's AsyncComputationFusion test is omitted because it was added
+// after the reference commit (8bac4a2c).
+
+}  // namespace
+}  // namespace zkx::gpu
