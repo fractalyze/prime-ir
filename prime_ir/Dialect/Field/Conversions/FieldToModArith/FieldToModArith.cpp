@@ -598,14 +598,16 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
                                                 adaptor.getRhs()));
       return success();
     } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      // For extension fields, we compare each coefficient separately.
-      auto lhsCoeffs = toCoeffs(b, adaptor.getLhs());
-      auto rhsCoeffs = toCoeffs(b, adaptor.getRhs());
+      // Recursively flatten tower extensions to prime-level coefficients.
+      auto lhsPrimeCoeffs = flattenToPrimeCoeffs(b, adaptor.getLhs());
+      auto rhsPrimeCoeffs = flattenToPrimeCoeffs(b, adaptor.getRhs());
       unsigned n = efType.getDegreeOverPrime();
+      assert(lhsPrimeCoeffs.size() == n && rhsPrimeCoeffs.size() == n);
+      PrimeFieldType basePF = efType.getBasePrimeField();
       SmallVector<Value> cmpResults;
       for (unsigned i = 0; i < n; ++i) {
-        cmpResults.push_back(compareOnStdDomain(b, fieldType, predicate,
-                                                lhsCoeffs[i], rhsCoeffs[i]));
+        cmpResults.push_back(compareOnStdDomain(
+            b, basePF, predicate, lhsPrimeCoeffs[i], rhsPrimeCoeffs[i]));
       }
       Value result = cmpResults[0];
       if (predicate == arith::CmpIPredicate::eq) {
