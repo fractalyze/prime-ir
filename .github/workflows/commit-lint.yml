@@ -1,0 +1,20 @@
+# Copyright 2026 Fractalyze Inc. All rights reserved.
+
+name: Commit Lint
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Validate PR title and commit messages
+        uses: fractalyze/github-actions/commit-lint@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          scope_mode: auto
+          scope_prefixes: 'zkx xla'
