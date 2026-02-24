@@ -18,6 +18,22 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "broadcast_canonicalizer",
+    srcs = ["broadcast_canonicalizer.cc"],
+    hdrs = ["broadcast_canonicalizer.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:hlo_creation_utils",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "flatten_call_graph",
     srcs = ["flatten_call_graph.cc"],
     hdrs = ["flatten_call_graph.h"],
@@ -188,6 +204,7 @@ zkx_cc_library(
 zkx_cc_unittest(
     name = "simplifiers_unittests",
     srcs = [
+        "broadcast_canonicalizer_unittest.cc",
         "flatten_call_graph_unittest.cc",
         "hlo_constant_folding_unittest.cc",
         "hlo_cse_unittest.cc",
@@ -199,6 +216,7 @@ zkx_cc_unittest(
         "zero_sized_hlo_elimination_unittest.cc",
     ],
     deps = [
+        ":broadcast_canonicalizer",
         ":flatten_call_graph",
         ":hlo_constant_folding",
         ":hlo_cse",
