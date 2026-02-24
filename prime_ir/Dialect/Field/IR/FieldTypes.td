@@ -219,6 +219,15 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     SmallVector<Value> extractCoeffsFromStruct(
         ImplicitLocOpBuilder &builder, Value structValue) const;
 
+    // Decompose into base field coefficients via field.ext_to_coeffs.
+    Operation::result_range toCoeffs(ImplicitLocOpBuilder &b, Value val) const;
+
+    // Compose base field coefficients via field.ext_from_coeffs.
+    Value fromCoeffs(ImplicitLocOpBuilder &b, ValueRange coeffs) const;
+
+    // Build from prime field coefficients (tower-aware recursive).
+    Value fromPrimeCoeffs(ImplicitLocOpBuilder &b,
+                          ArrayRef<Value> primeCoeffs) const;
   }];
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;

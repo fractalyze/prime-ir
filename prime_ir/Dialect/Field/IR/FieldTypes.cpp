@@ -632,4 +632,59 @@ ExtensionFieldType::extractCoeffsFromStruct(ImplicitLocOpBuilder &builder,
       getDegree(), builder, structValue, ext_field_utils::kExtDegreeSequence);
 }
 
+//===----------------------------------------------------------------------===//
+// ExtensionFieldType field-level coefficient methods
+//===----------------------------------------------------------------------===//
+
+Operation::result_range ExtensionFieldType::toCoeffs(ImplicitLocOpBuilder &b,
+                                                     Value val) const {
+  SmallVector<Type> resultTypes(getDegree(), getBaseField());
+  return b.create<ExtToCoeffsOp>(resultTypes, val).getResults();
+}
+
+Value ExtensionFieldType::fromCoeffs(ImplicitLocOpBuilder &b,
+                                     ValueRange coeffs) const {
+  return b.create<ExtFromCoeffsOp>(*this, coeffs);
+}
+
+Value ExtensionFieldType::fromPrimeCoeffs(ImplicitLocOpBuilder &b,
+                                          ArrayRef<Value> primeCoeffs) const {
+  Type baseField = getBaseField();
+  unsigned degree = getDegree();
+  if (isa<PrimeFieldType>(baseField)) {
+    return fromCoeffs(b, primeCoeffs);
+  }
+  auto baseEf = cast<ExtensionFieldType>(baseField);
+  unsigned baseDeg = baseEf.getDegreeOverPrime();
+  SmallVector<Value> baseCoeffs;
+  for (unsigned i = 0; i < degree; ++i) {
+    baseCoeffs.push_back(
+        baseEf.fromPrimeCoeffs(b, primeCoeffs.slice(i * baseDeg, baseDeg)));
+  }
+  return fromCoeffs(b, baseCoeffs);
+}
+
+//===----------------------------------------------------------------------===//
+// Standalone convenience wrappers
+//===----------------------------------------------------------------------===//
+
+Operation::result_range toCoeffs(ImplicitLocOpBuilder &b, Value val) {
+  return cast<ExtensionFieldType>(val.getType()).toCoeffs(b, val);
+}
+
+Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs) {
+  return cast<ExtensionFieldType>(type).fromCoeffs(b, coeffs);
+}
+
+Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
+                      ArrayRef<Value> primeCoeffs) {
+  return efType.fromPrimeCoeffs(b, primeCoeffs);
+}
+
+Value createFieldConstant(PrimeFieldType pfType, ImplicitLocOpBuilder &builder,
+                          const APInt &value) {
+  auto attr = IntegerAttr::get(pfType.getStorageType(), value);
+  return builder.create<ConstantOp>(pfType, attr);
+}
+
 } // namespace mlir::prime_ir::field

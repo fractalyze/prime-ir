@@ -243,7 +243,7 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
       // Use getBasePrimeField() to handle both direct and tower extensions
       auto basePrimeField = efType.getBasePrimeField();
       Type baseModArithType = typeConverter->convertType(basePrimeField);
-      auto coeffs = toCoeffs(b, adaptor.getInput());
+      auto coeffs = toModArithCoeffs(b, adaptor.getInput());
 
       SmallVector<Value> montCoeffs;
       for (auto coeff : coeffs) {
@@ -280,7 +280,7 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
       // Use getBasePrimeField() to handle both direct and tower extensions
       auto basePrimeField = efType.getBasePrimeField();
       Type baseModArithType = typeConverter->convertType(basePrimeField);
-      auto coeffs = toCoeffs(b, adaptor.getInput());
+      auto coeffs = toModArithCoeffs(b, adaptor.getInput());
 
       SmallVector<Value> stdCoeffs;
       for (auto coeff : coeffs) {
@@ -624,6 +624,22 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
       return success();
     }
     return failure();
+  }
+
+  // Recursively flatten a (possibly tower) extension field value to all its
+  // prime-level coefficients (mod_arith values).
+  SmallVector<Value> flattenToPrimeCoeffs(ImplicitLocOpBuilder &b,
+                                          Value val) const {
+    if (isa<mod_arith::ModArithType>(val.getType())) {
+      return {val};
+    }
+    auto coeffs = toModArithCoeffs(b, val);
+    SmallVector<Value> result;
+    for (Value c : coeffs) {
+      auto sub = flattenToPrimeCoeffs(b, c);
+      result.append(sub.begin(), sub.end());
+    }
+    return result;
   }
 
   Value compareOnStdDomain(ImplicitLocOpBuilder &b, Type fieldType,

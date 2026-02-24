@@ -23,59 +23,6 @@ limitations under the License.
 
 namespace mlir::prime_ir::elliptic_curve {
 
-FieldCodeGen FieldCodeGen::operator+(const FieldCodeGen &other) const {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return FieldCodeGen(b->create<field::AddOp>(value, other.value).getOutput());
-}
-
-FieldCodeGen &FieldCodeGen::operator+=(const FieldCodeGen &other) {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  value = b->create<field::AddOp>(value, other.value).getOutput();
-  return *this;
-}
-
-FieldCodeGen FieldCodeGen::operator-(const FieldCodeGen &other) const {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return FieldCodeGen(b->create<field::SubOp>(value, other.value).getOutput());
-}
-
-FieldCodeGen &FieldCodeGen::operator-=(const FieldCodeGen &other) {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  value = b->create<field::SubOp>(value, other.value).getOutput();
-  return *this;
-}
-
-FieldCodeGen FieldCodeGen::operator*(const FieldCodeGen &other) const {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return FieldCodeGen(b->create<field::MulOp>(value, other.value).getOutput());
-}
-
-FieldCodeGen &FieldCodeGen::operator*=(const FieldCodeGen &other) {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  value = b->create<field::MulOp>(value, other.value).getOutput();
-  return *this;
-}
-
-FieldCodeGen FieldCodeGen::operator-() const {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return FieldCodeGen(b->create<field::NegateOp>(value).getOutput());
-}
-
-FieldCodeGen FieldCodeGen::Double() const {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return FieldCodeGen(b->create<field::DoubleOp>(value).getOutput());
-}
-
-FieldCodeGen FieldCodeGen::Square() const {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return FieldCodeGen(b->create<field::SquareOp>(value).getOutput());
-}
-
-FieldCodeGen FieldCodeGen::Inverse() const {
-  ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return FieldCodeGen(b->create<field::InverseOp>(value).getOutput());
-}
-
 Value FieldCodeGen::IsZero() const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   Value zero = field::createFieldZero(value.getType(), *b);

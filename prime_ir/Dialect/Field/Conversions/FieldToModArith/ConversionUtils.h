@@ -25,17 +25,11 @@ limitations under the License.
 
 namespace mlir::prime_ir::field {
 
-Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
-                                 Value extFieldElement);
-
-Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs);
-
-// Build an extension field value from prime field coefficients.
-// For non-tower extensions: expects getDegree() prime field values.
-// For tower extensions: recursively builds nested structure from
-// getDegreeOverPrime() prime field values.
-Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
-                      ArrayRef<Value> primeCoeffs);
+// Decompose extension field element into ModArith-typed coefficients.
+// Unlike field::toCoeffs (which produces field-typed results), this converts
+// prime field coefficients to their mod_arith equivalents.
+Operation::result_range toModArithCoeffs(ImplicitLocOpBuilder &b,
+                                         Value extFieldElement);
 
 // Create a mod_arith constant with value numerator / denominator.
 // When denominator is 1 (default), this creates a simple integer constant.

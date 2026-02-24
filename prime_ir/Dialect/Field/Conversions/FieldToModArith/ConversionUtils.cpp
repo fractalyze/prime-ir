@@ -39,45 +39,12 @@ SmallVector<Type> coeffsTypeRange(Type type) {
 
 } // namespace
 
-Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
-                                 Value extFieldElement) {
+Operation::result_range toModArithCoeffs(ImplicitLocOpBuilder &b,
+                                         Value extFieldElement) {
   return b
       .create<ExtToCoeffsOp>(coeffsTypeRange(extFieldElement.getType()),
                              extFieldElement)
       .getResults();
-}
-
-Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs) {
-  return b.create<ExtFromCoeffsOp>(type, coeffs);
-}
-
-Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
-                      ArrayRef<Value> primeCoeffs) {
-  Type baseField = efType.getBaseField();
-  unsigned degree = efType.getDegree();
-
-  // Non-tower: primeCoeffs should have exactly `degree` elements
-  if (isa<PrimeFieldType>(baseField)) {
-    assert(primeCoeffs.size() == degree &&
-           "Expected degree prime coefficients for non-tower extension");
-    return fromCoeffs(b, efType, primeCoeffs);
-  }
-
-  // Tower extension: recursively build nested structure
-  auto baseEf = cast<ExtensionFieldType>(baseField);
-  unsigned baseDegreeOverPrime = baseEf.getDegreeOverPrime();
-
-  assert(primeCoeffs.size() == degree * baseDegreeOverPrime &&
-         "Expected degreeOverPrime prime coefficients for tower extension");
-
-  SmallVector<Value> baseCoeffs;
-  for (unsigned i = 0; i < degree; ++i) {
-    ArrayRef<Value> baseCoeffSlice =
-        primeCoeffs.slice(i * baseDegreeOverPrime, baseDegreeOverPrime);
-    baseCoeffs.push_back(fromPrimeCoeffs(b, baseEf, baseCoeffSlice));
-  }
-
-  return fromCoeffs(b, efType, baseCoeffs);
 }
 
 Value createPrimeConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,

@@ -21,6 +21,16 @@ package(
 )
 
 cc_library(
+    name = "FieldDialectArithmetic",
+    hdrs = ["FieldDialectArithmetic.h"],
+    deps = [
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:BuilderContext",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
+cc_library(
     name = "ConversionUtils",
     srcs = ["ConversionUtils.cpp"],
     hdrs = ["ConversionUtils.h"],
@@ -57,6 +67,7 @@ cc_library(
         ":IntrinsicFunctionGenerator",
         ":pass_inc_gen",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers:Generic",
+        "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PairingOperations:PairingCodeGen",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations:PointCodeGen",
         "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",

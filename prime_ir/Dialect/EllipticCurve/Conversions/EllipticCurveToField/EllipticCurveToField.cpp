@@ -26,9 +26,11 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/ConversionUtils.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/IntrinsicFunctionGenerator.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Generic.h"
+#include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PairingOperations/PairingCodeGen.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/PointCodeGen.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "prime_ir/Dialect/EllipticCurve/IR/KnownCurves.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/BitSerialAlgorithm.h"
@@ -725,6 +727,43 @@ struct ConvertWindowReduce : public OpConversionPattern<WindowReduceOp> {
   }
 };
 
+struct ConvertPairingCheck : public OpConversionPattern<PairingCheckOp> {
+  explicit ConvertPairingCheck(MLIRContext *context)
+      : OpConversionPattern<PairingCheckOp>(context) {}
+
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(PairingCheckOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    Value g1Points = op.getG1Points();
+    Value g2Points = op.getG2Points();
+
+    // Get pairing curve family from G1/G2 attributes.
+    auto g1PointType = cast<PointTypeInterface>(
+        cast<RankedTensorType>(g1Points.getType()).getElementType());
+    auto g2PointType = cast<PointTypeInterface>(
+        cast<RankedTensorType>(g2Points.getType()).getElementType());
+    auto g1CurveAttr = cast<ShortWeierstrassAttr>(g1PointType.getCurveAttr());
+    auto g2CurveAttr = cast<ShortWeierstrassAttr>(g2PointType.getCurveAttr());
+
+    auto family = getKnownPairingCurveFamily(g1CurveAttr, g2CurveAttr);
+    if (!family)
+      return op.emitError() << "unsupported pairing curve family";
+
+    bool isMontgomery =
+        cast<field::PrimeFieldType>(g1PointType.getBaseFieldType())
+            .isMontgomery();
+
+    Value result =
+        emitBN254PairingCheck(b, *family, g1Points, g2Points, isMontgomery);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 namespace rewrites {
 // In an inner namespace to avoid conflicts with canonicalization patterns
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.cpp.inc"
@@ -763,6 +802,7 @@ void EllipticCurveToField::runOnOperation() {
       IsZeroOp,
       MSMOp,
       NegateOp,
+      PairingCheckOp,
       ScalarDecompOp,
       ScalarMulOp,
       SubOp,
@@ -820,6 +860,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertIsZero,
       ConvertMSM,
       ConvertNegate,
+      ConvertPairingCheck,
       ConvertScalarDecomp,
       ConvertSub,
       ConvertWindowReduce
