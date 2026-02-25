@@ -106,6 +106,53 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "compile_only_client",
+    srcs = ["compile_only_client.cc"],
+    hdrs = ["compile_only_client.h"],
+    deps = [
+        ":client",
+        "//zkx:shape_util",
+        "//zkx:status_macros",
+        "//zkx:zkx_cc_proto",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/builder:zkx_computation",
+        "//zkx/service:compile_only_service",
+        "//zkx/service:compiler",
+        "//zkx/service:hlo_module_config",
+        "//zkx/stream_executor",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/types:span",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:TargetParser",
+    ],
+)
+
+zkx_cc_library(
+    name = "client_library",
+    srcs = ["client_library.cc"],
+    hdrs = ["client_library.h"],
+    deps = [
+        ":compile_only_client",
+        ":local_client",
+        "//xla/tsl/platform:statusor",
+        "//zkx/service",
+        "//zkx/service:compile_only_service",
+        "//zkx/service:local_service",
+        "//zkx/service:platform_util",
+        "//zkx/stream_executor",
+        "//zkx/stream_executor:platform",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/debugging:leak_check",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
 zkx_cc_unittest(
     name = "client_unittests",
     srcs = ["executable_build_options_unittest.cc"],
