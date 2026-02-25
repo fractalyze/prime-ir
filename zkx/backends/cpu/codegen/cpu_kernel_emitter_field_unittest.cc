@@ -158,11 +158,6 @@ TYPED_TEST(FieldR2TensorBinaryTest, Add) { this->SetUpAdd(); }
 
 TYPED_TEST_SUITE(FieldTest, FieldTypes);
 
-TYPED_TEST(FieldTest, CSRMatrixVectorMultiplication) {
-  this->SetUpCSRMatrixVectorMultiplication();
-  this->RunAndVerify();
-}
-
 TYPED_TEST(FieldTest, DynamicUpdateSlice) {
   this->SetUpDynamicUpdateSliceBug();
   this->RunAndVerify();

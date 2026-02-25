@@ -245,9 +245,6 @@ message LayoutProto {
   // different memories.
   repeated SplitConfigProto split_configs = 17;
 
-  // The number of non-zero elements in the sparse tensor.
-  int64 num_nonzeros = 10000;
-
   // Important: if any field is added, be sure to modify ShapeUtil::Equal() and
   // LayoutUtil::Hash appropriately to account for the new field.
 

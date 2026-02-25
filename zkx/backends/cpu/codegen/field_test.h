@@ -29,9 +29,9 @@ limitations under the License.
 #include "zkx/array2d.h"
 #include "zkx/backends/cpu/codegen/cpu_kernel_emitter_test.h"
 #include "zkx/base/containers/container_util.h"
+#include "zkx/base/random.h"
 #include "zkx/comparison_util.h"
 #include "zkx/literal_util.h"
-#include "zkx/math/base/sparse_matrix.h"
 #include "zkx/math/field/prime_field_serde.h"
 #include "zkx/primitive_util.h"
 
@@ -634,40 +634,6 @@ class FieldTest : public CpuKernelEmitterTest {
   }
 
  protected:
-  void SetUpCSRMatrixVectorMultiplication() {
-    constexpr static int64_t M = 4;
-    constexpr static int64_t N = 3;
-    constexpr static int64_t NNZ = 8;
-
-    hlo_text_ = absl::Substitute(R"(
-      ENTRY %main {
-        %x = $0[$1, $2]{1,0:D(D, C) NNZ($3)} parameter(0)
-        %y = $0[$2] parameter(1)
-
-        ROOT %ret = $0[$1] dot(%x, %y)
-      }
-    )",
-                                 x_typename_, M, N, NNZ);
-
-    math::SparseMatrix<F> sparse_matrix =
-        math::SparseMatrix<F>::Random(M, N, NNZ);
-
-    std::vector<uint32_t> row_ptrs, col_indices;
-    std::vector<F> values;
-    sparse_matrix.ToCSR(row_ptrs, col_indices, values);
-
-    TF_ASSERT_OK_AND_ASSIGN(std::vector<uint8_t> csr_buffer,
-                            sparse_matrix.ToCSRBuffer());
-    std::vector<F> vector = CreateRandomVector(N);
-
-    literals_.push_back(LiteralUtil::CreateR1<uint8_t>(csr_buffer));
-    literals_.push_back(LiteralUtil::CreateR1<F>(vector));
-
-    std::vector<F> expected =
-        ComputeCSRMatrixVectorProduct(row_ptrs, col_indices, values, vector);
-    expected_literal_ = LiteralUtil::CreateR1<F>(expected);
-  }
-
   void SetUpDynamicUpdateSliceBug() {
     hlo_text_ = absl::Substitute(R"(
       ENTRY %main {
@@ -826,20 +792,6 @@ class FieldTest : public CpuKernelEmitterTest {
           sum += lhs({i, l}) * rhs({l, j});
         }
         result({i, j}) = sum;
-      }
-    }
-    return result;
-  }
-
-  // Computes CSR matrix-vector product
-  static std::vector<F> ComputeCSRMatrixVectorProduct(
-      const std::vector<uint32_t>& row_ptrs,
-      const std::vector<uint32_t>& col_indices, const std::vector<F>& values,
-      const std::vector<F>& vec) {
-    std::vector<F> result(row_ptrs.size() - 1);
-    for (size_t i = 0; i < result.size(); ++i) {
-      for (size_t j = row_ptrs[i]; j < row_ptrs[i + 1]; ++j) {
-        result[i] += values[j] * vec[col_indices[j]];
       }
     }
     return result;

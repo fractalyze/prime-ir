@@ -5626,7 +5626,6 @@ bool HloParserImpl::ParseLayout(Layout* layout) {
   std::optional<Shape> physical_shape;
   int64_t dynamic_shape_metadata_prefix_bytes = 0;
   int64_t tail_padding_alignment_in_elements = 1;
-  int64_t num_nonzeros = 0;
 
   auto parse_and_add_item = [&]() {
     int64_t i;
@@ -5724,11 +5723,6 @@ bool HloParserImpl::ParseLayout(Layout* layout) {
         ParseLayoutIntAttribute(&dynamic_shape_metadata_prefix_bytes,
                                 "dynamic shape metadata prefix bytes");
       }
-
-      if (lexer_.GetKind() == TokKind::kIdent && lexer_.GetStrVal() == "NNZ") {
-        lexer_.Lex();
-        ParseLayoutIntAttribute(&num_nonzeros, "number of non zero elements");
-      }
     }
   }
   if (!ParseToken(TokKind::kRbrace,
@@ -5745,8 +5739,7 @@ bool HloParserImpl::ParseLayout(Layout* layout) {
       minor_to_major, dim_level_types, dim_unique, dim_ordered, vec_tiles,
       tail_padding_alignment_in_elements, index_primitive_type,
       pointer_primitive_type, element_size_in_bits, memory_space, split_configs,
-      std::move(physical_shape), dynamic_shape_metadata_prefix_bytes,
-      num_nonzeros);
+      std::move(physical_shape), dynamic_shape_metadata_prefix_bytes);
   return true;
 }
 

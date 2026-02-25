@@ -30,7 +30,6 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/thread_pool.h"
 #include "zkx/index_util.h"
-#include "zkx/math/base/sparse_matrix.h"
 #include "zkx/permutation_util.h"
 #include "zkx/printer.h"
 
@@ -905,13 +904,8 @@ int64_t ShapeUtil::ByteSizeOfTupleIndexTable(const Shape& shape,
 // static
 int64_t ShapeUtil::ByteSizeOfElements(const Shape& shape) {
   DCHECK_OK(ValidateShapeWithOptionalLayout(shape));
-  int64_t allocated_element_count;
-
-  if (LayoutUtil::IsSparseArray(shape)) {
-    return SparseArrayDataSize(shape);
-  }
   CHECK(LayoutUtil::IsDenseArray(shape)) << shape.ShortDebugString();
-  allocated_element_count = ElementsIn(shape);
+  int64_t allocated_element_count = ElementsIn(shape);
 
   if (shape.has_layout() && shape.layout().element_size_in_bits() != 0) {
     const int64_t num_bits =
@@ -1976,29 +1970,6 @@ int64_t ShapeUtil::ArrayDataSize(const Shape& shape) {
     return CeilOfRatio<int64_t>(num_bits, CHAR_BIT);
   }
   return size * ByteSizeOfPrimitiveType(shape.element_type());
-}
-
-// static
-int64_t ShapeUtil::SparseArrayDataSize(const Shape& shape) {
-  CHECK(LayoutUtil::IsSparseArray(shape));
-  if (LayoutUtil::IsCSRArray(shape)) {
-    return math::SparseMatrix<int>::EstimateCSRSize(
-        shape.dimensions(0), shape.dimensions(1),
-        shape.layout().num_nonzeros());
-  } else if (LayoutUtil::IsCSCArray(shape)) {
-    return math::SparseMatrix<int>::EstimateCSCSize(
-        shape.dimensions(1), shape.dimensions(0),
-        shape.layout().num_nonzeros());
-  } else if (LayoutUtil::IsCOOArray(shape)) {
-    CHECK_EQ(shape.layout().dim_level_types_size(), 2)
-        << "COO sparse tensor not implemented";
-    return math::SparseMatrix<int>::EstimateCOOSize(
-        shape.dimensions(0), shape.dimensions(1),
-        shape.layout().num_nonzeros());
-  }
-  LOG(ERROR) << "SparseArrayDataSize not implemented: " << shape.layout();
-  ABSL_UNREACHABLE();
-  return 0;
 }
 
 int64_t ShapeUtil::ForEachState::CalculateNumSteps() const {

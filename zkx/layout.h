@@ -181,8 +181,7 @@ class Layout {
                   int64_t element_size_in_bits = 0, int64_t memory_space = 0,
                   absl::Span<const SplitConfig> split_configs = {},
                   std::unique_ptr<Shape> physical_shape = nullptr,
-                  int64_t dynamic_shape_metadata_prefix_bytes = 0,
-                  int64_t num_nonzeros = 0);
+                  int64_t dynamic_shape_metadata_prefix_bytes = 0);
 
   Layout& operator=(const Layout& other);
   Layout& operator=(Layout&& other);
@@ -253,11 +252,6 @@ class Layout {
       return *this;
     }
 
-    Equal& IgnoreNumNonZeros() {
-      ignore_num_nonzeros_ = true;
-      return *this;
-    }
-
     Equal& MinorToMajorOnly() {
       return IgnoreTiles()
           .IgnoreIndexPrimitiveType()
@@ -265,8 +259,7 @@ class Layout {
           .IgnoreMemorySpace()
           .IgnorePhysicalShape()
           .IgnoreElementSize()
-          .IgnoreTailPaddingAlignmentInElements()
-          .IgnoreNumNonZeros();
+          .IgnoreTailPaddingAlignmentInElements();
     }
 
    private:
@@ -278,7 +271,6 @@ class Layout {
     bool ignore_memory_space_ = false;
     bool ignore_split_configs_ = false;
     bool ignore_physical_shape_ = false;
-    bool ignore_num_nonzeros_ = false;
   };
 
   bool operator==(const Layout& other) const;
@@ -451,9 +443,6 @@ class Layout {
     dynamic_shape_metadata_prefix_bytes_ = bytes;
   }
 
-  int64_t num_nonzeros() const { return num_nonzeros_; }
-  void set_num_nonzeros(int64_t num_nonzeros) { num_nonzeros_ = num_nonzeros; }
-
   void Swap(Layout* other) { std::swap(*this, *other); }
 
   void Clear() { *this = Layout(); }
@@ -463,8 +452,7 @@ class Layout {
     return H::combine(std::move(h), l.minor_to_major_, l.tiles_,
                       l.element_size_in_bits_, l.index_primitive_type_,
                       l.pointer_primitive_type_, l.memory_space_,
-                      l.split_configs_, l.tail_padding_alignment_in_elements_,
-                      l.num_nonzeros_);
+                      l.split_configs_, l.tail_padding_alignment_in_elements_);
   }
 
  private:
@@ -531,9 +519,6 @@ class Layout {
   // field may be non-zero for a static shape whose associated buffer is for a
   // dynamic shape, e.g. a result of SliceToDynamic.
   int64_t dynamic_shape_metadata_prefix_bytes_ = 0;
-
-  // The number of non-zero elements in the sparse tensor.
-  int64_t num_nonzeros_ = 0;
 };
 
 std::ostream& operator<<(std::ostream& out, const Tile& Tile);

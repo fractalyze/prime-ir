@@ -112,8 +112,7 @@ Layout::Layout(absl::Span<const int64_t> minor_to_major,
                int64_t element_size_in_bits, int64_t memory_space,
                absl::Span<const SplitConfig> split_configs,
                std::unique_ptr<Shape> physical_shape,
-               int64_t dynamic_shape_metadata_prefix_bytes,
-               int64_t num_nonzeros)
+               int64_t dynamic_shape_metadata_prefix_bytes)
     : index_primitive_type_(index_primitive_type),
       pointer_primitive_type_(element_primitive_type),
       memory_space_(memory_space),
@@ -123,8 +122,8 @@ Layout::Layout(absl::Span<const int64_t> minor_to_major,
       split_configs_(split_configs.begin(), split_configs.end()),
       tail_padding_alignment_in_elements_(tail_padding_alignment_in_elements),
       physical_shape_(std::move(physical_shape)),
-      dynamic_shape_metadata_prefix_bytes_(dynamic_shape_metadata_prefix_bytes),
-      num_nonzeros_(num_nonzeros) {
+      dynamic_shape_metadata_prefix_bytes_(
+          dynamic_shape_metadata_prefix_bytes) {
   // Grow dim_attributes_ to the maximum length of "dim_level_types",
   // "dim_unique", and "dim_ordered", and then initialize the attributes that
   // should exist.
@@ -160,8 +159,7 @@ Layout::Layout(const Layout& other)
                           ? std::make_unique<Shape>(*other.physical_shape_)
                           : nullptr),
       dynamic_shape_metadata_prefix_bytes_(
-          other.dynamic_shape_metadata_prefix_bytes_),
-      num_nonzeros_(other.num_nonzeros_) {}
+          other.dynamic_shape_metadata_prefix_bytes_) {}
 
 Layout::Layout(Layout&& other) = default;
 
@@ -189,7 +187,6 @@ Layout& Layout::operator=(const Layout& other) {
     }
     dynamic_shape_metadata_prefix_bytes_ =
         other.dynamic_shape_metadata_prefix_bytes_;
-    num_nonzeros_ = other.num_nonzeros_;
   }
   return *this;
 }
@@ -233,7 +230,6 @@ Layout& Layout::operator=(Layout&& other) = default;
   }
   layout.set_dynamic_shape_metadata_prefix_bytes(
       proto.dynamic_shape_metadata_prefix_bytes());
-  layout.set_num_nonzeros(proto.num_nonzeros());
   return layout;
 }
 
@@ -275,7 +271,6 @@ void Layout::SetProto(LayoutProto& proto) const {
   }
   proto.set_dynamic_shape_metadata_prefix_bytes(
       dynamic_shape_metadata_prefix_bytes_);
-  proto.set_num_nonzeros(num_nonzeros_);
 }
 
 namespace {
@@ -402,13 +397,6 @@ void Layout::Print(Printer* printer) const {
     printer->Append(")");
   }
 
-  if (num_nonzeros_ != 0) {
-    print_colon();
-    printer->Append("NNZ(");
-    printer->Append(num_nonzeros());
-    printer->Append(")");
-  }
-
   printer->Append("}");
 }
 
@@ -487,9 +475,6 @@ bool Layout::Equal::operator()(const Layout& lhs, const Layout& rhs) {
       }
     }
   }
-  if (!ignore_num_nonzeros_ && lhs.num_nonzeros() != rhs.num_nonzeros()) {
-    return false;
-  }
   return true;
 }
 
@@ -526,13 +511,6 @@ Layout& Layout::DeleteDimension(int64_t dim_to_delete) {
       minor_to_major_[i] -= 1;
     }
     ++i;
-  }
-  // Delete the corresponding dim level types.
-  if (LayoutUtil::IsSparse(*this)) {
-    if (dim_to_delete < n_dim_level_types_) n_dim_level_types_--;
-    if (dim_to_delete < n_dim_unique_) n_dim_unique_--;
-    if (dim_to_delete < n_dim_ordered_) n_dim_ordered_--;
-    dim_attributes_.erase(dim_attributes_.begin() + dim_to_delete);
   }
   return *this;
 }

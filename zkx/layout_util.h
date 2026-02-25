@@ -55,8 +55,7 @@ class LayoutUtil {
       int64_t element_size_in_bits = 0, int64_t memory_space = 0,
       absl::Span<const SplitConfig> split_configs = {},
       std::optional<Shape> physical_shape = std::nullopt,
-      int64_t dynamic_shape_metadata_prefix_bytes = 0,
-      int64_t num_nonzeros = 0);
+      int64_t dynamic_shape_metadata_prefix_bytes = 0);
 
   // Similar to MakeLayout, but take indices in reverse order.
   static Layout MakeLayoutFromMajorToMinor(

@@ -203,16 +203,6 @@ bool Shape::Equal::operator()(const Shape& lhs, const Shape& rhs) {
     return false;
   }
 
-  // TODO(chokobole): Sparse array has a u8 array internally. For example, CSR
-  // matrix has a concatenated u8 array of row ptrs, col indices, and values.
-  bool is_lhs_sparse = LayoutUtil::IsSparseArray(lhs);
-  bool is_rhs_sparse = LayoutUtil::IsSparseArray(rhs);
-  if (is_lhs_sparse && !is_rhs_sparse) {
-    return true;
-  } else if (!is_lhs_sparse && is_rhs_sparse) {
-    return true;
-  }
-
   if (!ignore_element_type_) {
     if (!ShapeUtil::SameElementType(lhs, rhs)) {
       VLOG(3) << "CompareShapes: lhs element type != rhs element type";
