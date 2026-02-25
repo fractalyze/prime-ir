@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "zkx/service/gpu/transforms/fusion_wrapper.h"
 
+#include <cstdint>
 #include <optional>
 
 #include <gtest/gtest.h>  // NOLINT(build/include_order)
@@ -34,9 +35,6 @@ class FusionWrapperTest : public HloHardwareIndependentTestBase {
  protected:
   se::DeviceDescription device_description_;
 };
-
-// NOTE: XLA's ConvolutionWorks test is omitted because kConvolution is not
-// present in the ZKX HloOpcode enum.
 
 TEST_F(FusionWrapperTest, SimpleOp) {
   RunAndFilecheckHloRewrite(R"(
@@ -176,9 +174,6 @@ TEST_F(FusionWrapperTest, While) {
 // CHECK: })");
 }
 
-// NOTE: Unlike XLA's original recursive approach, using
-// MakeNonfusionComputations() also visits while-body computations called from
-// within fusions, so the broadcast inside the while body gets wrapped.
 TEST_F(FusionWrapperTest, WhileInFusion) {
   RunAndFilecheckHloRewrite(R"(
       HloModule While
@@ -206,21 +201,10 @@ TEST_F(FusionWrapperTest, WhileInFusion) {
         %parameter.1 = s32[5]{0} parameter(0)
         ROOT %fusion = (s32[5]{0}) fusion(s32[5]{0} %parameter.1), kind=kLoop, calls=%fusion
       })",
-                            FusionWrapper(device_description_), R"(
-// CHECK: %wrapped_broadcast_computation {{.*}} {
-// CHECK:   %param_0 = s32[] parameter(0)
-// CHECK:   ROOT %broadcast.0 = s32[5]{0} broadcast(%param_0), dimensions={}
-// CHECK: }
-// CHECK: %body {{.*}} {
-// CHECK:   %parameter.5 = (s32[5]{0}) parameter(0)
-// CHECK:   %constant_8 = s32[] constant(0)
-// CHECK:   %wrapped_broadcast = s32[5]{0} fusion(%constant_8), kind=kLoop, calls=%wrapped_broadcast_computation
-// CHECK:   ROOT %tuple.2 = (s32[5]{0}) tuple(%wrapped_broadcast)
-// CHECK: })");
+                            FusionWrapper(device_description_),
+                            // No change
+                            std::nullopt);
 }
-
-// NOTE: XLA's AsyncComputationFusion test is omitted because it was added
-// after the reference commit (8bac4a2c).
 
 }  // namespace
 }  // namespace zkx::gpu

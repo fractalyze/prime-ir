@@ -22,7 +22,6 @@ limitations under the License.
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/pass/hlo_pass_interface.h"
 #include "zkx/stream_executor/device_description.h"
@@ -48,13 +47,6 @@ class FusionWrapper : public HloModulePass {
       const absl::flat_hash_set<std::string_view>& execution_threads) override;
 
  private:
-  // Returns true if the instruction must be wrapped in a fusion.
-  static bool MustWrapInstruction(const HloInstruction& instruction);
-
-  // Chooses the fusion kind for the given producer/consumer pair.
-  HloInstruction::FusionKind ChooseFusionKind(const HloInstruction& producer,
-                                              const HloInstruction& consumer);
-
   const se::DeviceDescription& device_description_;
 };
 
