@@ -45,17 +45,6 @@ cc_proto_library(
 )
 
 cc_library(
-    name = "pjrt_attribute_map_util",
-    srcs = ["pjrt_attribute_map_util.cc"],
-    hdrs = ["pjrt_attribute_map_util.h"],
-    deps = [
-        "//zkx/pjrt:pjrt_common",
-        "//zkx/python/ifrt:attribute_map",
-        "@com_google_absl//absl/container:flat_hash_map",
-    ],
-)
-
-cc_library(
     name = "basic_string_array",
     srcs = ["basic_string_array.cc"],
     hdrs = ["basic_string_array.h"],
@@ -79,6 +68,17 @@ cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
         "@llvm-project//llvm:Support",
+    ],
+)
+
+cc_library(
+    name = "pjrt_attribute_map_util",
+    srcs = ["pjrt_attribute_map_util.cc"],
+    hdrs = ["pjrt_attribute_map_util.h"],
+    deps = [
+        "//zkx/pjrt:pjrt_common",
+        "//zkx/python/ifrt:attribute_map",
+        "@com_google_absl//absl/container:flat_hash_map",
     ],
 )
 
@@ -320,6 +320,7 @@ zkx_cc_unittest(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "pjrt_ifrt_tests_with_cpu_client_multi_process",
     srcs = ["basic_string_array_unittest.cc"],

@@ -168,6 +168,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_instruction_fusion_unittest",
     srcs = ["cpu_instruction_fusion_unittest.cc"],

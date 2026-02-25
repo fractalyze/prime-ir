@@ -18,6 +18,27 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "copy",
+    srcs = ["copy.cc"],
+    hdrs = ["copy.h"],
+    deps = [
+        ":fusion_emitter",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx/backends/gpu/runtime:copy_thunk",
+        "//zkx/backends/gpu/runtime:thunk",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/utils:hlo_traversal",
+        "//zkx/service:buffer_assignment",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/service/gpu:ir_emitter_context",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "cuda_kernel_emitter_test",
     testonly = True,
     hdrs = ["cuda_kernel_emitter_test.h"],
@@ -47,27 +68,6 @@ zkx_cc_library(
         "//zkx/base:random",
         "//zkx/base/containers:container_util",
         "@com_google_absl//absl/strings",
-    ],
-)
-
-zkx_cc_library(
-    name = "copy",
-    srcs = ["copy.cc"],
-    hdrs = ["copy.h"],
-    deps = [
-        ":fusion_emitter",
-        "//xla/tsl/platform:errors",
-        "//xla/tsl/platform:statusor",
-        "//zkx:shape_util",
-        "//zkx/backends/gpu/runtime:copy_thunk",
-        "//zkx/backends/gpu/runtime:thunk",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/utils:hlo_traversal",
-        "//zkx/service:buffer_assignment",
-        "//zkx/service/gpu:hlo_fusion_analysis",
-        "//zkx/service/gpu:ir_emitter_context",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
     ],
 )
 
@@ -156,6 +156,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cuda_kernel_emitter_ext_field_unittest",
     srcs = ["cuda_kernel_emitter_ext_field_unittest.cc"],
@@ -166,6 +167,7 @@ zkx_cc_unittest(
     deps = [":field_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cuda_kernel_emitter_field_unittest",
     srcs = ["cuda_kernel_emitter_field_unittest.cc"],
@@ -176,6 +178,7 @@ zkx_cc_unittest(
     deps = [":field_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cuda_kernel_emitter_g1_unittest",
     timeout = "moderate",
@@ -187,6 +190,7 @@ zkx_cc_unittest(
     deps = [":group_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cuda_kernel_emitter_g2_unittest",
     timeout = "moderate",
@@ -198,6 +202,7 @@ zkx_cc_unittest(
     deps = [":group_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cuda_kernel_emitter_int_unittest",
     srcs = ["cuda_kernel_emitter_int_unittest.cc"],

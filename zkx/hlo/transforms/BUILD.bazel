@@ -48,6 +48,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "transform_unittests",
     srcs = ["host_offload_legalize_unittest.cc"],

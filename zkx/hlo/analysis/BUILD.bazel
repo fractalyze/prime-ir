@@ -58,20 +58,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "hlo_reachability",
-    srcs = ["hlo_reachability.cc"],
-    hdrs = ["hlo_reachability.h"],
-    deps = [
-        "//zkx/hlo/ir:hlo",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/functional:function_ref",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/types:span",
-    ],
-)
-
-zkx_cc_library(
     name = "hlo_ordering",
     srcs = ["hlo_ordering.cc"],
     hdrs = ["hlo_ordering.h"],
@@ -92,30 +78,15 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "while_loop_analysis",
-    srcs = ["while_loop_analysis.cc"],
-    hdrs = ["while_loop_analysis.h"],
+    name = "hlo_reachability",
+    srcs = ["hlo_reachability.cc"],
+    hdrs = ["hlo_reachability.h"],
     deps = [
-        ":hlo_reachability",
-        "//zkx:comparison_util",
-        "//zkx:literal",
-        "//zkx:literal_util",
-        "//zkx:primitive_util",
-        "//zkx:shape_util",
-        "//zkx/hlo/evaluator:hlo_evaluator",
         "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/utils:hlo_query",
-        "//zkx/service:collective_ops_utils",
-        "//zkx/service:constant_value",
-        "//zkx/service:pattern_matcher",
-        "//zkx/service:value_range",
-        "//zkx/tools:hlo_extractor",
-        "@com_google_absl//absl/base",
+        "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:function_ref",
-        "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -231,6 +202,35 @@ zkx_cc_library(
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "while_loop_analysis",
+    srcs = ["while_loop_analysis.cc"],
+    hdrs = ["while_loop_analysis.h"],
+    deps = [
+        ":hlo_reachability",
+        "//zkx:comparison_util",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:primitive_util",
+        "//zkx:shape_util",
+        "//zkx/hlo/evaluator:hlo_evaluator",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/utils:hlo_query",
+        "//zkx/service:collective_ops_utils",
+        "//zkx/service:constant_value",
+        "//zkx/service:pattern_matcher",
+        "//zkx/service:value_range",
+        "//zkx/tools:hlo_extractor",
+        "@com_google_absl//absl/base",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:function_ref",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
     ],
 )
 

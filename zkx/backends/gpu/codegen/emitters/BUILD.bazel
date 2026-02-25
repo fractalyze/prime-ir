@@ -18,6 +18,33 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "concatenate",
+    srcs = ["concatenate.cc"],
+    hdrs = ["concatenate.h"],
+    deps = [
+        ":emitter_base",
+        "//zkx:shape_util",
+        "//zkx/codegen/emitters:computation_partitioner",
+        "//zkx/codegen/emitters:elemental_hlo_to_mlir",
+        "//zkx/hlo/analysis:indexing_analysis",
+        "//zkx/hlo/analysis:indexing_map",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service/gpu:gpu_fusible",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/service/gpu:launch_dimensions",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
+
+zkx_cc_library(
     name = "emitter_base",
     srcs = ["emitter_base.cc"],
     hdrs = ["emitter_base.h"],
@@ -101,33 +128,6 @@ zkx_cc_library(
         "@prime_ir//prime_ir/Dialect/ModArith/Conversions/ModArithToArith",
         "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArith",
         "@prime_ir//prime_ir/Dialect/Poly/IR:Poly",
-    ],
-)
-
-zkx_cc_library(
-    name = "concatenate",
-    srcs = ["concatenate.cc"],
-    hdrs = ["concatenate.h"],
-    deps = [
-        ":emitter_base",
-        "//zkx:shape_util",
-        "//zkx/codegen/emitters:computation_partitioner",
-        "//zkx/codegen/emitters:elemental_hlo_to_mlir",
-        "//zkx/hlo/analysis:indexing_analysis",
-        "//zkx/hlo/analysis:indexing_map",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/service/gpu:gpu_fusible",
-        "//zkx/service/gpu:hlo_fusion_analysis",
-        "//zkx/service/gpu:launch_dimensions",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:FuncDialect",
-        "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:TensorDialect",
     ],
 )
 
@@ -216,39 +216,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "reduction_base",
-    srcs = ["reduction_base.cc"],
-    hdrs = ["reduction_base.h"],
-    deps = [
-        "//zkx:primitive_util",
-        "//zkx:shape_util",
-        "//zkx:union_find",
-        "//zkx:util",
-        "//zkx:zkx_data_cc_proto",
-        "//zkx/backends/gpu/codegen:fusion_emitter",
-        "//zkx/hlo/analysis:indexing_map",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/utils:hlo_query",
-        "//zkx/hlo/utils:hlo_traversal",
-        "//zkx/service/gpu:gpu_fusible",
-        "//zkx/service/gpu:hlo_fusion_analysis",
-        "//zkx/service/gpu:ir_emission_utils",
-        "//zkx/service/gpu:reduction_utils",
-        "//zkx/stream_executor:device_description",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/container:inlined_vector",
-        "@com_google_absl//absl/container:node_hash_map",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/types:span",
-        "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:IR",
-    ],
-)
-
-zkx_cc_library(
     name = "reduction",
     srcs = ["reduction.cc"],
     hdrs = ["reduction.h"],
@@ -291,6 +258,39 @@ zkx_cc_library(
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:VectorDialect",
+    ],
+)
+
+zkx_cc_library(
+    name = "reduction_base",
+    srcs = ["reduction_base.cc"],
+    hdrs = ["reduction_base.h"],
+    deps = [
+        "//zkx:primitive_util",
+        "//zkx:shape_util",
+        "//zkx:union_find",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/backends/gpu/codegen:fusion_emitter",
+        "//zkx/hlo/analysis:indexing_map",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/utils:hlo_query",
+        "//zkx/hlo/utils:hlo_traversal",
+        "//zkx/service/gpu:gpu_fusible",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/service/gpu:ir_emission_utils",
+        "//zkx/service/gpu:reduction_utils",
+        "//zkx/stream_executor:device_description",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/container:node_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/types:span",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
     ],
 )
 
@@ -363,6 +363,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "transpose_unittest",
     srcs = ["transpose_unittest.cc"],

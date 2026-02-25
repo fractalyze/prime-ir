@@ -30,7 +30,7 @@ zkx_cc_library(
 )
 
 zkx_cc_unittest(
-    name = "table_writer_unittest",
+    name = "console_unittests",
     srcs = ["table_writer_unittest.cc"],
     deps = [":table_writer"],
 )

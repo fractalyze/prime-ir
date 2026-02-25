@@ -326,19 +326,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "small_int_test",
-    testonly = True,
-    hdrs = ["small_int_test.h"],
-    deps = [
-        ":cpu_kernel_emitter_test",
-        "//zkx:literal_util",
-        "//zkx:primitive_util",
-        "//zkx/base:random",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-zkx_cc_library(
     name = "pred_test",
     testonly = True,
     hdrs = ["pred_test.h"],
@@ -350,6 +337,19 @@ zkx_cc_library(
         "//zkx:primitive_util",
         "//zkx/base:random",
         "//zkx/base/containers:container_util",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
+    name = "small_int_test",
+    testonly = True,
+    hdrs = ["small_int_test.h"],
+    deps = [
+        ":cpu_kernel_emitter_test",
+        "//zkx:literal_util",
+        "//zkx:primitive_util",
+        "//zkx/base:random",
         "@com_google_absl//absl/strings",
     ],
 )
@@ -388,12 +388,14 @@ zkx_cc_unittest(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_kernel_emitter_field_unittest",
     srcs = ["cpu_kernel_emitter_field_unittest.cc"],
     deps = [":field_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_kernel_emitter_g1_unittest",
     timeout = "moderate",
@@ -401,6 +403,7 @@ zkx_cc_unittest(
     deps = [":group_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_kernel_emitter_g2_unittest",
     timeout = "moderate",
@@ -408,6 +411,7 @@ zkx_cc_unittest(
     deps = [":group_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_kernel_emitter_g1_msm_unittest",
     timeout = "moderate",
@@ -415,6 +419,7 @@ zkx_cc_unittest(
     deps = [":msm_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_kernel_emitter_g2_msm_unittest",
     timeout = "long",
@@ -422,18 +427,21 @@ zkx_cc_unittest(
     deps = [":msm_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_kernel_emitter_int_unittest",
     srcs = ["cpu_kernel_emitter_int_unittest.cc"],
     deps = [":int_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_kernel_emitter_small_int_unittest",
     srcs = ["cpu_kernel_emitter_small_int_unittest.cc"],
     deps = [":small_int_test"],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cpu_kernel_emitter_pred_unittest",
     srcs = ["cpu_kernel_emitter_pred_unittest.cc"],

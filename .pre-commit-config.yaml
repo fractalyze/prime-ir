@@ -33,9 +33,11 @@ repos:
 
   # Fractal lint — custom style linter for ZKX
   - repo: https://github.com/fractalyze/fractal-lint
-    rev: v0.2.0
+    rev: v0.3.1
     hooks:
       - id: fractal-lint
+        files: ^zkx/
+      - id: fractal-build-lint
         files: ^zkx/
       - id: fractal-commit-lint
 

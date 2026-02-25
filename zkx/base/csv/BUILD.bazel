@@ -33,7 +33,7 @@ zkx_cc_library(
 )
 
 zkx_cc_unittest(
-    name = "csv_writer_unittest",
+    name = "csv_unittests",
     srcs = ["csv_writer_unittest.cc"],
     deps = [":csv_writer"],
 )

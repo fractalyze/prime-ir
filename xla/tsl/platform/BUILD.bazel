@@ -158,28 +158,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "net",
-    srcs = if_posix(["net_posix.cc"]),
-    hdrs = ["net.h"],
-    deps = [
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-    ],
-)
-
-zkx_cc_library(
-    name = "numbers",
-    srcs = ["numbers.cc"],
-    hdrs = ["numbers.h"],
-    deps = [
-        "//zkx/base:logging",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-    ],
-)
-
-zkx_cc_library(
     name = "hash",
     srcs = ["hash.cc"],
     hdrs = ["hash.h"],
@@ -220,6 +198,16 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "net",
+    srcs = if_posix(["net_posix.cc"]),
+    hdrs = ["net.h"],
+    deps = [
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+    ],
+)
+
+zkx_cc_library(
     name = "numa",
     srcs = if_posix(["numa_posix.cc"]),
     hdrs = ["numa.h"],
@@ -227,6 +215,18 @@ zkx_cc_library(
         ":mem",
         "@com_google_absl//absl/base",
         "@com_google_absl//absl/log",
+    ],
+)
+
+zkx_cc_library(
+    name = "numbers",
+    srcs = ["numbers.cc"],
+    hdrs = ["numbers.h"],
+    deps = [
+        "//zkx/base:logging",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
     ],
 )
 

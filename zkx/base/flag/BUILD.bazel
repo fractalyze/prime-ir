@@ -36,15 +36,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "numeric_flags",
-    hdrs = ["numeric_flags.h"],
-    deps = [
-        ":flag",
-        "//xla/tsl/platform:errors",
-    ],
-)
-
-zkx_cc_library(
     name = "flag_parser",
     srcs = ["flag_parser.cc"],
     hdrs = ["flag_parser.h"],
@@ -52,6 +43,15 @@ zkx_cc_library(
         ":flag",
         "//xla/tsl/platform:errors",
         "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "numeric_flags",
+    hdrs = ["numeric_flags.h"],
+    deps = [
+        ":flag",
+        "//xla/tsl/platform:errors",
     ],
 )
 

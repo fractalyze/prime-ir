@@ -59,12 +59,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "serde_forward",
-    hdrs = ["serde_forward.h"],
-    deps = ["//zkx/base/types:cxx20_is_bounded_array"],
-)
-
-zkx_cc_library(
     name = "serde",
     hdrs = ["serde.h"],
     deps = [
@@ -72,6 +66,12 @@ zkx_cc_library(
         ":serde_forward",
         "@com_google_absl//absl/base:core_headers",
     ],
+)
+
+zkx_cc_library(
+    name = "serde_forward",
+    hdrs = ["serde_forward.h"],
+    deps = ["//zkx/base/types:cxx20_is_bounded_array"],
 )
 
 zkx_cc_library(

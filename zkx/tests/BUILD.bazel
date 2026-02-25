@@ -28,6 +28,7 @@ cc_library(
 # Generate a test_macros_${BACKEND} library per backend with the proper copts.
 generate_backend_test_macros()
 
+# fractal-build-lint: disable=build-target-sort
 zkx_cc_library(
     name = "hlo_runner_agnostic_reference_mixin",
     testonly = True,
@@ -135,20 +136,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "test_utils",
-    srcs = ["test_utils.cc"],
-    hdrs = ["test_utils.h"],
-    deps = [
-        "//zkx:literal_util",
-        "//zkx/hlo/analysis:hlo_dataflow_analysis",
-        "//zkx/hlo/ir:hlo",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_protobuf//:protobuf",
-    ],
-)
-
-zkx_cc_library(
     name = "pjrt_client_registry",
     srcs = ["pjrt_client_registry.cc"],
     hdrs = ["pjrt_client_registry.h"],
@@ -159,5 +146,19 @@ zkx_cc_library(
         "@com_google_absl//absl/debugging:leak_check",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_library(
+    name = "test_utils",
+    srcs = ["test_utils.cc"],
+    hdrs = ["test_utils.h"],
+    deps = [
+        "//zkx:literal_util",
+        "//zkx/hlo/analysis:hlo_dataflow_analysis",
+        "//zkx/hlo/ir:hlo",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_protobuf//:protobuf",
     ],
 )

@@ -68,6 +68,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "hlo_evaluator_unittest",
     srcs = [

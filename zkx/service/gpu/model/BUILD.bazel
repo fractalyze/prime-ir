@@ -16,6 +16,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "affine_map_evaluator_unittest",
     srcs = ["affine_map_evaluator_unittest.cc"],
@@ -53,6 +54,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "coalescing_analysis_unittest",
     srcs = ["coalescing_analysis_unittest.cc"],
@@ -87,6 +89,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "fusion_analysis_cache_unittest",
     srcs = ["fusion_analysis_cache_unittest.cc"],
@@ -157,6 +160,7 @@ zkx_cc_library(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "gpu_performance_model_base_unittest",
     srcs = ["gpu_performance_model_base_unittest.cc"],

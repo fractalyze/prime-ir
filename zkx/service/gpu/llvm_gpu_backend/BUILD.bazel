@@ -49,6 +49,18 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "load_ir_module",
+    srcs = ["default/load_ir_module.cc"],
+    hdrs = ["load_ir_module.h"],
+    deps = [
+        "@com_google_absl//absl/log",
+        "@llvm-project//llvm:Core",
+        "@llvm-project//llvm:IRReader",
+        "@llvm-project//llvm:Support",
+    ],
+)
+
+zkx_cc_library(
     name = "nvptx_backend",
     srcs = ["nvptx_backend.cc"],
     hdrs = ["nvptx_backend.h"],
@@ -102,18 +114,6 @@ zkx_cc_library(
         "@com_google_absl//absl/debugging:leak_check",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/synchronization",
-    ],
-)
-
-zkx_cc_library(
-    name = "load_ir_module",
-    srcs = ["default/load_ir_module.cc"],
-    hdrs = ["load_ir_module.h"],
-    deps = [
-        "@com_google_absl//absl/log",
-        "@llvm-project//llvm:Core",
-        "@llvm-project//llvm:IRReader",
-        "@llvm-project//llvm:Support",
     ],
 )
 

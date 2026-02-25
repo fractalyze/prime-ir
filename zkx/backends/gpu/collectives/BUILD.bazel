@@ -36,6 +36,24 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "gpu_clique_key",
+    srcs = ["gpu_clique_key.cc"],
+    hdrs = ["gpu_clique_key.h"],
+    deps = [
+        "//xla/tsl/lib/gtl:int_type",
+        "//xla/tsl/platform:casts",
+        "//zkx/core/collectives:clique_key",
+        "//zkx/service:global_device_id",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "gpu_cliques",
     srcs = ["gpu_cliques.cc"],
     hdrs = ["gpu_cliques.h"],
@@ -70,24 +88,6 @@ zkx_cc_library(
         "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
-        "@com_google_absl//absl/types:span",
-    ],
-)
-
-zkx_cc_library(
-    name = "gpu_clique_key",
-    srcs = ["gpu_clique_key.cc"],
-    hdrs = ["gpu_clique_key.h"],
-    deps = [
-        "//xla/tsl/lib/gtl:int_type",
-        "//xla/tsl/platform:casts",
-        "//zkx/core/collectives:clique_key",
-        "//zkx/service:global_device_id",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/hash",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
         "@com_google_absl//absl/types:span",
     ],
 )

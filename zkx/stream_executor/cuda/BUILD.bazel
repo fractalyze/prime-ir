@@ -140,17 +140,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "composite_compilation_provider",
-    srcs = ["composite_compilation_provider.cc"],
-    hdrs = ["composite_compilation_provider.h"],
-    deps = [
-        ":compilation_provider",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
-zkx_cc_library(
     name = "compilation_options",
     hdrs = ["compilation_options.h"],
     deps = [
@@ -179,6 +168,17 @@ zkx_cc_library(
         "//zkx:zkx_cc_proto",
         "//zkx/stream_executor:namespace_alias",
         "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+zkx_cc_library(
+    name = "composite_compilation_provider",
+    srcs = ["composite_compilation_provider.cc"],
+    hdrs = ["composite_compilation_provider.h"],
+    deps = [
+        ":compilation_provider",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -604,6 +604,17 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "nvjitlink_compilation_provider",
+    srcs = ["nvjitlink_compilation_provider.cc"],
+    hdrs = ["nvjitlink_compilation_provider.h"],
+    deps = [
+        ":compilation_provider",
+        ":nvjitlink",
+        "//xla/tsl/platform:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "nvjitlink_known_issues",
     srcs = ["nvjitlink_known_issues.cc"],
     hdrs = ["nvjitlink_known_issues.h"],
@@ -633,17 +644,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "nvjitlink_compilation_provider",
-    srcs = ["nvjitlink_compilation_provider.cc"],
-    hdrs = ["nvjitlink_compilation_provider.h"],
-    deps = [
-        ":compilation_provider",
-        ":nvjitlink",
-        "//xla/tsl/platform:statusor",
-    ],
-)
-
-zkx_cc_library(
     name = "nvptxcompiler_compilation_provider",
     srcs = ["nvptxcompiler_compilation_provider.cc"],
     hdrs = ["nvptxcompiler_compilation_provider.h"],
@@ -651,6 +651,15 @@ zkx_cc_library(
         ":compilation_provider",
         ":ptx_compiler",
         "//xla/tsl/platform:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "ptx_compilation_method",
+    hdrs = ["ptx_compilation_method.h"],
+    deps = [
+        "//zkx/stream_executor:namespace_alias",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -694,15 +703,6 @@ zkx_cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
-    ],
-)
-
-zkx_cc_library(
-    name = "ptx_compilation_method",
-    hdrs = ["ptx_compilation_method.h"],
-    deps = [
-        "//zkx/stream_executor:namespace_alias",
-        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -795,6 +795,7 @@ zkx_cc_library(
 # NOTE(chokobole): This test must be separated from `cuda_unittests` because
 # it causes `CudaPlatform` to cache the executor for the device, which makes
 # `FindExisting(0)` to return true, causing this test to fail.
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cuda_platform_unittest",
     srcs = if_cuda_is_configured(["cuda_platform_unittest.cc"]),

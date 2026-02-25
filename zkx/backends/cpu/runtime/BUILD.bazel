@@ -120,6 +120,54 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "collective_permute_thunk",
+    srcs = ["collective_permute_thunk.cc"],
+    hdrs = ["collective_permute_thunk.h"],
+    deps = [
+        ":collective_thunk",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/profiler/lib:traceme",
+        "//zkx:shape_util",
+        "//zkx:status_macros",
+        "//zkx/backends/cpu/collectives:cpu_collectives",
+        "//zkx/core/collectives:communicator",
+        "//zkx/service:collective_ops_utils",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+zkx_cc_library(
+    name = "collective_thunk",
+    srcs = ["collective_thunk.cc"],
+    hdrs = ["collective_thunk.h"],
+    deps = [
+        ":thunk",
+        "//xla/tsl/concurrency:async_value",
+        "//zkx:shape_util",
+        "//zkx:status_macros",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/backends/cpu/collectives:cpu_clique_key",
+        "//zkx/backends/cpu/collectives:cpu_cliques",
+        "//zkx/service:buffer_assignment",
+        "//zkx/service:collective_ops_utils",
+        "//zkx/stream_executor:device_memory",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+        "@zk_dtypes//zk_dtypes:all_types",
+    ],
+)
+
+zkx_cc_library(
     name = "conditional_thunk",
     srcs = ["conditional_thunk.cc"],
     hdrs = ["conditional_thunk.h"],
@@ -172,54 +220,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "collective_thunk",
-    srcs = ["collective_thunk.cc"],
-    hdrs = ["collective_thunk.h"],
-    deps = [
-        ":thunk",
-        "//xla/tsl/concurrency:async_value",
-        "//zkx:shape_util",
-        "//zkx:status_macros",
-        "//zkx:zkx_data_cc_proto",
-        "//zkx/backends/cpu/collectives:cpu_clique_key",
-        "//zkx/backends/cpu/collectives:cpu_cliques",
-        "//zkx/service:buffer_assignment",
-        "//zkx/service:collective_ops_utils",
-        "//zkx/stream_executor:device_memory",
-        "@com_google_absl//absl/container:inlined_vector",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:span",
-        "@zk_dtypes//zk_dtypes:all_types",
-    ],
-)
-
-zkx_cc_library(
-    name = "collective_permute_thunk",
-    srcs = ["collective_permute_thunk.cc"],
-    hdrs = ["collective_permute_thunk.h"],
-    deps = [
-        ":collective_thunk",
-        "//xla/tsl/platform:statusor",
-        "//xla/tsl/profiler/lib:traceme",
-        "//zkx:shape_util",
-        "//zkx:status_macros",
-        "//zkx/backends/cpu/collectives:cpu_collectives",
-        "//zkx/core/collectives:communicator",
-        "//zkx/service:collective_ops_utils",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/memory",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-    ],
-)
-
-zkx_cc_library(
     name = "infeed_thunk",
     srcs = ["infeed_thunk.cc"],
     hdrs = ["infeed_thunk.h"],
@@ -240,11 +240,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "kernel_c_api",
-    hdrs = ["kernel_c_api.h"],
-)
-
-zkx_cc_library(
     name = "kernel",
     srcs = ["kernel.cc"],
     hdrs = ["kernel.h"],
@@ -261,6 +256,11 @@ zkx_cc_library(
         "@com_google_absl//absl/types:span",
         "@eigen_archive//:eigen3",
     ],
+)
+
+zkx_cc_library(
+    name = "kernel_c_api",
+    hdrs = ["kernel_c_api.h"],
 )
 
 zkx_cc_library(
@@ -412,6 +412,33 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "thunk_executor",
+    srcs = ["thunk_executor.cc"],
+    hdrs = ["thunk_executor.h"],
+    deps = [
+        ":resource_use",
+        ":thunk",
+        "//xla/tsl/concurrency:async_value",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:numbers",
+        "//xla/tsl/profiler/lib:traceme",
+        "//zkx/runtime:buffer_use",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:fixed_array",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "thunk_proto_serdes",
     srcs = ["thunk_proto_serdes.cc"],
     hdrs = ["thunk_proto_serdes.h"],
@@ -460,33 +487,6 @@ zkx_cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/types:span",
         "@eigen_archive//:eigen3",
-    ],
-)
-
-zkx_cc_library(
-    name = "thunk_executor",
-    srcs = ["thunk_executor.cc"],
-    hdrs = ["thunk_executor.h"],
-    deps = [
-        ":resource_use",
-        ":thunk",
-        "//xla/tsl/concurrency:async_value",
-        "//xla/tsl/platform:env",
-        "//xla/tsl/platform:numbers",
-        "//xla/tsl/profiler/lib:traceme",
-        "//zkx/runtime:buffer_use",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/container:fixed_array",
-        "@com_google_absl//absl/container:inlined_vector",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/types:span",
     ],
 )
 

@@ -39,6 +39,28 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "hlo_constant_folding",
+    srcs = ["hlo_constant_folding.cc"],
+    hdrs = ["hlo_constant_folding.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:literal",
+        "//zkx:shape_util",
+        "//zkx/hlo/evaluator:hlo_evaluator",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:slow_operation_alarm",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/time",
+    ],
+)
+
+zkx_cc_library(
     name = "hlo_cse",
     srcs = ["hlo_cse.cc"],
     hdrs = ["hlo_cse.h"],
@@ -145,28 +167,6 @@ zkx_cc_library(
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/ir:hlo_opcode",
         "//zkx/hlo/pass:hlo_pass_interface",
-    ],
-)
-
-zkx_cc_library(
-    name = "hlo_constant_folding",
-    srcs = ["hlo_constant_folding.cc"],
-    hdrs = ["hlo_constant_folding.h"],
-    deps = [
-        "//xla/tsl/platform:errors",
-        "//zkx:literal",
-        "//zkx:shape_util",
-        "//zkx/hlo/evaluator:hlo_evaluator",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/pass:hlo_pass_interface",
-        "//zkx/service:slow_operation_alarm",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/time",
     ],
 )
 

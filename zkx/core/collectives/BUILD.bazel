@@ -18,17 +18,6 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
-    name = "clique_id",
-    srcs = ["clique_id.cc"],
-    hdrs = ["clique_id.h"],
-    deps = [
-        "@com_google_absl//absl/crc:crc32c",
-        "@com_google_absl//absl/hash",
-        "@com_google_absl//absl/types:span",
-    ],
-)
-
-zkx_cc_library(
     name = "clique",
     srcs = ["clique.cc"],
     hdrs = ["clique.h"],
@@ -37,6 +26,17 @@ zkx_cc_library(
         ":rank_id",
         "@com_google_absl//absl/container:btree",
         "@com_google_absl//absl/status",
+    ],
+)
+
+zkx_cc_library(
+    name = "clique_id",
+    srcs = ["clique_id.cc"],
+    hdrs = ["clique_id.h"],
+    deps = [
+        "@com_google_absl//absl/crc:crc32c",
+        "@com_google_absl//absl/hash",
+        "@com_google_absl//absl/types:span",
     ],
 )
 

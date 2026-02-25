@@ -263,19 +263,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "scheduling_instruction_annotator",
-    srcs = ["scheduling_instruction_annotator.cc"],
-    hdrs = ["scheduling_instruction_annotator.h"],
-    deps = [
-        "//xla/tsl/platform:statusor",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/ir:hlo_opcode",
-        "//zkx/hlo/pass:hlo_pass_interface",
-        "@com_google_absl//absl/log:check",
-    ],
-)
-
-zkx_cc_library(
     name = "schedule_postprocessing",
     srcs = ["schedule_postprocessing.cc"],
     hdrs = ["schedule_postprocessing.h"],
@@ -290,6 +277,19 @@ zkx_cc_library(
         "//zkx/service/gpu/transforms/collectives:collective_ops_utils",
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/container:flat_hash_map",
+    ],
+)
+
+zkx_cc_library(
+    name = "scheduling_instruction_annotator",
+    srcs = ["scheduling_instruction_annotator.cc"],
+    hdrs = ["scheduling_instruction_annotator.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/log:check",
     ],
 )
 

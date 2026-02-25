@@ -390,6 +390,7 @@ zkx_cc_unittest(
     ],
 )
 
+# fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "transpose_unittest",
     timeout = "moderate",

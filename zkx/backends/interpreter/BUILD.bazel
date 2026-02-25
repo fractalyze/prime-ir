@@ -117,13 +117,6 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
-    name = "platform_id",
-    srcs = ["platform_id.cc"],
-    hdrs = ["platform_id.h"],
-    deps = ["//zkx/stream_executor:platform"],
-)
-
-zkx_cc_library(
     name = "platform",
     srcs = ["platform.cc"],
     hdrs = ["platform.h"],
@@ -138,4 +131,11 @@ zkx_cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings:str_format",
     ],
+)
+
+zkx_cc_library(
+    name = "platform_id",
+    srcs = ["platform_id.cc"],
+    hdrs = ["platform_id.h"],
+    deps = ["//zkx/stream_executor:platform"],
 )
