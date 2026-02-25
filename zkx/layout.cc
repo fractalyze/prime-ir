@@ -196,6 +196,7 @@ Layout& Layout::operator=(const Layout& other) {
 
 Layout& Layout::operator=(Layout&& other) = default;
 
+// static
 /* static */ Layout Layout::CreateFromProto(const LayoutProto& proto) {
   Layout layout;
   for (int dim_level_type : proto.dim_level_types()) {

@@ -56,7 +56,7 @@ class ThreadPoolTaskRunner : public Thunk::TaskRunner {
   }
 
  private:
-  Eigen::ThreadPoolInterface* thread_pool_;
+  Eigen::ThreadPoolInterface* thread_pool_;  // not owned
 };
 
 }  // namespace zkx::cpu

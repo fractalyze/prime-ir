@@ -24,6 +24,7 @@ limitations under the License.
 
 namespace zkx::cpu {
 
+// static
 CpuCollectives* CpuCollectives::Default() {
   absl::StatusOr<Collectives*> collectives =
       CollectivesRegistry::Default("host");

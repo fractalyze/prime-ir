@@ -41,7 +41,11 @@ limitations under the License.
 
 namespace zkx {
 
-static const char kWS[] = " \t\r\n";  // whitespace
+namespace {
+
+const char kWS[] = " \t\r\n";  // whitespace
+
+}  // namespace
 
 // The following struct represents an argv[]-style array, parsed
 // from data gleaned from the environment.
@@ -70,8 +74,10 @@ struct EnvArgv {
 // Append the string s0[0, .., s0len-1] concatenated with s1[0, .., s1len-1] as
 // a newly allocated nul-terminated string to the array *a.  If s0==nullptr, a
 // nullptr is appended without increasing a->argc.
-static void AppendToEnvArgv(const char* s0, size_t s0len, const char* s1,
-                            size_t s1len, EnvArgv* a) {
+namespace {
+
+void AppendToEnvArgv(const char* s0, size_t s0len, const char* s1, size_t s1len,
+                     EnvArgv* a) {
   if (s0 == nullptr) {
     a->argv.push_back(nullptr);
     a->argv_save.push_back(nullptr);
@@ -84,24 +90,36 @@ static void AppendToEnvArgv(const char* s0, size_t s0len, const char* s1,
   }
 }
 
+}  // namespace
+
 // Like s.find_first_of(x, pos), but return s.size() when find_first_of() would
 // return std::string::npos.  This avoids if-statements elsewhere.
-static size_t FindFirstOf(const std::string& s, const char* x, size_t pos) {
+namespace {
+
+size_t FindFirstOf(const std::string& s, const char* x, size_t pos) {
   size_t result = s.find_first_of(x, pos);
   return result == std::string::npos ? s.size() : result;
 }
 
+}  // namespace
+
 // Like s.find_first_not_of(x, pos), but return s.size() when
 // find_first_not_of() would return std::string::npos.  This avoids
 // if-statements elsewhere.
-static size_t FindFirstNotOf(const std::string& s, const char* x, size_t pos) {
+namespace {
+
+size_t FindFirstNotOf(const std::string& s, const char* x, size_t pos) {
   size_t result = s.find_first_not_of(x, pos);
   return result == std::string::npos ? s.size() : result;
 }
 
+}  // namespace
+
 // Given a string containing flags, parse them into the XLA command line flags.
 // The parse is best effort, and gives up on the first syntax error.
-static void ParseArgvFromString(const std::string& flag_str, EnvArgv* a) {
+namespace {
+
+void ParseArgvFromString(const std::string& flag_str, EnvArgv* a) {
   size_t b = FindFirstNotOf(flag_str, kWS, 0);
   while (b != flag_str.size() && flag_str[b] == '-') {
     // b is the index of the start of a flag.
@@ -144,9 +162,13 @@ static void ParseArgvFromString(const std::string& flag_str, EnvArgv* a) {
   }
 }
 
+}  // namespace
+
 // Call ParseArgvFromString(..., a) on a string derived from the setting of the
 // environment variable `envvar`, or a file it points to.
-static void SetArgvFromEnv(std::string_view envvar, EnvArgv* a) {
+namespace {
+
+void SetArgvFromEnv(std::string_view envvar, EnvArgv* a) {
   if (!a->initialized) {
     static const char kDummyArgv[] = "<argv[0]>";
     AppendToEnvArgv(kDummyArgv, strlen(kDummyArgv), nullptr, 0,
@@ -180,18 +202,24 @@ static void SetArgvFromEnv(std::string_view envvar, EnvArgv* a) {
   }
 }
 
+}  // namespace
+
 // The simulated argv[] parsed from the environment, one for each different
 // environment variable we've seen.
-static absl::flat_hash_map<std::string, EnvArgv>& EnvArgvs() {
+namespace {
+
+absl::flat_hash_map<std::string, EnvArgv>& EnvArgvs() {
   static auto* env_argvs =
       absl::IgnoreLeak(new absl::flat_hash_map<std::string, EnvArgv>());
   return *env_argvs;
 }
 
 // Used to protect accesses to env_argvs.
-static absl::Mutex env_argv_mu(absl::kConstInit);
+absl::Mutex env_argv_mu(absl::kConstInit);
 
-static void DieIfEnvHasUnknownFlagsLeft(std::string_view envvar);
+void DieIfEnvHasUnknownFlagsLeft(std::string_view envvar);
+
+}  // namespace
 
 void ParseFlagsFromEnvAndDieIfUnknown(std::string_view envvar,
                                       const std::vector<tsl::Flag>& flag_list,
@@ -222,7 +250,9 @@ void ParseFlagsFromEnvAndIgnoreUnknown(std::string_view envvar,
       << tsl::Flags::Usage(getenv(std::string(envvar).c_str()), flag_list);
 }
 
-static void DieIfEnvHasUnknownFlagsLeft(std::string_view envvar) {
+namespace {
+
+void DieIfEnvHasUnknownFlagsLeft(std::string_view envvar) {
   absl::MutexLock lock(&env_argv_mu);
   auto* env_argv = &EnvArgvs()[envvar];
   SetArgvFromEnv(envvar, env_argv);
@@ -236,6 +266,8 @@ static void DieIfEnvHasUnknownFlagsLeft(std::string_view envvar) {
                 << absl::StrJoin(unknown_flags, " ");
   }
 }
+
+}  // namespace
 
 // Testing only.
 //

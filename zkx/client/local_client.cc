@@ -25,7 +25,6 @@ limitations under the License.
 #include "zkx/debug_options_flags.h"
 #include "zkx/service/computation_layout.h"
 #include "zkx/service/dump.h"
-#include "zkx/service/shaped_buffer.h"
 #include "zkx/service/source_map_util.h"
 #include "zkx/shape.h"
 #include "zkx/shape_util.h"
@@ -230,7 +229,9 @@ absl::StatusOr<ExecutionOutput> LocalExecutable::Run(
       });
 }
 
-static std::shared_ptr<HloSnapshot> DumpArguments(
+namespace {
+
+std::shared_ptr<HloSnapshot> DumpArguments(
     const Backend* backend, const Executable* executable,
     const absl::Span<const ShapedBuffer* const> arguments, se::Stream* stream) {
   auto snapshot = std::make_shared<HloSnapshot>();
@@ -252,10 +253,10 @@ static std::shared_ptr<HloSnapshot> DumpArguments(
   return snapshot;
 }
 
-static void DumpOutputsAndSaveSnapshot(const Backend* backend,
-                                       const ShapedBuffer& outputs,
-                                       std::shared_ptr<HloSnapshot> snapshot,
-                                       se::Stream* stream) {
+void DumpOutputsAndSaveSnapshot(const Backend* backend,
+                                const ShapedBuffer& outputs,
+                                std::shared_ptr<HloSnapshot> snapshot,
+                                se::Stream* stream) {
   auto literal = std::make_shared<Literal>(outputs.on_host_shape());
   backend->transfer_manager()->TransferLiteralFromDevice(
       stream, outputs, literal.get(),
@@ -270,6 +271,8 @@ static void DumpOutputsAndSaveSnapshot(const Backend* backend,
         DumpHloSnapshotIfEnabled(*snapshot, GetDebugOptionsFromFlags());
       });
 }
+
+}  // namespace
 
 absl::StatusOr<ScopedShapedBuffer> LocalExecutable::RunAsync(
     const absl::Span<const ShapedBuffer* const> arguments,
@@ -300,7 +303,9 @@ absl::StatusOr<ScopedShapedBuffer> LocalExecutable::RunAsync(
   return std::move(outputs);
 }
 
-static ShapedBuffer MaybeOwningShapeTreeToShapedBuffer(
+namespace {
+
+ShapedBuffer MaybeOwningShapeTreeToShapedBuffer(
     const ShapeTree<MaybeOwningDeviceMemory>& tree, int device_ordinal) {
   ShapedBuffer result(tree.shape(), device_ordinal);
   auto it = tree.begin();
@@ -310,6 +315,8 @@ static ShapedBuffer MaybeOwningShapeTreeToShapedBuffer(
   }
   return result;
 }
+
+}  // namespace
 
 absl::StatusOr<ExecutionOutput> LocalExecutable::RunAsync(
     absl::Span<Shape const* const> argument_host_shapes,
@@ -387,7 +394,9 @@ Backend* LocalClient::mutable_backend() {
   return local_service_->mutable_backend();
 }
 
-static absl::StatusOr<ExecutableBuildOptions> UpdateBuildOptions(
+namespace {
+
+absl::StatusOr<ExecutableBuildOptions> UpdateBuildOptions(
     const ExecutableBuildOptions& options, int default_device_ordinal) {
   ExecutableBuildOptions updated_options = options;
   if (options.device_ordinal() == -1) {
@@ -414,6 +423,8 @@ static absl::StatusOr<ExecutableBuildOptions> UpdateBuildOptions(
   }
   return updated_options;
 }
+
+}  // namespace
 
 absl::StatusOr<std::vector<std::unique_ptr<LocalExecutable>>>
 LocalClient::Compile(const ZkxComputation& computation,

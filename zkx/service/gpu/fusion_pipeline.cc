@@ -18,9 +18,7 @@ limitations under the License.
 
 #include <utility>
 
-#include "xla/tsl/platform/thread_pool.h"
 #include "zkx/hlo/pass/hlo_pass_fix.h"
-#include "zkx/hlo/pass/hlo_pass_pipeline.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_cse.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_dce.h"
 #include "zkx/service/gpu/model/gpu_hlo_cost_analysis.h"
@@ -28,9 +26,6 @@ limitations under the License.
 #include "zkx/service/gpu/transforms/horizontal_loop_fusion.h"
 #include "zkx/service/gpu/transforms/multi_output_fusion.h"
 #include "zkx/service/gpu/transforms/priority_fusion.h"
-#include "zkx/service/hlo_cost_analysis.h"
-#include "zkx/stream_executor/device_description.h"
-#include "zkx/zkx.pb.h"
 
 namespace zkx::gpu {
 

@@ -74,8 +74,8 @@ class TfAllocatorAdapter : public DeviceMemoryAllocator {
   absl::StatusOr<tsl::Allocator*> GetAllocator(int device_ordinal);
 
  private:
-  tsl::Allocator* wrapped_;
-  Stream* stream_;
+  tsl::Allocator* wrapped_;  // not owned
+  Stream* stream_;           // not owned
 };
 
 // Adapter class that wraps per-device tsl::Allocators with corresponding

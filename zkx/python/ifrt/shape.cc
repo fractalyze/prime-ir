@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "zkx/python/ifrt/shape.h"
 
-#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"

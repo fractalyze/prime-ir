@@ -43,13 +43,17 @@ namespace zkx::cpu {
 //
 // WARNING: This option is UNSAFE and can lead to deadlocks. It should be used
 // only for debugging purposes.
-static constexpr bool UseBlockingThunkExecutor() {
+namespace {
+
+constexpr bool UseBlockingThunkExecutor() {
 #if defined(ZKX_CPU_USE_BLOCKING_THUNK_EXECUTOR)
   return true;
 #else
   return false;
 #endif  // ZKX_CPU_USE_BLOCKING_THUNK_EXECUTOR
 }
+
+}  // namespace
 
 ThunkExecutor::ThunkExecutor(ThunkSequence thunk_sequence,
                              NodesEdges nodes_in_edges,
@@ -577,8 +581,10 @@ ThunkExecutor::CreateNodeDefs(std::vector<NodeDefBuilder> builders) {
 
 // Erases edge from `from` node to `to` node if it exists. We rely on the fact
 // that out and in-edges are sorted and use binary search on a critical path.
-static int64_t EraseEdge(ThunkExecutor::NodeDefBuilder& from,
-                         ThunkExecutor::NodeDefBuilder& to) {
+namespace {
+
+int64_t EraseEdge(ThunkExecutor::NodeDefBuilder& from,
+                  ThunkExecutor::NodeDefBuilder& to) {
   DCHECK_NE(from.id, to.id) << "Nodes must be different";
   DCHECK_LT(from.id, to.id) << "Nodes must be ordered";
 
@@ -621,6 +627,8 @@ static int64_t EraseEdge(ThunkExecutor::NodeDefBuilder& from,
   // We erased one edge between `from` and `to` nodes.
   return 1;
 }
+
+}  // namespace
 
 int64_t ThunkExecutor::RunTransitiveReductionAndUpdatePriorities(
     absl::Span<NodeDefBuilder> builders) {

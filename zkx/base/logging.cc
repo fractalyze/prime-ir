@@ -428,11 +428,13 @@ void LogMessage::GenerateLogMessage() {
       LogEntry(severity_, fname_, line_, str()));
 }
 
+// static
 int LogMessage::MaxVLogLevel() {
   static int max_vlog_level = MaxVLogLevelFromEnv();
   return max_vlog_level;
 }
 
+// static
 bool LogMessage::VmoduleActivated(const char* fname, int level) {
   if (level <= MaxVLogLevel()) {
     return true;

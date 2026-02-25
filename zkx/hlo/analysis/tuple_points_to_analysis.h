@@ -172,7 +172,7 @@ class BufferAlias {
   std::string ToString() const;
 
  private:
-  HloInstruction* instruction_;
+  HloInstruction* instruction_;  // not owned
   ShapeIndex index_;
 };
 

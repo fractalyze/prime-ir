@@ -53,14 +53,14 @@ PaddingConfig MakeNoPaddingConfig(int64_t rank) {
 
 namespace {
 std::string HumanReadableNumOps(double flops, double nanoseconds,
-                                absl::string_view op_prefix) {
+                                std::string_view op_prefix) {
   if (nanoseconds == 0) {
     return absl::StrCat("NaN ", op_prefix, "OP/s");
   }
   double nano_flops = flops / nanoseconds;
   std::string throughput =
       tsl::strings::HumanReadableNum(static_cast<int64_t>(nano_flops * 1e9));
-  absl::string_view sp(throughput);
+  std::string_view sp(throughput);
   // Use the more common "G(FLOPS)", rather than "B(FLOPS)"
   if (absl::EndsWith(sp, "B") ||  // Ends in 'B', ignoring case
       absl::EndsWith(sp, "b")) {

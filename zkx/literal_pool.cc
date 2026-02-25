@@ -23,6 +23,7 @@ limitations under the License.
 
 namespace zkx {
 
+// static
 LiteralPool* LiteralPool::Default() {
   static auto* pool = absl::IgnoreLeak(new LiteralPool());
   return pool;
@@ -30,8 +31,9 @@ LiteralPool* LiteralPool::Default() {
 
 // Erases expired weak pointers from the vector and returns the number of
 // elements that were erased.
-static size_t EraseExpiredLiterals(
-    std::vector<std::weak_ptr<Literal>>& literals) {
+namespace {
+
+size_t EraseExpiredLiterals(std::vector<std::weak_ptr<Literal>>& literals) {
   auto it = std::remove_if(literals.begin(), literals.end(),
                            [](auto& ptr) { return ptr.expired(); });
   size_t num_erased = std::distance(it, literals.end());
@@ -39,6 +41,8 @@ static size_t EraseExpiredLiterals(
   literals.erase(it, literals.end());
   return num_erased;
 }
+
+}  // namespace
 
 size_t LiteralPool::GarbageCollect() {
   absl::MutexLock lock(&mu_);
@@ -66,7 +70,9 @@ size_t LiteralPool::GarbageCollect(Shape shape) {
 }
 
 // Tried to find a canonical literal in the pool. Return nullptr if not found.
-static std::shared_ptr<Literal> FindCanonicalLiteral(
+namespace {
+
+std::shared_ptr<Literal> FindCanonicalLiteral(
     std::vector<std::weak_ptr<Literal>>& literals, const Literal& literal) {
   for (std::weak_ptr<Literal>& ptr : literals) {
     if (auto locked_ptr = ptr.lock()) {
@@ -78,6 +84,8 @@ static std::shared_ptr<Literal> FindCanonicalLiteral(
 
   return nullptr;
 }
+
+}  // namespace
 
 std::shared_ptr<Literal> LiteralPool::GetCanonicalLiteral(
     const Literal& literal) {

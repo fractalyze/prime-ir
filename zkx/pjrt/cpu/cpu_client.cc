@@ -21,7 +21,7 @@ limitations under the License.
 #include "absl/base/casts.h"
 #include "absl/log/check.h"
 #include "absl/memory/memory.h"
-#include "unsupported/Eigen/CXX11/Tensor"
+#include "unsupported/Eigen/CXX11/Tensor"  // fractal-lint: disable=redundant-include
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
@@ -212,12 +212,16 @@ absl::Span<const std::unique_ptr<PjRtDevice>> GetPjRtDeviceSpan(
 
 }  // namespace
 
-static int CpuDeviceCount() {
+namespace {
+
+int CpuDeviceCount() {
   // By default we fix the number of devices to one. However we do let the user
   // override this behavior to help run tests on the host that run models in
   // parallel across multiple devices, e.g. pmap.
   return GetDebugOptionsFromFlags().zkx_force_host_platform_device_count();
 }
+
+}  // namespace
 
 absl::StatusOr<std::unique_ptr<PjRtClient>> GetTfrtCpuClient(
     CpuClientOptions options) {
@@ -242,9 +246,11 @@ absl::StatusOr<std::unique_ptr<PjRtClient>> GetTfrtCpuClient(
 // An upper bound on the number of threads to use for intra-op parallelism. It
 // is nearly impossible to utilize efficiently more than 256 threads for compute
 // intensive operations that are supposed to run inside the intra-op threadpool.
-static const size_t kMaxIntraOpThreads = 256;
+namespace {
 
-static tsl::ThreadOptions GetThreadOptions() {
+const size_t kMaxIntraOpThreads = 256;
+
+tsl::ThreadOptions GetThreadOptions() {
   tsl::ThreadOptions thread_options;
   // On Mac OS the default stack size is 512KiB, which is too small for some
   // BLAS and LAPACK functions (https://github.com/google/jax/issues/20428).
@@ -253,6 +259,8 @@ static tsl::ThreadOptions GetThreadOptions() {
   thread_options.stack_size = 8 * 1024 * 1024;
   return thread_options;
 }
+
+}  // namespace
 
 TfrtCpuClient::TfrtCpuClient(
     int process_index, std::vector<std::unique_ptr<TfrtCpuDevice>> devices,
@@ -376,11 +384,15 @@ TfrtCpuClient::GetHloCostAnalysis() const {
 }
 
 // Find the root instruction of the entry computation.
-static const InstructionValueSet& GetRootValueSet(
-    const BufferAssignment& assignment, const HloModule& module) {
+namespace {
+
+const InstructionValueSet& GetRootValueSet(const BufferAssignment& assignment,
+                                           const HloModule& module) {
   return assignment.dataflow_analysis().GetInstructionValueSet(
       module.entry_computation()->root_instruction());
 }
+
+}  // namespace
 
 // Buffer table is indexed by buffer allocation indices. The output buffer is
 // made up of a subset of those buffer allocations (for tuple, it includes tuple
@@ -388,7 +400,9 @@ static const InstructionValueSet& GetRootValueSet(
 // assignment that make up for the output buffer. It is used by
 // CreateResultShapedBuffer to reconstruct the output buffer from the buffer
 // table allocated by MemoryForAllocation.
-static absl::StatusOr<absl::InlinedVector<BufferAllocation::Index, 4>>
+namespace {
+
+absl::StatusOr<absl::InlinedVector<BufferAllocation::Index, 4>>
 FindResultBufferAllocationIndex(const BufferAssignment& assignment,
                                 const HloModule& module) {
   absl::InlinedVector<BufferAllocation::Index, 4> buffer_indices;
@@ -424,6 +438,8 @@ FindResultBufferAllocationIndex(const BufferAssignment& assignment,
   }
   return {std::move(buffer_indices)};
 }
+
+}  // namespace
 
 absl::StatusOr<std::string> TfrtCpuExecutable::SerializeExecutable() const {
   cpu::CpuCompiler compiler;
@@ -557,7 +573,9 @@ TfrtCpuClient::LoadSerializedExecutable(std::string_view serialized,
   return DeserializeExecutable(serialized, options);
 }
 
-static absl::StatusOr<std::unique_ptr<Executable>> JitCompile(
+namespace {
+
+absl::StatusOr<std::unique_ptr<Executable>> JitCompile(
     const ZkxComputation& computation,
     const absl::Span<const Shape* const> argument_layouts,
     const ExecutableBuildOptions& build_options,
@@ -605,6 +623,8 @@ static absl::StatusOr<std::unique_ptr<Executable>> JitCompile(
   return compiler.RunBackend(std::move(hlo_module), /*stream_exec=*/nullptr,
                              compile_options);
 }
+
+}  // namespace
 
 absl::StatusOr<std::unique_ptr<PjRtLoadedExecutable>> TfrtCpuClient::Compile(
     mlir::ModuleOp module, CompileOptions options) {
@@ -800,10 +820,14 @@ TfrtCpuClient::CompileInternal(
   return std::unique_ptr<PjRtLoadedExecutable>(std::move(executable));
 }
 
-static bool IsAlignedData(void* ptr) {
+namespace {
+
+bool IsAlignedData(void* ptr) {
   return (absl::bit_cast<std::uintptr_t>(ptr) &
           (cpu_function_runtime::MinAlign() - 1)) == 0;
 }
+
+}  // namespace
 
 absl::StatusOr<std::unique_ptr<PjRtBuffer>>
 TfrtCpuClient::CreateViewOfDeviceBuffer(
@@ -892,7 +916,9 @@ TfrtCpuClient::CreateBuffersForAsyncHostToDevice(
   return CreateBuffersForAsyncHostToDevice(shapes, memory_space->devices()[0]);
 }
 
-static absl::StatusOr<std::vector<Shape>> ConvertShapeSpecToShapes(
+namespace {
+
+absl::StatusOr<std::vector<Shape>> ConvertShapeSpecToShapes(
     absl::Span<const PjRtClient::ShapeSpec> shape_specs,
     std::optional<absl::Span<const std::optional<Layout>>> device_layouts) {
   if (device_layouts.has_value() &&
@@ -913,6 +939,8 @@ static absl::StatusOr<std::vector<Shape>> ConvertShapeSpecToShapes(
   }
   return device_shapes;
 }
+
+}  // namespace
 
 absl::StatusOr<std::unique_ptr<PjRtClient::AsyncHostToDeviceTransferManager>>
 TfrtCpuClient::CreateBuffersForAsyncHostToDevice(
@@ -999,7 +1027,9 @@ TfrtCpuBuffer::TfrtCpuBuffer(
       device_(device),
       memory_space_(memory_space) {}
 
-static std::vector<tsl::RCReference<tsl::AsyncValue>> CopyAsyncValues(
+namespace {
+
+std::vector<tsl::RCReference<tsl::AsyncValue>> CopyAsyncValues(
     absl::Span<const tsl::RCReference<tsl::AsyncValue>> events) {
   std::vector<tsl::RCReference<tsl::AsyncValue>> avs;
   avs.reserve(events.size());
@@ -1008,6 +1038,8 @@ static std::vector<tsl::RCReference<tsl::AsyncValue>> CopyAsyncValues(
   }
   return avs;
 }
+
+}  // namespace
 
 PjRtFuture<> TfrtCpuBuffer::CopyRawToHost(void* dst, int64_t offset,
                                           int64_t transfer_size) {
@@ -1191,7 +1223,9 @@ struct BufferAllocAndCopy {
 
 // The following few helpers are adapted from ZKX:CPU to create a buffer table
 // and assemble the buffer pointers in order to call into CpuExecutable.
-static absl::StatusOr<BufferInfo> MemoryForAllocation(
+namespace {
+
+absl::StatusOr<BufferInfo> MemoryForAllocation(
     const BufferAllocation& allocation,
     absl::Span<const cpu::CpuExecutable::ConstantAllocation> constants,
     absl::Span<std::pair<bool, TrackedTfrtCpuDeviceBuffer*> const> arguments,
@@ -1256,7 +1290,7 @@ static absl::StatusOr<BufferInfo> MemoryForAllocation(
   return buffer_info;
 }
 
-static absl::StatusOr<std::vector<BufferInfo>> CreateBufferTable(
+absl::StatusOr<std::vector<BufferInfo>> CreateBufferTable(
     const BufferAssignment& assignment,
     absl::Span<const cpu::CpuExecutable::ConstantAllocation> constants,
     absl::Span<std::pair<bool, TrackedTfrtCpuDeviceBuffer*> const> arguments,
@@ -1272,7 +1306,7 @@ static absl::StatusOr<std::vector<BufferInfo>> CreateBufferTable(
   return std::move(buffer_table);
 }
 
-static absl::InlinedVector<BufferInfo, 4> CreateResultBufferInfo(
+absl::InlinedVector<BufferInfo, 4> CreateResultBufferInfo(
     absl::Span<const BufferAllocation::Index> buffer_indices,
     absl::Span<const BufferInfo> buffer_table) {
   absl::InlinedVector<BufferInfo, 4> output_buffer_info;
@@ -1282,6 +1316,8 @@ static absl::InlinedVector<BufferInfo, 4> CreateResultBufferInfo(
   }
   return output_buffer_info;
 }
+
+}  // namespace
 
 absl::Status TfrtCpuExecutable::CheckBufferCompatibilities(
     absl::Span<std::pair<bool, TrackedTfrtCpuDeviceBuffer*> const>

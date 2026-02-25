@@ -17,15 +17,11 @@ limitations under the License.
 #include "zkx/hlo/transforms/host_offload_legalize.h"
 
 #include <array>
-#include <cstdint>
 #include <memory>
 #include <queue>
 #include <string>
-#include <string_view>
-#include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -38,7 +34,6 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/base/logging.h"
 #include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/layout.h"
 #include "zkx/service/call_graph.h"

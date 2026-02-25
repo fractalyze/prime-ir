@@ -23,7 +23,6 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "llvm/Support/Casting.h"
 #include "mlir/IR/AffineMap.h"
-#include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Support/LLVM.h"

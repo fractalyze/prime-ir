@@ -16,10 +16,8 @@ limitations under the License.
 
 #include "zkx/service/compile_only_service.h"
 
-#include <memory>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"

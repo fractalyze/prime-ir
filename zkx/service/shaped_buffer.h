@@ -212,7 +212,7 @@ class ScopedShapedBuffer : public ShapedBuffer {
  protected:
   void Deallocate();
 
-  se::DeviceMemoryAllocator* allocator_;
+  se::DeviceMemoryAllocator* allocator_;  // not owned
 };
 
 }  // namespace zkx

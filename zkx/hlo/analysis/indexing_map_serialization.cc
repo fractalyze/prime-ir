@@ -34,8 +34,6 @@ limitations under the License.
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LLVM.h"
 
-#include "zkx/hlo/analysis/indexing_map.h"
-
 namespace zkx {
 namespace {
 

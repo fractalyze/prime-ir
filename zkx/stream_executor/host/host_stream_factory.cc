@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "zkx/stream_executor/host/host_stream_factory.h"
 
-#include <memory>
 #include <utility>
 
 #include "absl/base/attributes.h"

@@ -17,18 +17,14 @@ limitations under the License.
 #include "zkx/service/gpu/transforms/variadic_op_splitter.h"
 
 #include <cstdint>
-#include <string_view>
 #include <vector>
 
-#include "absl/container/flat_hash_set.h"
-#include "absl/status/statusor.h"
 #include "absl/types/span.h"
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/shape.h"
 #include "zkx/util.h"

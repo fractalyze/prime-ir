@@ -16,22 +16,12 @@ limitations under the License.
 
 #include "zkx/stream_executor/integrations/tf_allocator_adapter.h"
 
-#include <cstdint>
-
 #include "absl/log/check.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/cord.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 
-#include "xla/tsl/framework/allocator.h"
 #include "zkx/layout.h"
-#include "zkx/stream_executor/device_memory.h"
-#include "zkx/stream_executor/device_memory_allocator.h"
-#include "zkx/stream_executor/platform.h"
-#include "zkx/stream_executor/stream.h"
-#include "zkx/stream_executor/stream_executor.h"
 
 namespace stream_executor {
 
@@ -88,11 +78,15 @@ absl::StatusOr<tsl::Allocator*> TfAllocatorAdapter::GetAllocator(
   return wrapped_;
 }
 
-static constexpr absl::string_view kMemoryAllocationErrorPayloadKey =
+namespace {
+
+constexpr std::string_view kMemoryAllocationErrorPayloadKey =
     "tf-allocator-allocation-error";
 
+}  // namespace
+
 absl::Status MemoryAllocationError(uint64_t size, bool is_host_mem) {
-  constexpr absl::string_view kHostMemoryExplanation =
+  constexpr std::string_view kHostMemoryExplanation =
       " Please set the environment variable "
       "XLA_PJRT_GPU_HOST_MEMORY_LIMIT_GB to allocate larger "
       "host memory than the default 64 GB.";

@@ -153,7 +153,7 @@ class Span {
   T* end() const { return data_ + size_; }
 
  private:
-  T* data_;
+  T* data_;  // not owned
   size_t size_;
 };
 
@@ -1174,7 +1174,7 @@ class ScratchAllocator {
   };
 
   const ZKX_FFI_Api* api_;
-  ZKX_FFI_ExecutionContext* ctx_;
+  ZKX_FFI_ExecutionContext* ctx_;  // not owned
 
   DiagnosticEngine& diagnostic_;
   std::vector<Allocation> allocations_;
@@ -1295,7 +1295,7 @@ class ThreadPool {
              DiagnosticEngine& diagnostic);
 
   const ZKX_FFI_Api* api_;
-  ZKX_FFI_ExecutionContext* ctx_;
+  ZKX_FFI_ExecutionContext* ctx_;  // not owned
   DiagnosticEngine& diagnostic_;
 };
 

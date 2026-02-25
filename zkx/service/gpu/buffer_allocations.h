@@ -92,7 +92,7 @@ class BufferAllocations {
   // input buffer, or nullptr if no buffer is needed for that Index.
   std::vector<se::DeviceMemoryBase> buffers_;
   int device_ordinal_;
-  se::DeviceMemoryAllocator* memory_allocator_;
+  se::DeviceMemoryAllocator* memory_allocator_;  // not owned
 };
 
 }  // namespace zkx::gpu

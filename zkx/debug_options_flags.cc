@@ -113,33 +113,36 @@ DebugOptions DefaultDebugOptionsIgnoringFlags() {
   return opts;
 }
 
-static absl::once_flag flags_init;
-static DebugOptions* flag_values;
-static std::vector<tsl::Flag>* flag_objects;
+namespace {
+
+absl::once_flag flags_init;
+DebugOptions* flag_values;
+std::vector<tsl::Flag>* flag_objects;
 
 // Maps pass -> initial fuel values (parsed when AllocateFlags was run).
-static auto* const initial_fuel =
+auto* const initial_fuel =
     absl::IgnoreLeak(new absl::flat_hash_map<std::string, int64_t>());
 
 // Maps pass -> whether fuel was ever consumed for that pass.
-static auto* const fuel_ever_consumed =
+auto* const fuel_ever_consumed =
     absl::IgnoreLeak(new absl::node_hash_map<std::string, std::atomic<bool>>());
 
 // Maps pass -> remaining fuel.
 //
 // All threads start off using this global fuel pool, but ResetThreadLocalFuel()
 // switches them to a thread-local fuel pool.
-static auto* const global_fuel = absl::IgnoreLeak(
+auto* const global_fuel = absl::IgnoreLeak(
     new absl::node_hash_map<std::string, std::atomic<int64_t>>());
 
 // If we're using thread-local fuel, this stores it.
-static thread_local std::unique_ptr<
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
+thread_local std::unique_ptr<
     absl::node_hash_map<std::string, std::atomic<int64_t>>>
-    thread_fuel;  // NOLINT (global variable with nontrivial destructor)
+    thread_fuel;
 
 // Logs a warning if a pass's fuel was never consumed, on the theory that this
 // may be a typo in the flag value.  Called atexit.
-static void WarnIfFuelWasNeverConsumed() {
+void WarnIfFuelWasNeverConsumed() {
   CHECK(fuel_ever_consumed != nullptr);
   for (const auto& kv : *fuel_ever_consumed) {
     std::string_view pass = kv.first;
@@ -152,6 +155,8 @@ static void WarnIfFuelWasNeverConsumed() {
     }
   }
 }
+
+}  // namespace
 
 void MakeDebugOptionsFlags(std::vector<tsl::Flag>* flag_list,
                            DebugOptions* debug_options) {
@@ -987,9 +992,11 @@ void MakeDebugOptionsFlags(std::vector<tsl::Flag>* flag_list,
                 "possible."));
 }  // NOLINT(readability/fn_size)
 
+namespace {
+
 // Allocates flag_values and flag_objects; this function must not be called more
 // than once - its call done via call_once.
-static void AllocateFlags(DebugOptions* defaults) {
+void AllocateFlags(DebugOptions* defaults) {
   if (defaults == nullptr) {
     defaults =
         absl::IgnoreLeak(new DebugOptions(DefaultDebugOptionsIgnoringFlags()));
@@ -999,6 +1006,8 @@ static void AllocateFlags(DebugOptions* defaults) {
   MakeDebugOptionsFlags(flag_objects, flag_values);
   ParseFlagsFromEnvAndDieIfUnknown("ZKX_FLAGS", *flag_objects);
 }
+
+}  // namespace
 
 void AppendDebugOptionsFlags(std::vector<tsl::Flag>* flag_list,
                              DebugOptions* debug_options) {

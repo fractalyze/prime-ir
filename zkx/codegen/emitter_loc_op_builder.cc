@@ -18,14 +18,12 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstddef>
-#include <string>
 #include <vector>
 
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/Location.h"
 #include "mlir/Support/LLVM.h"
 
 namespace zkx {

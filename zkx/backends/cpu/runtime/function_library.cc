@@ -22,6 +22,7 @@ limitations under the License.
 
 namespace zkx::cpu {
 
+// static
 FunctionLibrary::TypeId FunctionLibrary::GetNextTypeId() {
   static auto* counter = absl::IgnoreLeak(new std::atomic<int64_t>(1));
   return TypeId(counter->fetch_add(1));

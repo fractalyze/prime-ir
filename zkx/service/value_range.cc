@@ -17,20 +17,14 @@ limitations under the License.
 #include "zkx/service/value_range.h"
 
 #include <cstdint>
-#include <optional>
-#include <string>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 
 #include "zkx/comparison_util.h"
-#include "zkx/hlo/analysis/hlo_alias_analysis.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/primitive_util.h"
-#include "zkx/service/constant_value.h"
 #include "zkx/service/hlo_value.h"
 
 namespace zkx {

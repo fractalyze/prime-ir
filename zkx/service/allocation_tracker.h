@@ -123,7 +123,7 @@ class AllocationTracker {
 
   // Backend to use with this tracker. The backend supplies the memory allocator
   // to use when deallocating memory.
-  Backend* backend_;
+  Backend* backend_;  // not owned
 
   // The next handle to assign to an allocation, guarded by the same mutex as
   // the mapping as they'll be mutated at the same time.

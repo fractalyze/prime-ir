@@ -28,14 +28,18 @@ limitations under the License.
 
 namespace zkx::cpu {
 
-static std::unique_ptr<llvm::orc::RTDyldObjectLinkingLayer>
-CreateObjectLinkingLayer(llvm::orc::ExecutionSession& execution_session) {
+namespace {
+
+std::unique_ptr<llvm::orc::RTDyldObjectLinkingLayer> CreateObjectLinkingLayer(
+    llvm::orc::ExecutionSession& execution_session) {
   return std::make_unique<llvm::orc::RTDyldObjectLinkingLayer>(
       execution_session, [](const llvm::MemoryBuffer&) {
         return std::make_unique<ContiguousSectionMemoryManager>(
             orc_jit_memory_mapper::GetInstance());
       });
 }
+
+}  // namespace
 
 ExecutionEngine::ExecutionEngine(
     std::unique_ptr<llvm::orc::ExecutionSession> execution_session,

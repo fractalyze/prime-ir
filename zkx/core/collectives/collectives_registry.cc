@@ -53,10 +53,14 @@ struct Registry {
 
 }  // namespace
 
-static Registry& GetCollectivesRegistry() {
+namespace {
+
+Registry& GetCollectivesRegistry() {
   static auto* const registry = absl::IgnoreLeak(new Registry());
   return *registry;
 }
+
+}  // namespace
 
 absl::Status CollectivesRegistry::Register(
     std::string_view platform_name, std::string_view name, int32_t priority,

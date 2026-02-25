@@ -39,7 +39,9 @@ limitations under the License.
 
 namespace stream_executor {
 
-static std::string_view ToString(nvJitLinkResult status) {
+namespace {
+
+std::string_view ToString(nvJitLinkResult status) {
   switch (status) {
     case NVJITLINK_SUCCESS:
       return "SUCCESS";
@@ -62,9 +64,11 @@ static std::string_view ToString(nvJitLinkResult status) {
   }
 }
 
-static absl::Status ToStatus(nvJitLinkResult status, std::string_view message) {
+absl::Status ToStatus(nvJitLinkResult status, std::string_view message) {
   return absl::UnknownError(absl::StrCat(ToString(status), ": ", message));
 }
+
+}  // namespace
 
 #define RETURN_IF_NVJITLINK_ERROR(expr)                                  \
   do {                                                                   \
@@ -77,8 +81,9 @@ static absl::Status ToStatus(nvJitLinkResult status, std::string_view message) {
     }                                                                    \
   } while (false)
 
-static absl::StatusOr<std::string> nvJitLinkGetErrorLog(
-    nvJitLinkHandle link_handle) {
+namespace {
+
+absl::StatusOr<std::string> nvJitLinkGetErrorLog(nvJitLinkHandle link_handle) {
   size_t size{};
   RETURN_IF_NVJITLINK_ERROR(nvJitLinkGetErrorLogSize(link_handle, &size));
 
@@ -89,8 +94,7 @@ static absl::StatusOr<std::string> nvJitLinkGetErrorLog(
   return error_log;
 }
 
-static absl::StatusOr<std::string> nvJitLinkGetInfoLog(
-    nvJitLinkHandle link_handle) {
+absl::StatusOr<std::string> nvJitLinkGetInfoLog(nvJitLinkHandle link_handle) {
   size_t size{};
   RETURN_IF_NVJITLINK_ERROR(nvJitLinkGetInfoLogSize(link_handle, &size));
 
@@ -99,6 +103,8 @@ static absl::StatusOr<std::string> nvJitLinkGetInfoLog(
 
   return info_log;
 }
+
+}  // namespace
 
 extern "C" {
 // We forward declare this as a weak symbol which allows us to check at runtime

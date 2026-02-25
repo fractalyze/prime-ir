@@ -54,7 +54,8 @@ CompileOnlyClient::CompileAheadOfTime(
                                                metadata);
 }
 
-int64_t CompileOnlyClient::PointerSizeForTriple(absl::string_view triple) {
+// static
+int64_t CompileOnlyClient::PointerSizeForTriple(std::string_view triple) {
   llvm::Triple llvm_triple(
       llvm::Triple::normalize(llvm::StringRef(triple.data(), triple.size())));
   if (llvm_triple.isArch64Bit()) {

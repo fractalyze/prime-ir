@@ -17,11 +17,8 @@ limitations under the License.
 
 #include <cstdint>
 #include <iterator>
-#include <memory>
 #include <optional>
-#include <string>
 #include <utility>
-#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/log/check.h"
@@ -43,7 +40,6 @@ limitations under the License.
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/Func/Extensions/InlinerExtension.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"

@@ -17,21 +17,15 @@ limitations under the License.
 #include "zkx/service/gpu/transforms/layout_assignment.h"
 
 #include <cstddef>
-#include <cstdint>
-#include <initializer_list>
 #include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/log/check.h"
-#include "absl/status/status.h"
-#include "absl/types/span.h"
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
 #include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/layout.h"
 #include "zkx/layout_util.h"

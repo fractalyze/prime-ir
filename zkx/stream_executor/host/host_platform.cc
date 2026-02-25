@@ -64,10 +64,14 @@ HostPlatform::GetUncachedExecutor(int ordinal) {
   return std::move(executor);
 }
 
-static void InitializeHostPlatform() {
+namespace {
+
+void InitializeHostPlatform() {
   std::unique_ptr<Platform> platform(new host::HostPlatform);
   CHECK_OK(PlatformManager::RegisterPlatform(std::move(platform)));
 }
+
+}  // namespace
 
 }  // namespace stream_executor::host
 

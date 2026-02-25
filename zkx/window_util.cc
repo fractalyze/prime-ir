@@ -16,16 +16,10 @@ limitations under the License.
 
 #include "zkx/window_util.h"
 
-#include <cstdint>
-#include <string>
-
 #include "absl/algorithm/container.h"
 #include "absl/functional/function_ref.h"
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
-#include "absl/types/span.h"
-
-#include "zkx/zkx_data.pb.h"
 
 namespace zkx::window_util {
 

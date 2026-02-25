@@ -18,7 +18,6 @@ limitations under the License.
 
 #include "absl/algorithm/container.h"
 #include "absl/base/optimization.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/strings/escaping.h"
 
 #include "xla/tsl/lib/gtl/map_util.h"
@@ -3557,6 +3556,7 @@ std::string HloInstruction::ToString() const {
   return ToString(HloPrintOptions::Default());
 }
 
+// static
 bool HloInstruction::IsOpElementwise(HloOpcode opcode) {
   switch (opcode) {
     // Unary elementwise operations.
@@ -3999,11 +3999,14 @@ inline bool PushDFSChild(Visitor* visitor, DFSStack* dfs_stack,
 using InternalCompareFunction =
     absl::FunctionRef<bool(std::pair<int, const HloInstruction*>,
                            std::pair<int, const HloInstruction*>)>;
+
+namespace {
+
 template <typename Visitor>
-static absl::Status PostOrderDFS(
-    HloInstruction* root, Visitor* visitor,
-    std::optional<InternalCompareFunction> operand_order,
-    bool ignore_control_predecessors, bool cross_computation) {
+absl::Status PostOrderDFS(HloInstruction* root, Visitor* visitor,
+                          std::optional<InternalCompareFunction> operand_order,
+                          bool ignore_control_predecessors,
+                          bool cross_computation) {
   visitor->ReserveVisitStates(root->parent()->instruction_count());
 
   // dfs_stack holds pairs of <HloInstruction*->unique_id(), HloInstruction*>.
@@ -4066,8 +4069,8 @@ static absl::Status PostOrderDFS(
     }
 
     // If `cross_computation` is enabled, and the current visiting instruction
-    // is a caller of other computations, we try to push the root instruction of
-    // those called computations onto the stack .
+    // is a caller of other computations, we try to push the root instruction
+    // of those called computations onto the stack .
     if (cross_computation) {
       for (const HloComputation* called_computation :
            current_node->called_computations()) {
@@ -4096,6 +4099,8 @@ static absl::Status PostOrderDFS(
 
   return absl::OkStatus();
 }
+
+}  // namespace
 
 template <typename HloInstructionPtr>
 absl::Status HloInstruction::Accept(
@@ -4182,8 +4187,9 @@ class FusionReusesParamElements {
 }  // namespace
 
 // Returns how this instruction uses elements of its operand at operand_num.
-static UseKind OperandElementUse(const HloInstruction& instr,
-                                 int64_t operand_num) {
+namespace {
+
+UseKind OperandElementUse(const HloInstruction& instr, int64_t operand_num) {
   switch (instr.opcode()) {
     case HloOpcode::kBitcast:
     case HloOpcode::kBitReverse:
@@ -4225,6 +4231,8 @@ static UseKind OperandElementUse(const HloInstruction& instr,
       return instr.IsElementwise() ? UseKind::kUse : UseKind::kReuse;
   }
 }
+
+}  // namespace
 
 UseKind FusionReusesParamElements::ComputeInternal(
     int64_t outer_param_num, const HloInstruction& hlo,

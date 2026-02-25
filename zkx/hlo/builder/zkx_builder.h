@@ -130,7 +130,7 @@ class ZkxOp {
 
   // Not owned. Non-null for any handle returned by ZkxBuilder, even if the
   // handle is invalid.
-  ZkxBuilder* builder_;
+  ZkxBuilder* builder_;  // not owned
 };
 
 // Arithmetic operator overloads for the ZkxOp type.

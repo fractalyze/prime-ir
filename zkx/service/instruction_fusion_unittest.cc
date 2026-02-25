@@ -147,7 +147,9 @@ TEST_F(InstructionFusionTest, AvoidDuplicationIfNotAllFusible) {
 }
 
 // Counts the number of HLO ops with a given op code in the specified module.
-static int Count(const HloModule& module, HloOpcode op) {
+namespace {
+
+int Count(const HloModule& module, HloOpcode op) {
   int count = 0;
   for (const auto* computation : module.computations()) {
     for (const auto* instruction : computation->instructions()) {
@@ -158,6 +160,8 @@ static int Count(const HloModule& module, HloOpcode op) {
   }
   return count;
 }
+
+}  // namespace
 
 TEST_F(InstructionFusionTest, FuseCheapNonDuplicatableOps) {
   auto module = ParseAndReturnVerifiedModule(R"(

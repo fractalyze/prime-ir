@@ -56,7 +56,7 @@ class JitCompiler {
   using Symbol = FunctionLibrary::Symbol;
 
   // Task and a TaskRunner are used to run compilation tasks in parallel.
-  using Task = std::function<void()>;  // NOLINT (must be copyable)
+  using Task = std::function<void()>;  // must be copyable
   using TaskRunner = absl::AnyInvocable<void(Task)>;
 
   JitCompiler(JitCompiler&&) = default;

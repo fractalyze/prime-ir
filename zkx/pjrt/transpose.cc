@@ -486,11 +486,12 @@ void TransposePlan::Execute(
 TransposePlan::TransposePlan() = default;
 TransposePlan::~TransposePlan() = default;
 
-static void ComputeStrides(
-    int64_t elem_size_in_bytes, absl::Span<const int64_t> dims,
-    absl::Span<const int64_t> tiling,
-    absl::InlinedVector<int64_t, 4>& outer_tile_strides,
-    absl::InlinedVector<int64_t, 4>& inner_tile_strides) {
+namespace {
+
+void ComputeStrides(int64_t elem_size_in_bytes, absl::Span<const int64_t> dims,
+                    absl::Span<const int64_t> tiling,
+                    absl::InlinedVector<int64_t, 4>& outer_tile_strides,
+                    absl::InlinedVector<int64_t, 4>& inner_tile_strides) {
   inner_tile_strides.resize(dims.size());
   int64_t acc = elem_size_in_bytes;
   for (int d = static_cast<int>(dims.size()) - 1; d >= 0; --d) {
@@ -503,6 +504,8 @@ static void ComputeStrides(
     acc *= CeilOfRatio(dims[d], tiling[d]);
   }
 }
+
+}  // namespace
 
 void TransposePlan::RemoveTrivialDimensions(
     absl::InlinedVector<int64_t, 4>& a_dims,
@@ -639,9 +642,11 @@ int64_t TransposePlan::OutputNumElems() const {
 }
 
 // Parses and validates a tiling specification, and populates `tiling`.
-static absl::Status ParseTilingSpecification(
-    int ndim, absl::Span<int64_t const> tiling_spec,
-    absl::InlinedVector<int64_t, 4>& tiling) {
+namespace {
+
+absl::Status ParseTilingSpecification(int ndim,
+                                      absl::Span<int64_t const> tiling_spec,
+                                      absl::InlinedVector<int64_t, 4>& tiling) {
   tiling.resize(ndim, 1);
   if (tiling_spec.size() > ndim) {
     return absl::InvalidArgumentError(absl::StrFormat(
@@ -663,6 +668,8 @@ static absl::Status ParseTilingSpecification(
   absl::c_copy(tiling_spec, tiling.begin() + offset);
   return absl::OkStatus();
 }
+
+}  // namespace
 
 // Helper function that builds a plan.
 void TransposePlan::BuildPlanNodes(

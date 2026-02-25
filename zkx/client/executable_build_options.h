@@ -330,7 +330,7 @@ class ExecutableBuildOptions {
   bool result_layout_set_ = false;
   std::optional<CompilationEnvironments> comp_envs_;
   std::optional<DebugOptions> debug_options_;
-  se::DeviceMemoryAllocator* device_allocator_ = nullptr;
+  se::DeviceMemoryAllocator* device_allocator_ = nullptr;  // not owned
   int num_replicas_ = 1;
   int num_partitions_ = 1;
   bool use_spmd_partitioning_ = false;
@@ -347,7 +347,7 @@ class ExecutableBuildOptions {
       {false};
   absl::InlinedVector<bool, 1> allow_spmd_sharding_propagation_to_output_ = {
       false};
-  tsl::thread::ThreadPool* compile_thread_pool_ = nullptr;
+  tsl::thread::ThreadPool* compile_thread_pool_ = nullptr;  // not owned
   LayoutCanonicalizationCallback layout_canonicalization_callback_;
   std::string fdo_profile_;
   int64_t device_memory_size_ = 0;

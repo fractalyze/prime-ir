@@ -23,6 +23,7 @@ limitations under the License.
 
 namespace zkx {
 
+// static
 CustomCallTargetRegistry* CustomCallTargetRegistry::Global() {
   static auto* registry = absl::IgnoreLeak(new CustomCallTargetRegistry);
   return registry;

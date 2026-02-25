@@ -16,15 +16,12 @@ limitations under the License.
 
 #include "zkx/stream_executor/cuda/cuda_platform.h"
 
-#include <memory>
-#include <string>
 #include <utility>
 
 #include "absl/debugging/leak_check.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "third_party/gpus/cuda/include/cuda.h"
 
 #include "xla/tsl/platform/errors.h"

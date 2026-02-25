@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "zkx/codegen/emitters/ir/zkx_ops.h"
 
-#include <optional>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -24,11 +23,9 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/LogicalResult.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -44,7 +41,6 @@ limitations under the License.
 #include "mlir/IR/ValueRange.h"
 
 #include "zkx/codegen/emitters/ir/zkx_dialect.cc.inc"
-#include "zkx/hlo/analysis/indexing_map.h"
 #include "zkx/hlo/analysis/indexing_map_serialization.h"
 
 namespace zkx {

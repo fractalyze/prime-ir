@@ -30,12 +30,10 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
-#include "absl/types/span.h"
 
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/ir/hlo_sharding.h"
 #include "zkx/permutation_util.h"
-#include "zkx/service/hlo.pb.h"
 #include "zkx/service/shape_inference.h"
 #include "zkx/status_macros.h"
 #include "zkx/util.h"
@@ -106,6 +104,7 @@ ZkxOp ZkxBuilderFriend::BuildBitcast(ZkxBuilder* builder, ZkxOp operand,
   });
 }
 
+// static
 HloInstructionProto* ZkxBuilderFriend::GetInstruction(ZkxOp op) {
   return &op.builder()
               ->instructions_[op.builder()->handle_to_index_[op.handle_]];
@@ -190,7 +189,9 @@ std::string ZkxBuilder::OpToString(ZkxOp op) const {
   return s;
 }
 
-static std::string ShapeToString(const ShapeProto& shape) {
+namespace {
+
+std::string ShapeToString(const ShapeProto& shape) {
   if (shape.tuple_shapes_size() > 1) {
     return absl::StrCat(
         "(",
@@ -202,6 +203,8 @@ static std::string ShapeToString(const ShapeProto& shape) {
   }
   return absl::StrCat("[", absl::StrJoin(shape.dimensions(), ", "), "]");
 }
+
+}  // namespace
 
 void ZkxBuilder::ToStringHelper(std::string* out, int ident,
                                 int64_t op_handle) const {

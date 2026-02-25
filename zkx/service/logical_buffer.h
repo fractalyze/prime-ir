@@ -45,7 +45,7 @@ class LogicalBuffer : public BufferValue {
   std::string ToString() const override;
 
  private:
-  HloInstruction* instruction_;
+  HloInstruction* instruction_;  // not owned
   ShapeIndex index_;
 };
 

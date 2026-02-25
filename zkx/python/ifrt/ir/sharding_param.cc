@@ -20,7 +20,6 @@ limitations under the License.
 #include "absl/strings/str_join.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
-#include "llvm/ADT/SmallVector.h"
 
 #include "xla/tsl/platform/errors.h"
 

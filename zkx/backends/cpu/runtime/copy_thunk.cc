@@ -80,7 +80,9 @@ CopyThunk::CopyThunk(Info info, BufferAllocation::Slice src_buffer,
   }
 }
 
-static std::tuple<void*, void*, int64_t> GetBlockCopyParameters(
+namespace {
+
+std::tuple<void*, void*, int64_t> GetBlockCopyParameters(
     const CopyThunk::ParallelBlockParams& params, int64_t block_index,
     se::DeviceMemoryBase destination, se::DeviceMemoryBase source) {
   CHECK_LT(block_index, params.block_count);
@@ -97,6 +99,9 @@ static std::tuple<void*, void*, int64_t> GetBlockCopyParameters(
   return {dst + offset, src + offset, size};
 }
 
+}  // namespace
+
+// static
 CopyThunk::ParallelBlockParams CopyThunk::ComputeParallelBlockParams(
     const Shape& shape) {
   // Prefer single-threaded memcpy for small copies.

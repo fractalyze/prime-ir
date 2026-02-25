@@ -98,7 +98,9 @@ absl::StatusOr<std::string> GetBootIdString() {
   return boot_id_str;
 }
 
-static absl::StatusOr<std::vector<LocalTopologyProto>> GetAllLocalTopologies(
+namespace {
+
+absl::StatusOr<std::vector<LocalTopologyProto>> GetAllLocalTopologies(
     std::string_view platform, int num_nodes, KeyValueStoreInterface* kv_store,
     absl::Duration timeout) {
   std::vector<absl::StatusOr<std::string>> local_topology_strs(num_nodes);
@@ -146,6 +148,8 @@ static absl::StatusOr<std::vector<LocalTopologyProto>> GetAllLocalTopologies(
       absl::StrCat("Getting local topologies failed: ",
                    absl::StrJoin(error_messages, "\n\n")));
 }
+
+}  // namespace
 
 // Steals the contents of `local_topologies`.
 GlobalTopologyProto BuildGlobalTopology(

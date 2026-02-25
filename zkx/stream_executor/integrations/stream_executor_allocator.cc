@@ -15,19 +15,9 @@ limitations under the License.
 ==============================================================================*/
 #include "zkx/stream_executor/integrations/stream_executor_allocator.h"
 
-#include <cstddef>
-#include <memory>
-#include <utility>
-#include <vector>
-
 #include "absl/log/log.h"
-#include "absl/synchronization/mutex.h"
 
-#include "xla/tsl/framework/allocator.h"
 #include "xla/tsl/profiler/lib/traceme.h"
-#include "zkx/stream_executor/memory_allocation.h"
-#include "zkx/stream_executor/memory_allocator.h"
-#include "zkx/stream_executor/stream_executor.h"
 
 namespace stream_executor {
 

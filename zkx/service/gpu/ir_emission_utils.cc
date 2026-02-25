@@ -26,7 +26,6 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_casting_utils.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/primitive_util.h"
-#include "zkx/shape_util.h"
 #include "zkx/util.h"
 
 namespace zkx::gpu {

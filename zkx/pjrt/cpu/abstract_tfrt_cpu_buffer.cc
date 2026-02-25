@@ -32,7 +32,6 @@ limitations under the License.
 #include "zkx/primitive_util.h"
 #include "zkx/service/cpu/cpu_executable.h"
 #include "zkx/service/shaped_buffer.h"
-#include "zkx/shape.h"
 #include "zkx/shape_tree.h"
 #include "zkx/shape_util.h"
 #include "zkx/stream_executor/device_memory.h"

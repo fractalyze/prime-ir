@@ -18,9 +18,6 @@ limitations under the License.
 
 #include "zkx/tools/hlo_module_loader.h"
 
-#include <functional>
-#include <memory>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -37,9 +34,7 @@ limitations under the License.
 #include "xla/tsl/platform/path.h"
 #include "zkx/debug_options_flags.h"
 #include "zkx/hlo/parser/hlo_parser.h"
-#include "zkx/service/hlo.pb.h"
 #include "zkx/service/hlo_module_config.h"
-#include "zkx/tools/run_hlo_module.pb.h"
 #include "zkx/util.h"
 
 namespace zkx {

@@ -78,7 +78,7 @@ class HloInstructionInfo {
  private:
   friend class HloComputation;
   HloOpcode opcode_;
-  HloInstruction* inst_;
+  HloInstruction* inst_;  // not owned
 };
 
 namespace mapped_ptr_container_sorter_internal {
@@ -137,7 +137,7 @@ class HloInstructionIteratorBase {
   }
 
  private:
-  UnderlyingList* list_;
+  UnderlyingList* list_;  // not owned
   int current_;
   int end_index_;
 };
@@ -2295,7 +2295,7 @@ class HloInstruction {
   Users users_;
 
   // The computation in which this instruction is contained.
-  HloComputation* parent_ = nullptr;
+  HloComputation* parent_ = nullptr;  // not owned
 
   // The sharding, if one exists.
   // Uses std::shared_ptr to allow reuse of the same sharding object between

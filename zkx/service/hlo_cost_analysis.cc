@@ -18,12 +18,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
-#include <functional>
-#include <memory>
-#include <optional>
-#include <string>
-#include <string_view>
 #include <utility>
 
 #include "absl/algorithm/container.h"
@@ -37,15 +31,11 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/base/bits.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
-#include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/shape.h"
-#include "zkx/shape_util.h"
 #include "zkx/status_macros.h"
 #include "zkx/util.h"
-#include "zkx/zkx_data.pb.h"
 
 namespace zkx {
 
@@ -603,7 +593,7 @@ absl::Status HloCostAnalysis::HandleReduceWindow(
                    reduce_window->operand(0)->shape().element_type()));
   }
 
-  sub_properties.ForEach([&](absl::string_view key, float val) {
+  sub_properties.ForEach([&](std::string_view key, float val) {
     if (KeyToCopyFromSubcomputation(key)) {
       current_properties_[key] = val * reduction_count;
     }

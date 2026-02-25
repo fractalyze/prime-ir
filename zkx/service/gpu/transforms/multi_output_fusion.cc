@@ -20,12 +20,9 @@ limitations under the License.
 #include <cstddef>
 #include <cstdint>
 #include <iterator>
-#include <memory>
-#include <string_view>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
@@ -34,19 +31,14 @@ limitations under the License.
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/debug_options_flags.h"
-#include "zkx/hlo/analysis/hlo_reachability.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
-#include "zkx/service/gpu/gpu_fusible.h"
-#include "zkx/service/gpu/model/gpu_hlo_cost_analysis.h"
 #include "zkx/service/gpu/model/gpu_performance_model.h"
 #include "zkx/service/gpu/model/gpu_performance_model_base.h"
 #include "zkx/service/hlo_graph_dumper.h"
 #include "zkx/service/instruction_fusion.h"
 #include "zkx/shape_util.h"
-#include "zkx/stream_executor/device_description.h"
 
 namespace zkx::gpu {
 

@@ -18,31 +18,16 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
-#include <functional>
-#include <memory>
-#include <optional>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-#include "absl/types/span.h"
 
 #include "zkx/debug_options_flags.h"
 #include "zkx/hlo/analysis/hlo_dataflow_analysis.h"
-#include "zkx/hlo/analysis/hlo_reachability.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/map_util.h"
-#include "zkx/service/fusion_queue.h"
 #include "zkx/service/hlo_graph_dumper.h"
-#include "zkx/service/hlo_module_config.h"
 #include "zkx/service/pattern_matcher.h"
 #include "zkx/shape.h"
 #include "zkx/shape_util.h"

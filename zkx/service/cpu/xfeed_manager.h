@@ -91,8 +91,8 @@ class XfeedQueueManager {
   std::deque<XfeedBuffer*> enqueued_buffers_;
 
   // If non-NULL, the buffer that is currently being processed by the
-  // runtime. Not owned.
-  XfeedBuffer* current_buffer_ = nullptr;
+  // runtime.
+  XfeedBuffer* current_buffer_ = nullptr;  // not owned
 };
 
 // Client-side class used to enqueue infeed buffers.

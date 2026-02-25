@@ -348,7 +348,7 @@ class PjRtChunk {
  private:
   // The ownership of the bytes pointed to by `data_` is controlled by the
   // `deleter_`.
-  uint8_t* data_ = nullptr;
+  uint8_t* data_ = nullptr;  // not owned
   size_t size_ = 0;
   std::function<void(void*)> deleter_;
 };

@@ -91,7 +91,9 @@ extern "C" void __chkstk(size_t);
              "__zkx_cpu_runtime_" #base_name);                              \
   } while (false)
 
-static bool RegisterKnownJITSymbols() {
+namespace {
+
+bool RegisterKnownJITSymbols() {
   zkx::CustomCallTargetRegistry* registry =
       zkx::CustomCallTargetRegistry::Global();
   registry->Register("printf", reinterpret_cast<void*>(&printf), "Host");
@@ -162,8 +164,14 @@ static bool RegisterKnownJITSymbols() {
   return true;
 }
 
+}  // namespace
+
 #undef REGISTER_CPU_RUNTIME_SYMBOL
 
-static bool unused = RegisterKnownJITSymbols();
+namespace {
+
+bool unused = RegisterKnownJITSymbols();
+
+}  // namespace
 
 }  // namespace zkx::cpu

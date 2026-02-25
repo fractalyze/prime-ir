@@ -175,7 +175,7 @@ class AddI32Thunk final : public Thunk {
  private:
   std::vector<BufferAllocation::Slice> srcs_;
   std::vector<BufferAllocation::Slice> dsts_;
-  std::vector<std::string>* trace_;
+  std::vector<std::string>* trace_;  // not owned
   bool use_shared_resource_;
   bool inject_error_;
 };

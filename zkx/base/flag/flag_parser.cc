@@ -21,9 +21,7 @@ limitations under the License.
 
 #include <iostream>
 #include <limits>
-#include <string>
 #include <tuple>
-#include <utility>
 
 #include "xla/tsl/platform/errors.h"
 

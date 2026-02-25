@@ -21,14 +21,11 @@ limitations under the License.
 #include <variant>
 
 #include "absl/algorithm/container.h"
-#include "absl/base/thread_annotations.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
-#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
-#include "absl/synchronization/mutex.h"
 #include "llvm/Support/Casting.h"
 
 #include "xla/tsl/distributed_runtime/call_options.h"

@@ -231,7 +231,7 @@ class HloAsyncInstruction : public HloInstruction {
   std::unique_ptr<HloInstruction> CloneWithNewOperandsImpl(
       const Shape& shape, absl::Span<HloInstruction* const> new_operands,
       HloCloneContext* context) const override;
-  HloAsyncInstruction* async_chain_next_ = nullptr;
+  HloAsyncInstruction* async_chain_next_ = nullptr;  // not owned
 };
 
 // Creates async-start.

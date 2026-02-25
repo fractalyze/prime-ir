@@ -947,7 +947,7 @@ class InFlightDiagnostic {
   }
 
  private:
-  DiagnosticEngine* engine_;
+  DiagnosticEngine* engine_;  // not owned
   std::stringstream stream_;
 };
 

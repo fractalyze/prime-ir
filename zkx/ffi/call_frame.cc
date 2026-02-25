@@ -229,7 +229,9 @@ ZKX_FFI_CallFrame CallFrame::Build(const ZKX_FFI_Api* api,
 // We rely on casting to and from underlying integral type to convert from
 // PrimitiveType to ZKX FFI DataType, and for safety convert all unknown types
 // to invalid type, otherwise we can accidentally cause UB.
-static ZKX_FFI_DataType ToDataType(PrimitiveType primitive_type) {
+namespace {
+
+ZKX_FFI_DataType ToDataType(PrimitiveType primitive_type) {
   switch (primitive_type) {
     case PrimitiveType::PRIMITIVE_TYPE_INVALID:
       return ZKX_FFI_DataType_INVALID;
@@ -265,6 +267,9 @@ static ZKX_FFI_DataType ToDataType(PrimitiveType primitive_type) {
   }
 }
 
+}  // namespace
+
+// static
 CallFrame::Buffer CallFrame::ConvertBuffer(
     const CallFrameBuilder::Buffer& buffer) {
   Buffer result;

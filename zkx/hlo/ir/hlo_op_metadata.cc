@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "zkx/hlo/ir/hlo_op_metadata.h"
 
-#include <string>
 #include <vector>
 
 #include "absl/strings/escaping.h"

@@ -444,13 +444,13 @@ class AotCompilationOptions {
 
  private:
   se::Platform::Id platform_id_;
-  se::DeviceMemoryAllocator* device_allocator_ = nullptr;
+  se::DeviceMemoryAllocator* device_allocator_ = nullptr;  // not owned
   DebugOptions debug_options_;
   std::optional<DeviceAssignment> static_device_assignment_;
   std::vector<std::vector<bool>> fusion_config_;
   FusionConfigCollection fusion_config_collection_ =
       FusionConfigCollection::kOff;
-  se::StreamExecutor* executor_ = nullptr;
+  se::StreamExecutor* executor_ = nullptr;  // not owned
   int64_t profile_version_ = 0;
   std::string cache_key_;
   bool run_backend_only_ = false;

@@ -19,7 +19,6 @@ limitations under the License.
 #include <algorithm>
 #include <memory>
 #include <utility>
-#include <vector>
 
 #include "absl/algorithm/container.h"
 
@@ -51,7 +50,7 @@ HloProfileIndexMap::HloProfileIndexMap(
 std::unique_ptr<HloProfilePrinterData> CreateHloProfilePrinterData(
     const HloProfileIndexMap& hlo_profile_index_map,
     const HloCostAnalysis& cost_analysis,
-    absl::string_view entry_computation_name) {
+    std::string_view entry_computation_name) {
   using HloComputationInfo = HloProfilePrinterData::HloComputationInfo;
   using HloInstructionInfo = HloProfilePrinterData::HloInstructionInfo;
 

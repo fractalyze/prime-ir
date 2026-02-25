@@ -47,8 +47,8 @@ class KernelThunk;
 // SmallKernelThunk via the same interface.
 class KernelThunkBase : public Thunk {
  public:
-  virtual ~KernelThunkBase() = default;  // NOLINT: clang-tidy complains that
-                                         // `override` should be used here.
+  // NOLINTNEXTLINE(modernize-use-override)
+  virtual ~KernelThunkBase() = default;
   KernelThunkBase(Kind kind, Info info) : Thunk(kind, std::move(info)) {}
   virtual std::string_view kernel_name() const = 0;
   virtual const se::ThreadDim& thread_dim() const = 0;

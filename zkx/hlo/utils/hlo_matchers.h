@@ -461,7 +461,7 @@ inline ::testing::Matcher<const ::zkx::HloInstruction*> Shape(
   return ::testing::MakeMatcher(new ::zkx::testing::HloShapeMatcher(shape));
 }
 inline ::testing::Matcher<const ::zkx::HloInstruction*> Shape(
-    absl::string_view shape) {
+    std::string_view shape) {
   return ::testing::MakeMatcher(
       new ::zkx::testing::HloShapeMatcher(ParseShape(shape).value()));
 }
@@ -471,7 +471,7 @@ inline ::testing::Matcher<const ::zkx::HloInstruction*> ShapeWithLayout(
       new ::zkx::testing::HloShapeAndLayoutMatcher(shape));
 }
 inline ::testing::Matcher<const ::zkx::HloInstruction*> ShapeWithLayout(
-    absl::string_view shape, bool minor_to_major_only = false) {
+    std::string_view shape, bool minor_to_major_only = false) {
   return ::testing::MakeMatcher(new ::zkx::testing::HloShapeAndLayoutMatcher(
       ParseShape(shape).value(), minor_to_major_only));
 }
@@ -484,7 +484,7 @@ inline ::testing::Matcher<const ::zkx::HloInstruction*> Sharding(
 }
 // Matcher for Sharding from sharding string
 inline ::testing::Matcher<const ::zkx::HloInstruction*> Sharding(
-    absl::string_view sharding) {
+    std::string_view sharding) {
   return ::testing::MakeMatcher(
       new ::zkx::testing::HloShardingMatcher(ParseSharding(sharding).value()));
 }

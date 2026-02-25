@@ -81,6 +81,7 @@ HloDataflowAnalysis::HloDataflowAnalysis(
       can_share_buffer_(can_share_buffer),
       forwards_value_(forwards_value) {}
 
+// static
 bool HloDataflowAnalysis::AreTransitiveUsesElementwiseOrTuple(
     const HloInstruction* inst) {
   absl::flat_hash_set<const HloInstruction*> visited;

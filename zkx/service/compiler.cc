@@ -16,8 +16,6 @@ limitations under the License.
 
 #include "zkx/service/compiler.h"
 
-#include <utility>
-
 #include "absl/base/const_init.h"
 #include "absl/debugging/leak_check.h"
 #include "absl/log/check.h"

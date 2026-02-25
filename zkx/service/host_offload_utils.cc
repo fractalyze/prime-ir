@@ -19,19 +19,15 @@ limitations under the License.
 #include <array>
 #include <cstdint>
 #include <memory>
-#include <string>
 #include <utility>
-#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 
 #include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/layout.h"
 #include "zkx/service/call_graph.h"

@@ -20,7 +20,6 @@ limitations under the License.
 
 #include "absl/status/status.h"
 #include "llvm/Support/Casting.h"
-#include "llvm/Support/ExtensibleRTTI.h"
 
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/python/ifrt/client.h"

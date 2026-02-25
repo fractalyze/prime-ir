@@ -25,7 +25,6 @@ limitations under the License.
 #include "xla/tsl/lib/math/math_util.h"
 #include "xla/tsl/platform/errors.h"
 #include "zkx/base/strings/string_util.h"
-#include "zkx/shape.h"
 #include "zkx/shape_util.h"
 
 namespace zkx {

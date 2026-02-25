@@ -20,8 +20,6 @@ limitations under the License.
 
 #include <string.h>
 
-#include <queue>
-
 #include "absl/synchronization/notification.h"
 
 #include "zkx/stream_executor/host/host_event.h"

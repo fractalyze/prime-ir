@@ -15,8 +15,6 @@ limitations under the License.
 ==============================================================================*/
 #include "zkx/backends/gpu/codegen/fusions.h"
 
-#include <memory>
-#include <optional>
 #include <utility>
 
 #include "absl/algorithm/container.h"

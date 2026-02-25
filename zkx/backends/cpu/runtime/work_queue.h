@@ -134,7 +134,7 @@ class Worker {
 
   size_t worker_index_;
   size_t partition_index_;
-  WorkQueue* queue_;
+  WorkQueue* queue_;  // not owned
 };
 
 inline std::optional<size_t> WorkQueue::Pop(size_t partition_index) {

@@ -16,8 +16,6 @@ limitations under the License.
 
 #include "zkx/service/platform_util.h"
 
-#include <vector>
-
 #include "absl/log/log.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/str_format.h"
@@ -85,6 +83,7 @@ absl::StatusOr<std::string> PlatformUtil::CanonicalPlatformName(
   return zkx::CanonicalPlatformName(platform_name);
 }
 
+// static
 absl::StatusOr<std::vector<se::Platform*>>
 PlatformUtil::GetSupportedPlatforms() {
   // Gather all platforms which have an XLA compiler.
@@ -134,7 +133,9 @@ absl::StatusOr<se::Platform*> PlatformUtil::GetPlatform(
 
 // Returns whether the device underlying the given StreamExecutor is supported
 // by XLA.
-static bool IsDeviceSupported(se::StreamExecutor* executor) {
+namespace {
+
+bool IsDeviceSupported(se::StreamExecutor* executor) {
   const auto& description = executor->GetDeviceDescription();
   if (executor->GetPlatform()->id() == se::cuda::kCudaPlatformId) {
     // CUDA devices must have a minimum compute capability.
@@ -161,6 +162,8 @@ static bool IsDeviceSupported(se::StreamExecutor* executor) {
   }
   return true;
 }
+
+}  // namespace
 
 absl::StatusOr<std::vector<se::StreamExecutor*>>
 PlatformUtil::GetStreamExecutors(

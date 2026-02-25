@@ -134,13 +134,13 @@ class KernelApiIrBuilder {
 
   Options options_;
 
-  llvm::StructType* thread_dim_ty_;
-  llvm::StructType* thread_ty_;
-  llvm::StructType* arg_ty_;
-  llvm::StructType* call_frame_ty_;
+  llvm::StructType* thread_dim_ty_;  // not owned
+  llvm::StructType* thread_ty_;      // not owned
+  llvm::StructType* arg_ty_;         // not owned
+  llvm::StructType* call_frame_ty_;  // not owned
 
   absl::flat_hash_map<int64_t, llvm::StructType*> memref_tys_;
-  llvm::FunctionType* kernel_function_ty_;
+  llvm::FunctionType* kernel_function_ty_;  // not owned
 };
 
 }  // namespace zkx::cpu

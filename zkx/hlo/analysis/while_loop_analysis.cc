@@ -21,7 +21,6 @@ limitations under the License.
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <optional>
 #include <ostream>
 #include <utility>
 #include <vector>
@@ -36,7 +35,6 @@ limitations under the License.
 #include "zkx/comparison_util.h"
 #include "zkx/hlo/analysis/hlo_reachability.h"
 #include "zkx/hlo/evaluator/hlo_evaluator.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/hlo/utils/hlo_query.h"
@@ -46,7 +44,6 @@ limitations under the License.
 #include "zkx/service/collective_ops_utils.h"
 #include "zkx/service/constant_value.h"
 #include "zkx/service/pattern_matcher.h"
-#include "zkx/service/value_range.h"
 #include "zkx/shape_util.h"
 #include "zkx/tools/hlo_extractor.h"
 
@@ -902,7 +899,9 @@ optional<int64_t> ComputeWhileLoopTripCount(const HloInstruction* while_op,
 // get-tuple-element, otherwise return null. If this runs before CSE/DCE, we may
 // get a false negative if there are several copies of the same GTE, or there
 // are unused GTEs, but we can live with this.
-static HloInstruction* GetOnlyGTE(HloInstruction* inst) {
+namespace {
+
+HloInstruction* GetOnlyGTE(HloInstruction* inst) {
   if (inst->user_count() != 1) {
     return nullptr;
   }
@@ -913,6 +912,8 @@ static HloInstruction* GetOnlyGTE(HloInstruction* inst) {
   }
   return user;
 }
+
+}  // namespace
 
 optional<int64_t> ComputeWhileLoopTripCountUpperBound(
     const HloInstruction* while_op) {

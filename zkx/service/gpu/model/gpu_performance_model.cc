@@ -22,21 +22,15 @@ limitations under the License.
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "absl/time/time.h"
-#include "absl/types/span.h"
 #include "llvm/ADT/STLExtras.h"
 
 #include "zkx/hlo/ir/hlo_casting_utils.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/service/gpu/backend_configs.pb.h"
 #include "zkx/service/gpu/hlo_fusion_analysis.h"
 #include "zkx/service/gpu/launch_dimensions.h"
 #include "zkx/service/gpu/model/coalescing_analysis.h"
-#include "zkx/service/gpu/model/gpu_hlo_cost_analysis.h"
-#include "zkx/service/gpu/model/gpu_performance_model_base.h"
-#include "zkx/stream_executor/device_description.h"
 #include "zkx/util.h"
 #include "zkx/zkx_data.pb.h"
 

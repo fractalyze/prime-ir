@@ -105,6 +105,4 @@ std::ostream& operator<<(std::ostream& out, const HloModuleGroup& group) {
   return out;
 }
 
-#include <utility>
-
 }  // namespace zkx

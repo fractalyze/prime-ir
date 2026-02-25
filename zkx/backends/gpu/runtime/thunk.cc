@@ -87,7 +87,9 @@ using GlobalDeviceIdMap = Thunk::CollectiveExecuteParams::GlobalDeviceIdMap;
 
 // Returns global device id for a local device ordinal or an error if global
 // device id map is misconfigured and missing an entry for a local device.
-static absl::StatusOr<GlobalDeviceId> GetGlobalDeviceId(
+namespace {
+
+absl::StatusOr<GlobalDeviceId> GetGlobalDeviceId(
     const GlobalDeviceIdMap* device_id_map, int64_t local_device_ordinal) {
   // No local -> global mapping was provided; assume the identity mapping.
   if (!device_id_map) return GlobalDeviceId(local_device_ordinal);
@@ -101,6 +103,8 @@ static absl::StatusOr<GlobalDeviceId> GetGlobalDeviceId(
 
   return it->second;
 }
+
+}  // namespace
 
 // static
 absl::StatusOr<Thunk::CollectiveExecuteParams>

@@ -21,8 +21,6 @@ limitations under the License.
 #include "absl/debugging/leak_check.h"
 #include "absl/synchronization/mutex.h"
 
-#include "zkx/python/ifrt/device.h"
-
 namespace zkx::ifrt {
 
 namespace {

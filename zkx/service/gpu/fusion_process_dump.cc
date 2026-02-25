@@ -16,12 +16,6 @@ limitations under the License.
 
 #include "zkx/service/gpu/fusion_process_dump.h"
 
-#include <string>
-#include <string_view>
-#include <utility>
-
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/inlined_vector.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_format.h"
 #include "google/protobuf/text_format.h"
@@ -32,8 +26,6 @@ limitations under the License.
 #include "xla/tsl/platform/status.h"
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
-#include "zkx/service/gpu/fusion_process_dump.pb.h"
-#include "zkx/stream_executor/device_description.h"
 #include "zkx/tools/hlo_module_loader.h"
 #include "zkx/util.h"
 

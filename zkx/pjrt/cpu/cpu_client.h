@@ -310,7 +310,7 @@ class TfrtCpuBuffer final : public AbstractTfrtCpuBuffer {
  private:
   std::string_view buffer_name() const override { return "TfrtCpuBuffer"; }
 
-  TfrtCpuClient* client_;
+  TfrtCpuClient* client_;  // not owned
   TfrtCpuDevice* const device_;
   PjRtMemorySpace* const memory_space_;
 };
@@ -437,7 +437,7 @@ class TfrtCpuExecutable final : public PjRtLoadedExecutable {
       tsl::AsyncValueRef<CpuEvent> last_collective_launch_event,
       bool fill_future, TfrtCpuDevice* device = nullptr);
 
-  TfrtCpuClient* client_;
+  TfrtCpuClient* client_;  // not owned
 
   int num_replicas_;
   int num_partitions_;

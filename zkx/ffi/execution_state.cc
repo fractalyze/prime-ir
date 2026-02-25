@@ -21,8 +21,6 @@ limitations under the License.
 #include "absl/log/check.h"
 #include "absl/strings/str_cat.h"
 
-#include "zkx/ffi/type_id_registry.h"
-
 namespace zkx::ffi {
 
 ExecutionState::ExecutionState()

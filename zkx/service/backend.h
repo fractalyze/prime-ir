@@ -69,7 +69,7 @@ class BackendOptions {
   const std::optional<std::set<int>>& allowed_devices() const;
 
  private:
-  se::Platform* platform_ = nullptr;
+  se::Platform* platform_ = nullptr;  // not owned
   int intra_op_parallelism_threads_ = -1;
   std::optional<std::set<int>> allowed_devices_;
 };
@@ -188,10 +188,10 @@ class Backend {
   Backend(const Backend&) = delete;
   Backend& operator=(const Backend&) = delete;
 
-  se::Platform* platform_;
-  Compiler* compiler_;
-  TransferManager* transfer_manager_;
-  ComputationPlacer* computation_placer_;
+  se::Platform* platform_;                 // not owned
+  Compiler* compiler_;                     // not owned
+  TransferManager* transfer_manager_;      // not owned
+  ComputationPlacer* computation_placer_;  // not owned
 
   // Vector of stream executors. stream_executors_[0] is the default executor.
   std::vector<se::StreamExecutor*> stream_executors_;

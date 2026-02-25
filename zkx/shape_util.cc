@@ -19,7 +19,6 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/base/optimization.h"
 #include "absl/debugging/leak_check.h"
-#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/log/vlog_is_on.h"
 #include "absl/strings/str_cat.h"
@@ -28,7 +27,6 @@ limitations under the License.
 #include "absl/synchronization/blocking_counter.h"
 
 #include "xla/tsl/platform/cpu_info.h"
-#include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/thread_pool.h"
 #include "zkx/index_util.h"
@@ -904,6 +902,7 @@ int64_t ShapeUtil::ByteSizeOfTupleIndexTable(const Shape& shape,
   return pointer_size * shape.tuple_shapes_size();
 }
 
+// static
 int64_t ShapeUtil::ByteSizeOfElements(const Shape& shape) {
   DCHECK_OK(ValidateShapeWithOptionalLayout(shape));
   int64_t allocated_element_count;

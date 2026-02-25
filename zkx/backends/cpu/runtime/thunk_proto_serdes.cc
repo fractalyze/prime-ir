@@ -23,7 +23,6 @@ limitations under the License.
 #include <string>
 #include <tuple>
 #include <utility>
-#include <vector>
 
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/str_format.h"
@@ -276,8 +275,7 @@ class ThunkSerDesProtobuf : public SerDesBase<Thunk> {
       const ThunkProto& proto) const;
 
  private:
-  // TODO(basiol) remove NOLINT when this actually gets used
-  const std::vector<BufferAllocation>* buffer_allocations_;  // NOLINT
+  const std::vector<BufferAllocation>* buffer_allocations_;
 };
 
 ThunkSerDesProtobuf::ThunkSerDesProtobuf(

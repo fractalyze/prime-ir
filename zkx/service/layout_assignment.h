@@ -643,7 +643,7 @@ class LayoutAssignment : public HloModulePass {
       HloComputation* computation, ComputationLayout* computation_layout);
 
   // The pointer to the ComputationLayout passed as constructor parameter.
-  ComputationLayout* entry_computation_layout_;
+  ComputationLayout* entry_computation_layout_;  // not owned
 
   // A copy of entry_computation_layout_ used to reset it to the initial values
   // during the multiple passes done by the layout assignment operation.
@@ -739,7 +739,7 @@ class LayoutAssignment : public HloModulePass {
 
   // The pointer to the channel layout constraints passed in with the
   // constructor. If not nullptr, this is an input/output argument.
-  ChannelLayoutConstraints* channel_layout_constraints_ = nullptr;
+  ChannelLayoutConstraints* channel_layout_constraints_ = nullptr;  // not owned
 
   // A copy of the input layout constraints used to reset the above pointer in
   // case we have to undo operations due to the multiple passes over the

@@ -17,13 +17,9 @@ limitations under the License.
 #include "zkx/ffi/ffi_api.h"
 
 #include <cstddef>
-#include <cstdint>
 #include <exception>
-#include <string>
-#include <string_view>
 #include <type_traits>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "absl/base/optimization.h"
@@ -303,7 +299,11 @@ absl::StatusOr<ZKX_FFI_Metadata> GetMetadata(ZKX_FFI_Handler* handler) {
 }
 
 namespace internal {
-static thread_local const ExecutionContext* scoped_execution_context = nullptr;
+namespace {
+
+thread_local const ExecutionContext* scoped_execution_context = nullptr;
+
+}  // namespace
 
 ScopedExecutionContext::ScopedExecutionContext(const ExecutionContext* context)
     : recover_(scoped_execution_context) {

@@ -16,8 +16,6 @@ limitations under the License.
 
 #include "zkx/hlo/translate/mhlo_to_hlo/location_exporter.h"
 
-#include <string>
-
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"

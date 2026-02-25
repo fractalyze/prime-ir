@@ -19,7 +19,6 @@ limitations under the License.
 #include <cstdint>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "absl/strings/match.h"
 #include "llvm/ADT/StringRef.h"

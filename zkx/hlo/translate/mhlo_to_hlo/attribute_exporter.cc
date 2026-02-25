@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "zkx/hlo/translate/mhlo_to_hlo/attribute_exporter.h"
 
-#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 
 #include "zkx/hlo/ir/hlo_sharding.h"

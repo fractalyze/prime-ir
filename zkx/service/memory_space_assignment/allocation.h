@@ -293,10 +293,10 @@ class CopyAllocation final : public Allocation {
   // is before copy_done_schedule_before_.
   int64_t copy_start_schedule_after_;
   int64_t copy_done_schedule_before_;
-  HloInstruction* copy_start_ = nullptr;
-  HloInstruction* copy_done_ = nullptr;
+  HloInstruction* copy_start_ = nullptr;  // not owned
+  HloInstruction* copy_done_ = nullptr;   // not owned
   // The sync data movement instruction that this copy is associated with.
-  HloInstruction* sync_mem_op_ = nullptr;
+  HloInstruction* sync_mem_op_ = nullptr;  // not owned
 };
 
 // This class represents an allocation resulting from asynchronous sliced
@@ -407,11 +407,11 @@ class SlicedCopyAllocation final : public Allocation {
   // - sorted_segments_[i].copy_done_before_time <=
   //   sorted_segments_[i+j].copy.start_before_time
   std::vector<SliceDetail> slice_details_sorted_by_exclusive_start_time_;
-  HloInstruction* concat_ = nullptr;
+  HloInstruction* concat_ = nullptr;  // not owned
   const SlicedPrefetchOptions& sliced_prefetch_options_;
   absl::FunctionRef<Shape(const Shape&)> get_equivalent_s8_shape_fn_;
   // The sync data movement instruction that this copy is associated with.
-  HloInstruction* sync_mem_op_ = nullptr;
+  HloInstruction* sync_mem_op_ = nullptr;  // not owned
 };
 
 // This class represents an allocation resulting from asynchronously prefetching
@@ -473,7 +473,7 @@ class WindowPrefetchedAllocation final : public Allocation {
       HloComputation* computation);
 
   Options options_;
-  HloInstruction* prefetch_instruction_ = nullptr;
+  HloInstruction* prefetch_instruction_ = nullptr;  // not owned
   Allocation& prev_allocation_;
   HloUse use_;
   int64_t prefetch_start_schedule_after_;
@@ -546,7 +546,7 @@ class ParentAllocation final : public Allocation {
 
  private:
   const Allocation& original_allocation_;
-  HloInstruction* calling_instruction_;
+  HloInstruction* calling_instruction_;  // not owned
 };
 
 // A class with some utility functions that are useful in debugging.

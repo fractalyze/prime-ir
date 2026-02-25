@@ -27,7 +27,6 @@ limitations under the License.
 #include "xla/tsl/util/byte_swap_array.h"
 #include "zk_dtypes/include/all_types.h"
 #include "zkx/permutation_util.h"
-#include "zkx/primitive_util.h"
 
 namespace zkx {
 

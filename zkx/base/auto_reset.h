@@ -74,7 +74,7 @@ class [[maybe_unused, nodiscard]] AutoReset {
   // number of non-PartitionAlloc pointees + AutoReset is typically short-lived
   // (e.g. allocated on the stack).
   // RAW_PTR_EXCLUSION T* scoped_variable_;
-  T* scoped_variable_;
+  T* scoped_variable_;  // not owned
 
   T original_value_;
 };

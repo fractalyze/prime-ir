@@ -18,29 +18,18 @@ limitations under the License.
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
-#include <optional>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "absl/synchronization/mutex.h"
-#include "absl/time/time.h"
 
 #include "zkx/backends/gpu/codegen/fusion_emitter.h"
 #include "zkx/backends/gpu/codegen/fusions.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/hlo/utils/hlo_traversal.h"
-#include "zkx/service/gpu/hlo_fusion_analysis.h"
-#include "zkx/service/gpu/launch_dimensions.h"
-#include "zkx/service/gpu/model/gpu_hlo_cost_analysis.h"
 #include "zkx/shape_util.h"
-#include "zkx/stream_executor/device_description.h"
 #include "zkx/util.h"
-#include "zkx/zkx_data.pb.h"
 
 namespace zkx::gpu {
 

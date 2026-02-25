@@ -120,7 +120,7 @@ class MultiOutputFusion : public HloModulePass {
                        const HloInstruction* producer = nullptr);
 
   // Computation for the pass.
-  HloComputation* computation_;
+  HloComputation* computation_;  // not owned
 
   // The reachability map of current computation.
   std::unique_ptr<HloReachabilityMap> reachability_;

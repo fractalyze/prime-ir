@@ -18,7 +18,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
-#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -36,7 +35,6 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_input_output_alias_config.h"
 #include "zkx/layout_util.h"
 #include "zkx/literal.h"
-#include "zkx/service/executable.h"
 #include "zkx/service/maybe_owning_device_memory.h"
 #include "zkx/service/service_executable_run_options.h"
 #include "zkx/service/shaped_buffer.h"

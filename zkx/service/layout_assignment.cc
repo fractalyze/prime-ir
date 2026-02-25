@@ -17,20 +17,11 @@ limitations under the License.
 #include "zkx/service/layout_assignment.h"
 
 #include <algorithm>
-#include <cstdint>
 #include <deque>
-#include <memory>
 #include <ostream>
-#include <set>
-#include <string>
-#include <utility>
-#include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -38,28 +29,14 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
-#include "zkx/hlo/analysis/tuple_points_to_analysis.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
-#include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_input_output_alias_config.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
-#include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/hlo/ir/hlo_sharding.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_dce.h"
 #include "zkx/hlo/transforms/simplifiers/tuple_simplifier.h"
-#include "zkx/layout.h"
-#include "zkx/layout_util.h"
-#include "zkx/map_util.h"
 #include "zkx/permutation_util.h"
-#include "zkx/service/call_graph.h"
-#include "zkx/service/computation_layout.h"
-#include "zkx/service/logical_buffer.h"
-#include "zkx/shape.h"
-#include "zkx/shape_layout.h"
-#include "zkx/shape_util.h"
 #include "zkx/status_macros.h"
-#include "zkx/util.h"
 #include "zkx/zkx_data.pb.h"
 
 namespace zkx {
@@ -1461,14 +1438,18 @@ std::unique_ptr<Layout> LayoutAssignment::ChooseOperandLayoutFromOutputLayout(
   return nullptr;
 }
 
-static Layout GetReduceLayoutFromOperand(const Layout& operand_layout,
-                                         const HloInstruction* hlo) {
+namespace {
+
+Layout GetReduceLayoutFromOperand(const Layout& operand_layout,
+                                  const HloInstruction* hlo) {
   CHECK_EQ(hlo->opcode(), HloOpcode::kReduce);
   Shape operand_shape = hlo->operand(0)->shape();
   *operand_shape.mutable_layout() = operand_layout;
   operand_shape = ShapeUtil::DeleteDimensions(hlo->dimensions(), operand_shape);
   return operand_shape.layout();
 }
+
+}  // namespace
 
 bool LayoutAssignment::OperandLayoutAlwaysPropagateForward(
     const HloInstruction* user) {

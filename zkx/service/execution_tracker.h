@@ -48,7 +48,7 @@ class AsyncExecution {
 
  private:
   // Backend to execute the computation on.
-  Backend* backend_;
+  Backend* backend_;  // not owned
 
   // Stream on which the execution is launched.
   std::vector<StreamPool::Ptr> streams_;

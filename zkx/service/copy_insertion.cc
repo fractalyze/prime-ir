@@ -2368,7 +2368,9 @@ absl::Status CopyInsertion::AddSpecialCaseCopies(
   return absl::OkStatus();
 }
 
-static int64_t GetNumExistingCopies(
+namespace {
+
+int64_t GetNumExistingCopies(
     const HloModule* module,
     const absl::flat_hash_set<std::string_view>& execution_threads) {
   int64_t num_existing_copies = 0;
@@ -2381,6 +2383,8 @@ static int64_t GetNumExistingCopies(
   }
   return num_existing_copies;
 }
+
+}  // namespace
 
 absl::Status CopyInsertion::RemoveUnnecessaryCopies(
     HloModule* module, bool check_live_range_ordering,

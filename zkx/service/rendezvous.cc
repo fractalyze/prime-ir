@@ -146,7 +146,7 @@ RendezvousFlag::InFlightRendezvous::~InFlightRendezvous() {
   // should mark rendezvous flag completed.
   int32_t state = flag_->state_.load();
 
-  CHECK(state != kPending && state != kCompleted)  // NOLINT
+  CHECK(state != kPending && state != kCompleted)
       << "rendezvous can't be in pending or completed state";
 
   // Exit the critical section and maybe mark rendezvous as completed.
@@ -154,7 +154,7 @@ RendezvousFlag::InFlightRendezvous::~InFlightRendezvous() {
       state, state == 1 ? kCompleted : state - 1)) {
     // Check state after CAS failure: while we are in this function no one
     // should complete rendezvous without us or switch it back to pending.
-    CHECK(state != kPending && state != kCompleted);  // NOLINT
+    CHECK(state != kPending && state != kCompleted);
   }
 }
 

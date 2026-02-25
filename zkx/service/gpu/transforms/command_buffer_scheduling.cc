@@ -18,20 +18,13 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <iterator>
-#include <memory>
-#include <string>
 #include <utility>
 #include <variant>
-#include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/log/log.h"
-#include "absl/status/status.h"
 #include "absl/types/span.h"
 #include "llvm/ADT/STLExtras.h"
 
@@ -39,18 +32,14 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
 #include "zkx/hlo/ir/hlo_clone_context.h"
-#include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
-#include "zkx/hlo/ir/hlo_schedule.h"
 #include "zkx/service/gpu/backend_configs.pb.h"
 #include "zkx/service/gpu/hlo_fusion_analysis.h"
 #include "zkx/service/gpu/ir_emission_utils.h"
 #include "zkx/service/gpu/variant_visitor.h"
 #include "zkx/shape.h"
 #include "zkx/shape_util.h"
-#include "zkx/stream_executor/device_description.h"
 #include "zkx/stream_executor/semantic_version.h"
 #include "zkx/util.h"
 
@@ -149,7 +138,7 @@ bool IsAsyncDoneCommand(const HloInstruction* hlo,
 HloInstruction* FindAsyncDoneCommand(const HloInstruction* start) {
   if (HloPredicateIsOp<HloOpcode::kAllReduceStart, HloOpcode::kAllGatherStart>(
           start)) {
-    CHECK(start->users().size() == 1);  // NOLINT, checked by HLO verifier
+    CHECK_EQ(start->users().size(), 1);  // checked by HLO verifier
     return start->users().front();
   } else if (HloPredicateIsOp<HloOpcode::kAsyncStart>(start)) {
     return start->async_chain_done();

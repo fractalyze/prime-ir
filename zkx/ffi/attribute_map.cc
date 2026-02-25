@@ -26,7 +26,6 @@ limitations under the License.
 #include "absl/strings/str_cat.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/Attributes.h"
-#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/Support/LLVM.h"
 
 #include "xla/tsl/platform/errors.h"

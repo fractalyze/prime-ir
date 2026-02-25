@@ -21,13 +21,10 @@ limitations under the License.
 #include <functional>
 #include <iterator>
 #include <map>
-#include <memory>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -43,25 +40,17 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/thread_pool.h"
 #include "zkx/debug_options_flags.h"
-#include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/hlo/utils/hlo_traversal.h"
 #include "zkx/service/dump.h"
 #include "zkx/service/gpu/backend_configs.pb.h"
-#include "zkx/service/gpu/fusion_process_dump.pb.h"
 #include "zkx/service/gpu/gpu_fusible.h"
 #include "zkx/service/gpu/hlo_fusion_analysis.h"
 #include "zkx/service/gpu/ir_emission_utils.h"
-#include "zkx/service/gpu/model/fusion_analysis_cache.h"
-#include "zkx/service/gpu/model/gpu_hlo_cost_analysis.h"
 #include "zkx/service/gpu/model/gpu_performance_model.h"
 #include "zkx/service/gpu/model/gpu_performance_model_base.h"
 #include "zkx/service/hlo_graph_dumper.h"
-#include "zkx/service/instruction_fusion.h"
 #include "zkx/shape_util.h"
-#include "zkx/stream_executor/device_description.h"
-#include "zkx/zkx_data.pb.h"
 
 namespace zkx::gpu {
 

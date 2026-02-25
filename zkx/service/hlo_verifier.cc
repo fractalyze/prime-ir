@@ -18,13 +18,10 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <iterator>
 #include <map>
-#include <memory>
 #include <numeric>
 #include <optional>
-#include <string>
 #include <vector>
 
 #include "absl/algorithm/container.h"
@@ -294,9 +291,11 @@ bool ShapeVerifier::ShapesSame(const Shape& a, const Shape& b,
 // In general, if replica groups is not empty, all replica groups should be of
 // the same size. The exception is all-reduce, where non-uniform replica groups
 // are allowed. This is controlled by `uniform_replica_group_size`.
-static absl::Status CheckReplicaGroups(HloInstruction* hlo,
-                                       CollectiveOpGroupMode group_mode,
-                                       bool uniform_replica_group_size = true) {
+namespace {
+
+absl::Status CheckReplicaGroups(HloInstruction* hlo,
+                                CollectiveOpGroupMode group_mode,
+                                bool uniform_replica_group_size = true) {
   if (!hlo->replica_groups().empty()) {
     absl::flat_hash_set<int64_t> replicas_seen;
     for (const ReplicaGroup& g : hlo->replica_groups()) {
@@ -369,8 +368,8 @@ static absl::Status CheckReplicaGroups(HloInstruction* hlo,
   return absl::OkStatus();
 }
 
-static absl::Status CheckCommonAllGatherInvariants(
-    HloInstruction* hlo, int64_t* computed_shard_count) {
+absl::Status CheckCommonAllGatherInvariants(HloInstruction* hlo,
+                                            int64_t* computed_shard_count) {
   auto ag = Cast<HloAllGatherInstruction>(hlo);
   CHECK_NE(computed_shard_count, nullptr) << "Expected a shard count as input";
   TF_ASSIGN_OR_RETURN(CollectiveOpGroupMode group_mode,
@@ -412,6 +411,8 @@ static absl::Status CheckCommonAllGatherInvariants(
   *computed_shard_count = shard_count;
   return absl::OkStatus();
 }
+
+}  // namespace
 
 absl::Status ShapeVerifier::HandleAllGather(HloInstruction* hlo) {
   auto ag = Cast<HloAllGatherInstruction>(hlo);

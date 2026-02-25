@@ -59,7 +59,11 @@ enum class Int32BasedEnum : int32_t {
   kTwo = 2,
 };
 
-static constexpr int64_t kI32MaxValue = std::numeric_limits<int32_t>::max();
+namespace {
+
+constexpr int64_t kI32MaxValue = std::numeric_limits<int32_t>::max();
+
+}  // namespace
 
 enum class Int64BasedEnum : int64_t {
   kOne = kI32MaxValue + 1,

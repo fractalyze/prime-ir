@@ -28,7 +28,6 @@ limitations under the License.
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
-#include "zkx/literal.h"
 #include "zkx/service/compiler.h"
 #include "zkx/status_macros.h"
 #include "zkx/util.h"

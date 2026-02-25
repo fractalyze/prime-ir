@@ -127,7 +127,7 @@ class HloModuleMetadata {
       absl::FunctionRef<void(HloPassMetadata*)> mutator);
 
   HloModuleMetadataProto module_metadata_;
-  tsl::Env* env_;
+  tsl::Env* env_;  // not owned
   int64_t next_pass_id_ = 1;
 
   // Stack of metadata for passes that are currently running. Size > 1 iff

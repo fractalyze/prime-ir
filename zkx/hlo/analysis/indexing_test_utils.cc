@@ -19,7 +19,6 @@ limitations under the License.
 #include <cctype>
 #include <cstddef>
 #include <limits>
-#include <optional>
 #include <string>
 #include <utility>
 
@@ -34,7 +33,6 @@ limitations under the License.
 #include "llvm/Support/MathExtras.h"
 #include "mlir/AsmParser/AsmParser.h"
 #include "mlir/IR/BuiltinAttributes.h"
-#include "mlir/IR/MLIRContext.h"
 #include "mlir/Support/LLVM.h"
 
 #include "xla/tsl/platform/errors.h"

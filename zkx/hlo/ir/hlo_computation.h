@@ -926,10 +926,10 @@ class HloComputation {
   void SetInstruction(HloInstruction* instruction, InstructionType type);
 
   int64_t unique_id_;
-  HloInstruction* root_instruction_;
+  HloInstruction* root_instruction_;  // not owned
 
   // Module containing this computation.
-  HloModule* parent_ = nullptr;
+  HloModule* parent_ = nullptr;  // not owned
 
   // Contains HloInstruction* and its type.
   // The respective type in the least significant three bits.
@@ -939,7 +939,7 @@ class HloComputation {
   // first async instruction (async-start) in the asynchronous op chain that
   // calls this computation.
   // Otherwise, this is empty.
-  HloInstruction* async_start_ = nullptr;
+  HloInstruction* async_start_ = nullptr;  // not owned
 
   HloInstruction::InstructionVector param_instructions_;
 

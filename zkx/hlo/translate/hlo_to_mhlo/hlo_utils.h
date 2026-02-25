@@ -147,7 +147,7 @@ template <>
 inline absl::StatusOr<mlir::MemRefType> ConvertTensorShapeToType(
     const Shape& shape, mlir::Builder builder) {
   if (shape.is_dynamic()) {
-    return absl::FailedPreconditionError(  // NOLINT
+    return absl::FailedPreconditionError(
         "MemRefType don't support dynamic shapes");
   }
   return ConvertTensorShapeToMemRefType(shape, builder);

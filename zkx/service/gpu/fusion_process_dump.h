@@ -110,7 +110,7 @@ class FusionProcessDump {
   int64_t current_step_idx_ = 0;
 
   // Tracks result of the last fusion step.
-  HloInstruction* last_fusion_ = nullptr;
+  HloInstruction* last_fusion_ = nullptr;  // not owned
 };
 
 }  // namespace zkx::gpu

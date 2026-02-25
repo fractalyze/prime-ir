@@ -16,11 +16,7 @@ limitations under the License.
 
 #include "zkx/python/pjrt_ifrt/pjrt_memory.h"
 
-#include "absl/types/span.h"
-
-#include "zkx/pjrt/pjrt_client.h"
 #include "zkx/python/ifrt/device.h"
-#include "zkx/python/ifrt/memory.h"
 #include "zkx/python/pjrt_ifrt/pjrt_client.h"
 #include "zkx/python/pjrt_ifrt/pjrt_device.h"
 

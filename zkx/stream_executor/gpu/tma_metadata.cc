@@ -34,8 +34,11 @@ namespace stream_executor::gpu {
 // https://docs.nvidia.com/cuda/cuda-driver-api/group__CUDA__TENSOR__MEMORY.html
 
 // Supported element byte widths for TMA.
-static constexpr std::initializer_list<int> kValidElementByteWidths = {1, 2, 4,
-                                                                       8};
+namespace {
+
+constexpr std::initializer_list<int> kValidElementByteWidths = {1, 2, 4, 8};
+
+}  // namespace
 
 // `boxDim`s are limited to 256 by Nvidia's TMA API.
 const int kMaxBoxDim = 256;

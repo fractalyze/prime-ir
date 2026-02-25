@@ -18,8 +18,6 @@ limitations under the License.
 
 #include <stdexcept>
 
-#include <Python.h>
-
 namespace nb = nanobind;
 
 namespace zkx {

@@ -76,7 +76,7 @@ class ServiceOptions {
   const std::optional<std::set<int>>& allowed_devices() const;
 
  private:
-  se::Platform* platform_ = nullptr;
+  se::Platform* platform_ = nullptr;  // not owned
   int number_of_replicas_ = 1;
   int intra_op_parallelism_threads_ = -1;
   std::optional<std::set<int>> allowed_devices_;

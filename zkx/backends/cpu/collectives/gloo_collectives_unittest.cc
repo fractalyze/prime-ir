@@ -79,11 +79,15 @@ RendezvousKey MakeRendezvousKey(std::vector<GlobalDeviceId> global_devices) {
 
 // TODO(cobley) - add tests for other collectives.
 
+namespace {
+
 template <typename T>
-static se::DeviceMemoryBase AsDeviceMemory(const std::vector<T>& data) {
+se::DeviceMemoryBase AsDeviceMemory(const std::vector<T>& data) {
   return se::DeviceMemoryBase(const_cast<T*>(data.data()),
                               data.size() * sizeof(T));
 }
+
+}  // namespace
 
 absl::StatusOr<std::vector<uint8_t>> AllReduce(
     const std::shared_ptr<zkx::KeyValueStoreInterface>& kv_store,

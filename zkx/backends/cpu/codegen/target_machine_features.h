@@ -81,7 +81,7 @@ class TargetMachineFeatures {
   mutable absl::flat_hash_map<const llvm::Function*, llvm::TargetTransformInfo>
       target_transform_info_;
 
-  llvm::TargetMachine* target_machine_;
+  llvm::TargetMachine* target_machine_;  // not owned
 };
 
 }  // namespace zkx::cpu

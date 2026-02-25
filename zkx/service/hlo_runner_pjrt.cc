@@ -16,12 +16,8 @@ limitations under the License.
 
 #include "zkx/service/hlo_runner_pjrt.h"
 
-#include <cstdint>
-#include <functional>
-#include <memory>
 #include <optional>
 #include <utility>
-#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/log/die_if_null.h"
@@ -35,7 +31,6 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/thread_pool.h"
 #include "zkx/hlo/builder/zkx_computation.h"
-#include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/literal_util.h"
 #include "zkx/pjrt/host_memory_spaces.h"
 #include "zkx/pjrt/pjrt_common.h"

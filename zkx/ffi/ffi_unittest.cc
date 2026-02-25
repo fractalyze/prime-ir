@@ -116,7 +116,11 @@ TEST(FfiTest, RegistrationTraitsBackwardsCompatibility) {
 ZKX_FFI_DECLARE_HANDLER_SYMBOL(NoOpHandler);
 
 // Define ZKX FFI handler as a function forwarded to `NoOp` implementation.
-static absl::Status NoOp() { return absl::OkStatus(); }
+namespace {
+
+absl::Status NoOp() { return absl::OkStatus(); }
+
+}  // namespace
 ZKX_FFI_DEFINE_HANDLER_SYMBOL(NoOpHandler, NoOp, Ffi::Bind());
 
 TEST(FfiTest, StaticHandlerSymbolRegistration) {

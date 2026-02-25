@@ -421,7 +421,7 @@ class BufferIntervalTree {
   std::vector<const BufferIntervalTreeNode*> NodesOverlappingInTime(
       int64_t start, int64_t end) const;
 
-  BufferIntervalTreeNode* root_ = nullptr;
+  BufferIntervalTreeNode* root_ = nullptr;  // not owned
   std::list<BufferIntervalTreeNode> node_storage_;
 };
 

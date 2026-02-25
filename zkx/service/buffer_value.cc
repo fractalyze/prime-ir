@@ -16,8 +16,6 @@ limitations under the License.
 
 #include "zkx/service/buffer_value.h"
 
-#include <ostream>
-
 namespace zkx {
 
 BufferValue::BufferValue(HloInstruction* instruction, const ShapeIndex& index,

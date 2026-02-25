@@ -15,38 +15,28 @@ limitations under the License.
 ==============================================================================*/
 #include "zkx/backends/gpu/codegen/emitters/input_slices.h"
 
-#include <cstdint>
 #include <iterator>
-#include <optional>
-#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
-#include "absl/status/status.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 
-#include "zkx/codegen/emitters/computation_partitioner.h"
 #include "zkx/codegen/emitters/elemental_hlo_to_mlir.h"
 #include "zkx/codegen/emitters/ir/zkx_ops.h"
 #include "zkx/hlo/analysis/indexing_analysis.h"
-#include "zkx/hlo/analysis/indexing_map.h"
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/utils/hlo_traversal.h"
-#include "zkx/service/gpu/launch_dimensions.h"
 #include "zkx/zkx_data.pb.h"
 
 namespace zkx::gpu {

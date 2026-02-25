@@ -64,10 +64,14 @@ static_assert(
     std::is_same_v<ArgsStorage<DeviceMemoryBase*, const DeviceMemoryBase*>,
                    std::tuple<const void*, const void*>>);
 
-static StreamExecutor* NewStreamExecutor() {
+namespace {
+
+StreamExecutor* NewStreamExecutor() {
   Platform* platform = PlatformManager::PlatformWithName("Host").value();
   return platform->ExecutorForDevice(/*ordinal=*/0).value();
 }
+
+}  // namespace
 
 TEST(KernelTest, PackDeviceMemoryArguments) {
   DeviceMemoryBase a(reinterpret_cast<void*>(0x12345678));

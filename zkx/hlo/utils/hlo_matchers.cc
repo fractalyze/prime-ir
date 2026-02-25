@@ -18,8 +18,6 @@ limitations under the License.
 
 #include <ostream>
 #include <sstream>
-#include <string>
-#include <utility>
 #include <vector>
 
 #include "absl/strings/str_cat.h"

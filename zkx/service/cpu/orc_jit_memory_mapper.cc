@@ -16,8 +16,6 @@ limitations under the License.
 
 #include "zkx/service/cpu/orc_jit_memory_mapper.h"
 
-#include <memory>
-
 #include "absl/base/attributes.h"
 #include "absl/base/const_init.h"
 #include "absl/base/thread_annotations.h"

@@ -20,6 +20,7 @@ limitations under the License.
 
 namespace zkx {
 
+// static
 ShardingConfigProto ShardingConfig::ToProto(const ShardingConfig& config) {
   ShardingConfigProto sharding_config_proto;
   std::function<NodeShardingConfigProto(const NodeShardingConfig&)> convert;
@@ -41,6 +42,7 @@ ShardingConfigProto ShardingConfig::ToProto(const ShardingConfig& config) {
   return sharding_config_proto;
 }
 
+// static
 ShardingConfig ShardingConfig::FromProto(const ShardingConfigProto& proto) {
   ShardingConfig config;
   std::function<NodeShardingConfig(const NodeShardingConfigProto&)> convert;

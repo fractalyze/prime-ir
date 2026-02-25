@@ -29,14 +29,11 @@ limitations under the License.
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/thread_pool.h"
-#include "zkx/executable_run_options.h"
 #include "zkx/hlo/ir/hlo_input_output_alias_config.h"
-#include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/ir/hlo_module_group.h"
 #include "zkx/service/gpu/gpu_executable_run_options.h"
 #include "zkx/service/hlo_module_util.h"
 #include "zkx/service/maybe_owning_device_memory.h"
-#include "zkx/service/service_executable_run_options.h"
 #include "zkx/service/transfer_manager.h"
 #include "zkx/shape.h"
 #include "zkx/shape_tree.h"
@@ -250,7 +247,9 @@ absl::StatusOr<Literal> HloRunner::ExecuteWithExecutable(
 // problems in rare cases (for example when the running of the HLO is
 // unsuccessful). We keep this here because too much code depends on it for
 // repeatedly running HLOs without reallocating device buffers.
-static std::vector<ExecutionInput> ExecutionInputsFromScopedShapedBuffers(
+namespace {
+
+std::vector<ExecutionInput> ExecutionInputsFromScopedShapedBuffers(
     absl::Span<ScopedShapedBuffer const> inputs,
     HloInputOutputAliasConfig alias_config, int device_ordinal,
     se::DeviceMemoryAllocator* allocator) {
@@ -280,7 +279,7 @@ static std::vector<ExecutionInput> ExecutionInputsFromScopedShapedBuffers(
 
 // Convert the owning buffer of inputs into a (partially) owning vector of
 // ExecutionInputs, and an owning vector of `OwningDeviceMemory`'s.
-static void ExecutionInputsFromMovedScopedShapedBuffers(
+void ExecutionInputsFromMovedScopedShapedBuffers(
     std::vector<ExecutionInput>* out_execution_inputs,
     std::vector<se::OwningDeviceMemory>* out_owned_args,
     std::vector<ScopedShapedBuffer> inputs,
@@ -323,6 +322,8 @@ static void ExecutionInputsFromMovedScopedShapedBuffers(
     out_execution_inputs->emplace_back(std::move(buffer_tree));
   }
 }
+
+}  // namespace
 
 absl::StatusOr<ExecutionOutput> HloRunner::ExecuteWithDeviceBuffers(
     std::unique_ptr<HloModule> module,

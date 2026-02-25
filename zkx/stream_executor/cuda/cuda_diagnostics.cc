@@ -38,7 +38,6 @@ limitations under the License.
 
 #include <sys/stat.h>
 
-#include <string>
 #include <vector>
 
 #include "absl/container/inlined_vector.h"

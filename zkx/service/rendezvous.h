@@ -258,7 +258,7 @@ class RendezvousMap {
 
       // Check that we have have exactly the number of participants we expected:
       // +1 reference for all participants and a +1 reference we extracted.
-      CHECK_EQ(state.use_count(), 1 + state->values.size());  // NOLINT
+      CHECK_EQ(state.use_count(), 1 + state->values.size());
 
       return state;
     }();
@@ -314,7 +314,7 @@ RendezvousResultType<R> Rendezvous(std::string_view name, const K& key,
   // If we got an id larger than `num_threads` it means that we have multiple
   // rendezvous sharing the same key running concurrently.
   int64_t id = state->ack.fetch_add(1);
-  CHECK_LT(id, num_threads)  // NOLINT
+  CHECK_LT(id, num_threads)
       << "Id can't be larger than the number of participating threads"
       << "; id=" << id << "; num_threads=" << num_threads;
 

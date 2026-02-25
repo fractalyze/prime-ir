@@ -291,7 +291,7 @@ class TypedKernel {
   Kernel* operator->() { return kernel_.get(); }
   const Kernel* operator->() const { return kernel_.get(); }
 
-  operator bool() const { return static_cast<bool>(kernel_); }  // NOLINT
+  operator bool() const { return static_cast<bool>(kernel_); }
 
   // Type of factory used to create a TypedKernel.
   using FactoryType = TypedKernelFactory<Params...>;

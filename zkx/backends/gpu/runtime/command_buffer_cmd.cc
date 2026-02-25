@@ -227,8 +227,9 @@ void CommandBufferCmdSequence::ClearTrackedBuffers(
   read_write_sets_[execution_stream_id] = ReadWriteSet();
 }
 
-static std::string_view RecordModeString(
-    CommandBufferCmdSequence::RecordMode mode) {
+namespace {
+
+std::string_view RecordModeString(CommandBufferCmdSequence::RecordMode mode) {
   switch (mode) {
     case CommandBufferCmdSequence::RecordMode::kExclusive:
       return "exclusive";
@@ -236,6 +237,8 @@ static std::string_view RecordModeString(
       return "conditional";
   }
 }
+
+}  // namespace
 
 absl::Status CommandBufferCmdSequence::Record(
     const Thunk::ExecuteParams& execute_params,
@@ -319,7 +322,7 @@ TracedCommandBuffer::TracedCommandBuffer(
     const CommandBufferCmd* trace_cmd,
     CommandBufferCmd::BufferUseVector buffers, int64_t capacity)
     : trace_cmd_(trace_cmd), capacity_(capacity), entries_(capacity) {
-  CHECK_GT(capacity, 0) << "capacity must be larger than 0";  // NOLINT
+  CHECK_GT(capacity, 0) << "capacity must be larger than 0";
   // Collect unique buffer allocation indices in a set first and convert to
   // vector as flat hash set iteration has measurable overheads.
   absl::flat_hash_set<BufferAllocation::Index> allocs_indices;

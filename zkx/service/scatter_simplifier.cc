@@ -30,7 +30,6 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/permutation_util.h"
 #include "zkx/service/call_inliner.h"
 #include "zkx/service/gather_scatter_utils.h"
@@ -224,6 +223,7 @@ absl::StatusOr<HloInstruction*> ScatterSimplifier::ExpandInstruction(
   return MaybeMakeTuple(result_items);
 }
 
+// static
 bool ScatterSimplifier::IsSimplifiedScatter(
     const HloScatterInstruction* scatter) {
   const auto& dims = scatter->scatter_dimension_numbers();

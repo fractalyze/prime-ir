@@ -16,18 +16,12 @@ limitations under the License.
 
 #include "zkx/service/while_loop_unroller.h"
 
-#include <cstdint>
 #include <iterator>
 #include <memory>
-#include <optional>
-#include <string_view>
-#include <utility>
-#include <vector>
 
 #include "absl/algorithm/algorithm.h"
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -40,9 +34,6 @@ limitations under the License.
 #include "zkx/hlo/analysis/while_loop_analysis.h"
 #include "zkx/hlo/evaluator/hlo_evaluator.h"
 #include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_module.h"
-#include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/hlo/pass/hlo_pass_fix.h"
 #include "zkx/hlo/transforms/simplifiers/flatten_call_graph.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_cse.h"

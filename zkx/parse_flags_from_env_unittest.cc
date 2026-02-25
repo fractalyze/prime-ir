@@ -29,7 +29,9 @@ namespace zkx {
 
 // Test that ZKX flags can be set from the environment.
 // Failure messages are accompanied by the text in msg[].
-static void TestParseFlagsFromEnv(const char* msg) {
+namespace {
+
+void TestParseFlagsFromEnv(const char* msg) {
   // Initialize module under test.
   int* pargc;
   std::vector<char*>* pargv;
@@ -61,12 +63,14 @@ static void TestParseFlagsFromEnv(const char* msg) {
 }
 
 // The flags settings to test.
-static const char kTestFlagString[] =
+const char kTestFlagString[] =
     "--simple "
     "--with_value=a_value "
     "--embedded_quotes=single'double\" "
     "--single_quoted='single quoted \\\\ \n \"' "
     "--double_quoted=\"double quoted \\\\ \n '\\\"\" ";
+
+}  // namespace
 
 // Test that the environment variable is parsed correctly.
 TEST(ParseFlagsFromEnv, Basic) {
@@ -104,7 +108,11 @@ TEST(ParseFlagsFromEnv, File) {
 }
 
 // Name of the test binary.
-static const char* binary_name;
+namespace {
+
+const char* binary_name;
+
+}  // namespace
 
 // Test that when we use both the environment variable and actual
 // command line flags (when the latter is possible), the latter win.

@@ -16,21 +16,15 @@ limitations under the License.
 #include "zkx/backends/gpu/codegen/copy.h"
 
 #include <memory>
-#include <vector>
 
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
-#include "zkx/backends/gpu/codegen/fusion_emitter.h"
 #include "zkx/backends/gpu/runtime/copy_thunk.h"
 #include "zkx/backends/gpu/runtime/thunk.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/utils/hlo_traversal.h"
-#include "zkx/service/buffer_assignment.h"
-#include "zkx/service/gpu/ir_emitter_context.h"
 #include "zkx/shape.h"
 #include "zkx/shape_util.h"
 

@@ -17,7 +17,6 @@ limitations under the License.
 #include "zkx/service/gpu/matmul_utils.h"
 
 #include <algorithm>
-#include <cstddef>
 #include <vector>
 
 #include "absl/algorithm/container.h"

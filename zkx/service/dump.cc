@@ -22,7 +22,6 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <queue>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -48,7 +47,6 @@ limitations under the License.
 #include "zkx/debug_options_flags.h"
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/service/buffer_assignment.h"
 #include "zkx/service/hlo.pb.h"

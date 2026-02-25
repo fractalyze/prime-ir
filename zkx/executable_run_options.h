@@ -311,21 +311,23 @@ class ExecutableRunOptions {
   int local_device_count() const { return local_device_count_; }
 
  private:
-  se::DeviceMemoryAllocator* allocator_ = nullptr;
+  se::DeviceMemoryAllocator* allocator_ = nullptr;  // not owned
   int device_ordinal_ = -1;
   int local_device_count_ = 0;
   int physical_device_ordinal_ = -1;
   const DeviceAssignment* device_assignment_ = nullptr;
-  se::Stream* stream_ = nullptr;
+  se::Stream* stream_ = nullptr;  // not owned
   const Eigen::ThreadPoolDevice* intra_op_thread_pool_ = nullptr;
-  ExecutionProfile* execution_profile_ = nullptr;
+  ExecutionProfile* execution_profile_ = nullptr;  // not owned
   int rng_seed_ = 0;
   int32_t launch_id_ = 0;
-  se::Stream* device_to_host_stream_ = nullptr;
-  se::Stream* host_to_device_stream_ = nullptr;
-  ThenExecuteFunction* then_execute_function_ = nullptr;
-  SendDeviceMemoryFunction* send_device_memory_function_ = nullptr;
-  RecvDeviceMemoryFunction* recv_device_memory_function_ = nullptr;
+  se::Stream* device_to_host_stream_ = nullptr;           // not owned
+  se::Stream* host_to_device_stream_ = nullptr;           // not owned
+  ThenExecuteFunction* then_execute_function_ = nullptr;  // not owned
+  SendDeviceMemoryFunction* send_device_memory_function_ =
+      nullptr;  // not owned
+  RecvDeviceMemoryFunction* recv_device_memory_function_ =
+      nullptr;  // not owned
   RunId run_id_;
   const cpu::CpuExecutableRunOptions* cpu_executable_run_options_ = nullptr;
   const gpu::GpuExecutableRunOptions* gpu_executable_run_options_ = nullptr;

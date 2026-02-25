@@ -16,13 +16,6 @@ limitations under the License.
 
 #include "zkx/service/gpu/model/fusion_analysis_cache.h"
 
-#include <utility>
-
-#include "absl/synchronization/mutex.h"
-
-#include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/service/gpu/hlo_fusion_analysis.h"
-
 namespace zkx::gpu {
 
 const HloFusionAnalysis& HloFusionAnalysisCache::Get(

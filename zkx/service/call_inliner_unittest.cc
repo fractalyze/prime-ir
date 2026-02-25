@@ -211,7 +211,7 @@ TEST_F(CallInlinerTest, CallToOutfeedComputationIsInlined) {
 }
 
 TEST_F(CallInlinerTest, InlineSingleUseCalleesOnly) {
-  const absl::string_view hlo_string = R"(
+  const std::string_view hlo_string = R"(
   HloModule inline_module
 
   a {
@@ -349,7 +349,7 @@ ENTRY %main_outer (p0: u32[]) -> u32[] {
 }
 
 TEST_F(CallInlinerTest, InlineCompositeCall) {
-  const absl::string_view hlo_string = R"(
+  const std::string_view hlo_string = R"(
   HloModule composite
 
   %add (lhs: s32[]) -> s32[] {
@@ -379,7 +379,7 @@ TEST_F(CallInlinerTest, InlineCompositeCall) {
 }
 
 TEST_F(CallInlinerTest, PreserveCompositeCall) {
-  const absl::string_view hlo_string = R"(
+  const std::string_view hlo_string = R"(
   HloModule composite
 
   %add (lhs: s32[]) -> s32[] {
@@ -509,7 +509,7 @@ TEST_F(CallInlinerTest, PreserveCompositeCall) {
 // TODO(chokobole): Enable this test. Dependency: HloInstruction::PrintWithCanonicalNameMap
 // clang-format on
 TEST_F(CallInlinerTest, DISABLED_DontInlineStreamAnnotationCall) {
-  const absl::string_view hlo_string = R"(
+  const std::string_view hlo_string = R"(
   HloModule composite
 
   %add (lhs: s32[]) -> s32[] {

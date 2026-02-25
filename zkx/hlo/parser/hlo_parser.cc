@@ -1731,7 +1731,7 @@ bool HloParserImpl::ParseInstructionRhs(HloComputation::Builder* builder,
   return AddInstruction(name, instruction, name_loc);
 }
 
-HloInstruction* HloParserImpl::CreateInstruction(  // NOLINT
+HloInstruction* HloParserImpl::CreateInstruction(
     HloComputation::Builder* builder, std::string_view name,
     std::optional<Shape> shape, HloOpcode opcode,
     std::optional<HloOpcode> async_wrapped_opcode,

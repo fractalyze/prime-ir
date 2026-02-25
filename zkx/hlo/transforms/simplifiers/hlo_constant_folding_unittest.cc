@@ -409,8 +409,7 @@ TEST_F(HloConstantFoldingTest, FoldOpsWhereOneOperandIsBroadcast) {
               GmockMatch(m::Tuple(m::Broadcast(m::Constant()),
                                   m::Add(m::Broadcast(m::Constant()),
                                          m::Broadcast(m::Constant())),
-                                  m::Constant(),
-                                  m::Constant())));  // NOLINT
+                                  m::Constant(), m::Constant())));
 }
 
 TEST_F(HloConstantFoldingTest, FoldInt4Ops) {

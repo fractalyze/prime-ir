@@ -62,7 +62,9 @@ absl::StatusOr<ScopedShapedBuffer> Executable::ExecuteOnStream(
   return result;
 }
 
-static ExecutionInput MakeMaybeOwningDeviceMemoryTree(
+namespace {
+
+ExecutionInput MakeMaybeOwningDeviceMemoryTree(
     const ShapedBuffer& shaped_buffer) {
   ExecutionInput result(shaped_buffer.on_device_shape());
   shaped_buffer.buffers().ForEachElement(
@@ -71,6 +73,8 @@ static ExecutionInput MakeMaybeOwningDeviceMemoryTree(
       });
   return result;
 }
+
+}  // namespace
 
 absl::StatusOr<ScopedShapedBuffer> Executable::ExecuteAsyncOnStream(
     const ServiceExecutableRunOptions* run_options,
@@ -152,7 +156,9 @@ struct ExecuteAsyncOnStreamWrapperState {
   ExecutionProfile* profile;
 };
 
-static ExecuteAsyncOnStreamWrapperState ExecuteWrapperBeforeExecution(
+namespace {
+
+ExecuteAsyncOnStreamWrapperState ExecuteWrapperBeforeExecution(
     const Executable& executable,
     const ServiceExecutableRunOptions* run_options) {
   ExecuteAsyncOnStreamWrapperState state;
@@ -200,6 +206,8 @@ absl::Status ExecuteWrapperAfterExecution(
 
   return return_status;
 }
+
+}  // namespace
 
 absl::StatusOr<ScopedShapedBuffer> Executable::ExecuteAsyncOnStreamWrapper(
     const ServiceExecutableRunOptions* run_options,

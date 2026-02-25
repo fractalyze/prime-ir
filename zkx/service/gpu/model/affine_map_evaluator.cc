@@ -16,14 +16,9 @@ limitations under the License.
 
 #include "zkx/service/gpu/model/affine_map_evaluator.h"
 
-#include <cstdint>
-
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "absl/types/span.h"
 #include "llvm/Support/MathExtras.h"
-#include "mlir/IR/AffineExpr.h"
-#include "mlir/IR/AffineMap.h"
 #include "mlir/Support/LLVM.h"
 
 namespace zkx::gpu {

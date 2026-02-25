@@ -101,7 +101,7 @@ class HloProfileIndexMap {
 std::unique_ptr<HloProfilePrinterData> CreateHloProfilePrinterData(
     const HloProfileIndexMap& hlo_profile_index_map,
     const HloCostAnalysis& cost_analysis,
-    absl::string_view entry_computation_name);
+    std::string_view entry_computation_name);
 
 // Describes how much time each HLO operation took.
 //

@@ -17,23 +17,16 @@ limitations under the License.
 
 #include <algorithm>
 #include <cassert>
-#include <cstdint>
-#include <memory>
 #include <numeric>
-#include <optional>
 #include <utility>
-#include <vector>
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "absl/status/status.h"
 #include "absl/types/span.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
-#include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/raw_ostream.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Utils/StaticValueUtils.h"
@@ -41,32 +34,18 @@ limitations under the License.
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
 #include "mlir/IR/Builders.h"
-#include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/Value.h"
-#include "mlir/IR/ValueRange.h"
 #include "mlir/Support/LLVM.h"
 
-#include "zkx/codegen/emitters/computation_partitioner.h"
 #include "zkx/codegen/emitters/elemental_hlo_to_mlir.h"
 #include "zkx/codegen/emitters/ir/zkx_ops.h"
 #include "zkx/hlo/analysis/indexing_analysis.h"
-#include "zkx/hlo/analysis/indexing_map.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/mlir/mlir_utils.h"
 #include "zkx/primitive_util.h"
 #include "zkx/service/gpu/gpu_fusible.h"
-#include "zkx/service/gpu/hlo_fusion_analysis.h"
 #include "zkx/service/gpu/ir_emission_utils.h"
-#include "zkx/service/gpu/launch_dimensions.h"
 #include "zkx/service/scatter_simplifier.h"
-#include "zkx/shape.h"
 #include "zkx/shape_util.h"
-#include "zkx/stream_executor/device_description.h"
-#include "zkx/util.h"
-#include "zkx/zkx_data.pb.h"
 
 namespace zkx::gpu {
 namespace {

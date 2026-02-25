@@ -686,7 +686,7 @@ class HloModule {
   // If you want to modify it, use mutable_config().
   std::shared_ptr<const HloModuleConfig> config_;
 
-  HloComputation* entry_computation_ = nullptr;
+  HloComputation* entry_computation_ = nullptr;  // not owned
   std::vector<std::unique_ptr<HloComputation>> computations_;
 
   // Random number generator engine to use when generating random numbers per

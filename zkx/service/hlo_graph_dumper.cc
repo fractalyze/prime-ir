@@ -25,12 +25,10 @@ limitations under the License.
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 
 #include "zkx/comparison_util.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_sharding.h"
 #include "zkx/shape.h"
 
@@ -40,14 +38,11 @@ limitations under the License.
 
 #include <deque>
 #include <functional>
-#include <optional>
-#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
@@ -1739,7 +1734,9 @@ static std::pair<int, int> FusionVisualizerStateKey(
 }  // namespace
 
 // Compress with zlib + b64 encode.
-static absl::StatusOr<std::string> CompressAndEncode(std::string_view input) {
+namespace {
+
+absl::StatusOr<std::string> CompressAndEncode(std::string_view input) {
   class WritableStringFile : public tsl::WritableFile {
    public:
     explicit WritableStringFile(std::string* data) : data_(data) {}
@@ -1773,12 +1770,14 @@ static absl::StatusOr<std::string> CompressAndEncode(std::string_view input) {
   return absl::StrReplaceAll(encoded, {{"_", "/"}, {"-", "+"}});
 }
 
-static std::string EscapeJSONString(std::string_view raw) {
+std::string EscapeJSONString(std::string_view raw) {
   return absl::StrCat(
       "\"",
       absl::StrReplaceAll(raw, {{"\n", "\\n"}, {"\"", "\\\""}, {"\\", "\\\\"}}),
       "\"");
 }
+
+}  // namespace
 
 absl::StatusOr<std::string> WrapFusionExplorer(
     const FusionVisualizerProgress& visualizer_progress,
@@ -1996,9 +1995,13 @@ absl::StatusOr<std::string> WrapFusionExplorer(
        {"$TITLE", graph_title}});
 }
 
-static std::string GraphTitle(const HloComputation& computation) {
+namespace {
+
+std::string GraphTitle(const HloComputation& computation) {
   return absl::StrCat(computation.parent()->name(), "_", computation.name());
 }
+
+}  // namespace
 
 absl::StatusOr<std::string> WrapFusionExplorer(
     const HloComputation& computation) {
@@ -2008,12 +2011,16 @@ absl::StatusOr<std::string> WrapFusionExplorer(
   return WrapFusionExplorer(visualizer_progress, GraphTitle(computation));
 }
 
-static absl::StatusOr<std::string> WrapDotInHtml(std::string_view dot,
-                                                 std::string_view title) {
+namespace {
+
+absl::StatusOr<std::string> WrapDotInHtml(std::string_view dot,
+                                          std::string_view title) {
   FusionVisualizerProgress progress;
   progress.AddState(dot, title, std::nullopt);
   return WrapFusionExplorer(progress, title);
 }
+
+}  // namespace
 
 // Precondition: (url_renderer != nullptr || format != kUrl).
 //
@@ -2021,9 +2028,12 @@ static absl::StatusOr<std::string> WrapDotInHtml(std::string_view dot,
 // returning an error because we want to fail quickly when there's no URL
 // renderer available, and this function runs only after we've done all the work
 // of producing dot for the graph.)
-static absl::StatusOr<std::string> WrapDotInFormat(
-    const HloComputation& computation, std::string_view dot,
-    RenderedGraphFormat format) ABSL_EXCLUSIVE_LOCKS_REQUIRED(url_renderer_mu) {
+namespace {
+
+absl::StatusOr<std::string> WrapDotInFormat(const HloComputation& computation,
+                                            std::string_view dot,
+                                            RenderedGraphFormat format)
+    ABSL_EXCLUSIVE_LOCKS_REQUIRED(url_renderer_mu) {
   switch (format) {
     case RenderedGraphFormat::kUrl:
       CHECK(url_renderer != nullptr)
@@ -2035,6 +2045,8 @@ static absl::StatusOr<std::string> WrapDotInFormat(
       return std::string(dot);
   }
 }
+
+}  // namespace
 
 void RegisterGraphToURLRenderer(
     std::function<absl::StatusOr<std::string>(std::string_view)> renderer) {

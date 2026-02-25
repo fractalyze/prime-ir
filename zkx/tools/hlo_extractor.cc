@@ -25,9 +25,7 @@ limitations under the License.
 #include <unistd.h>
 #endif
 
-#include <cstdint>
 #include <deque>
-#include <memory>
 #include <utility>
 #include <vector>
 

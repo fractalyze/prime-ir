@@ -15,15 +15,9 @@ limitations under the License.
 
 #include "zkx/tools/stablehlo_runner/stablehlo_utils.h"
 
-#include <memory>
-#include <string_view>
 #include <utility>
 
-#include "absl/status/statusor.h"
-#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/IR/OwningOpRef.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Support/LLVM.h"
 
@@ -32,7 +26,6 @@ limitations under the License.
 #include "stablehlo/dialect/Register.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/debug_options_flags.h"
-#include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/mlir/utils/error_util.h"
 #include "zkx/pjrt/mlir_to_hlo.h"
 

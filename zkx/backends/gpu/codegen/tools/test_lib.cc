@@ -15,12 +15,10 @@ limitations under the License.
 ==============================================================================*/
 #include "zkx/backends/gpu/codegen/tools/test_lib.h"
 
-#include <memory>
 #include <string>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/status/statusor.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Complex/IR/Complex.h"
@@ -34,17 +32,14 @@ limitations under the License.
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 
-#include "zkx/backends/gpu/codegen/emitters/emitter_base.h"
 #include "zkx/backends/gpu/codegen/emitters/ir/zkx_gpu_ops.h"
 #include "zkx/backends/gpu/codegen/fusions.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h"
 #include "zkx/service/gpu/gpu_device_info_for_tests.h"
-#include "zkx/service/gpu/hlo_fusion_analysis.h"
 #include "zkx/status_macros.h"
 #include "zkx/tools/hlo_module_loader.h"
 

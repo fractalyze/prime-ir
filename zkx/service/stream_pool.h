@@ -63,7 +63,7 @@ class StreamPool {
   std::unordered_map<se::StreamPriority,
                      std::vector<std::unique_ptr<se::Stream>>>
       streams_with_pri_ ABSL_GUARDED_BY(mu_);
-  se::StreamExecutor* executor_;
+  se::StreamExecutor* executor_;  // not owned
 };
 
 }  // namespace zkx

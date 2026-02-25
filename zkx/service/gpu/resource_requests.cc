@@ -33,7 +33,6 @@ limitations under the License.
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/backends/gpu/collectives/gpu_clique.h"
-#include "zkx/backends/gpu/collectives/gpu_clique_key.h"
 #include "zkx/backends/gpu/collectives/gpu_cliques.h"
 #include "zkx/core/collectives/rank_id.h"
 #include "zkx/service/gpu/gpu_executable_run_options.h"

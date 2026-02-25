@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "zkx/service/local_service_utils.h"
 
-#include <memory>
 #include <optional>
 #include <string>
 

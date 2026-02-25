@@ -18,7 +18,7 @@ limitations under the License.
 #define ZKX_STATUS_MACROS_H_
 
 #include <memory>
-#include <ostream>  // NOLINT
+#include <ostream>
 #include <sstream>
 #include <string>
 #include <utility>

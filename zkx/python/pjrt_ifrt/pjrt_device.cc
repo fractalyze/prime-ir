@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "zkx/python/pjrt_ifrt/pjrt_device.h"
 
-#include <string>
 #include <utility>
 
 #include "zkx/python/ifrt/memory.h"

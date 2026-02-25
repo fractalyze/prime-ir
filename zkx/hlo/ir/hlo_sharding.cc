@@ -308,6 +308,7 @@ HloSharding HloSharding::Subgroup(
   return create_sharding(tile_assignment, subgroup_types, metadata);
 }
 
+// static
 HloSharding HloSharding::Tuple(const ShapeTree<HloSharding>& sub_shardings) {
   std::vector<HloSharding> flattened_list;
   flattened_list.reserve(sub_shardings.leaf_count());
@@ -325,6 +326,7 @@ HloSharding HloSharding::Tuple(const ShapeTree<HloSharding>& sub_shardings) {
   return HloSharding(flattened_list);
 }
 
+// static
 HloSharding HloSharding::Tuple(const Shape& tuple_shape,
                                absl::Span<const HloSharding> shardings) {
   CHECK(tuple_shape.IsTuple()) << ShapeUtil::HumanString(tuple_shape);
@@ -352,6 +354,7 @@ HloSharding HloSharding::SingleTuple(const Shape& tuple_shape,
   return HloSharding(std::move(flattened_list));
 }
 
+// static
 HloSharding HloSharding::Single(const Shape& shape,
                                 const HloSharding& sharding) {
   return shape.IsTuple() ? SingleTuple(shape, sharding) : sharding;
@@ -581,6 +584,7 @@ std::vector<int64_t> HloSharding::TileLimitForDevice(const Shape& shape,
   return index;
 }
 
+// static
 int64_t HloSharding::RequiredLeaves(const Shape& shape) {
   // Empty tuples (with arbitrary nesting) have no leaf nodes as far as
   // ShapeUtil and ShapeTree are concerned, but they do have a single

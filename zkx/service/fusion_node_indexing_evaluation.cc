@@ -16,11 +16,7 @@ limitations under the License.
 
 #include "zkx/service/fusion_node_indexing_evaluation.h"
 
-#include "absl/container/flat_hash_map.h"
-#include "absl/container/flat_hash_set.h"
-
 #include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 
 namespace zkx {

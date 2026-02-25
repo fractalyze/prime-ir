@@ -32,7 +32,9 @@ limitations under the License.
 
 namespace zkx::gpu {
 
-static GpuCliqueKey GetBaseCliqueKey() {
+namespace {
+
+GpuCliqueKey GetBaseCliqueKey() {
   return GpuCliqueKey({GlobalDeviceId(0), GlobalDeviceId(1)},
                       CollectiveStreamId(0), AsyncStreamKind::kCollective,
                       std::vector<std::vector<GlobalDeviceId>>{
@@ -40,6 +42,8 @@ static GpuCliqueKey GetBaseCliqueKey() {
                           {GlobalDeviceId(2), GlobalDeviceId(3)}},
                       GlobalDeviceId(0));
 }
+
+}  // namespace
 
 TEST(GpuCliqueKeyTest, IsSubsetOf) {
   GlobalDeviceId id0 = GlobalDeviceId(0);

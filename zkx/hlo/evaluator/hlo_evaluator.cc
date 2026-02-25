@@ -21,7 +21,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <atomic>
-#include <functional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -30,7 +29,6 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/base/internal/endian.h"
 #include "absl/cleanup/cleanup.h"
-#include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
 #include "absl/log/log.h"
@@ -1146,6 +1144,7 @@ std::vector<int64_t> HloEvaluator::GetS64Indices(
   return start;
 }
 
+// static
 DimensionVector HloEvaluator::MakeDimMultipliers(const Shape& shape) {
   DimensionVector v(shape.rank());
   int64_t scale = 1;
@@ -3490,11 +3489,15 @@ absl::Status HloEvaluator::HandleReduce(const HloInstruction* hlo) {
 
 // Evaluate the reduction body for a single output element by iterating
 // through the window and applying the reduce function.
-static Literal EvaluateReduceWindowElement(
-    absl::Span<const int64_t> output_index, const Shape& window_shape,
-    const Window& window, const Literal& input_literal,
-    const Literal& init_literal, HloComputation* function,
-    HloEvaluator& embedded_evaluator) {
+namespace {
+
+Literal EvaluateReduceWindowElement(absl::Span<const int64_t> output_index,
+                                    const Shape& window_shape,
+                                    const Window& window,
+                                    const Literal& input_literal,
+                                    const Literal& init_literal,
+                                    HloComputation* function,
+                                    HloEvaluator& embedded_evaluator) {
   Literal computed_result = init_literal.Clone();
 
   IterateThroughWindow(
@@ -3511,6 +3514,8 @@ static Literal EvaluateReduceWindowElement(
 
   return computed_result;
 }
+
+}  // namespace
 
 absl::Status HloEvaluator::HandleReduceWindow(const HloInstruction* hlo) {
   auto* reduce_window = Cast<HloReduceWindowInstruction>(hlo);

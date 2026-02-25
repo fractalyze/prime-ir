@@ -134,13 +134,17 @@ absl::StatusOr<JitCompiler> JitCompiler::Create(
       options.num_dylibs, std::move(options.definition_generator));
 }
 
-static std::unique_ptr<llvm::orc::IRCompileLayer> CreateCompileLayer(
+namespace {
+
+std::unique_ptr<llvm::orc::IRCompileLayer> CreateCompileLayer(
     llvm::orc::ExecutionSession& execution_session,
     llvm::orc::RTDyldObjectLinkingLayer& object_layer,
     std::unique_ptr<IrCompiler> ir_compiler) {
   return std::make_unique<llvm::orc::IRCompileLayer>(
       execution_session, object_layer, std::move(ir_compiler));
 }
+
+}  // namespace
 
 JitCompiler::JitCompiler(
     IrCompiler::TargetMachineBuilder target_machine_builder,

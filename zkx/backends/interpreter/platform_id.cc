@@ -16,8 +16,6 @@ limitations under the License.
 
 #include "zkx/backends/interpreter/platform_id.h"
 
-#include "zkx/stream_executor/platform.h"
-
 namespace stream_executor::interpreter {
 
 PLATFORM_DEFINE_ID(kZkxInterpreterPlatformId);

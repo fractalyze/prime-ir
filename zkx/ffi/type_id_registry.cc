@@ -22,7 +22,6 @@ limitations under the License.
 #include "absl/base/attributes.h"
 #include "absl/base/const_init.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/synchronization/mutex.h"
 
@@ -33,11 +32,16 @@ ABSL_CONST_INIT absl::Mutex type_registry_mutex(absl::kConstInit);
 using ExternalTypeIdRegistry =
     absl::flat_hash_map<std::string, TypeIdRegistry::TypeId>;
 
-static ExternalTypeIdRegistry& StaticExternalTypeIdRegistry() {
+namespace {
+
+ExternalTypeIdRegistry& StaticExternalTypeIdRegistry() {
   static auto* registry = new ExternalTypeIdRegistry();
   return *registry;
 }
 
+}  // namespace
+
+// static
 TypeIdRegistry::TypeId TypeIdRegistry::GetNextTypeId() {
   static auto* counter = new std::atomic<int64_t>(1);
   return TypeId(counter->fetch_add(1));

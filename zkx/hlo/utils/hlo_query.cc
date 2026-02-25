@@ -17,7 +17,6 @@ limitations under the License.
 #include "zkx/hlo/utils/hlo_query.h"
 
 #include <algorithm>
-#include <cstdint>
 
 #include "absl/algorithm/container.h"
 #include "absl/log/check.h"

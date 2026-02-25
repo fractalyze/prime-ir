@@ -88,7 +88,7 @@ class CallSite {
 
  private:
   // The calling instruction.
-  HloInstruction* instruction_;
+  HloInstruction* instruction_;  // not owned
 
   // The computations called by this callsite.
   const absl::InlinedVector<HloComputation*, 2> called_computations_;
@@ -164,7 +164,7 @@ class CallGraphNode {
       const absl::flat_hash_set<std::string_view>& execution_threads = {});
 
   // Computation represented by this call graph node.
-  HloComputation* computation_;
+  HloComputation* computation_;  // not owned
 
   // The computations called by this computation. The vector is used for a
   // stable ordering and the set enables fast membership testing.

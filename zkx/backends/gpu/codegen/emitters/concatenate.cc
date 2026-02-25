@@ -16,35 +16,22 @@ limitations under the License.
 
 #include "zkx/backends/gpu/codegen/emitters/concatenate.h"
 
-#include <cstdint>
 #include <numeric>
-#include <optional>
-#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "absl/status/status.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
-#include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
 
-#include "zkx/codegen/emitters/computation_partitioner.h"
 #include "zkx/codegen/emitters/elemental_hlo_to_mlir.h"
 #include "zkx/hlo/analysis/indexing_analysis.h"
-#include "zkx/hlo/analysis/indexing_map.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
-#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/service/gpu/gpu_fusible.h"
-#include "zkx/service/gpu/hlo_fusion_analysis.h"
-#include "zkx/service/gpu/launch_dimensions.h"
-#include "zkx/shape.h"
 
 namespace zkx::gpu {
 namespace {

@@ -18,7 +18,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdlib>
-#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/log/check.h"

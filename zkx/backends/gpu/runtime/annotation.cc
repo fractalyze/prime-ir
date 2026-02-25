@@ -18,14 +18,11 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <iterator>
-#include <optional>
 #include <ostream>
 #include <set>
 #include <sstream>
-#include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
@@ -403,6 +400,7 @@ auto schema_entry(uint64_t type, const char* name, uint64_t offset) {
 }  // namespace
 #endif
 
+// static
 uint64_t ModuleAnnotation::NvtxSchemaId() {
   static std::uint64_t schema_id = []() -> std::uint64_t {
 #if GOOGLE_CUDA
@@ -477,6 +475,7 @@ KernelAnnotation::KernelAnnotation(const ModuleAnnotation& module_annotation,
 ModuleAnnotations::ModuleAnnotations(std::string_view module_name)
     : top_level(module_name) {}
 
+// static
 uint64_t KernelAnnotation::NvtxSchemaId() {
   static std::uint64_t schema_id = []() -> std::uint64_t {
 #if GOOGLE_CUDA

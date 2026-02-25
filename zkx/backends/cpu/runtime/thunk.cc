@@ -24,6 +24,7 @@ limitations under the License.
 
 namespace zkx::cpu {
 
+// static
 std::string_view Thunk::KindToString(Kind kind) {
   switch (kind) {
     case Kind::kAllGather:

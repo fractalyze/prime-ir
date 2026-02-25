@@ -208,6 +208,7 @@ CompiledMemoryStatsProto CompiledMemoryStats::ToProto() const {
   return proto;
 }
 
+// static
 CompiledMemoryStats CompiledMemoryStats::FromProto(
     const CompiledMemoryStatsProto& proto) {
   CompiledMemoryStats stats;

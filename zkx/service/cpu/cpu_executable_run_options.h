@@ -35,7 +35,7 @@ class CpuExecutableRunOptions {
  private:
   // For cross-process collectives, use this collective implementation to
   // communicate.
-  CpuCollectives* collectives_;
+  CpuCollectives* collectives_;  // not owned
 };
 
 }  // namespace zkx::cpu

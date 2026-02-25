@@ -41,7 +41,6 @@ limitations under the License.
 #include "mlir/IR/BuiltinTypeInterfaces.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/Matchers.h"
-#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Transforms/InliningUtils.h"
@@ -51,7 +50,6 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/IR/Attributes.h"
-#include "zkx/mlir_hlo/mhlo/IR/hlo_ops.h.inc"
 #include "zkx/mlir_hlo/utils/convert_op_folder.h"
 #include "zkx/mlir_hlo/utils/hlo_utils.h" // IWYU pragma: keep
 
@@ -1945,8 +1943,9 @@ IfOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         inferredReturnTypes);
 }
 
-static LogicalResult inlineIfConstantCondition(IfOp ifOp,
-                                               PatternRewriter &rewriter) {
+namespace {
+
+LogicalResult inlineIfConstantCondition(IfOp ifOp, PatternRewriter &rewriter) {
   DenseIntElementsAttr predAttr;
   if (!matchPattern(ifOp.getPred(), m_Constant(&predAttr)))
     return failure();
@@ -1958,6 +1957,8 @@ static LogicalResult inlineIfConstantCondition(IfOp ifOp,
   }
   return success();
 }
+
+} // namespace
 
 void IfOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                        MLIRContext *context) {
@@ -2777,9 +2778,11 @@ LogicalResult ReverseOp::verify() {
       llvm::to_vector(getDimensions().getValues<int64_t>()));
 }
 
+namespace {
+
 template <typename T>
-static Attribute foldReverseHelper(DenseElementsAttr &attr, ShapedType &type,
-                                   DenseIntElementsAttr &dims) {
+Attribute foldReverseHelper(DenseElementsAttr &attr, ShapedType &type,
+                            DenseIntElementsAttr &dims) {
   int64_t numElements = attr.getNumElements();
   // No-op if the tensor has 0 elements.
   // No-op if the result of folding is too large.
@@ -2836,6 +2839,8 @@ static Attribute foldReverseHelper(DenseElementsAttr &attr, ShapedType &type,
   }
   return DenseElementsAttr::get(type, result);
 }
+
+} // namespace
 
 OpFoldResult ReverseOp::fold(FoldAdaptor adaptor) {
   auto operands = adaptor.getOperands();
@@ -3907,8 +3912,10 @@ LogicalResult WhileOp::fold(FoldAdaptor /*adaptor*/,
   return success(!results.empty());
 }
 
-static LogicalResult whileCanonicalization(WhileOp whileOp,
-                                           PatternRewriter &rewriter) {
+namespace {
+
+LogicalResult whileCanonicalization(WhileOp whileOp,
+                                    PatternRewriter &rewriter) {
   // Turn loop invariant values into implicit capture.
   // Check if there is at least one value is forwarded from one iteration to the
   // next, or one of the yielded value is an implicit capture already. Otherwise
@@ -3964,6 +3971,8 @@ static LogicalResult whileCanonicalization(WhileOp whileOp,
   rewriter.eraseOp(whileOp);
   return success();
 }
+
+} // namespace
 
 void WhileOp::getCanonicalizationPatterns(RewritePatternSet &results,
                                           MLIRContext *context) {

@@ -102,7 +102,7 @@ class StreamCommon : public Stream {
 
  private:
   // The StreamExecutor that supports the operation of this stream.
-  StreamExecutor* parent_;
+  StreamExecutor* parent_;  // not owned
 
   // mutex that guards the allocation / error state flags.
   // Mutable so that it can be obtained via const reader lock.

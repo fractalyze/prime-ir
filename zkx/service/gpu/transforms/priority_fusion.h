@@ -81,7 +81,7 @@ class PriorityFusion : public HloModulePass {
   FusionDecision CanFuseConstant(const HloInstruction* constant,
                                  const HloInstruction* user);
 
-  tsl::thread::ThreadPool* thread_pool_;
+  tsl::thread::ThreadPool* thread_pool_;  // not owned
   se::DeviceDescription device_info_;
 
   // Cost model options that defines priorities in the queue.

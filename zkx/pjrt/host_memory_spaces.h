@@ -53,7 +53,7 @@ class UnpinnedHostMemorySpace : public PjRtMemorySpace {
 
  private:
   int id_;
-  PjRtDevice* device_ = nullptr;
+  PjRtDevice* device_ = nullptr;  // not owned
   std::string debug_string_;
   std::string to_string_;
 };
@@ -87,7 +87,7 @@ class PinnedHostMemorySpace : public PjRtMemorySpace {
 
  private:
   int id_;
-  PjRtDevice* device_ = nullptr;
+  PjRtDevice* device_ = nullptr;  // not owned
   std::string debug_string_;
   std::string to_string_;
 };

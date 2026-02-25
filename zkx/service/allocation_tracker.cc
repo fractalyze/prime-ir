@@ -51,10 +51,14 @@ absl::StatusOr<GlobalDataHandle> AllocationTracker::RegisterReplicatedBuffers(
 // ReleaseIfScopedShapedBuffer lets RegisterInternal<ShapedBufferTy>(b) call
 // b.release() if b is a ScopedShapedBuffer, or otherwise pass b through
 // unmodified.
-static ShapedBuffer ReleaseIfScopedShapedBuffer(ShapedBuffer b) { return b; }
-static ShapedBuffer ReleaseIfScopedShapedBuffer(ScopedShapedBuffer b) {
+namespace {
+
+ShapedBuffer ReleaseIfScopedShapedBuffer(ShapedBuffer b) { return b; }
+ShapedBuffer ReleaseIfScopedShapedBuffer(ScopedShapedBuffer b) {
   return b.release();
 }
+
+}  // namespace
 
 template <typename ShapedBufferTy>
 absl::StatusOr<GlobalDataHandle> AllocationTracker::RegisterInternal(

@@ -42,6 +42,7 @@ Thunk::ResourceUses CollectiveThunk::resource_uses() const {
   return {ResourceUse::Write(op_resources_.communicator_resource)};
 }
 
+// static
 bool CollectiveThunk::IsDataTypeSupportedByCollectiveReduce(
     PrimitiveType datatype) {
   switch (datatype) {

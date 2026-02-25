@@ -58,10 +58,14 @@ struct ProcessCpuCliques {
 }  // namespace
 
 // Returns process-local CPU cliques.
-static ProcessCpuCliques& GetProcessCpuCliques() {
+namespace {
+
+ProcessCpuCliques& GetProcessCpuCliques() {
   static auto* cliques = absl::IgnoreLeak(new ProcessCpuCliques);
   return *cliques;
 }
+
+}  // namespace
 
 //===----------------------------------------------------------------------===//
 

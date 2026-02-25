@@ -24,7 +24,6 @@ limitations under the License.
 
 #include "absl/log/log.h"
 #include "absl/strings/strip.h"
-#include "absl/types/span.h"
 
 #include "xla/tsl/platform/platform.h"
 #if defined(PLATFORM_POSIX)

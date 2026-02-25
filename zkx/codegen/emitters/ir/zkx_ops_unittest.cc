@@ -154,7 +154,7 @@ s1: no constraints
 }
 
 TEST_F(ZKXOpsTest, BackendKindGetAndSet) {
-  constexpr absl::string_view kHloModule = R"(
+  constexpr std::string_view kHloModule = R"(
   module {
     func.func public @main(%arg0: i32) -> i32
         attributes {zkx.backend_kind = #zkx.backend_kind<cpu>} {
@@ -175,7 +175,7 @@ TEST_F(ZKXOpsTest, BackendKindGetAndSet) {
   std::string mlir_dump;
   llvm::raw_string_ostream mlir_stream(mlir_dump);
   module->print(mlir_stream);
-  constexpr absl::string_view kExpected = R"(
+  constexpr std::string_view kExpected = R"(
     CHECK-NOT: {zkx.backend_kind = #zkx.backend_kind<cpu>}
     CHECK:     {zkx.backend_kind = #zkx.backend_kind<gpu>}
     CHECK-NOT: {zkx.backend_kind = #zkx.backend_kind<cpu>}
@@ -186,7 +186,7 @@ TEST_F(ZKXOpsTest, BackendKindGetAndSet) {
 }
 
 TEST_F(ZKXOpsTest, BackendKindCannotGetWrongAttributeName) {
-  constexpr absl::string_view kHloModule = R"(
+  constexpr std::string_view kHloModule = R"(
   module {
     func.func public @main(%arg0: i32) -> i32
         attributes {zkx.foo = #zkx.backend_kind<gpu>} {

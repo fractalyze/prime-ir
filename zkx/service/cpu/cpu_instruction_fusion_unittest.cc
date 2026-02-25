@@ -710,7 +710,7 @@ TEST_F(OpcodeFusionTest, DotAddOutputFusion_19x50x1_multi_use) {
 
 TEST_F(InstructionFusionTest,
        DotOperationFusion_DontOutputFuseDuplicateOperands) {
-  absl::string_view module_string = R"(
+  std::string_view module_string = R"(
 HloModule module
 
 ENTRY main {
@@ -882,7 +882,7 @@ INSTANTIATE_TEST_SUITE_P(GatherLoopFusionTestInstantiation,
                          GatherLoopFusionTestSpec::Name);
 
 TEST_F(InstructionFusionTest, NoFuseReduceMajor) {
-  absl::string_view module_string = R"(
+  std::string_view module_string = R"(
 HloModule module
 
 add {
@@ -910,7 +910,7 @@ ENTRY main {
 }
 
 TEST_F(InstructionFusionTest, FuseReduceMinor) {
-  absl::string_view module_string = R"(
+  std::string_view module_string = R"(
 HloModule module
 
 add {
@@ -937,7 +937,7 @@ ENTRY main {
 }
 
 TEST_F(OpcodeFusionTest, BigConstantNotInFusion) {
-  absl::string_view module_string = R"(
+  std::string_view module_string = R"(
 HloModule module
 
 ENTRY main {
@@ -957,7 +957,7 @@ ENTRY main {
 }
 
 TEST_F(OpcodeFusionTest, SmallConstantInFusion) {
-  absl::string_view module_string = R"(
+  std::string_view module_string = R"(
 HloModule module
 
 ENTRY main {
@@ -977,7 +977,7 @@ ENTRY main {
 }
 
 TEST_F(InstructionFusionTest, SkipCustomFusions) {
-  absl::string_view module_string = R"(
+  std::string_view module_string = R"(
 HloModule module
 
 %fused_computation (param_0: s32[10,10], param_1: s32[10,10]) -> s32[10,10] {
@@ -1004,7 +1004,7 @@ ENTRY %main (Arg_0: s32[10,10], Arg_1: s32[10,10]) -> s32[10,10] {
 
 // TODO(batzor): Enable this test. Dependency: CustomCall
 TEST_F(InstructionFusionTest, DISABLED_SkipComputationsAttachedToCustomCalls) {
-  absl::string_view module_string = R"(
+  std::string_view module_string = R"(
 HloModule module
 
 %custom_computation (param_0: s32[10,10], param_1: s32[10,10]) -> s32[10,10]

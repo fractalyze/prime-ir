@@ -83,7 +83,7 @@ class OwningScratchAllocator : public ScratchAllocator {
 
  private:
   int device_ordinal_;
-  DeviceMemoryAllocator* allocator_;
+  DeviceMemoryAllocator* allocator_;  // not owned
   absl::InlinedVector<OwningDeviceMemory, N> buffers_;
 };
 

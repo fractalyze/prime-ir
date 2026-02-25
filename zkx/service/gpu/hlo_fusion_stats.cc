@@ -16,17 +16,11 @@ limitations under the License.
 
 #include "zkx/service/gpu/hlo_fusion_stats.h"
 
-#include <set>
-#include <string>
-
-#include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 
 #include "xla/tsl/platform/errors.h"
-#include "zkx/hlo/ir/dfs_hlo_visitor_with_default.h"
 #include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 
 namespace zkx::gpu {

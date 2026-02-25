@@ -22,7 +22,6 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
 
-#include "xla/tsl/concurrency/ref_count.h"
 #include "zkx/python/ifrt/future.h"
 
 namespace zkx::ifrt {

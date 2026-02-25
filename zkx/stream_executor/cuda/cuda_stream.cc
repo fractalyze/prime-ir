@@ -30,7 +30,6 @@ limitations under the License.
 #include "xla/tsl/profiler/lib/nvtx_utils.h"
 #include "zkx/stream_executor/activate_context.h"
 #include "zkx/stream_executor/cuda/cuda_context.h"
-#include "zkx/stream_executor/cuda/cuda_event.h"
 #include "zkx/stream_executor/cuda/cuda_status.h"
 
 namespace stream_executor::gpu {

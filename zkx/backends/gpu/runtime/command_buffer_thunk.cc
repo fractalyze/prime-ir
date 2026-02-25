@@ -281,11 +281,13 @@ struct CommandBufferThunk::GlobalState {
       ABSL_GUARDED_BY(mutex);
 };
 
+// static
 CommandBufferThunk::GlobalState* CommandBufferThunk::GetGlobalState() {
   static auto* global_state = new GlobalState();
   return global_state;
 }
 
+// static
 void CommandBufferThunk::TrackCommandBuffers(
     std::weak_ptr<CommandBufferThunk::State> state) {
   auto* global_state = GetGlobalState();
@@ -293,6 +295,7 @@ void CommandBufferThunk::TrackCommandBuffers(
   global_state->state.push_back(state);
 }
 
+// static
 void CommandBufferThunk::EvictCommandBuffers() {
   tsl::profiler::TraceMe trace([&] { return "EvictCommandBuffers"; });
 

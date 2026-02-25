@@ -91,7 +91,7 @@ class TfrtCpuDevice final : public PjRtDevice {
   }
 
  private:
-  PjRtClient* client_ = nullptr;
+  PjRtClient* client_ = nullptr;  // not owned
   CpuDeviceDescription description_;
   absl::InlinedVector<PjRtMemorySpace*, 1> memory_spaces_;
   absl::flat_hash_map<int, PjRtMemorySpace*> memory_spaces_by_id_;

@@ -139,7 +139,8 @@ class HostCallbackContext {
  private:
   HostCallback host_callback_;
   bool use_major_to_minor_data_layout_for_callbacks_;
-  PjRtHostMemoryForDeviceManager* host_memory_for_device_manager_ = nullptr;
+  PjRtHostMemoryForDeviceManager* host_memory_for_device_manager_ =
+      nullptr;  // not owned
   std::vector<PjRtChunk> args_;
   std::vector<std::unique_ptr<ThreadSafePjRtChunkQueue>> result_channels_;
   std::atomic<int> ready_count_;

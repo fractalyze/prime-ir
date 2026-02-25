@@ -211,7 +211,7 @@ class Flag : public FlagBase, public FlagBuilder<Flag<T>, T> {
   absl::Status ParseValue(std::string_view arg) override;
   absl::Status ParseValueFromEnvironment() override;
 
-  T* value_ = nullptr;
+  T* value_ = nullptr;  // not owned
   ParseValueCallback parse_value_callback_;
   std::string env_name_;
 };
@@ -392,7 +392,7 @@ class RangeFlag : public FlagBase, public RangeFlagBuilder<RangeFlag<T>, T> {
   absl::Status ParseValue(std::string_view arg) override;
   absl::Status ParseValueFromEnvironment() override;
 
-  T* value_ = nullptr;
+  T* value_ = nullptr;  // not owned
   T start_;
   T end_;
   bool greater_than_or_equal_to_ = false;

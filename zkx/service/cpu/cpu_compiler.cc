@@ -17,7 +17,6 @@ limitations under the License.
 #include "zkx/service/cpu/cpu_compiler.h"
 
 #include <functional>
-#include <vector>
 
 #include "absl/debugging/leak_check.h"
 #include "absl/log/check.h"

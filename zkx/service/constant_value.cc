@@ -16,9 +16,6 @@ limitations under the License.
 
 #include "zkx/service/constant_value.h"
 
-#include <cstdint>
-#include <string>
-
 #include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"

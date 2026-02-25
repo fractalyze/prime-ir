@@ -20,4 +20,5 @@ package(default_visibility = ["//visibility:public"])
 zkx_cc_library(
     name = "counter",
     hdrs = ["counter.h"],
+    deps = ["@com_google_absl//absl/status"],
 )

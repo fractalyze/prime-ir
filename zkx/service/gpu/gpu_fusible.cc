@@ -17,29 +17,19 @@ limitations under the License.
 #include "zkx/service/gpu/gpu_fusible.h"
 
 #include <algorithm>
-#include <cstddef>
-#include <cstdint>
 #include <optional>
 #include <utility>
-#include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_set.h"
-#include "absl/container/inlined_vector.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/numeric/bits.h"
-#include "absl/synchronization/mutex.h"
 
 #include "zkx/hlo/analysis/hlo_dataflow_analysis.h"
-#include "zkx/hlo/ir/hlo_computation.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
-#include "zkx/hlo/utils/hlo_traversal.h"
 #include "zkx/permutation_util.h"
 #include "zkx/service/gpu/ir_emission_utils.h"
 #include "zkx/service/gpu/reduction_utils.h"
-#include "zkx/service/instruction_fusion.h"
 #include "zkx/shape_util.h"
 #include "zkx/side_effect_util.h"
 #include "zkx/util.h"
@@ -481,8 +471,10 @@ FusionDecision IsProducerMultiOutputFusible(
 
 // Returns an estimate of the shared memory usage for a given instruction in
 // bytes.
-static int64_t SharedMemoryUsageNoCache(
-    const HloInstruction& instr, const se::DeviceDescription& device_info) {
+namespace {
+
+int64_t SharedMemoryUsageNoCache(const HloInstruction& instr,
+                                 const se::DeviceDescription& device_info) {
   if (instr.opcode() == HloOpcode::kFusion) {
     int64_t sum = 0;
     for (const HloInstruction* hlo :
@@ -521,6 +513,8 @@ static int64_t SharedMemoryUsageNoCache(
   return 0;
 }
 
+}  // namespace
+
 int64_t FusionInfoCache::GetSharedMemoryUsage(const HloInstruction& instr) {
   {
     absl::MutexLock lock(&mutex_);
@@ -554,8 +548,10 @@ int64_t SharedMemoryUsage(const HloInstruction& instr, FusionInfoCache* cache,
 constexpr int64_t kMaxUnnestedReductionOutputsPerFusion = 8;
 
 // Returns the number of unnested reductions in the instruction output.
-static int64_t NumUnnestedReductionsNoCache(
-    const HloInstruction& instr, const se::DeviceDescription& device_info) {
+namespace {
+
+int64_t NumUnnestedReductionsNoCache(const HloInstruction& instr,
+                                     const se::DeviceDescription& device_info) {
   if (instr.opcode() == HloOpcode::kReduce &&
       IsReductionFromOrToContiguousDimensions(instr, device_info)) {
     return 1;
@@ -570,6 +566,8 @@ static int64_t NumUnnestedReductionsNoCache(
   }
   return 0;
 }
+
+}  // namespace
 
 int64_t FusionInfoCache::GetNumUnnestedReductions(const HloInstruction& instr) {
   {
@@ -592,15 +590,19 @@ int64_t FusionInfoCache::GetNumUnnestedReductions(const HloInstruction& instr) {
   return num_unnested_reductions;
 }
 
-static int64_t NumUnnestedReductions(const HloInstruction& instr,
-                                     FusionInfoCache* cache,
-                                     const se::DeviceDescription& device_info) {
+namespace {
+
+int64_t NumUnnestedReductions(const HloInstruction& instr,
+                              FusionInfoCache* cache,
+                              const se::DeviceDescription& device_info) {
   if (!cache) {
     return NumUnnestedReductionsNoCache(instr, device_info);
   }
 
   return cache->GetNumUnnestedReductions(instr);
 }
+
+}  // namespace
 
 // This function limits the maximum number of operands to a fusion, and the
 // amount of shared memory which can be consumed by the fusion.
@@ -779,8 +781,10 @@ size_t GetOutputSizeOfFusible(const HloInstruction& instr) {
 }
 
 // Recursive helper for GetFusionRoots below.
-static void GetFusionRootsRec(const HloInstruction* root,
-                              std::vector<const HloInstruction*>& out) {
+namespace {
+
+void GetFusionRootsRec(const HloInstruction* root,
+                       std::vector<const HloInstruction*>& out) {
   if (root->opcode() == HloOpcode::kGetTupleElement &&
       root->operand(0)->opcode() == HloOpcode::kTuple) {
     return GetFusionRootsRec(root->operand(0)->operand(root->tuple_index()),
@@ -795,6 +799,8 @@ static void GetFusionRootsRec(const HloInstruction* root,
     out.push_back(root);
   }
 }
+
+}  // namespace
 
 std::vector<const HloInstruction*> GetFusionRoots(
     const HloComputation& computation) {

@@ -70,7 +70,7 @@ class ContiguousSectionMemoryManager : public llvm::RTDyldMemoryManager {
   bool finalizeMemory(std::string* err_msg) override;
 
  private:
-  llvm::SectionMemoryManager::MemoryMapper* mmapper_;
+  llvm::SectionMemoryManager::MemoryMapper* mmapper_;  // not owned
   bool mmapper_is_owned_;
 
   llvm::sys::MemoryBlock allocation_;

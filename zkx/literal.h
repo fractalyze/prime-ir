@@ -1100,7 +1100,7 @@ class MutableBorrowingLiteral : public MutableLiteralBase {
   // not the content.
   void CopyPieceSubtree(const Shape& shape, const Piece* src_piece,
                         Piece* dest_piece);
-  Piece* root_piece_ = nullptr;
+  Piece* root_piece_ = nullptr;  // not owned
 };
 
 // A read-only view of a Literal. A LiteralSlice contains pointers to shape and

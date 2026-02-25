@@ -70,7 +70,9 @@ const char kModulePrefix[] = R"(
       ROOT mul.1 = s32[] multiply(scalar_lhs.1, scalar_rhs.1)
     })";
 
-static int64_t CountMultiOutputFusions(const HloModule* module) {
+namespace {
+
+int64_t CountMultiOutputFusions(const HloModule* module) {
   int multi_output_fusion_count = 0;
   for (auto* computation : module->MakeNonfusionComputations()) {
     for (auto* instr : computation->instructions()) {
@@ -81,6 +83,8 @@ static int64_t CountMultiOutputFusions(const HloModule* module) {
   }
   return multi_output_fusion_count;
 }
+
+}  // namespace
 
 TEST_F(MultiOutputFusionTest, MultiOutputFusionSiblingReduceAndReduceFusion) {
   // Fusion with reduce instruction root and a sibling reduce instruction

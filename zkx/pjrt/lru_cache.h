@@ -101,7 +101,7 @@ class LRUCache {
   auto end() const { return entries_.end(); }
 
  private:
-  LRUList* lru_list_;
+  LRUList* lru_list_;  // not owned
 
   struct Entry : public LRUListEntry {
     Entry() = default;

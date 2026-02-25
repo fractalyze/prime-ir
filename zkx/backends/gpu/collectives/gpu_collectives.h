@@ -38,7 +38,7 @@ class GpuCollectives : public Collectives {
   static GpuCollectives* Default();
 
   // A callback to get a unique clique id.
-  using CliqueIdCallback =  // NOLINT
+  using CliqueIdCallback =
       std::function<absl::StatusOr<CliqueId>(const CliqueKey&)>;
 
   // GPU collectives device is just a wrapper around the StreamExecutor.

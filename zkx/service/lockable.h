@@ -96,7 +96,7 @@ class Lockable {
   ~Lockable() {
     VLOG(2) << "Destroy " << LockableName::ToString(value_);
     absl::MutexLock lock(&mutex_);
-    CHECK_EQ(is_unlocked_, true);  // NOLINT
+    CHECK_EQ(is_unlocked_, true);
   }
 
   Lock Acquire() {
@@ -138,7 +138,7 @@ class Lockable {
   void Release() {
     absl::MutexLock lock(&mutex_);
     VLOG(2) << "Released " << LockableName::ToString(value_);
-    CHECK(!is_unlocked_);  // NOLINT
+    CHECK(!is_unlocked_);
     is_unlocked_ = true;
   }
 

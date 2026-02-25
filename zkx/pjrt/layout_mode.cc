@@ -16,7 +16,6 @@ limitations under the License.
 
 #include "zkx/pjrt/layout_mode.h"
 
-#include <optional>
 #include <utility>
 
 #include "absl/status/status.h"

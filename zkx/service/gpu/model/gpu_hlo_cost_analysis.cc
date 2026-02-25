@@ -18,29 +18,20 @@ limitations under the License.
 
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
-#include <memory>
-#include <string_view>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
-#include "absl/status/status.h"
 #include "absl/strings/match.h"
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_module.h"
-#include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/service/collective_ops_utils.h"
-#include "zkx/service/hlo_cost_analysis.h"
 #include "zkx/service/hlo_module_config.h"
-#include "zkx/shape.h"
 #include "zkx/shape_util.h"
 
 namespace zkx {

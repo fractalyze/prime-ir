@@ -17,7 +17,6 @@ limitations under the License.
 #include "zkx/backends/cpu/collectives/gloo_communicator.h"
 
 #include <cstring>
-#include <memory>
 #include <vector>
 
 #include "absl/log/log.h"

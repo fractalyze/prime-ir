@@ -78,7 +78,7 @@ class GpuExecutableRunOptions {
   bool enable_mock_collectives_ = false;
   std::optional<std::map<int, GlobalDeviceId>> gpu_global_device_ids_;
   CliqueIdCallback clique_id_callback_;
-  GpuCollectives* collectives_;
+  GpuCollectives* collectives_;  // not owned
 };
 
 }  // namespace zkx::gpu

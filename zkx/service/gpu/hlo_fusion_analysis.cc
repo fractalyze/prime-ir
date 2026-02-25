@@ -199,9 +199,10 @@ bool HloFusionAnalysis::HasConsistentTransposeHeroes() const {
   return tiled_transpose_.has_value();
 }
 
-static bool UseConcatenateFusion(
-    absl::Span<const HloInstructionAdaptor> roots,
-    absl::Span<const HloInstructionAdaptor> heroes) {
+namespace {
+
+bool UseConcatenateFusion(absl::Span<const HloInstructionAdaptor> roots,
+                          absl::Span<const HloInstructionAdaptor> heroes) {
   if (heroes.size() != 1) return false;
   if (heroes.front().opcode() != HloOpcode::kConcatenate) return false;
   // The concat emitter does not support multiple outputs yet. TODO(csigg): fix.
@@ -213,6 +214,8 @@ static bool UseConcatenateFusion(
   // TODO(csigg): exclude this case.
   return true;
 }
+
+}  // namespace
 
 HloFusionAnalysis::EmitterFusionKind HloFusionAnalysis::GetEmitterFusionKind()
     const {

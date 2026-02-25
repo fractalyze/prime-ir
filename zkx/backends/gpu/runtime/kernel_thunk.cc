@@ -84,8 +84,10 @@ absl::Status KernelThunk::Initialize(const InitializeParams& params) {
   return absl::OkStatus();
 }
 
-static void PrintBufferContents(
-    se::Stream* stream, absl::Span<const se::DeviceMemoryBase> buffer_args) {
+namespace {
+
+void PrintBufferContents(se::Stream* stream,
+                         absl::Span<const se::DeviceMemoryBase> buffer_args) {
   int input_idx = 0;
   for (const se::DeviceMemoryBase& buf : buffer_args) {
     auto host_buffer = std::make_unique<char[]>(buf.size());
@@ -100,6 +102,8 @@ static void PrintBufferContents(
     VLOG(100) << "BUF(" << input_idx++ << ") = " << buffer_contents;
   }
 }
+
+}  // namespace
 
 absl::Status KernelThunk::ExecuteOnStream(const ExecuteParams& params) {
   // Load the kernel.

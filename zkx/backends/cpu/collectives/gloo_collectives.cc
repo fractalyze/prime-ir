@@ -16,8 +16,6 @@ limitations under the License.
 
 #include "zkx/backends/cpu/collectives/gloo_collectives.h"
 
-#include <utility>
-
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "gloo/rendezvous/context.h"

@@ -127,7 +127,7 @@ class LocalExecutable {
   std::unique_ptr<Executable> executable_;
 
   // Execution backend.
-  Backend* backend_ = nullptr;
+  Backend* backend_ = nullptr;  // not owned
 
   // Options used to build the executable.
   const ExecutableBuildOptions build_options_;
@@ -216,7 +216,7 @@ class LocalClient : public Client {
   LocalService* local_service() { return local_service_; }
 
  private:
-  LocalService* local_service_;
+  LocalService* local_service_;  // not owned
 
   absl::StatusOr<std::unique_ptr<LocalExecutable>> LoadInternal(
       std::unique_ptr<AotCompilationResult> aot_result,

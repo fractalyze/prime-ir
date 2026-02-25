@@ -24,29 +24,21 @@ limitations under the License.
 #include <stack>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/container/inlined_vector.h"
-#include "absl/types/span.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/Support/MathExtras.h"
 #include "mlir/IR/AffineExpr.h"
 #include "mlir/IR/AffineMap.h"
-#include "mlir/IR/MLIRContext.h"
 #include "mlir/Support/LLVM.h"
 
-#include "zkx/backends/gpu/codegen/fusion_emitter.h"
 #include "zkx/hlo/analysis/indexing_analysis.h"
 #include "zkx/hlo/analysis/indexing_map.h"
-#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
-#include "zkx/hlo/utils/hlo_traversal.h"
 #include "zkx/layout.h"
 #include "zkx/service/gpu/gpu_fusible.h"
-#include "zkx/service/gpu/hlo_fusion_analysis.h"
 #include "zkx/service/gpu/model/affine_map_evaluator.h"
 #include "zkx/shape.h"
 #include "zkx/shape_util.h"
-#include "zkx/stream_executor/device_description.h"
 #include "zkx/util.h"
 #include "zkx/zkx_data.pb.h"
 

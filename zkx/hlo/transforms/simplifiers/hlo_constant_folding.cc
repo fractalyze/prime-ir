@@ -17,8 +17,6 @@ limitations under the License.
 #include "zkx/hlo/transforms/simplifiers/hlo_constant_folding.h"
 
 #include <algorithm>
-#include <atomic>
-#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
