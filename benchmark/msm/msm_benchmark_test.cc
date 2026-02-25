@@ -58,7 +58,7 @@ void BM_msm_benchmark(::benchmark::State &state) {
         elem = AffinePoint::Generator();
       });
 
-  std::string input_hash =
+  std::string inputHash =
       zkbench::ComputeArrayHash((*scalars).data, NUM_SCALARMULS);
 
   JacobianPoint result;
@@ -70,12 +70,12 @@ void BM_msm_benchmark(::benchmark::State &state) {
     }
   }
 
-  std::string output_hash = zkbench::ComputeArrayHash(&result, 1);
+  std::string outputHash = zkbench::ComputeArrayHash(&result, 1);
 
-  const char *bench_name = kIsParallel ? "msm_parallel" : "msm_serial";
-  zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash, output_hash,
+  const char *benchName = kIsParallel ? "msm_parallel" : "msm_serial";
+  zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
                                             /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata(bench_name,
+  zkbench::BenchmarkContext::SetMetadata(benchName,
                                          {{"curve", "BN254"},
                                           {"num_scalarmuls", NUM_SCALARMULS},
                                           {"parallel", kIsParallel}});

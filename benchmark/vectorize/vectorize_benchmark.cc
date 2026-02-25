@@ -62,17 +62,16 @@ void BM_square_scalar(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> input({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
 
-  std::string input_hash =
-      zkbench::ComputeArrayHash((*input).data, kBufferSize);
+  std::string inputHash = zkbench::ComputeArrayHash((*input).data, kBufferSize);
 
   for (auto _ : state) {
     _mlir_ciface_square_buffer(&*result, &*input);
   }
 
-  std::string output_hash =
+  std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_square_scalar", input_hash,
-                                            output_hash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetTestVectors("BM_square_scalar", inputHash,
+                                            outputHash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_square_scalar",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
@@ -84,17 +83,16 @@ void BM_square_vectorized(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> input({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
 
-  std::string input_hash =
-      zkbench::ComputeArrayHash((*input).data, kBufferSize);
+  std::string inputHash = zkbench::ComputeArrayHash((*input).data, kBufferSize);
 
   for (auto _ : state) {
     _mlir_ciface_vec_square_buffer(&*result, &*input);
   }
 
-  std::string output_hash =
+  std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_square_vectorized", input_hash,
-                                            output_hash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetTestVectors("BM_square_vectorized", inputHash,
+                                            outputHash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_square_vectorized",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
@@ -108,16 +106,16 @@ void BM_add_scalar(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> b({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
 
-  std::string input_hash = zkbench::ComputeArrayHash((*a).data, kBufferSize);
+  std::string inputHash = zkbench::ComputeArrayHash((*a).data, kBufferSize);
 
   for (auto _ : state) {
     _mlir_ciface_add_buffers(&*result, &*a, &*b);
   }
 
-  std::string output_hash =
+  std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_add_scalar", input_hash,
-                                            output_hash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetTestVectors("BM_add_scalar", inputHash,
+                                            outputHash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_add_scalar",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
@@ -130,16 +128,16 @@ void BM_add_vectorized(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> b({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
 
-  std::string input_hash = zkbench::ComputeArrayHash((*a).data, kBufferSize);
+  std::string inputHash = zkbench::ComputeArrayHash((*a).data, kBufferSize);
 
   for (auto _ : state) {
     _mlir_ciface_vec_add_buffers(&*result, &*a, &*b);
   }
 
-  std::string output_hash =
+  std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_add_vectorized", input_hash,
-                                            output_hash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetTestVectors("BM_add_vectorized", inputHash,
+                                            outputHash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_add_vectorized",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
@@ -154,16 +152,16 @@ void BM_mul_add_scalar(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> c({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
 
-  std::string input_hash = zkbench::ComputeArrayHash((*a).data, kBufferSize);
+  std::string inputHash = zkbench::ComputeArrayHash((*a).data, kBufferSize);
 
   for (auto _ : state) {
     _mlir_ciface_mul_add_buffers(&*result, &*a, &*b, &*c);
   }
 
-  std::string output_hash =
+  std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_mul_add_scalar", input_hash,
-                                            output_hash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetTestVectors("BM_mul_add_scalar", inputHash,
+                                            outputHash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_mul_add_scalar",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
@@ -177,16 +175,16 @@ void BM_mul_add_vectorized(::benchmark::State &state) {
   OwningMemRef<uint32_t, 1> c({kBufferSize}, {}, fillWithValue);
   OwningMemRef<uint32_t, 1> result({kBufferSize}, {}, fillWithValue);
 
-  std::string input_hash = zkbench::ComputeArrayHash((*a).data, kBufferSize);
+  std::string inputHash = zkbench::ComputeArrayHash((*a).data, kBufferSize);
 
   for (auto _ : state) {
     _mlir_ciface_vec_mul_add_buffers(&*result, &*a, &*b, &*c);
   }
 
-  std::string output_hash =
+  std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_mul_add_vectorized", input_hash,
-                                            output_hash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetTestVectors("BM_mul_add_vectorized", inputHash,
+                                            outputHash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_mul_add_vectorized",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},

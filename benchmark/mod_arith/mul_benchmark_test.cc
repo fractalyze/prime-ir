@@ -44,7 +44,7 @@ void BM_mul_benchmark(::benchmark::State &state) {
                             /*init=*/fillWithRandom);
   OwningMemRef<F, 0> output(/*shape=*/{}, /*shapeAlloc=*/{}, /*init=*/{});
 
-  std::string input_hash = zkbench::ComputeArrayHash((*input1).data, N);
+  std::string inputHash = zkbench::ComputeArrayHash((*input1).data, N);
 
   for (auto _ : state) {
     if constexpr (kIsMont) {
@@ -54,13 +54,13 @@ void BM_mul_benchmark(::benchmark::State &state) {
     }
   }
 
-  std::string output_hash = zkbench::ComputeArrayHash((*output).data, 1);
+  std::string outputHash = zkbench::ComputeArrayHash((*output).data, 1);
 
-  const char *bench_name = kIsMont ? "mont_mul" : "mul";
-  zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash, output_hash,
+  const char *benchName = kIsMont ? "mont_mul" : "mul";
+  zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
                                             /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
-      bench_name, {{"field", "BN254"}, {"n", N}, {"montgomery", kIsMont}});
+      benchName, {{"field", "BN254"}, {"n", N}, {"montgomery", kIsMont}});
 }
 
 BENCHMARK_TEMPLATE(BM_mul_benchmark, /*kIsMont=*/false)
