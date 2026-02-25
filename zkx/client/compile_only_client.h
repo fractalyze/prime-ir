@@ -49,11 +49,11 @@ class CompileOnlyClient : public Client {
 
   // A description of a zkx computation to compile using CompileAheadOfTime.
   struct AotZkxComputationInstance {
-    const ZkxComputation* computation;
+    const ZkxComputation* computation;  // not owned
     // Inform the compiler of the expected layout for arguments.
-    std::vector<const Shape*> argument_layouts;
+    std::vector<const Shape*> argument_layouts;  // not owned
     // Specifies the expected result layout.
-    const Shape* result_layout;
+    const Shape* result_layout;  // not owned
   };
 
   // Compiles a list of zkx computations for ahead-of-time execution.
@@ -77,7 +77,7 @@ class CompileOnlyClient : public Client {
   static int64_t PointerSizeForTriple(absl::string_view triple);
 
  private:
-  CompileOnlyService* compiler_service_;
+  CompileOnlyService* compiler_service_;  // not owned
 };
 
 }  // namespace zkx

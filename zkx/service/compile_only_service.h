@@ -49,7 +49,7 @@ class CompileOnlyService : public Service {
   // A description of a zkx computation to compile using CompileAheadOfTime.
   struct AotZkxComputationInstance {
     HloModuleProto computation;
-    std::vector<const Shape*> argument_layouts;
+    std::vector<const Shape*> argument_layouts;  // not owned
     Shape result_layout;
   };
 
