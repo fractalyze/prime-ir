@@ -142,6 +142,10 @@ absl::Status TestBufferDonationClashes(
     absl::flat_hash_map<const void*, std::pair<bool, int>>& donation_clashes,
     bool is_donated, int arg_idx, int replica, int partition);
 
+// Capitalizes the first character in a string, which can be empty.
+std::string MakeAsciiTitlecase(std::string_view s);
+void MakeAsciiTitlecase(std::string* s);
+
 }  // namespace zkx
 
 #endif  // ZKX_PJRT_UTILS_H_

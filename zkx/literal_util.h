@@ -83,6 +83,10 @@ class LiteralUtil {
   // Creates a scalar literal value one of the given primitive type.
   static Literal One(PrimitiveType primitive_type);
 
+  // Creates a literal of the given shape where each element is `value`.
+  template <typename NativeT>
+  static Literal CreateFullWithDescendingLayout(
+      absl::Span<const int64_t> dimensions, NativeT value);
   template <typename NativeT>
   static Literal CreateFull(absl::Span<const int64_t> dimensions,
                             NativeT value);
@@ -358,6 +362,16 @@ Literal LiteralUtil::CreateR4FromArray4DWithLayout(
 template <typename NativeT>
 Literal LiteralUtil::CreateR4FromArray4D(const Array4D<NativeT>& values) {
   return CreateFromArray(values);
+}
+
+// static
+template <typename NativeT>
+Literal LiteralUtil::CreateFullWithDescendingLayout(
+    absl::Span<const int64_t> dimensions, NativeT value) {
+  Literal literal(ShapeUtil::MakeShapeWithDescendingLayout(
+      primitive_util::NativeToPrimitiveType<NativeT>(), dimensions));
+  literal.PopulateWithValue(value);
+  return literal;
 }
 
 // static

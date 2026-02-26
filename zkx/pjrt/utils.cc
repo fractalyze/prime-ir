@@ -22,6 +22,7 @@ limitations under the License.
 #include "absl/algorithm/container.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -798,6 +799,18 @@ absl::Status TestBufferDonationClashes(
     }
   }
   return absl::OkStatus();
+}
+
+void MakeAsciiTitlecase(std::string* s) {
+  if (!s->empty()) {
+    s->at(0) = absl::ascii_toupper(s->at(0));
+  }
+}
+
+std::string MakeAsciiTitlecase(std::string_view s) {
+  std::string result(s);
+  MakeAsciiTitlecase(&result);
+  return result;
 }
 
 }  // namespace zkx

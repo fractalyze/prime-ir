@@ -1,0 +1,77 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("//bazel:zkx_cc.bzl", "zkx_cc_library")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "gpu_helpers",
+    srcs = ["gpu_helpers.cc"],
+    hdrs = ["gpu_helpers.h"],
+    deps = [
+        "//xla/tsl/framework:allocator",
+        "//xla/tsl/framework:bfc_allocator",
+        "//xla/tsl/framework:device_id",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/util:env_var",
+        "//zkx/client:client_library",
+        "//zkx/client:local_client",
+        "//zkx/service:platform_util",
+        "//zkx/stream_executor",
+        "//zkx/stream_executor/integrations:device_mem_allocator",
+        "//zkx/stream_executor/integrations:stream_executor_allocator",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
+    name = "gpu_metrics",
+    srcs = ["gpu_metrics.cc"],
+    hdrs = ["gpu_metrics.h"],
+    deps = [
+        "//xla/tsl/lib/monitoring:gauge",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+zkx_cc_library(
+    name = "nccl_id_store",
+    srcs = ["nccl_id_store.cc"],
+    hdrs = ["nccl_id_store.h"],
+    deps = [
+        "//xla/tsl/platform:casts",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:status_macros",
+        "//zkx/backends/gpu/collectives:gpu_clique_key",
+        "//zkx/backends/gpu/collectives:gpu_collectives",
+        "//zkx/core/collectives:clique_id",
+        "//zkx/core/collectives:clique_key",
+        "//zkx/pjrt/distributed:key_value_store_interface",
+        "//zkx/service:global_device_id",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/synchronization",
+        "@com_google_absl//absl/time",
+    ],
+)

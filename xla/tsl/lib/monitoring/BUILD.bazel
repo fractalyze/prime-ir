@@ -22,3 +22,8 @@ zkx_cc_library(
     hdrs = ["counter.h"],
     deps = ["@com_google_absl//absl/status"],
 )
+
+zkx_cc_library(
+    name = "gauge",
+    hdrs = ["gauge.h"],
+)
