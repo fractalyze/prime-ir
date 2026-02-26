@@ -67,6 +67,10 @@ PrimitiveType SignedIntegralTypeForBitWidth(int64_t src_bitwidth) {
       return S32;
     case 64:
       return S64;
+    case 128:
+      return S128;
+    case 256:
+      return S256;
     default:
       return PRIMITIVE_TYPE_INVALID;
   }

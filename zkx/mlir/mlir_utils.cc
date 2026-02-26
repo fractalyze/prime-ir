@@ -61,7 +61,9 @@ mlir::Type PrimitiveTypeToMlirType(PrimitiveType element_type,
     case U32:
     case S64:
     case U64:
+    case S128:
     case U128:
+    case S256:
     case U256:
       return mlir::IntegerType::get(context,
                                     primitive_util::BitWidth(element_type));

@@ -800,13 +800,17 @@ HloEvaluator::HloEvaluator(int64_t max_loop_iterations)
           if constexpr (primitive_util::IsArrayType(primitive_type)) {
             using NativeT = primitive_util::NativeTypeOf<primitive_type>;
             if constexpr (primitive_util::IsSignedIntegralType(
-                              primitive_type)) {
+                              primitive_type) &&
+                          !primitive_util::IsBigIntType(primitive_type)) {
               typed_visitors_[primitive_type] =
                   std::make_unique<HloEvaluatorTypedVisitor<NativeT, int64_t>>(
                       this);
               // NOLINTNEXTLINE(readability/braces)
             } else if constexpr (primitive_util::IsUnsignedIntegralType(
-                                     primitive_type)) {
+                                     primitive_type) ||
+                                 primitive_util::IsBigIntType(primitive_type)) {
+              // BigInt types (U128/U256/S128/S256) use uint64_t as
+              // ElementwiseT since BigInt only has operator uint64_t().
               typed_visitors_[primitive_type] =
                   std::make_unique<HloEvaluatorTypedVisitor<NativeT, uint64_t>>(
                       this);

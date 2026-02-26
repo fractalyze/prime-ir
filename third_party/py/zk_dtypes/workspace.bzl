@@ -21,8 +21,8 @@ zk_dtypes provides ZK-specific data-types like babybear.
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def repo():
-    ZK_DTYPES_COMMIT = "447ae5bfa94aa79b13d46b53e0d194ab0d2da7f6"
-    ZK_DTYPES_SHA256 = "798f2ba932154671ee46bf214b361d999b6402a3dc0239a7eeb793e5c98f88fb"
+    ZK_DTYPES_COMMIT = "b4c0e689266f61b65b04b6f45f508a43594169a3"
+    ZK_DTYPES_SHA256 = "a6e6b2455d1bcd225dbfcc58a395dd5bde25785cc1f89181e3084f0a6ce926fd"
     http_archive(
         name = "zk_dtypes",
         sha256 = ZK_DTYPES_SHA256,

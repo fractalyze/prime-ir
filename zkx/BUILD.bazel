@@ -509,6 +509,7 @@ zkx_cc_library(
     deps = [
         "@zk_dtypes//zk_dtypes:big_int",
         "@zk_dtypes//zk_dtypes:intn",
+        "@zk_dtypes//zk_dtypes:signed_big_int",
     ],
 )
 

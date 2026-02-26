@@ -511,7 +511,9 @@ std::string LiteralBase::GetAsString(absl::Span<const int64_t> multi_index,
                         std::is_same_v<NativeT, u4> ||
                         std::is_same_v<NativeT, s4> ||
                         std::is_same_v<NativeT, u128> ||
-                        std::is_same_v<NativeT, u256>) {
+                        std::is_same_v<NativeT, u256> ||
+                        std::is_same_v<NativeT, s128> ||
+                        std::is_same_v<NativeT, s256>) {
             return Get<NativeT>(multi_index, shape_index).ToString();
           } else {
             return absl::StrCat(Get<NativeT>(multi_index, shape_index));
@@ -1824,6 +1826,16 @@ void LiteralBase::Piece::WriteToProto(LiteralProto* proto) const {
     case S64:
       CopyToRepeatedField(proto->mutable_s64s(), data<int64_t>());
       break;
+    case S128:
+      *proto->mutable_s128s() =
+          std::string(reinterpret_cast<const char*>(data<s128>().data()),
+                      size_bytes_dense());
+      break;
+    case S256:
+      *proto->mutable_s256s() =
+          std::string(reinterpret_cast<const char*>(data<s256>().data()),
+                      size_bytes_dense());
+      break;
     case TUPLE:
     case TOKEN:
       // Nothing to do but assign the shape which is done above.
@@ -1934,6 +1946,18 @@ absl::Status LiteralBase::Piece::CopyFromProto(const LiteralProto& proto) {
     case S64:
       TF_RETURN_IF_ERROR(CopyFromRepeatedField(data<int64_t>(), proto.s64s()));
       break;
+    case S128: {
+      const std::string& s(proto.s128s());
+      TF_RET_CHECK(data<s128>().size() * sizeof(s128) == s.size());
+      memcpy(untyped_data(), s.data(), s.size());
+      break;
+    }
+    case S256: {
+      const std::string& s(proto.s256s());
+      TF_RET_CHECK(data<s256>().size() * sizeof(s256) == s.size());
+      memcpy(untyped_data(), s.data(), s.size());
+      break;
+    }
     case U2: {
       const std::string& s(proto.u2s());
       TF_RET_CHECK(data<u2>().size() * sizeof(u2) == s.size());

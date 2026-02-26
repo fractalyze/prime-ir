@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "zk_dtypes/include/big_int.h"
 #include "zk_dtypes/include/intn.h"
+#include "zk_dtypes/include/signed_big_int.h"
 
 namespace zkx {
 
@@ -32,6 +33,9 @@ struct is_specialized_integral
 
 template <size_t N>
 struct is_specialized_integral<::zk_dtypes::BigInt<N>> : std::true_type {};
+template <size_t N>
+struct is_specialized_integral<::zk_dtypes::SignedBigInt<N>> : std::true_type {
+};
 
 template <typename T>
 inline constexpr bool is_specialized_integral_v =
@@ -46,11 +50,15 @@ using s4 = ::zk_dtypes::int4;
 
 using u128 = ::zk_dtypes::BigInt<2>;
 using u256 = ::zk_dtypes::BigInt<4>;
+using s128 = ::zk_dtypes::SignedBigInt<2>;
+using s256 = ::zk_dtypes::SignedBigInt<4>;
 
 template <class T>
 struct is_big_int : std::false_type {};
 template <size_t N>
 struct is_big_int<::zk_dtypes::BigInt<N>> : std::true_type {};
+template <size_t N>
+struct is_big_int<::zk_dtypes::SignedBigInt<N>> : std::true_type {};
 template <typename T>
 inline constexpr bool is_big_int_v = is_big_int<T>::value;
 
@@ -77,11 +85,14 @@ struct make_specialized_unsigned<T, typename std::enable_if_t<is_intN_v<T>>> {
                         std::make_unsigned_t<typename T::underlying_type>>;
 };
 
-template <typename T>
-struct make_specialized_unsigned<T,
-                                 typename std::enable_if_t<is_big_int_v<T>>> {
-  // BigInt is already unsigned, return the same type.
-  using type = T;
+template <size_t N>
+struct make_specialized_unsigned<::zk_dtypes::BigInt<N>> {
+  using type = ::zk_dtypes::BigInt<N>;
+};
+
+template <size_t N>
+struct make_specialized_unsigned<::zk_dtypes::SignedBigInt<N>> {
+  using type = ::zk_dtypes::BigInt<N>;
 };
 
 template <typename T>
@@ -100,10 +111,14 @@ struct make_specialized_signed<T, typename std::enable_if_t<is_intN_v<T>>> {
                         std::make_signed_t<typename T::underlying_type>>;
 };
 
-template <typename T>
-struct make_specialized_signed<T, typename std::enable_if_t<is_big_int_v<T>>> {
-  // BigInt is unsigned only, no signed variant exists.
-  using type = T;
+template <size_t N>
+struct make_specialized_signed<::zk_dtypes::BigInt<N>> {
+  using type = ::zk_dtypes::SignedBigInt<N>;
+};
+
+template <size_t N>
+struct make_specialized_signed<::zk_dtypes::SignedBigInt<N>> {
+  using type = ::zk_dtypes::SignedBigInt<N>;
 };
 
 template <typename T>

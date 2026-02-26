@@ -38,6 +38,8 @@ enum PrimitiveType {
   S16 = 6;
   S32 = 7;
   S64 = 8;
+  S128 = 59;
+  S256 = 60;
 
   // Unsigned integral values of fixed width.
   U1 = 9;
@@ -561,6 +563,8 @@ message LiteralProto {
   bytes binary_field_t7s = 56;
   bytes u128s = 57;
   bytes u256s = 58;
+  bytes s128s = 59;
+  bytes s256s = 60;
 }
 
 message WindowDimension {

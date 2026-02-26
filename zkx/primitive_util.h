@@ -155,6 +155,16 @@ constexpr PrimitiveType NativeToPrimitiveType<int64_t>() {
   return S64;
 }
 
+template <>
+constexpr PrimitiveType NativeToPrimitiveType<s128>() {
+  return S128;
+}
+
+template <>
+constexpr PrimitiveType NativeToPrimitiveType<s256>() {
+  return S256;
+}
+
 #define ZK_DTYPES_CONVERSION(cpp_type, unused, enum, unused2) \
   template <>                                                 \
   constexpr PrimitiveType NativeToPrimitiveType<cpp_type>() { \
@@ -257,6 +267,16 @@ struct PrimitiveTypeToNative<S64> {
   using type = int64_t;
 };
 
+template <>
+struct PrimitiveTypeToNative<S128> {
+  using type = s128;
+};
+
+template <>
+struct PrimitiveTypeToNative<S256> {
+  using type = s256;
+};
+
 // Token
 template <>
 struct PrimitiveTypeToNative<TOKEN> {
@@ -300,7 +320,7 @@ inline constexpr bool IsArrayType(PrimitiveType primitive_type) {
 
 constexpr bool IsSignedIntegralType(PrimitiveType type) {
   return type == S1 || type == S2 || type == S4 || type == S8 || type == S16 ||
-         type == S32 || type == S64;
+         type == S32 || type == S64 || type == S128 || type == S256;
 }
 
 constexpr bool IsUnsignedIntegralType(PrimitiveType type) {
@@ -317,7 +337,7 @@ constexpr bool Is8BitIntegralType(PrimitiveType type) {
 }
 
 constexpr bool IsBigIntType(PrimitiveType type) {
-  return type == U128 || type == U256;
+  return type == U128 || type == U256 || type == S128 || type == S256;
 }
 
 constexpr bool IsPrimeFieldType(PrimitiveType type) {
@@ -358,7 +378,8 @@ constexpr bool IsComparableType(PrimitiveType type) {
 
 constexpr bool IsZkDtypesType(PrimitiveType type) {
   if (type == U1 || type == S1 || type == U2 || type == S2 || type == U4 ||
-      type == S4 || type == U128 || type == U256) {
+      type == S4 || type == U128 || type == U256 || type == S128 ||
+      type == S256) {
     return true;
   }
 #define ZK_DTYPES_CASE(unused, unused2, enum, unused3) type == enum ||
@@ -415,6 +436,10 @@ constexpr R IntegralTypeSwitch(F&& f, PrimitiveType type) {
         return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::S32>());
       case S64:
         return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::S64>());
+      case S128:
+        return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::S128>());
+      case S256:
+        return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::S256>());
       case U1:
         return std::forward<F>(f)(PrimitiveTypeConstant<PrimitiveType::U1>());
       case U2:
