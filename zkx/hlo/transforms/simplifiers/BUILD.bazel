@@ -18,6 +18,55 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "broadcast_canonicalizer",
+    srcs = ["broadcast_canonicalizer.cc"],
+    hdrs = ["broadcast_canonicalizer.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:hlo_creation_utils",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "conditional_canonicalizer",
+    srcs = ["conditional_canonicalizer.cc"],
+    hdrs = ["conditional_canonicalizer.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx/base:logging",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
+    name = "dynamic_dimension_simplifier",
+    srcs = ["dynamic_dimension_simplifier.cc"],
+    hdrs = ["dynamic_dimension_simplifier.h"],
+    deps = [
+        "//zkx:util",
+        "//zkx/base:logging",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "flatten_call_graph",
     srcs = ["flatten_call_graph.cc"],
     hdrs = ["flatten_call_graph.h"],
@@ -35,6 +84,25 @@ zkx_cc_library(
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings:string_view",
+    ],
+)
+
+zkx_cc_library(
+    name = "fusion_constant_sinking",
+    srcs = ["fusion_constant_sinking.cc"],
+    hdrs = ["fusion_constant_sinking.h"],
+    deps = [
+        ":hlo_dce",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx/base:logging",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 
@@ -116,6 +184,21 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "instruction_hoister",
+    srcs = ["instruction_hoister.cc"],
+    hdrs = ["instruction_hoister.h"],
+    deps = [
+        "//xla/tsl/platform:status",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "optimize_input_output_buffer_alias",
     srcs = ["optimize_input_output_buffer_alias.cc"],
     hdrs = ["optimize_input_output_buffer_alias.h"],
@@ -130,6 +213,20 @@ zkx_cc_library(
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
+    name = "root_instruction_sinker",
+    srcs = ["root_instruction_sinker.cc"],
+    hdrs = ["root_instruction_sinker.h"],
+    deps = [
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:tuple_util",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
     ],
 )
 
@@ -170,27 +267,56 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "zero_sized_hlo_elimination",
+    srcs = ["zero_sized_hlo_elimination.cc"],
+    hdrs = ["zero_sized_hlo_elimination.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx:literal",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
 zkx_cc_unittest(
     name = "simplifiers_unittests",
     srcs = [
+        "broadcast_canonicalizer_unittest.cc",
+        "conditional_canonicalizer_unittest.cc",
+        "dynamic_dimension_simplifier_unittest.cc",
         "flatten_call_graph_unittest.cc",
+        "fusion_constant_sinking_unittest.cc",
         "hlo_constant_folding_unittest.cc",
         "hlo_cse_unittest.cc",
         "hlo_dce_unittest.cc",
         "hlo_memory_scheduler_unittest.cc",
+        "instruction_hoister_unittest.cc",
         "optimize_input_output_buffer_alias_unittest.cc",
+        "root_instruction_sinker_unittest.cc",
         "sub_byte_normalization_unittest.cc",
         "tuple_simplifier_unittest.cc",
+        "zero_sized_hlo_elimination_unittest.cc",
     ],
     deps = [
+        ":broadcast_canonicalizer",
+        ":conditional_canonicalizer",
+        ":dynamic_dimension_simplifier",
         ":flatten_call_graph",
+        ":fusion_constant_sinking",
         ":hlo_constant_folding",
         ":hlo_cse",
         ":hlo_dce",
         ":hlo_memory_scheduler",
+        ":instruction_hoister",
         ":optimize_input_output_buffer_alias",
+        ":root_instruction_sinker",
         ":sub_byte_normalization",
         ":tuple_simplifier",
+        ":zero_sized_hlo_elimination",
         "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
         "//zkx:comparison_util",

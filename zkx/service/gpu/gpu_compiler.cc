@@ -62,8 +62,21 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/hlo/ir/hlo_module_group.h"
+#include "zkx/hlo/pass/hlo_pass_fix.h"
+#include "zkx/hlo/pass/hlo_pass_pipeline.h"
 #include "zkx/hlo/transforms/expanders/reshape_decomposer.h"
+#include "zkx/hlo/transforms/host_offload_legalize.h"
+#include "zkx/hlo/transforms/simplifiers/broadcast_canonicalizer.h"
+#include "zkx/hlo/transforms/simplifiers/conditional_canonicalizer.h"
+#include "zkx/hlo/transforms/simplifiers/dynamic_dimension_simplifier.h"
+#include "zkx/hlo/transforms/simplifiers/flatten_call_graph.h"
+#include "zkx/hlo/transforms/simplifiers/hlo_constant_folding.h"
+#include "zkx/hlo/transforms/simplifiers/hlo_cse.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_dce.h"
+#include "zkx/hlo/transforms/simplifiers/optimize_input_output_buffer_alias.h"
+#include "zkx/hlo/transforms/simplifiers/sub_byte_normalization.h"
+#include "zkx/hlo/transforms/simplifiers/tuple_simplifier.h"
+#include "zkx/hlo/transforms/simplifiers/zero_sized_hlo_elimination.h"
 #include "zkx/maybe_owning.h"
 #include "zkx/service/buffer_assignment.h"
 #include "zkx/service/call_inliner.h"
@@ -81,10 +94,14 @@ limitations under the License.
 #include "zkx/service/gpu/prepare_hlo_for_ir_emitting_pipeline.h"
 #include "zkx/service/gpu/transforms/command_buffer_scheduling.h"
 #include "zkx/service/gpu/transforms/fusion_wrapper.h"
+#include "zkx/service/gpu/transforms/layout_assignment.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
+#include "zkx/service/scatter_expander.h"
 #include "zkx/service/scatter_simplifier.h"
 #include "zkx/service/slow_operation_alarm.h"
+#include "zkx/service/transpose_folding.h"
+#include "zkx/service/while_loop_constant_sinking.h"
 #include "zkx/status_macros.h"
 #include "zkx/stream_executor/platform_manager.h"
 #include "zkx/zkx_data.pb.h"
@@ -179,30 +196,6 @@ class GpuThunkAotCompilationResult : public AotCompilationResult {
   std::unique_ptr<HloModule> module_;
   CompilationResultProto proto_;
 };
-
-absl::Status RunFusionPasses(HloModule* hlo_module,
-                             const Compiler::TargetConfig& gpu_target_config,
-                             tsl::thread::ThreadPool* thread_pool,
-                             HloCostAnalysis::ShapeSizeFunction shape_size_fn) {
-  const se::DeviceDescription& gpu_device_info =
-      gpu_target_config.device_description;
-
-  TF_RETURN_IF_ERROR(FusionPipeline(hlo_module->config().debug_options(),
-                                    shape_size_fn, thread_pool, gpu_device_info)
-                         .Run(hlo_module)
-                         .status());
-
-  TF_RETURN_IF_ERROR(
-      HorizontalFusionPipeline(gpu_device_info).Run(hlo_module).status());
-
-  if (VLOG_IS_ON(2)) {
-    HloFusionStatsVisitor stats;
-    TF_RETURN_IF_ERROR(hlo_module->entry_computation()->Accept(&stats));
-    VLOG(2) << stats.ToString();
-  }
-
-  return absl::OkStatus();
-}
 
 }  // namespace
 
@@ -321,6 +314,169 @@ void LogDebugOptions(HloModule* hlo_module) {
                          hlo_module->config().debug_options().DebugString()));
 }
 
+absl::Status RunPreSPMDPartitionerPasses(HloModule* hlo_module) {
+  HloPassPipeline pre_spmd_pipeline("pre-spmd-partitioner");
+  // Run some IR cleanup passes before running the SPMD partitioning passes.
+  // TODO(batzor): Add ConvertMemoryPlacementToInternalAnnotations
+  pre_spmd_pipeline.AddPass<CallInliner>();
+  pre_spmd_pipeline.AddPass<ZeroSizedHloElimination>();
+  pre_spmd_pipeline.AddPass<ConditionalCanonicalizer>();
+
+  return pre_spmd_pipeline.Run(hlo_module).status();
+}
+
+absl::Status RunOptimizationPasses(
+    HloModule* hlo_module, const Compiler::TargetConfig& gpu_target_config) {
+  const se::GpuComputeCapability gpu_version =
+      gpu_target_config.device_description.gpu_compute_capability();
+
+  HloPassPipeline pipeline("optimization");
+  // TODO(batzor): Add HloVerifier
+  // TODO(batzor): Add BatchedGatherScatterNormalizer
+  // TODO(batzor): Add WindowedEinsumHandler
+  // TODO(batzor): Add DotDimensionSorter
+  // TODO(batzor): Add DotDecomposer
+  // TODO(batzor): Add DotOperandConverter
+
+  pipeline.AddPass<SubByteNormalization>(
+      SubByteNormalization::SET_ELEMENT_SIZE);
+
+  // TODO(batzor): Add RngExpander, RngBitGeneratorExpander
+  // TODO(batzor): Add SortRewriter
+
+  // Remove zero-sized HLO from the input so that other passes don't have to
+  // handle it.
+  pipeline.AddPass<ZeroSizedHloElimination>();
+
+  // TODO(batzor): Add SelectAndScatterExpander
+  // TODO(batzor): Add ScatterDeterminismExpander
+  pipeline.AddPass<ScatterExpander>(
+      ScatterExpander::kEliminateIndeterministicScatters);
+  // TODO(batzor): Add GpuScatterExpander
+  // TODO(batzor): Add DynamicIndexSplitter
+
+  pipeline.AddPass<CallInliner>();
+
+  pipeline.AddPass<ConditionalCanonicalizer>();
+  pipeline.AddPass<DynamicDimensionSimplifier>();
+
+  // TODO(batzor): Add ReduceWindowRewriter
+  // TODO(batzor): Add DynamicPadder
+  // TODO(batzor): Add StableSortExpander
+
+  // Build simplification pipeline. The passes in here are run to a fixed
+  // point.
+  [&, &pipeline =
+          pipeline.AddPass<HloPassFix<HloPassPipeline>>("simplification")] {
+    // TODO(batzor): Add HloVerifier
+
+    pipeline.AddPass<ZeroSizedHloElimination>();
+
+    // TODO(batzor): Add GatherSimplifier
+    // TODO(batzor): Add GatherExpander (kEliminateSimpleGathers)
+    pipeline.AddPass<ScatterSimplifier>();
+    pipeline.AddPass<ScatterExpander>(
+        ScatterExpander::kEliminateSimpleScatters);
+    // TODO(batzor): Add ScatterSliceSimplifier
+    // TODO(batzor): Add GpuAlgebraicSimplifier
+    // TODO(batzor): Add BitcastDtypesExpander
+    // TODO(batzor): Add DotMerger
+    // TODO(batzor): Add SortSimplifier
+    pipeline.AddPass<TupleSimplifier>();
+    pipeline.AddPass<WhileLoopConstantSinking>();
+    // TODO(batzor): Add WhileLoopSimplifier
+    // TODO(batzor): Add SliceSinker
+    // TODO(batzor): Add ReshapeMover
+    pipeline.AddPass<HloConstantFolding>();
+    // TODO(batzor): Add ConditionalSimplifier
+    pipeline.AddPass<TransposeFolding>();
+    pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/false);
+    pipeline.AddPass<HloDCE>();
+  }();
+
+  // TODO(batzor): Add ConvertMover + GpuAlgebraicSimplifier
+  // TODO(batzor): Add HloComputationDeduplicator
+  return pipeline.Run(hlo_module).status();
+}
+
+absl::Status RunLayoutAssignmentPasses(
+    HloModule* hlo_module, const se::DeviceDescription& device_description) {
+  // Run layout assignment in a separate pipeline from
+  // "post-layout-assignment" because we want everything after layout
+  // assignment to have a layout-sensitive invariant-checker, but
+  // HloPassPipeline also runs its invariant checker before any passes are
+  // run, meaning, the pipeline that contains layout assignment cannot contain
+  // a layout-sensitive verifier!
+  HloPassPipeline pipeline("layout assignment");
+  // Layout assignment uses alias analysis, which requires the call graph to
+  // be flattened.
+  pipeline.AddPass<FlattenCallGraph>();
+  ChannelLayoutConstraints layout_constraints;
+  pipeline.AddPass<GpuLayoutAssignment>(
+      hlo_module->mutable_entry_computation_layout(), device_description,
+      &layout_constraints);
+  // Run SubByteNormalization because GpuLayoutAssignment may modify a
+  // Layout's element_size_in_bits field.
+  pipeline.AddPass<SubByteNormalization>(
+      SubByteNormalization::SET_ELEMENT_SIZE);
+  pipeline.AddPass<OptimizeInputOutputBufferAlias>(true);
+  // Run HostOffloadLegalize before LayoutNormalization to prevent
+  // the creation of invalid transpose/bitcast operations within
+  // host memory offloading segments.
+  pipeline.AddPass<HostOffloadLegalize>(
+      static_cast<int64_t>(stream_executor::MemoryType::kHost),
+      /* after_layout= */ true);
+  return pipeline.Run(hlo_module).status();
+}
+
+absl::Status RunFusionPasses(HloModule* hlo_module,
+                             const Compiler::TargetConfig& gpu_target_config,
+                             tsl::thread::ThreadPool* thread_pool,
+                             HloCostAnalysis::ShapeSizeFunction shape_size_fn) {
+  const se::DeviceDescription& gpu_device_info =
+      gpu_target_config.device_description;
+
+  TF_RETURN_IF_ERROR(FusionPipeline(hlo_module->config().debug_options(),
+                                    shape_size_fn, thread_pool, gpu_device_info)
+                         .Run(hlo_module)
+                         .status());
+
+  TF_RETURN_IF_ERROR(
+      HorizontalFusionPipeline(gpu_device_info).Run(hlo_module).status());
+
+  if (VLOG_IS_ON(2)) {
+    HloFusionStatsVisitor stats;
+    TF_RETURN_IF_ERROR(hlo_module->entry_computation()->Accept(&stats));
+    VLOG(2) << stats.ToString();
+  }
+
+  return absl::OkStatus();
+}
+
+// TODO(batzor): Uncomment this. Dependency: DoubleBufferLoopUnrolling,
+// WhileLoopSimplifier, IsPassEnabledAtOptimizationEffort
+// void AddDoubleBufferingPasses(const HloModule& module,
+//                               HloPassPipeline& pipeline) {
+//   ...
+// }
+
+absl::Status RunLayoutNormalizationPasses(
+    HloModule* hlo_module, const se::GpuComputeCapability& gpu_version) {
+  HloPassPipeline layout_normalization_pipeline("layout normalization");
+
+  layout_normalization_pipeline.AddPass<ReshapeDecomposer>();
+  // TODO(batzor): Add HloPassFix<MoveCopyToUsers>
+  // TODO(batzor): Add LayoutNormalization
+  // TODO(batzor): Add HloPassFix<GpuAlgebraicSimplifier>
+
+  // Layout normalization will create broadcasts that are not canonical.
+  layout_normalization_pipeline.AddPass<BroadcastCanonicalizer>();
+  // Layout normalization will create scatters that are not simplified and
+  // also have unsorted update_window_dims.
+  layout_normalization_pipeline.AddPass<ScatterSimplifier>();
+  return layout_normalization_pipeline.Run(hlo_module).status();
+}
+
 }  // namespace
 
 // Runs optimization passes on the given HLO module.
@@ -339,18 +495,15 @@ absl::Status GpuCompiler::OptimizeHloModule(
       /*default_thread_pool=*/options.thread_pool,
       /*default_parallelism=*/tsl::port::MaxParallelism());
 
-  // TODO(chokobole): Uncomment this. Dependency: RunPreSPMDPartitionerPasses
-  // TF_RETURN_IF_ERROR(RunPreSPMDPartitionerPasses(hlo_module));
+  TF_RETURN_IF_ERROR(RunPreSPMDPartitionerPasses(hlo_module));
   // TODO(chokobole): Uncomment this. Dependency: RunSPMDPasses
   // TF_RETURN_IF_ERROR(RunSPMDPasses(hlo_module, gpu_target_config,
   //                                  layout_insensitive_algsimp_opts));
-  // TODO(chokobole): Uncomment this. Dependency: RunOptimizationPasses
-  // TF_RETURN_IF_ERROR(RunOptimizationPasses(hlo_module, gpu_target_config,
-  //                                          layout_insensitive_algsimp_opts));
+  TF_RETURN_IF_ERROR(RunOptimizationPasses(hlo_module, gpu_target_config));
   se::GpuComputeCapability gpu_version =
       gpu_target_config.device_description.gpu_compute_capability();
   // clang-format off
-      // TODO(chokobole): Uncomment this. Dependency: RunCollectiveOptimizationPasses
+  // TODO(chokobole): Uncomment this. Dependency: RunCollectiveOptimizationPasses
   // clang-format on
   // TF_RETURN_IF_ERROR(RunCollectiveOptimizationPasses(
   //     hlo_module, layout_insensitive_algsimp_opts, gpu_version));
@@ -361,39 +514,23 @@ absl::Status GpuCompiler::OptimizeHloModule(
     gpu_version = GetGpuVersion(stream_exec);
   }
 
-  // TODO(chokobole): Uncomment this. Dependency: RunLayoutAssignmentPasses
-  // TF_RETURN_IF_ERROR(
-  //     RunLayoutAssignmentPasses(hlo_module, gpu_version, dnn_version,
-  //                               gpu_target_config.device_description));
-  // TODO(chokobole): Uncomment this. Dependency: RunLayoutNormalizationPasses
-  // TF_RETURN_IF_ERROR(RunLayoutNormalizationPasses(hlo_module, gpu_version));
+  TF_RETURN_IF_ERROR(RunLayoutAssignmentPasses(
+      hlo_module, gpu_target_config.device_description));
+
+  TF_RETURN_IF_ERROR(RunLayoutNormalizationPasses(hlo_module, gpu_version));
 
   // Run target-specific HLO optimization passes after layout assignment.
-  // clang-format off
-  // TODO(chokobole): Uncomment this. Dependency: OptimizeHloPostLayoutAssignment
-  // clang-format on
-  // TF_RETURN_IF_ERROR(OptimizeHloPostLayoutAssignment(
-  //     hlo_module, stream_exec, options, gpu_target_config,
-  //     thread_pool.get_mutable()));
+  TF_RETURN_IF_ERROR(OptimizeHloPostLayoutAssignment(
+      hlo_module, stream_exec, options, gpu_target_config,
+      thread_pool.get_mutable()));
 
   // This is a "low effort, high impact" fusion that should be run first.
   // TODO(chokobole): Uncomment this. Dependency: RunDynamicSliceFusionPasses
   // TF_RETURN_IF_ERROR(RunDynamicSliceFusionPasses(hlo_module, PlatformId()));
 
-  // TODO(batzor): Remove these after the previous passes are uncommented.
-  TF_RETURN_IF_ERROR(ReshapeDecomposer().Run(hlo_module).status());
-  TF_RETURN_IF_ERROR(ScatterSimplifier().Run(hlo_module).status());
-  TF_RETURN_IF_ERROR(CallInliner().Run(hlo_module).status());
-
   TF_RETURN_IF_ERROR(RunFusionPasses(hlo_module, gpu_target_config,
                                      thread_pool.get_mutable(),
                                      ShapeSizeBytesFunction()));
-
-  // Wrap remaining unfused ops that have no standalone GPU emitter in
-  // single-op fusions. Must run after all fusion passes.
-  TF_RETURN_IF_ERROR(FusionWrapper(gpu_target_config.device_description)
-                         .Run(hlo_module)
-                         .status());
 
   // TODO(chokobole): Uncomment this. Dependency: RunPostFusionPasses
   // TF_RETURN_IF_ERROR(RunPostFusionPasses(
@@ -434,6 +571,74 @@ absl::Status GpuCompiler::PrepareHloModuleForIrEmitting(
              device_description)
       .Run(hlo_module)
       .status();
+}
+
+absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
+    HloModule* hlo_module, se::StreamExecutor* /*stream_exec*/,
+    const CompileOptions& /*options*/, const TargetConfig& gpu_target_config,
+    tsl::thread::ThreadPool* /*thread_pool*/) {
+  const se::GpuComputeCapability gpu_version =
+      gpu_target_config.device_description.gpu_compute_capability();
+
+  {
+    HloPassPipeline pipeline("hlo normalization");
+
+    // TODO(batzor): Add HloPassFix<GpuAlgebraicSimplifier>
+
+    pipeline.AddPass<TransposeFolding>();
+    pipeline.AddPass<ReshapeDecomposer>();
+    // TODO(batzor): Add ReduceDecomposer
+    // TODO(batzor): Add LayoutNormalization
+    // TODO(batzor): Add HloPassFix<GpuAlgebraicSimplifier>
+    // TODO(batzor): Add DotNormalizer
+
+    // Layout normalization will create scatters that are not simplified and
+    // also have unsorted update_window_dims.
+    pipeline.AddPass<ScatterSimplifier>();
+    pipeline.AddPass<BroadcastCanonicalizer>();
+
+    // TODO(batzor): Add TransposeDimensionGrouper
+    // TODO(batzor): Add ReductionDegenerateDimRemover
+    // TODO(batzor): Add ReductionLayoutNormalizer
+    // TODO(batzor): Add ReductionDimensionGrouper
+    // TODO(batzor): Add ReductionSplitter
+    // TODO(batzor): Add TreeReductionRewriter
+
+    pipeline.AddPass<SubByteNormalization>(
+        SubByteNormalization::SET_ELEMENT_SIZE);
+    TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
+  }
+
+  {
+    HloPassPipeline pipeline("post-layout_assignment");
+    // TODO(batzor): Add HloVerifier
+
+    pipeline.AddPass<CallInliner>();
+    // Recover host-offloader invariants (such as the single-use broadcast
+    // buffer initialization before loops) by re-running the offload legalizer.
+    pipeline.AddPass<HostOffloadLegalize>(
+        static_cast<int64_t>(se::MemoryType::kHost),
+        /*after_layout=*/true);
+    // TODO(batzor): Add LayoutNormalization
+
+    // Layout normalization will create scatters that are not simplified and
+    // also have unsorted update_window_dims.
+    pipeline.AddPass<ScatterSimplifier>();
+
+    // TODO(batzor): Add HostOffloader
+
+    pipeline.AddPass<TupleSimplifier>();
+
+    // TODO(batzor): Add HloPassFix<GpuAlgebraicSimplifier>
+
+    pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
+
+    // TODO(batzor): Add HostMemoryTransferAsyncifier
+
+    TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
+  }
+
+  return absl::OkStatus();
 }
 
 // Returns the TargetConfig, either from the module debug options, or from the
@@ -977,9 +1182,7 @@ GpuCompiler::CompileToBackendResult(
     const se::DeviceDescription& gpu_device_info) {
   tsl::profiler::TraceMe traceme("GpuCompiler::CompileToBackendResult");
 
-  // TODO(chokobole): Uncomment this. Dependency: RunPreSchedulingPasses
-  // TF_RETURN_IF_ERROR(RunPreSchedulingPasses(module, executor,
-  // gpu_device_info));
+  TF_RETURN_IF_ERROR(RunPreSchedulingPasses(module, executor, gpu_device_info));
   TF_ASSIGN_OR_RETURN(
       ScheduleMetadata schedule_metadata,
       ScheduleGpuModule(module, pointer_size_, gpu_device_info));
@@ -1277,6 +1480,29 @@ absl::StatusOr<std::unique_ptr<AotCompilationResult>> GpuCompiler::Export(
       gpu_executable->text(), gpu_executable->binary());
 }
 
+absl::Status GpuCompiler::RunPreSchedulingPasses(
+    HloModule* module, se::StreamExecutor* stream_exec,
+    const se::DeviceDescription& gpu_device_info) {
+  HloPassPipeline pipeline("pre-scheduling-passes");
+  pipeline.AddPass<FusionWrapper>(gpu_device_info);
+  // TODO(batzor): Uncomment this. Dependency: GpuHloCostAnalysis,
+  // GpuCostModelStatsCollection, SolGpuCostModelStatsCollection
+  // if (module->config().debug_options().xla_gpu_collect_cost_model_stats()) {
+  //   GpuHloCostAnalysis::Options cost_analysis_options{
+  //       ShapeSizeBytesFunction(),
+  //       /*per_second_rates=*/{},
+  //       /*min_latencies_seconds=*/{},
+  //       /*count_multiple_input_accesses=*/true};
+  //   // Cost model analysis for compute.
+  //   pipeline.AddPass<GpuCostModelStatsCollection>(gpu_device_info,
+  //                                                 cost_analysis_options);
+  //   // Cost model analysis for collectives.
+  //   pipeline.AddPass<SolGpuCostModelStatsCollection>(
+  //       gpu_device_info, ShapeSizeBytesFunction());
+  // }
+  return pipeline.Run(module).status();
+}
+
 absl::Status GpuCompiler::RunPostSchedulingPipelines(
     HloModule* module, int64_t scheduler_mem_limit,
     const se::DeviceDescription& gpu_device_info) const {
@@ -1285,58 +1511,55 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
   HloPassPipeline main_pipeline("post-scheduling-passes");
 
   // clang-format off
-// TODO(batzor): Uncomment this. Dependency: GpuConvertAsyncCollectivesToSync
-// // Pipeline for async -> sync conversion on for non-overlapped async ops.
-// {
-//   HloPassPipeline& pipeline =
-//       main_pipeline.AddPass<HloPassPipeline>("async-to-sync-converter");
+  // TODO(batzor): Uncomment this. Dependency: GpuConvertAsyncCollectivesToSync
+  // // Pipeline for async -> sync conversion on for non-overlapped async ops.
+  // {
+  //   HloPassPipeline& pipeline =
+  //       main_pipeline.AddPass<HloPassPipeline>("async-to-sync-converter");
 
-//   if (module->config()
-//               .debug_options()
-//               .xla_gpu_experimental_pipeline_parallelism_opt_level() ==
-//           DebugOptions::PIPELINE_PARALLELISM_OPT_LEVEL_DISABLE &&
-//       (module->config()
-//            .debug_options()
-//            .xla_gpu_enable_pipelined_collectives() ||
-//        module->config().debug_options().xla_gpu_enable_pipelined_p2p())) {
-//     pipeline.AddPass<PipelinedP2PRewriter>();
-//   }
-//   pipeline.AddPass<GpuConvertAsyncCollectivesToSync>();
-// }
+  //   if (module->config()
+  //               .debug_options()
+  //               .xla_gpu_experimental_pipeline_parallelism_opt_level() ==
+  //           DebugOptions::PIPELINE_PARALLELISM_OPT_LEVEL_DISABLE &&
+  //       (module->config()
+  //            .debug_options()
+  //            .xla_gpu_enable_pipelined_collectives() ||
+  //        module->config().debug_options().xla_gpu_enable_pipelined_p2p())) {
+  //     pipeline.AddPass<PipelinedP2PRewriter>();
+  //   }
+  //   pipeline.AddPass<GpuConvertAsyncCollectivesToSync>();
+  // }
   // clang-format on
 
   // clang-format off
-// TODO(batzor): Uncomment this. Dependency: HloRematerialization
-// // Pipeline rematerialization passes with optional host offloading.
-// HloRematerialization::RematerializationSizes sizes;
-// // `HloCostAnalysis` initialization.
-// HloCostAnalysis::Options hlo_cost_analysis_opts =
-//     CreateHloAnalysisOpts(*module, gpu_device_info, ShapeSizeBytesFunction());
-// HloCostAnalysis hlo_cost_analysis(hlo_cost_analysis_opts);
-// // `HloRematerialization` options initialization.
-// HloRematerialization::Options remat_opts = CreateRematOpts(
-//     *module, gpu_device_info, hlo_cost_analysis, scheduler_mem_limit);
-// {
-//   HloPassPipeline& pipeline =
-//       main_pipeline.AddPass<HloPassPipeline>("remat-pipeline");
+  // TODO(batzor): Uncomment this. Dependency: HloRematerialization
+  // // Pipeline rematerialization passes with optional host offloading.
+  // HloRematerialization::RematerializationSizes sizes;
+  // // `HloCostAnalysis` initialization.
+  // HloCostAnalysis::Options hlo_cost_analysis_opts =
+  //     CreateHloAnalysisOpts(*module, gpu_device_info, ShapeSizeBytesFunction());
+  // HloCostAnalysis hlo_cost_analysis(hlo_cost_analysis_opts);
+  // // `HloRematerialization` options initialization.
+  // HloRematerialization::Options remat_opts = CreateRematOpts(
+  //     *module, gpu_device_info, hlo_cost_analysis, scheduler_mem_limit);
+  // {
+  //   HloPassPipeline& pipeline =
+  //       main_pipeline.AddPass<HloPassPipeline>("remat-pipeline");
 
-//   pipeline.AddPass<HloRematerialization>(remat_opts, sizes);
-//   pipeline.AddPass<StreamAttributeAnnotator>(gpu_device_info);
-//   pipeline.AddPass<OptimizationBarrierExpander>();
-// }
+  //   pipeline.AddPass<HloRematerialization>(remat_opts, sizes);
+  //   pipeline.AddPass<StreamAttributeAnnotator>(gpu_device_info);
+  //   pipeline.AddPass<OptimizationBarrierExpander>();
+  // }
   // clang-format on
 
-  // clang-format off
-// TODO(batzor): Uncomment this. Dependency: FusionWrapper
-// Wrap remaining unfused ops that have no LHLO equivalent in single-op
-// fusions. This needs to happen after rematerialization, because that
-// will insert additional copies.
-// {
-//   HloPassPipeline& pipeline =
-//       main_pipeline.AddPass<HloPassPipeline>("fusion-wrapper");
-//   pipeline.AddPass<FusionWrapper>(gpu_device_info);
-// }
-  // clang-format on
+  // Wrap remaining unfused ops that have no LHLO equivalent in single-op
+  // fusions. This needs to happen after rematerialization, because that
+  // will insert additional copies.
+  {
+    HloPassPipeline& pipeline =
+        main_pipeline.AddPass<HloPassPipeline>("fusion-wrapper");
+    pipeline.AddPass<FusionWrapper>(gpu_device_info);
+  }
 
   // Pipeline with passes which wrap a scheduled module into command buffers.
   {
@@ -1344,19 +1567,19 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
         main_pipeline.AddPass<HloPassPipeline>("command-buffer-scheduling");
     pipeline.AddPass<CommandBufferScheduling>(gpu_device_info);
     // clang-format off
-  // TODO(batzor): Uncomment this. Dependency: SanitizeConstantNames
-  // pipeline.AddPass<SanitizeConstantNames>();
+    // TODO(batzor): Uncomment this. Dependency: SanitizeConstantNames
+    // pipeline.AddPass<SanitizeConstantNames>();
     // clang-format on
   }
 
   // clang-format off
-// TODO(batzor): Uncomment this. Dependency: HloVerifierOpts
-// if (module->config().debug_options().xla_gpu_pgle_accuracy_checker() ==
-//     DebugOptions::PGLE_STRICTNESS_LEVEL_ERROR) {
-//   AddHloVerifier(&main_pipeline,
-//                  module->config().debug_options().xla_ignore_channel_id(),
-//                  HloVerifierOpts{}.VerifyInstructionNameUnchanged());
-// }
+  // TODO(batzor): Uncomment this. Dependency: HloVerifierOpts
+  // if (module->config().debug_options().xla_gpu_pgle_accuracy_checker() ==
+  //     DebugOptions::PGLE_STRICTNESS_LEVEL_ERROR) {
+  //   AddHloVerifier(&main_pipeline,
+  //                  module->config().debug_options().xla_ignore_channel_id(),
+  //                  HloVerifierOpts{}.VerifyInstructionNameUnchanged());
+  // }
   // clang-format on
   return main_pipeline.Run(module).status();
 }
