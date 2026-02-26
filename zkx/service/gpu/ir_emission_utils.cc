@@ -36,6 +36,52 @@ bool IsSliceWithUnitStrides(const HloInstruction* instr) {
                                  [](int64_t stride) { return stride == 1; });
 }
 
+namespace {
+
+bool IsContiguousSlice(const Shape& orig, const Shape& sliced,
+                       std::optional<absl::Span<const int64_t>> slice_strides) {
+  std::optional<int64_t> sliced_dim;
+
+  for (auto dim : orig.layout().minor_to_major()) {
+    // All dimensions more major than the sliced one must have size 1.
+    if (sliced_dim.has_value()) {
+      if (sliced.dimensions(dim) != 1) return false;
+    }
+
+    // We found sliced dimension, check that it's not a strided one, because it
+    // means that we can't take a contiguous slice.
+    if (sliced.dimensions(dim) < orig.dimensions(dim)) {
+      if (slice_strides.has_value() && slice_strides.value()[dim] != 1 &&
+          sliced.dimensions(dim) > 1) {
+        return false;
+      }
+      sliced_dim = dim;
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
+bool IsContiguousSlice(const HloInstruction& instr) {
+  if (auto slice = DynCast<HloSliceInstruction>(&instr)) {
+    const Shape& full_shape = slice->operand(0)->shape();
+    const Shape& slice_shape = slice->shape();
+    return IsContiguousSlice(full_shape, slice_shape, slice->slice_strides());
+
+  } else if (auto slice = DynCast<HloDynamicSliceInstruction>(&instr)) {
+    const Shape& full_shape = slice->operand(0)->shape();
+    const Shape& slice_shape = slice->shape();
+    return IsContiguousSlice(full_shape, slice_shape, std::nullopt);
+
+  } else if (auto slice = DynCast<HloDynamicUpdateSliceInstruction>(&instr)) {
+    const Shape& full_shape = slice->shape();
+    const Shape& slice_shape = slice->update()->shape();
+    return IsContiguousSlice(full_shape, slice_shape, std::nullopt);
+  }
+  return false;
+}
+
 bool IsCubDeviceRadixSort(const HloInstruction& hlo) {
   return hlo.opcode() == HloOpcode::kCustomCall &&
          hlo.custom_call_target() == kCubDeviceRadixSortTarget;

@@ -262,6 +262,7 @@ zkx_cc_library(
         "//zkx/service:transpose_folding",
         "//zkx/service:while_loop_constant_sinking",
         "//zkx/service/gpu/transforms:command_buffer_scheduling",
+        "//zkx/service/gpu/transforms:dynamic_slice_fusion_rewriter",
         "//zkx/service/gpu/transforms:fusion_wrapper",
         "//zkx/service/gpu/transforms:layout_assignment",
         "//zkx/service/llvm_ir:llvm_command_line_options",
