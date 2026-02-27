@@ -37,11 +37,13 @@ limitations under the License.
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/Value.h"
 #include "mlir/IR/ValueRange.h"
+#include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "zkx/backends/gpu/codegen/emitters/ir/zkx_gpu_ops.h"
 #include "zkx/codegen/emitters/elemental_hlo_to_mlir.h"
 #include "zkx/codegen/emitters/ir/zkx_ops.h"
@@ -168,6 +170,20 @@ struct RewriteShuffleReduce : mlir::OpRewritePattern<gpu::ShuffleReduceOp> {
       };
 
       auto shuffle = [&](Value value) -> Value {
+        if (!mlir::isa<mlir::IntegerType>(value.getType())) {
+          auto orig_ty = value.getType();
+          unsigned bits =
+              mlir::DataLayout::closest(b.getInsertionBlock()->getParentOp())
+                  .getTypeSizeInBits(orig_ty);
+          auto int_ty = b.getIntegerType(bits);
+          // NOTE(jeong0982): Replace with a TypeInterface-based approach once
+          // an IntegerBitcastable TypeInterface is added to prime-ir, so that
+          // EC and other future types can provide their own bitcast logic.
+          value = b.create<mlir::prime_ir::field::BitcastOp>(int_ty, value);
+          value = shuffle_int(value);
+          value = b.create<mlir::prime_ir::field::BitcastOp>(orig_ty, value);
+          return value;
+        }
         if (value.getType().isUnsignedInteger()) {
           auto ty = mlir::cast<mlir::IntegerType>(value.getType());
           mlir::IntegerType signless_ty = b.getIntegerType(ty.getWidth());
@@ -267,14 +283,14 @@ struct RewriteMaterialize : mlir::OpRewritePattern<gpu::MaterializeOp> {
     mlir::VectorType vec_type =
         GetThreadLevelVectorType(op.getResult().getType());
     mlir::Type element_type = op.getResult().getType().getElementType();
-    mlir::Type data_type = vec_type.getElementType();
-    Value init_vec;
-    if (mlir::isa<mlir::IntegerType>(data_type)) {
-      init_vec = b.create<mlir::arith::ConstantOp>(mlir::DenseElementsAttr::get(
-          vec_type, b.getIntegerAttr(data_type, 0)));
-    } else {
-      return op->emitOpError("invalid data type");
-    }
+    auto zero_attr = b.getZeroAttr(vec_type);
+    auto& dialect = vec_type.getElementType().getDialect();
+    auto* materialize_op =
+        dialect.materializeConstant(b, zero_attr, vec_type, b.getLoc());
+    Value init_vec =
+        materialize_op
+            ? materialize_op->getResult(0)
+            : b.create<mlir::arith::ConstantOp>(zero_attr).getResult();
 
     auto loop = b.create<LoopOp>(
         op.getMapAttr(), op.getIndices(), ValueRange{init_vec},

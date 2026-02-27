@@ -170,3 +170,40 @@ func.func @materialize_and_insert(%input: tensor<32x64xi32>, %i: index,
 // CHECK-NOT: unrealized_conversion_cast
 
 // -----
+
+// shuffle_reduce with field type: cast to i32, shuffle, cast back.
+func.func @combiner_pf(%a: !field.pf<2013265921:i32>,
+    %b: !field.pf<2013265921:i32>) -> !field.pf<2013265921:i32> {
+  return %a : !field.pf<2013265921:i32>
+}
+
+func.func @shuffler_pf(%a: !field.pf<2013265921:i32>)
+    -> !field.pf<2013265921:i32> {
+  %ret = zkx_gpu.shuffle_reduce (%a) to 1 combiner=@combiner_pf
+    : !field.pf<2013265921:i32>
+  return %ret : !field.pf<2013265921:i32>
+}
+// CHECK-LABEL: @shuffler_pf
+// CHECK:         field.bitcast {{.*}} : !pf_babybear -> i32
+// CHECK:         gpu.shuffle down
+// CHECK:         field.bitcast {{.*}} : i32 -> !pf_babybear
+
+// -----
+
+// materialize with field type: field.constant for zero init.
+func.func private @exp_pf(tensor<8x!field.pf<2013265921:i32>>, index)
+    -> !field.pf<2013265921:i32>
+
+#map = #zkx.indexing_map<"(d0)[s0] -> (s0), domain: d0 in [0, 1], s0 in [0, 7]">
+
+func.func @materialize_pf(%input: tensor<8x!field.pf<2013265921:i32>>,
+    %i: index)
+    -> !zkx_gpu.indexed_vector<1x8x!field.pf<2013265921:i32>, #map> {
+  %0 = zkx_gpu.materialize @exp_pf(%input) at #map(%i)
+    : (tensor<8x!field.pf<2013265921:i32>>)
+    -> !zkx_gpu.indexed_vector<1x8x!field.pf<2013265921:i32>, #map>
+  func.return %0
+    : !zkx_gpu.indexed_vector<1x8x!field.pf<2013265921:i32>, #map>
+}
+// CHECK-LABEL: @materialize_pf
+// CHECK:         field.constant dense<0> : vector<8x!pf_babybear>

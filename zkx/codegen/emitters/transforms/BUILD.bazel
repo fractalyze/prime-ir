@@ -170,6 +170,7 @@ zkx_cc_library(
         "//zkx/codegen/emitters:elemental_hlo_to_mlir",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:DataLayoutInterfaces",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:GPUDialect",
         "@llvm-project//mlir:IR",
@@ -178,6 +179,7 @@ zkx_cc_library(
         "@llvm-project//mlir:SCFDialect",
         "@llvm-project//mlir:TensorDialect",
         "@llvm-project//mlir:VectorDialect",
+        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
     ],
 )
 
