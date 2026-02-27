@@ -93,7 +93,7 @@ void BM_bf64_mul_baseline(::benchmark::State &state) {
   BinaryFieldT6 result;
 
   uint64_t inputs[] = {a.value(), b.value()};
-  std::string input_hash = zkbench::ComputeArrayHash(inputs, 2);
+  std::string inputHash = zkbench::ComputeArrayHash(inputs, 2);
 
   for (auto _ : state) {
     result = _mlir_ciface_bf64_mul_baseline(a.value(), b.value());
@@ -104,7 +104,7 @@ void BM_bf64_mul_baseline(::benchmark::State &state) {
 
   uint64_t out = result.value();
   std::string output_hash = zkbench::ComputeArrayHash(&out, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_baseline", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_baseline", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
       "BM_bf64_mul_baseline", {{"field", "BF64"}, {"arch", "baseline"}});
@@ -117,7 +117,7 @@ void BM_bf64_mul_x86(::benchmark::State &state) {
   BinaryFieldT6 result;
 
   uint64_t inputs[] = {a.value(), b.value()};
-  std::string input_hash = zkbench::ComputeArrayHash(inputs, 2);
+  std::string inputHash = zkbench::ComputeArrayHash(inputs, 2);
 
   for (auto _ : state) {
     result = _mlir_ciface_bf64_mul_x86(a.value(), b.value());
@@ -128,7 +128,7 @@ void BM_bf64_mul_x86(::benchmark::State &state) {
 
   uint64_t out = result.value();
   std::string output_hash = zkbench::ComputeArrayHash(&out, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_x86", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_x86", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_bf64_mul_x86",
                                          {{"field", "BF64"}, {"arch", "x86"}});
@@ -142,7 +142,7 @@ void BM_bf64_mul_arm(::benchmark::State &state) {
   BinaryFieldT6 result;
 
   uint64_t inputs[] = {a.value(), b.value()};
-  std::string input_hash = zkbench::ComputeArrayHash(inputs, 2);
+  std::string inputHash = zkbench::ComputeArrayHash(inputs, 2);
 
   for (auto _ : state) {
     result = _mlir_ciface_bf64_mul_arm(a.value(), b.value());
@@ -153,7 +153,7 @@ void BM_bf64_mul_arm(::benchmark::State &state) {
 
   uint64_t out = result.value();
   std::string output_hash = zkbench::ComputeArrayHash(&out, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_arm", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_arm", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_bf64_mul_arm",
                                          {{"field", "BF64"}, {"arch", "arm"}});
@@ -169,7 +169,7 @@ void BM_bf128_mul_baseline(::benchmark::State &state) {
   auto b = BinaryFieldT7::Random();
   BinaryFieldT7 result;
 
-  std::string input_hash = zkbench::ComputeArrayHash(&a, 1);
+  std::string inputHash = zkbench::ComputeArrayHash(&a, 1);
 
   for (auto _ : state) {
     result = _mlir_ciface_bf128_mul_baseline(a.value(), b.value());
@@ -179,7 +179,7 @@ void BM_bf128_mul_baseline(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations());
 
   std::string output_hash = zkbench::ComputeArrayHash(&result, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_baseline", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_baseline", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
       "BM_bf128_mul_baseline", {{"field", "BF128"}, {"arch", "baseline"}});
@@ -191,7 +191,7 @@ void BM_bf128_mul_x86(::benchmark::State &state) {
   auto b = BinaryFieldT7::Random();
   BinaryFieldT7 result;
 
-  std::string input_hash = zkbench::ComputeArrayHash(&a, 1);
+  std::string inputHash = zkbench::ComputeArrayHash(&a, 1);
 
   for (auto _ : state) {
     result = _mlir_ciface_bf128_mul_x86(a.value(), b.value());
@@ -201,7 +201,7 @@ void BM_bf128_mul_x86(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations());
 
   std::string output_hash = zkbench::ComputeArrayHash(&result, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_x86", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_x86", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_bf128_mul_x86",
                                          {{"field", "BF128"}, {"arch", "x86"}});
@@ -214,7 +214,7 @@ void BM_bf128_mul_arm(::benchmark::State &state) {
   auto b = BinaryFieldT7::Random();
   BinaryFieldT7 result;
 
-  std::string input_hash = zkbench::ComputeArrayHash(&a, 1);
+  std::string inputHash = zkbench::ComputeArrayHash(&a, 1);
 
   for (auto _ : state) {
     result = _mlir_ciface_bf128_mul_arm(a.value(), b.value());
@@ -224,7 +224,7 @@ void BM_bf128_mul_arm(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations());
 
   std::string output_hash = zkbench::ComputeArrayHash(&result, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_arm", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_arm", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata("BM_bf128_mul_arm",
                                          {{"field", "BF128"}, {"arch", "arm"}});
@@ -235,17 +235,29 @@ void BM_bf128_mul_arm_polyval(::benchmark::State &state) {
   auto b = BinaryFieldT7::Random();
   BinaryFieldT7 result;
 
+  std::string inputHash = zkbench::ComputeArrayHash(&a, 1);
+
   for (auto _ : state) {
     result = _mlir_ciface_bf128_mul_arm_polyval(a.value(), b.value());
     ::benchmark::DoNotOptimize(result);
     a += result;
   }
   state.SetItemsProcessed(state.iterations());
+
+  std::string outputHash = zkbench::ComputeArrayHash(&result, 1);
+  zkbench::BenchmarkContext::SetTestVectors(
+      "BM_bf128_mul_arm_polyval", inputHash, outputHash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetMetadata(
+      "BM_bf128_mul_arm_polyval",
+      {{"field", "BF128"}, {"arch", "arm_polyval"}});
 }
 
 void BM_bf64_square_arm(::benchmark::State &state) {
   auto a = BinaryFieldT6::Random();
   BinaryFieldT6 result;
+
+  uint64_t input = a.value();
+  std::string inputHash = zkbench::ComputeArrayHash(&input, 1);
 
   for (auto _ : state) {
     result = _mlir_ciface_bf64_square_arm(a.value());
@@ -253,11 +265,20 @@ void BM_bf64_square_arm(::benchmark::State &state) {
     a += result;
   }
   state.SetItemsProcessed(state.iterations());
+
+  uint64_t out = result.value();
+  std::string outputHash = zkbench::ComputeArrayHash(&out, 1);
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_square_arm", inputHash,
+                                            outputHash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetMetadata("BM_bf64_square_arm",
+                                         {{"field", "BF64"}, {"arch", "arm"}});
 }
 
 void BM_bf128_square_arm(::benchmark::State &state) {
   auto a = BinaryFieldT7::Random();
   BinaryFieldT7 result;
+
+  std::string inputHash = zkbench::ComputeArrayHash(&a, 1);
 
   for (auto _ : state) {
     result = _mlir_ciface_bf128_square_arm(a.value());
@@ -265,6 +286,12 @@ void BM_bf128_square_arm(::benchmark::State &state) {
     a += result;
   }
   state.SetItemsProcessed(state.iterations());
+
+  std::string outputHash = zkbench::ComputeArrayHash(&result, 1);
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_square_arm", inputHash,
+                                            outputHash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetMetadata("BM_bf128_square_arm",
+                                         {{"field", "BF128"}, {"arch", "arm"}});
 }
 #endif
 
@@ -276,18 +303,18 @@ void BM_bf8_mul_baseline(::benchmark::State &state) {
   auto b = BinaryFieldT3::Random();
 
   uint8_t inputs[] = {a.value(), b.value()};
-  std::string input_hash = zkbench::ComputeArrayHash(inputs, 2);
+  std::string inputHash = zkbench::ComputeArrayHash(inputs, 2);
 
-  uint8_t last_result = 0;
+  uint8_t lastResult = 0;
   for (auto _ : state) {
-    last_result = _mlir_ciface_bf8_mul_baseline(a.value(), b.value());
-    ::benchmark::DoNotOptimize(last_result);
-    a = BinaryFieldT3(last_result);
+    lastResult = _mlir_ciface_bf8_mul_baseline(a.value(), b.value());
+    ::benchmark::DoNotOptimize(lastResult);
+    a = BinaryFieldT3(lastResult);
   }
   state.SetItemsProcessed(state.iterations());
 
-  std::string output_hash = zkbench::ComputeArrayHash(&last_result, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf8_mul_baseline", input_hash,
+  std::string output_hash = zkbench::ComputeArrayHash(&lastResult, 1);
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf8_mul_baseline", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
       "BM_bf8_mul_baseline", {{"field", "BF8"}, {"arch", "baseline"}});
@@ -304,7 +331,7 @@ void BM_bf8x16_mul_gfni(::benchmark::State &state) {
     b_data[i] = BinaryFieldT3::Random().value();
   }
 
-  std::string input_hash = zkbench::ComputeArrayHash(a_data, 16);
+  std::string inputHash = zkbench::ComputeArrayHash(a_data, 16);
 
   // Create memref descriptors
   MemRef1D16xi8 a_memref = {a_data, a_data, 0, {16}, {1}};
@@ -321,7 +348,7 @@ void BM_bf8x16_mul_gfni(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations() * 16);
 
   std::string output_hash = zkbench::ComputeArrayHash(c_data, 16);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf8x16_mul_gfni", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf8x16_mul_gfni", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
       "BM_bf8x16_mul_gfni",
@@ -340,7 +367,7 @@ void BM_bf8x16_mul_pmull(::benchmark::State &state) {
     b_data[i] = BinaryFieldT3::Random().value();
   }
 
-  std::string input_hash = zkbench::ComputeArrayHash(a_data, 16);
+  std::string inputHash = zkbench::ComputeArrayHash(a_data, 16);
 
   // Create memref descriptors
   MemRef1D16xi8 a_memref = {a_data, a_data, 0, {16}, {1}};
@@ -357,7 +384,7 @@ void BM_bf8x16_mul_pmull(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations() * 16);
 
   std::string output_hash = zkbench::ComputeArrayHash(c_data, 16);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf8x16_mul_pmull", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("BM_bf8x16_mul_pmull", inputHash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
       "BM_bf8x16_mul_pmull",
@@ -374,15 +401,25 @@ void BM_bf8_inverse_baseline(::benchmark::State &state) {
   if (a.IsZero())
     a = BinaryFieldT3::One();
 
+  uint8_t input = a.value();
+  std::string inputHash = zkbench::ComputeArrayHash(&input, 1);
+
+  uint8_t lastResult = 0;
   for (auto _ : state) {
-    auto result = _mlir_ciface_bf8_inverse_baseline(a.value());
-    ::benchmark::DoNotOptimize(result);
+    lastResult = _mlir_ciface_bf8_inverse_baseline(a.value());
+    ::benchmark::DoNotOptimize(lastResult);
     // Chain results to prevent optimization, but keep non-zero
-    a = BinaryFieldT3(result);
+    a = BinaryFieldT3(lastResult);
     if (a.IsZero())
       a = BinaryFieldT3::One();
   }
   state.SetItemsProcessed(state.iterations());
+
+  std::string outputHash = zkbench::ComputeArrayHash(&lastResult, 1);
+  zkbench::BenchmarkContext::SetTestVectors(
+      "BM_bf8_inverse_baseline", inputHash, outputHash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetMetadata(
+      "BM_bf8_inverse_baseline", {{"field", "BF8"}, {"arch", "baseline"}});
 }
 
 // =============================================================================

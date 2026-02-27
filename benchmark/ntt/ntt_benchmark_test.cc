@@ -44,7 +44,7 @@ void BM_ntt_benchmark(::benchmark::State &state) {
                            /*init=*/fillWithRandom);
 
   OwningMemRef<F, 1> ntt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
-  std::string input_hash = zkbench::ComputeArrayHash((*input).data, NUM_COEFFS);
+  std::string inputHash = zkbench::ComputeArrayHash((*input).data, NUM_COEFFS);
 
   for (auto _ : state) {
     state.PauseTiming();
@@ -57,7 +57,7 @@ void BM_ntt_benchmark(::benchmark::State &state) {
     }
   }
 
-  std::string output_hash = zkbench::ComputeArrayHash((*ntt).data, NUM_COEFFS);
+  std::string outputHash = zkbench::ComputeArrayHash((*ntt).data, NUM_COEFFS);
 
   if constexpr (kIsMont) {
     _mlir_ciface_intt_mont(&*ntt);
@@ -80,13 +80,12 @@ void BM_ntt_benchmark(::benchmark::State &state) {
                            ::benchmark::Counter::kIsRate);
 
   // Set zkbench test vectors and metadata
-  const char *bench_name = kIsMont ? "ntt_mont" : "ntt";
-  zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash, output_hash,
+  const char *benchName = kIsMont ? "ntt_mont" : "ntt";
+  zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
                                             verified);
-  zkbench::BenchmarkContext::SetMetadata(bench_name,
-                                         {{"field", "BN254"},
-                                          {"num_coeffs", NUM_COEFFS},
-                                          {"montgomery", kIsMont}});
+  zkbench::BenchmarkContext::SetMetadata(benchName, {{"field", "BN254"},
+                                                     {"num_coeffs", NUM_COEFFS},
+                                                     {"montgomery", kIsMont}});
 }
 
 template <bool kIsMont>
@@ -102,7 +101,7 @@ void BM_intt_benchmark(::benchmark::State &state) {
     _mlir_ciface_ntt(&*ntt);
   }
 
-  std::string input_hash = zkbench::ComputeArrayHash((*ntt).data, NUM_COEFFS);
+  std::string inputHash = zkbench::ComputeArrayHash((*ntt).data, NUM_COEFFS);
 
   OwningMemRef<F, 1> intt(/*shape=*/{NUM_COEFFS}, /*shapeAlloc=*/{});
   for (auto _ : state) {
@@ -116,7 +115,7 @@ void BM_intt_benchmark(::benchmark::State &state) {
     }
   }
 
-  std::string output_hash = zkbench::ComputeArrayHash((*intt).data, NUM_COEFFS);
+  std::string outputHash = zkbench::ComputeArrayHash((*intt).data, NUM_COEFFS);
 
   bool verified = true;
   for (int i = 0; i < NUM_COEFFS; i++) {
@@ -133,13 +132,12 @@ void BM_intt_benchmark(::benchmark::State &state) {
                            ::benchmark::Counter::kIsRate);
 
   // Set zkbench test vectors and metadata
-  const char *bench_name = kIsMont ? "intt_mont" : "intt";
-  zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash, output_hash,
+  const char *benchName = kIsMont ? "intt_mont" : "intt";
+  zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
                                             verified);
-  zkbench::BenchmarkContext::SetMetadata(bench_name,
-                                         {{"field", "BN254"},
-                                          {"num_coeffs", NUM_COEFFS},
-                                          {"montgomery", kIsMont}});
+  zkbench::BenchmarkContext::SetMetadata(benchName, {{"field", "BN254"},
+                                                     {"num_coeffs", NUM_COEFFS},
+                                                     {"montgomery", kIsMont}});
 }
 
 BENCHMARK_TEMPLATE(BM_ntt_benchmark, /*kIsMont=*/false)

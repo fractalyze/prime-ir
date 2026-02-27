@@ -41,42 +41,42 @@ void fillVectorWithZero(Vector16xI32 &data,
 
 template <bool kIsPacked>
 void BM_permute_10000_benchmark(::benchmark::State &state) {
-  const char *bench_name = kIsPacked ? "permute_packed_10000" : "permute_10000";
+  const char *benchName = kIsPacked ? "permute_packed_10000" : "permute_10000";
 
   if constexpr (kIsPacked) {
     OwningMemRef<Vector16xI32, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
                                         /*init=*/fillVectorWithZero);
 
-    std::string input_hash = zkbench::ComputeArrayHash(
+    std::string inputHash = zkbench::ComputeArrayHash(
         reinterpret_cast<const uint32_t *>((*input).data), 16 * 16);
 
     for (auto _ : state) {
       _mlir_ciface_packed_permute_10000(&*input);
     }
 
-    std::string output_hash = zkbench::ComputeArrayHash(
+    std::string outputHash = zkbench::ComputeArrayHash(
         reinterpret_cast<const uint32_t *>((*input).data), 16 * 16);
 
-    zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash,
-                                              output_hash, /*verified=*/true);
+    zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
+                                              /*verified=*/true);
   } else {
     OwningMemRef<uint32_t, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
                                     /*init=*/fillWithZero);
 
-    std::string input_hash = zkbench::ComputeArrayHash((*input).data, 16);
+    std::string inputHash = zkbench::ComputeArrayHash((*input).data, 16);
 
     for (auto _ : state) {
       _mlir_ciface_permute_10000(&*input);
     }
 
-    std::string output_hash = zkbench::ComputeArrayHash((*input).data, 16);
+    std::string outputHash = zkbench::ComputeArrayHash((*input).data, 16);
 
-    zkbench::BenchmarkContext::SetTestVectors(bench_name, input_hash,
-                                              output_hash, /*verified=*/true);
+    zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
+                                              /*verified=*/true);
   }
 
   zkbench::BenchmarkContext::SetMetadata(
-      bench_name,
+      benchName,
       {{"field", "M31"}, {"iterations", 10000}, {"packed", kIsPacked}});
 }
 
