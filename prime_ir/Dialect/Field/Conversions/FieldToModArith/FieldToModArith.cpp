@@ -20,6 +20,8 @@ limitations under the License.
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
@@ -294,194 +296,134 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
   }
 };
 
-struct ConvertInverse : public OpConversionPattern<InverseOp> {
-  ConvertInverse(const TypeConverter &converter, MLIRContext *context,
-                 IntrinsicFunctionGenerator *generator = nullptr,
-                 LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<InverseOp>(converter, context),
-        generator(generator), mode(mode) {
-    setHasBoundedRewriteRecursion(true);
-  }
+template <typename OpT, typename Derived>
+struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
+  using Base = ConvertFieldOpBase;
+  using OpAdaptor = typename OpConversionPattern<OpT>::OpAdaptor;
 
-  LogicalResult
-  matchAndRewrite(InverseOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    ScopedBuilderContext scopedBuilderContext(&b);
-
-    Type fieldType = getElementTypeOrSelf(op.getOutput());
-
-    // Use intrinsic for quartic extension fields if enabled
-    if (generator &&
-        IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
-      auto efType = cast<ExtensionFieldType>(fieldType);
-      Value result = generator->emitQuarticInverseCall(
-          rewriter, op.getLoc(), efType, adaptor.getInput());
-      rewriter.replaceOp(op, result);
-      return success();
-    }
-
-    FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
-    rewriter.replaceOp(op, {codeGen.inverse()});
-    return success();
-  }
-
-private:
-  IntrinsicFunctionGenerator *generator;
-  LoweringMode mode;
-};
-
-struct ConvertNegate : public OpConversionPattern<NegateOp> {
-  ConvertNegate(const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern<NegateOp>(typeConverter, context) {
-    setHasBoundedRewriteRecursion(true);
-  }
-
-  LogicalResult
-  matchAndRewrite(NegateOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    ScopedBuilderContext scopedBuilderContext(&b);
-
-    Type fieldType = getElementTypeOrSelf(op.getOutput());
-    FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
-    rewriter.replaceOp(op, {-codeGen});
-    return success();
-  }
-};
-
-struct ConvertAdd : public OpConversionPattern<AddOp> {
-  ConvertAdd(const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern<AddOp>(typeConverter, context) {
-    setHasBoundedRewriteRecursion(true);
-  }
-
-  LogicalResult
-  matchAndRewrite(AddOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    ScopedBuilderContext scopedBuilderContext(&b);
-
-    Type fieldType = getElementTypeOrSelf(op.getOutput());
-    FieldCodeGen lhsCodeGen(fieldType, adaptor.getLhs(), typeConverter);
-    FieldCodeGen rhsCodeGen(fieldType, adaptor.getRhs(), typeConverter);
-    rewriter.replaceOp(op, {lhsCodeGen + rhsCodeGen});
-    return success();
-  }
-};
-
-struct ConvertDouble : public OpConversionPattern<DoubleOp> {
-  ConvertDouble(const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern<DoubleOp>(typeConverter, context) {
-    setHasBoundedRewriteRecursion(true);
-  }
-
-  LogicalResult
-  matchAndRewrite(DoubleOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    ScopedBuilderContext scopedBuilderContext(&b);
-
-    Type fieldType = getElementTypeOrSelf(op.getOutput());
-    FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
-    rewriter.replaceOp(op, {codeGen.dbl()});
-    return success();
-  }
-};
-
-struct ConvertSub : public OpConversionPattern<SubOp> {
-  ConvertSub(const TypeConverter &typeConverter, MLIRContext *context)
-      : OpConversionPattern<SubOp>(typeConverter, context) {
-    setHasBoundedRewriteRecursion(true);
-  }
-
-  LogicalResult
-  matchAndRewrite(SubOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    ScopedBuilderContext scopedBuilderContext(&b);
-
-    Type fieldType = getElementTypeOrSelf(op.getOutput());
-    FieldCodeGen lhsCodeGen(fieldType, adaptor.getLhs(), typeConverter);
-    FieldCodeGen rhsCodeGen(fieldType, adaptor.getRhs(), typeConverter);
-    rewriter.replaceOp(op, {lhsCodeGen - rhsCodeGen});
-    return success();
-  }
-};
-
-struct ConvertMul : public OpConversionPattern<MulOp> {
-  ConvertMul(const TypeConverter &converter, MLIRContext *context,
-             IntrinsicFunctionGenerator *generator = nullptr,
-             LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<MulOp>(converter, context), generator(generator),
+  ConvertFieldOpBase(const TypeConverter &converter, MLIRContext *context,
+                     IntrinsicFunctionGenerator *generator = nullptr,
+                     LoweringMode mode = LoweringMode::Inline)
+      : OpConversionPattern<OpT>(converter, context), generator(generator),
         mode(mode) {
-    setHasBoundedRewriteRecursion(true);
+    this->setHasBoundedRewriteRecursion(true);
   }
 
   LogicalResult
-  matchAndRewrite(MulOp op, OpAdaptor adaptor,
+  matchAndRewrite(OpT op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ScopedBuilderContext scopedBuilderContext(&b);
-
     Type fieldType = getElementTypeOrSelf(op.getOutput());
 
-    // Use intrinsic for quartic extension fields if enabled
     if (generator &&
         IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
       auto efType = cast<ExtensionFieldType>(fieldType);
-      Value result = generator->emitQuarticMulCall(
-          rewriter, op.getLoc(), efType, adaptor.getLhs(), adaptor.getRhs());
-      rewriter.replaceOp(op, result);
+      rewriter.replaceOp(op,
+                         static_cast<const Derived *>(this)->emitIntrinsicCall(
+                             rewriter, op.getLoc(), efType, adaptor));
       return success();
     }
 
-    FieldCodeGen lhsCodeGen(fieldType, adaptor.getLhs(), typeConverter);
-    FieldCodeGen rhsCodeGen(fieldType, adaptor.getRhs(), typeConverter);
-    rewriter.replaceOp(op, {lhsCodeGen * rhsCodeGen});
+    rewriter.replaceOp(
+        op, {static_cast<const Derived *>(this)->emitInlineCodeGen(fieldType,
+                                                                   adaptor)});
     return success();
   }
 
-private:
+protected:
   IntrinsicFunctionGenerator *generator;
   LoweringMode mode;
 };
 
-struct ConvertSquare : public OpConversionPattern<SquareOp> {
-  ConvertSquare(const TypeConverter &converter, MLIRContext *context,
-                IntrinsicFunctionGenerator *generator = nullptr,
-                LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<SquareOp>(converter, context), generator(generator),
-        mode(mode) {
-    setHasBoundedRewriteRecursion(true);
+struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
+  using Base::Base;
+  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
+                          OpAdaptor adaptor) const {
+    return generator->emitQuarticInverseCall(b, loc, efType,
+                                             adaptor.getInput());
   }
-
-  LogicalResult
-  matchAndRewrite(SquareOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    ScopedBuilderContext scopedBuilderContext(&b);
-
-    Type fieldType = getElementTypeOrSelf(op.getOutput());
-
-    // Use intrinsic for quartic extension fields if enabled
-    if (generator &&
-        IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
-      auto efType = cast<ExtensionFieldType>(fieldType);
-      Value result = generator->emitQuarticSquareCall(
-          rewriter, op.getLoc(), efType, adaptor.getInput());
-      rewriter.replaceOp(op, result);
-      return success();
-    }
-
-    FieldCodeGen codeGen(fieldType, adaptor.getInput(), typeConverter);
-    rewriter.replaceOp(op, {codeGen.square()});
-    return success();
+  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+    return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
+        .inverse();
   }
+};
 
-private:
-  IntrinsicFunctionGenerator *generator;
-  LoweringMode mode;
+struct ConvertNegate : ConvertFieldOpBase<NegateOp, ConvertNegate> {
+  using Base::Base;
+  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
+                          OpAdaptor adaptor) const {
+    return generator->emitNegateCall(b, loc, efType, adaptor.getInput());
+  }
+  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+    return -FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter);
+  }
+};
+
+struct ConvertAdd : ConvertFieldOpBase<AddOp, ConvertAdd> {
+  using Base::Base;
+  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
+                          OpAdaptor adaptor) const {
+    return generator->emitAddCall(b, loc, efType, adaptor.getLhs(),
+                                  adaptor.getRhs());
+  }
+  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+    FieldCodeGen lhs(fieldType, adaptor.getLhs(), this->typeConverter);
+    FieldCodeGen rhs(fieldType, adaptor.getRhs(), this->typeConverter);
+    return lhs + rhs;
+  }
+};
+
+struct ConvertDouble : ConvertFieldOpBase<DoubleOp, ConvertDouble> {
+  using Base::Base;
+  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
+                          OpAdaptor adaptor) const {
+    return generator->emitDoubleCall(b, loc, efType, adaptor.getInput());
+  }
+  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+    return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
+        .dbl();
+  }
+};
+
+struct ConvertSub : ConvertFieldOpBase<SubOp, ConvertSub> {
+  using Base::Base;
+  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
+                          OpAdaptor adaptor) const {
+    return generator->emitSubCall(b, loc, efType, adaptor.getLhs(),
+                                  adaptor.getRhs());
+  }
+  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+    FieldCodeGen lhs(fieldType, adaptor.getLhs(), this->typeConverter);
+    FieldCodeGen rhs(fieldType, adaptor.getRhs(), this->typeConverter);
+    return lhs - rhs;
+  }
+};
+
+struct ConvertMul : ConvertFieldOpBase<MulOp, ConvertMul> {
+  using Base::Base;
+  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
+                          OpAdaptor adaptor) const {
+    return generator->emitQuarticMulCall(b, loc, efType, adaptor.getLhs(),
+                                         adaptor.getRhs());
+  }
+  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+    FieldCodeGen lhs(fieldType, adaptor.getLhs(), this->typeConverter);
+    FieldCodeGen rhs(fieldType, adaptor.getRhs(), this->typeConverter);
+    return lhs * rhs;
+  }
+};
+
+struct ConvertSquare : ConvertFieldOpBase<SquareOp, ConvertSquare> {
+  using Base::Base;
+  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
+                          OpAdaptor adaptor) const {
+    return generator->emitQuarticSquareCall(b, loc, efType, adaptor.getInput());
+  }
+  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+    return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
+        .square();
+  }
 };
 
 struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
@@ -693,6 +635,86 @@ bool operationContainsBinaryFieldType(Operation *op) {
 
 } // namespace
 
+/// Outline high-degree extension field ops into shared intrinsic functions.
+///
+/// This pre-processing step runs before applyPartialConversion to work around
+/// a fundamental limitation: intrinsic functions created during dialect
+/// conversion (via raw OpBuilder) are invisible to the conversion framework,
+/// and applyPartialConversion rolls back all changes on failure.
+///
+/// Multi-level intrinsic strategy:
+/// 1. Pre-create intrinsic functions for ALL tower levels (Fp12, Fp6, Fp2)
+///    so the generator finds existing functions during conversion
+/// 2. Replace user function ops with calls to top-level intrinsics
+/// 3. During conversion, intrinsic function bodies expand one level,
+///    with sub-ops redirected to lower-level intrinsics via the generator
+static void outlineExtensionFieldOps(ModuleOp module, LoweringMode mode,
+                                     IntrinsicFunctionGenerator &generator) {
+  // Phase 1: Discover all extension field types and pre-create intrinsics
+  // for the full tower hierarchy. This ensures the generator's
+  // getOrCreateFunction always finds existing functions (via SymbolTable
+  // lookup) during conversion, avoiding raw OpBuilder function creation.
+  DenseSet<Type> seenTypes;
+  module.walk([&](Operation *op) {
+    if (!isa<AddOp, SubOp, NegateOp, DoubleOp, MulOp, SquareOp, InverseOp>(op))
+      return;
+    Type fieldType = getElementTypeOrSelf(op->getResult(0).getType());
+    if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
+      if (efType.getDegreeOverPrime() >= 2 &&
+          efType.getBasePrimeField().getStorageBitWidth() > 64 &&
+          !seenTypes.contains(efType)) {
+        seenTypes.insert(efType);
+        generator.preCreateIntrinsicsForTower(efType);
+      }
+    }
+  });
+
+  // Phase 2: Replace qualifying ops in user functions with intrinsic calls
+  SmallVector<Operation *> opsToOutline;
+  module.walk([&](Operation *op) {
+    if (isInsideIntrinsicFunction(op))
+      return;
+    if (!isa<AddOp, SubOp, NegateOp, DoubleOp, MulOp, SquareOp, InverseOp>(op))
+      return;
+    Type fieldType = getElementTypeOrSelf(op->getResult(0).getType());
+    if (IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode))
+      opsToOutline.push_back(op);
+  });
+
+  for (Operation *op : opsToOutline) {
+    OpBuilder builder(op);
+    auto efType = cast<ExtensionFieldType>(
+        getElementTypeOrSelf(op->getResult(0).getType()));
+
+    Value result;
+    if (auto addOp = dyn_cast<AddOp>(op)) {
+      result = generator.emitAddCall(builder, op->getLoc(), efType,
+                                     addOp.getLhs(), addOp.getRhs());
+    } else if (auto subOp = dyn_cast<SubOp>(op)) {
+      result = generator.emitSubCall(builder, op->getLoc(), efType,
+                                     subOp.getLhs(), subOp.getRhs());
+    } else if (auto negateOp = dyn_cast<NegateOp>(op)) {
+      result = generator.emitNegateCall(builder, op->getLoc(), efType,
+                                        negateOp.getInput());
+    } else if (auto doubleOp = dyn_cast<DoubleOp>(op)) {
+      result = generator.emitDoubleCall(builder, op->getLoc(), efType,
+                                        doubleOp.getInput());
+    } else if (auto mulOp = dyn_cast<MulOp>(op)) {
+      result = generator.emitQuarticMulCall(builder, op->getLoc(), efType,
+                                            mulOp.getLhs(), mulOp.getRhs());
+    } else if (auto squareOp = dyn_cast<SquareOp>(op)) {
+      result = generator.emitQuarticSquareCall(builder, op->getLoc(), efType,
+                                               squareOp.getInput());
+    } else if (auto inverseOp = dyn_cast<InverseOp>(op)) {
+      result = generator.emitQuarticInverseCall(builder, op->getLoc(), efType,
+                                                inverseOp.getInput());
+    }
+
+    op->getResult(0).replaceAllUsesWith(result);
+    op->erase();
+  }
+}
+
 struct FieldToModArith : impl::FieldToModArithBase<FieldToModArith> {
   using FieldToModArithBase::FieldToModArithBase;
 
@@ -707,10 +729,29 @@ void FieldToModArith::runOnOperation() {
   // Parse the lowering mode option
   LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
 
-  // Create intrinsic function generator if needed
-  std::unique_ptr<IntrinsicFunctionGenerator> intrinsicGenerator;
+  // Generator must outlive both outlining and conversion to maintain the
+  // SymbolTable cache — conversion patterns look up existing functions.
+  std::optional<IntrinsicFunctionGenerator> generator;
   if (mode != LoweringMode::Inline) {
-    intrinsicGenerator = std::make_unique<IntrinsicFunctionGenerator>(module);
+    generator.emplace(module);
+
+    // Pre-pass: outline high-degree extension field ops into shared functions.
+    // Also pre-creates intrinsic functions for all tower levels so the
+    // generator always finds existing functions during conversion.
+    outlineExtensionFieldOps(module, mode, *generator);
+
+    // Set LLVM internal linkage on intrinsic functions to avoid duplicate
+    // symbol errors when multiple HLO computations are compiled as separate
+    // LLVM modules and linked together in the JIT.
+    // Only set when the LLVM dialect is loaded (e.g., in the ZKX JIT pipeline).
+    if (context->getLoadedDialect<LLVM::LLVMDialect>()) {
+      auto internalLinkage =
+          LLVM::LinkageAttr::get(context, LLVM::Linkage::Internal);
+      module.walk([&](func::FuncOp funcOp) {
+        if (funcOp.getName().starts_with("__prime_ir_"))
+          funcOp->setAttr("llvm.linkage", internalLinkage);
+      });
+    }
   }
 
   ConversionTarget target(*context);
@@ -730,21 +771,22 @@ void FieldToModArith::runOnOperation() {
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
 
-  // Register patterns that support intrinsic mode
-  patterns.add<ConvertInverse, ConvertMul, ConvertSquare>(
-      typeConverter, context, intrinsicGenerator.get(), mode);
+  // Pass the generator to conversion patterns for multi-level intrinsic calls:
+  // when converting Fp12 intrinsic bodies, the Fp6 sub-ops should call pre-
+  // created Fp6 intrinsics instead of being expanded inline.
+  IntrinsicFunctionGenerator *generatorPtr =
+      generator.has_value() ? &*generator : nullptr;
+  patterns.add<ConvertInverse, ConvertMul, ConvertSquare, ConvertAdd,
+               ConvertSub, ConvertNegate, ConvertDouble>(typeConverter, context,
+                                                         generatorPtr, mode);
 
   patterns.add<
       // clang-format off
-      ConvertAdd,
       ConvertBitcast,
       ConvertConstant,
       ConvertCmp,
-      ConvertDouble,
       ConvertFromMont,
-      ConvertNegate,
       ConvertPowUI,
-      ConvertSub,
       ConvertToMont,
       ConvertAny<ExtFromCoeffsOp>,
       ConvertAny<ExtToCoeffsOp>,

@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "llvm/ADT/Twine.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
+#include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 
 namespace mlir::prime_ir::field {
 
@@ -26,35 +27,146 @@ bool IntrinsicFunctionGenerator::shouldUseIntrinsic(Operation *op,
   if (mode == LoweringMode::Inline)
     return false;
 
-  if (isInsideIntrinsicFunction(op))
-    return false;
-
   auto efType = dyn_cast<ExtensionFieldType>(fieldType);
   if (!efType)
     return false;
 
-  // Both Intrinsic and Auto modes use intrinsic for quartic (degree >= 4)
-  return efType.getDegree() >= 4;
+  if (efType.getDegreeOverPrime() < 2)
+    return false;
+
+  // Only outline for large prime fields (>64-bit) where function call overhead
+  // is negligible. Small fields (BabyBear=31bit, Goldilocks=64bit) benefit
+  // more from inlining for LLVM cross-operation optimization.
+  if (efType.getBasePrimeField().getStorageBitWidth() <= 64)
+    return false;
+
+  // Inside an intrinsic function, only use intrinsics for strictly lower-degree
+  // extension fields to enable multi-level call chains (e.g., Fp12 -> Fp6 ->
+  // Fp2) while preventing self-recursive calls.
+  if (auto parentFunc = op->getParentOfType<func::FuncOp>()) {
+    if (parentFunc.getName().starts_with("__prime_ir_")) {
+      auto parentInputTypes = parentFunc.getArgumentTypes();
+      if (!parentInputTypes.empty()) {
+        if (auto parentEfType =
+                dyn_cast<ExtensionFieldType>(parentInputTypes[0])) {
+          if (efType.getDegreeOverPrime() >= parentEfType.getDegreeOverPrime())
+            return false;
+        }
+      }
+    }
+  }
+
+  return true;
 }
 
 std::string
 IntrinsicFunctionGenerator::mangleFunctionName(StringRef baseName,
                                                ExtensionFieldType type) {
-  // Create a unique name based on the type
-  // Format: __prime_ir_<baseName>_<degree>_<modulus_hash>
-  auto baseField = cast<PrimeFieldType>(type.getBaseField());
+  // Format: __prime_ir_<baseName>_<degreeOverPrime>_<modulus_hash>
+  // Use getBasePrimeField() to handle tower extensions (e.g., Fp6 = 3x Fp2).
+  PrimeFieldType baseField = type.getBasePrimeField();
   APInt modulus = baseField.getModulus().getValue();
 
-  // Use a simple hash of the modulus to keep names manageable
   uint64_t modulusHash = modulus.getLimitedValue();
   if (modulus.getBitWidth() > 64) {
-    // For larger moduli, use a combination of high and low bits
     modulusHash ^= modulus.extractBits(64, 64).getLimitedValue();
   }
 
-  return ("__prime_ir_" + baseName + "_" + Twine(type.getDegree()) + "_" +
-          Twine(modulusHash))
+  return ("__prime_ir_" + baseName + "_" + Twine(type.getDegreeOverPrime()) +
+          "_" + Twine(modulusHash))
       .str();
+}
+
+void IntrinsicFunctionGenerator::preCreateIntrinsicsForTower(
+    ExtensionFieldType type) {
+  if (type.getDegreeOverPrime() < 2)
+    return;
+
+  // Create intrinsics for this level (bottom-up: sub-levels first)
+  if (auto subEfType = dyn_cast<ExtensionFieldType>(type.getBaseField()))
+    preCreateIntrinsicsForTower(subEfType);
+
+  getOrCreateAddFunction(type);
+  getOrCreateSubFunction(type);
+  getOrCreateNegateFunction(type);
+  getOrCreateDoubleFunction(type);
+  getOrCreateQuarticMulFunction(type);
+  getOrCreateQuarticSquareFunction(type);
+  getOrCreateQuarticInverseFunction(type);
+}
+
+func::FuncOp
+IntrinsicFunctionGenerator::getOrCreateAddFunction(ExtensionFieldType type) {
+  return getOrCreateFunction(mangleFunctionName("ext4_add", type), {type, type},
+                             {type}, [&](func::FuncOp func) {
+                               OpBuilder builder(func.getContext());
+                               auto args = setupFunctionBody(func, builder);
+                               Value result = builder.create<AddOp>(
+                                   func.getLoc(), type, args[0], args[1]);
+                               emitReturn(builder, func.getLoc(), result);
+                             });
+}
+
+func::FuncOp
+IntrinsicFunctionGenerator::getOrCreateSubFunction(ExtensionFieldType type) {
+  return getOrCreateFunction(mangleFunctionName("ext4_sub", type), {type, type},
+                             {type}, [&](func::FuncOp func) {
+                               OpBuilder builder(func.getContext());
+                               auto args = setupFunctionBody(func, builder);
+                               Value result = builder.create<SubOp>(
+                                   func.getLoc(), type, args[0], args[1]);
+                               emitReturn(builder, func.getLoc(), result);
+                             });
+}
+
+func::FuncOp
+IntrinsicFunctionGenerator::getOrCreateNegateFunction(ExtensionFieldType type) {
+  return getOrCreateFunction(mangleFunctionName("ext4_negate", type), {type},
+                             {type}, [&](func::FuncOp func) {
+                               OpBuilder builder(func.getContext());
+                               auto args = setupFunctionBody(func, builder);
+                               Value result = builder.create<NegateOp>(
+                                   func.getLoc(), type, args[0]);
+                               emitReturn(builder, func.getLoc(), result);
+                             });
+}
+
+Value IntrinsicFunctionGenerator::emitAddCall(OpBuilder &builder, Location loc,
+                                              ExtensionFieldType type,
+                                              Value lhs, Value rhs) {
+  return emitCall(builder, loc, getOrCreateAddFunction(type), {lhs, rhs});
+}
+
+Value IntrinsicFunctionGenerator::emitSubCall(OpBuilder &builder, Location loc,
+                                              ExtensionFieldType type,
+                                              Value lhs, Value rhs) {
+  return emitCall(builder, loc, getOrCreateSubFunction(type), {lhs, rhs});
+}
+
+Value IntrinsicFunctionGenerator::emitNegateCall(OpBuilder &builder,
+                                                 Location loc,
+                                                 ExtensionFieldType type,
+                                                 Value input) {
+  return emitCall(builder, loc, getOrCreateNegateFunction(type), {input});
+}
+
+func::FuncOp
+IntrinsicFunctionGenerator::getOrCreateDoubleFunction(ExtensionFieldType type) {
+  return getOrCreateFunction(mangleFunctionName("ext4_double", type), {type},
+                             {type}, [&](func::FuncOp func) {
+                               OpBuilder builder(func.getContext());
+                               auto args = setupFunctionBody(func, builder);
+                               Value result = builder.create<DoubleOp>(
+                                   func.getLoc(), type, args[0]);
+                               emitReturn(builder, func.getLoc(), result);
+                             });
+}
+
+Value IntrinsicFunctionGenerator::emitDoubleCall(OpBuilder &builder,
+                                                 Location loc,
+                                                 ExtensionFieldType type,
+                                                 Value input) {
+  return emitCall(builder, loc, getOrCreateDoubleFunction(type), {input});
 }
 
 func::FuncOp IntrinsicFunctionGenerator::getOrCreateQuarticMulFunction(

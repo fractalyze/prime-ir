@@ -38,30 +38,66 @@ class IntrinsicFunctionGenerator
 public:
   explicit IntrinsicFunctionGenerator(ModuleOp module) : Base(module) {}
 
-  /// Get or create the intrinsic function for quartic extension field multiply.
+  /// Get or create the intrinsic function for extension field multiply.
   func::FuncOp getOrCreateQuarticMulFunction(ExtensionFieldType type);
 
-  /// Get or create the intrinsic function for quartic extension field square.
+  /// Get or create the intrinsic function for extension field square.
   func::FuncOp getOrCreateQuarticSquareFunction(ExtensionFieldType type);
 
-  /// Get or create the intrinsic function for quartic extension field inverse.
+  /// Get or create the intrinsic function for extension field inverse.
   func::FuncOp getOrCreateQuarticInverseFunction(ExtensionFieldType type);
 
-  /// Emit a call to the quartic multiplication intrinsic.
+  /// Get or create the intrinsic function for extension field add.
+  func::FuncOp getOrCreateAddFunction(ExtensionFieldType type);
+
+  /// Get or create the intrinsic function for extension field sub.
+  func::FuncOp getOrCreateSubFunction(ExtensionFieldType type);
+
+  /// Get or create the intrinsic function for extension field negate.
+  func::FuncOp getOrCreateNegateFunction(ExtensionFieldType type);
+
+  /// Get or create the intrinsic function for extension field double.
+  func::FuncOp getOrCreateDoubleFunction(ExtensionFieldType type);
+
+  /// Emit a call to the multiplication intrinsic.
   Value emitQuarticMulCall(OpBuilder &builder, Location loc,
                            ExtensionFieldType type, Value lhs, Value rhs);
 
-  /// Emit a call to the quartic square intrinsic.
+  /// Emit a call to the square intrinsic.
   Value emitQuarticSquareCall(OpBuilder &builder, Location loc,
                               ExtensionFieldType type, Value input);
 
-  /// Emit a call to the quartic inverse intrinsic.
+  /// Emit a call to the inverse intrinsic.
   Value emitQuarticInverseCall(OpBuilder &builder, Location loc,
                                ExtensionFieldType type, Value input);
 
+  /// Emit a call to the add intrinsic.
+  Value emitAddCall(OpBuilder &builder, Location loc, ExtensionFieldType type,
+                    Value lhs, Value rhs);
+
+  /// Emit a call to the sub intrinsic.
+  Value emitSubCall(OpBuilder &builder, Location loc, ExtensionFieldType type,
+                    Value lhs, Value rhs);
+
+  /// Emit a call to the negate intrinsic.
+  Value emitNegateCall(OpBuilder &builder, Location loc,
+                       ExtensionFieldType type, Value input);
+
+  /// Emit a call to the double intrinsic.
+  Value emitDoubleCall(OpBuilder &builder, Location loc,
+                       ExtensionFieldType type, Value input);
+
+  /// Proactively create intrinsic functions for all levels of a tower
+  /// extension. For Fp12 = Fp6² = (Fp2³)², this creates intrinsics for Fp12,
+  /// Fp6, and Fp2. Must be called before conversion so the generator finds
+  /// existing functions (via SymbolTable lookup) instead of creating new ones
+  /// during conversion.
+  void preCreateIntrinsicsForTower(ExtensionFieldType type);
+
   /// Determine if an operation should use intrinsic mode based on type and
-  /// mode. Returns false if the operation is inside an intrinsic function
-  /// (detected by `__prime_ir_` prefix) to prevent infinite recursion.
+  /// mode. Inside intrinsic function bodies, allows lower-degree operations
+  /// to use intrinsics (enabling multi-level call chains like Fp12→Fp6→Fp2)
+  /// while preventing self-recursive calls.
   static bool shouldUseIntrinsic(Operation *op, Type fieldType,
                                  LoweringMode mode);
 
