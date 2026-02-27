@@ -340,3 +340,31 @@ func.func @constant_vector() -> vector<2x3xf32> {
 // CHECK-LABEL: func.func @constant_vector
 // CHECK-SAME: -> vector<6xf32>
 // CHECK-NOT:  builtin.unrealized_conversion_cast
+
+// -----
+
+// Non-cast multi-dim field vector init args should be flattened.
+func.func @for_field_vector_init(%v: vector<8x1x!field.pf<2013265921:i32>>)
+    -> vector<8x1x!field.pf<2013265921:i32>> {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %result = scf.for %i = %c0 to %c1 step %c1
+      iter_args(%acc = %v) -> (vector<8x1x!field.pf<2013265921:i32>>) {
+    scf.yield %acc : vector<8x1x!field.pf<2013265921:i32>>
+  }
+  return %result : vector<8x1x!field.pf<2013265921:i32>>
+}
+// CHECK-LABEL: func.func @for_field_vector_init
+// CHECK-SAME:    vector<8x!pf_babybear>
+// CHECK-NOT:     vector<8x1x
+
+// -----
+
+// Cross-type casts (field ↔ integer) should not cause convergence failure.
+func.func @cross_type_cast(%v: !field.pf<2013265921:i32>) -> i32 {
+  %0 = builtin.unrealized_conversion_cast %v
+    : !field.pf<2013265921:i32> to i32
+  return %0 : i32
+}
+// CHECK-LABEL: func.func @cross_type_cast
+// CHECK:         builtin.unrealized_conversion_cast

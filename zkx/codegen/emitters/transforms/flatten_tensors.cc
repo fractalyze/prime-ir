@@ -434,12 +434,15 @@ struct RewriteFor : public OpRewritePattern<ForOp> {
     new_init_args.reserve(op.getNumResults());
     for (auto [index, arg] : llvm::enumerate(op.getInitArgs())) {
       auto type_before_linearization = GetDelinearizedTensorOrVector(arg);
-      if (!type_before_linearization.has_value()) {
+      if (type_before_linearization.has_value()) {
+        new_init_args.push_back(*type_before_linearization);
+        args_to_update.set(index);
+      } else if (!IsScalarOrFlat(arg.getType())) {
+        new_init_args.push_back(Flatten(arg, rewriter));
+        args_to_update.set(index);
+      } else {
         new_init_args.push_back(arg);
-        continue;
       }
-      new_init_args.push_back(*type_before_linearization);
-      args_to_update.set(index);
     }
     if (args_to_update.none()) {
       return rewriter.notifyMatchFailure(op, "no args to update");
@@ -707,9 +710,23 @@ class FlattenTensorsPass
       signalPassFailure();
       return;
     }
-    // Check if there are no unrealized_conversion_casts.
+    // Check if there are no unrealized_conversion_casts from FlattenTensors.
+    // FlattenTensors casts always have the same element type on both sides
+    // (shape-only changes). Casts with different element types (e.g., field ↔
+    // integer from shuffle lowering) are not ours — skip them.
     mlir::WalkResult walk_result =
         module.walk([&](UnrealizedConversionCastOp op) {
+          // Only inspect 1-to-1 casts; multi-input/output casts are not
+          // produced by FlattenTensors and should not affect convergence.
+          if (op.getNumOperands() != 1 || op.getNumResults() != 1) {
+            return mlir::WalkResult::advance();
+          }
+          auto src_elem =
+              mlir::getElementTypeOrSelf(op.getOperand(0).getType());
+          auto dst_elem = mlir::getElementTypeOrSelf(op.getResult(0).getType());
+          if (src_elem != dst_elem) {
+            return mlir::WalkResult::advance();
+          }
           op.emitError("FlattenTensorsPass failed to converge, cast remains");
           return mlir::WalkResult::interrupt();
         });
