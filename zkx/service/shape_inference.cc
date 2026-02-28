@@ -27,6 +27,7 @@ limitations under the License.
 #include "xla/tsl/platform/errors.h"
 #include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/permutation_util.h"
+#include "zkx/primitive_util.h"
 #include "zkx/shape_util.h"
 #include "zkx/window_util.h"
 
@@ -1030,11 +1031,48 @@ absl::StatusOr<Shape> ShapeInference::InferElementwiseBinaryOpShape(
   TF_RETURN_IF_ERROR(ExpectArray(lhs, "lhs of elementwise binary operation"));
   TF_RETURN_IF_ERROR(ExpectArray(rhs, "rhs of elementwise binary operation"));
 
+  // Determine EC scalar multiplication result type.
+  // ScalarMulOp: affine → jacobian, jacobian → jacobian, xyzz → xyzz.
+  auto ec_scalar_mul_result_type =
+      [](PrimitiveType lhs_type,
+         PrimitiveType rhs_type) -> std::optional<PrimitiveType> {
+    PrimitiveType ec_type;
+    if (primitive_util::IsFieldType(lhs_type) &&
+        primitive_util::IsEcPointType(rhs_type)) {
+      ec_type = rhs_type;
+    } else if (primitive_util::IsEcPointType(lhs_type) &&
+               primitive_util::IsFieldType(rhs_type)) {
+      ec_type = lhs_type;
+    } else {
+      return std::nullopt;
+    }
+    if (primitive_util::IsAffineEcPointType(ec_type)) {
+      return primitive_util::AffineToJacobianType(ec_type);
+    }
+    return ec_type;
+  };
+
   if (!ShapeUtil::SameElementType(lhs, rhs)) {
-    return absl::InvalidArgumentError(
-        absl::StrFormat("Binary op %s with different element types: %s and %s.",
-                        HloOpcodeString(operation), ShapeUtil::HumanString(lhs),
-                        ShapeUtil::HumanString(rhs)));
+    // Allow field × EC point for multiply (scalar multiplication)
+    auto ec_result =
+        operation == HloOpcode::kMultiply
+            ? ec_scalar_mul_result_type(lhs.element_type(), rhs.element_type())
+            : std::nullopt;
+    if (!ec_result.has_value()) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Binary op %s with different element types: %s and %s.",
+          HloOpcodeString(operation), ShapeUtil::HumanString(lhs),
+          ShapeUtil::HumanString(rhs)));
+    }
+    // EC scalar mul: shapes must be compatible ignoring element type,
+    // result uses the ScalarMulOp result type.
+    if (!ShapeUtil::CompatibleIgnoringElementType(lhs, rhs)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Binary op %s with incompatible shapes: %s and %s.",
+          HloOpcodeString(operation), ShapeUtil::HumanString(lhs),
+          ShapeUtil::HumanString(rhs)));
+    }
+    return ShapeUtil::ChangeElementType(lhs, *ec_result);
   }
 
   if (lhs.rank() == rhs.rank()) {

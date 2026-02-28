@@ -369,6 +369,19 @@ constexpr bool IsEcPointType(PrimitiveType type) {
 #undef ZK_DTYPES_CASE
 }
 
+constexpr bool IsAffineEcPointType(PrimitiveType type) {
+#define ZK_DTYPES_CASE(unused, unused2, enum, unused3) type == enum ||
+  return ZK_DTYPES_PUBLIC_AFFINE_POINT_TYPE_LIST(ZK_DTYPES_CASE) false;
+#undef ZK_DTYPES_CASE
+}
+
+// Returns the jacobian type corresponding to an affine type.
+// Proto layout: AFFINE, AFFINE_MONT, JACOBIAN, JACOBIAN_MONT
+// so jacobian = affine + 2.
+constexpr PrimitiveType AffineToJacobianType(PrimitiveType affine) {
+  return static_cast<PrimitiveType>(static_cast<int>(affine) + 2);
+}
+
 // Returns true if the type supports comparison operators (<, >, <=, >=).
 // Extension fields, binary fields, and EC points don't have natural ordering.
 constexpr bool IsComparableType(PrimitiveType type) {

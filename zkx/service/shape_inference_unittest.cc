@@ -3441,6 +3441,107 @@ INSTANTIATE_TEST_SUITE_P(
                                   "Operands to select must be the same shape; "
                                   "got u32[?] and u32[]."})));
 
+// =============================================================================
+// EC Scalar Multiplication — field × EC point shape inference
+// =============================================================================
+
+TEST_F(ShapeInferenceTest, EcScalarMulFieldTimesAffine) {
+  // affine → jacobian: ScalarMulOp changes representation
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("bn254_sf[4]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("bn254_g1_affine[4]"));
+  TF_ASSERT_OK_AND_ASSIGN(
+      const Shape inferred,
+      ShapeInference::InferBinaryOpShape(HloOpcode::kMultiply, lhs, rhs, {}));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("bn254_g1_jacobian[4]"));
+  EXPECT_TRUE(ShapeUtil::Equal(inferred, expected))
+      << "inferred: " << ShapeUtil::HumanString(inferred)
+      << " expected: " << ShapeUtil::HumanString(expected);
+}
+
+TEST_F(ShapeInferenceTest, EcScalarMulAffineTimesField) {
+  // affine → jacobian: ScalarMulOp changes representation
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("bn254_g1_affine[4]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("bn254_sf[4]"));
+  TF_ASSERT_OK_AND_ASSIGN(
+      const Shape inferred,
+      ShapeInference::InferBinaryOpShape(HloOpcode::kMultiply, lhs, rhs, {}));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("bn254_g1_jacobian[4]"));
+  EXPECT_TRUE(ShapeUtil::Equal(inferred, expected))
+      << "inferred: " << ShapeUtil::HumanString(inferred)
+      << " expected: " << ShapeUtil::HumanString(expected);
+}
+
+TEST_F(ShapeInferenceTest, EcScalarMulFieldTimesXyzz) {
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("bn254_sf[8]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("bn254_g1_xyzz[8]"));
+  TF_ASSERT_OK_AND_ASSIGN(
+      const Shape inferred,
+      ShapeInference::InferBinaryOpShape(HloOpcode::kMultiply, lhs, rhs, {}));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("bn254_g1_xyzz[8]"));
+  EXPECT_TRUE(ShapeUtil::Equal(inferred, expected))
+      << "inferred: " << ShapeUtil::HumanString(inferred)
+      << " expected: " << ShapeUtil::HumanString(expected);
+}
+
+TEST_F(ShapeInferenceTest, EcScalarMulXyzzTimesField) {
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("bn254_g1_xyzz[8]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("bn254_sf[8]"));
+  TF_ASSERT_OK_AND_ASSIGN(
+      const Shape inferred,
+      ShapeInference::InferBinaryOpShape(HloOpcode::kMultiply, lhs, rhs, {}));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("bn254_g1_xyzz[8]"));
+  EXPECT_TRUE(ShapeUtil::Equal(inferred, expected))
+      << "inferred: " << ShapeUtil::HumanString(inferred)
+      << " expected: " << ShapeUtil::HumanString(expected);
+}
+
+TEST_F(ShapeInferenceTest, EcScalarMulFieldTimesJacobian) {
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("bn254_sf[2]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("bn254_g1_jacobian[2]"));
+  TF_ASSERT_OK_AND_ASSIGN(
+      const Shape inferred,
+      ShapeInference::InferBinaryOpShape(HloOpcode::kMultiply, lhs, rhs, {}));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("bn254_g1_jacobian[2]"));
+  EXPECT_TRUE(ShapeUtil::Equal(inferred, expected))
+      << "inferred: " << ShapeUtil::HumanString(inferred)
+      << " expected: " << ShapeUtil::HumanString(expected);
+}
+
+TEST_F(ShapeInferenceTest, EcScalarMulJacobianTimesField) {
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("bn254_g1_jacobian[2]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("bn254_sf[2]"));
+  TF_ASSERT_OK_AND_ASSIGN(
+      const Shape inferred,
+      ShapeInference::InferBinaryOpShape(HloOpcode::kMultiply, lhs, rhs, {}));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("bn254_g1_jacobian[2]"));
+  EXPECT_TRUE(ShapeUtil::Equal(inferred, expected))
+      << "inferred: " << ShapeUtil::HumanString(inferred)
+      << " expected: " << ShapeUtil::HumanString(expected);
+}
+
+TEST_F(ShapeInferenceTest, EcScalarMulRejectsDimensionMismatch) {
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("bn254_sf[4]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("bn254_g1_xyzz[8]"));
+  const absl::StatusOr<Shape> inferred =
+      ShapeInference::InferBinaryOpShape(HloOpcode::kMultiply, lhs, rhs, {});
+  EXPECT_FALSE(inferred.ok());
+}
+
+TEST_F(ShapeInferenceTest, EcAddRejectsMixedTypes) {
+  // add(field, ec) should still be rejected
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("bn254_sf[4]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("bn254_g1_xyzz[4]"));
+  const absl::StatusOr<Shape> inferred =
+      ShapeInference::InferBinaryOpShape(HloOpcode::kAdd, lhs, rhs, {});
+  EXPECT_FALSE(inferred.ok());
+  EXPECT_THAT(inferred.status().message(),
+              HasSubstr("Binary op add with different element types"));
+}
+
 INSTANTIATE_TEST_SUITE_P(UnboundedDynamism, UnboundedUnaryOpShapeInferenceTest,
                          ::testing::ValuesIn<UnaryOpTestCase>({
                              {"s32[?]", "s32[?]", HloOpcode::kAbs},

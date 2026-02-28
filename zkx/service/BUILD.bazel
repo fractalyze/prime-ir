@@ -1633,6 +1633,7 @@ zkx_cc_library(
     deps = [
         "//xla/tsl/platform:errors",
         "//zkx:permutation_util",
+        "//zkx:primitive_util",
         "//zkx:shape_util",
         "//zkx:zkx_data_cc_proto",
         "//zkx/hlo/ir:hlo",
