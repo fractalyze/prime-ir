@@ -776,9 +776,17 @@ void FieldToModArith::runOnOperation() {
   // created Fp6 intrinsics instead of being expanded inline.
   IntrinsicFunctionGenerator *generatorPtr =
       generator.has_value() ? &*generator : nullptr;
-  patterns.add<ConvertInverse, ConvertMul, ConvertSquare, ConvertAdd,
-               ConvertSub, ConvertNegate, ConvertDouble>(typeConverter, context,
-                                                         generatorPtr, mode);
+  patterns.add<
+      // clang-format off
+      ConvertAdd,
+      ConvertDouble,
+      ConvertMul,
+      ConvertInverse,
+      ConvertNegate,
+      ConvertSquare,
+      ConvertSub
+      // clang-format on
+      >(typeConverter, context, generatorPtr, mode);
 
   patterns.add<
       // clang-format off
@@ -787,129 +795,27 @@ void FieldToModArith::runOnOperation() {
       ConvertCmp,
       ConvertFromMont,
       ConvertPowUI,
-      ConvertToMont,
-      ConvertAny<ExtFromCoeffsOp>,
-      ConvertAny<ExtToCoeffsOp>,
-      ConvertAny<affine::AffineForOp>,
-      ConvertAny<affine::AffineLoadOp>,
-      ConvertAny<affine::AffineParallelOp>,
-      ConvertAny<affine::AffineStoreOp>,
-      ConvertAny<affine::AffineYieldOp>,
-      ConvertAny<arith::SelectOp>,
-      ConvertAny<bufferization::AllocTensorOp>,
-      ConvertAny<bufferization::MaterializeInDestinationOp>,
-      ConvertAny<bufferization::ToBufferOp>,
-      ConvertAny<bufferization::ToTensorOp>,
-      ConvertAny<elliptic_curve::BitcastOp>,
-      ConvertAny<elliptic_curve::FromCoordsOp>,
-      ConvertAny<elliptic_curve::ToCoordsOp>,
-      ConvertAny<linalg::BroadcastOp>,
-      ConvertAny<linalg::DotOp>,
-      ConvertAny<linalg::FillOp>,
-      ConvertAny<linalg::GenericOp>,
-      ConvertAny<linalg::MapOp>,
-      ConvertAny<linalg::MatmulOp>,
-      ConvertAny<linalg::MatvecOp>,
-      ConvertAny<linalg::ReduceOp>,
-      ConvertAny<linalg::TransposeOp>,
-      ConvertAny<linalg::YieldOp>,
-      ConvertAny<memref::AllocOp>,
-      ConvertAny<memref::AllocaOp>,
-      ConvertAny<memref::CastOp>,
-      ConvertAny<memref::CopyOp>,
-      ConvertAny<memref::DimOp>,
-      ConvertAny<memref::LoadOp>,
-      ConvertAny<memref::StoreOp>,
-      ConvertAny<memref::SubViewOp>,
-      ConvertAny<memref::ViewOp>,
-      ConvertAny<sparse_tensor::AssembleOp>,
-      ConvertAny<tensor::CastOp>,
-      ConvertAny<tensor::ConcatOp>,
-      ConvertAny<tensor::DimOp>,
-      ConvertAny<tensor::EmptyOp>,
-      ConvertAny<tensor::ExtractOp>,
-      ConvertAny<tensor::ExtractSliceOp>,
-      ConvertAny<tensor::FromElementsOp>,
-      ConvertAny<tensor::GenerateOp>,
-      ConvertAny<tensor::InsertOp>,
-      ConvertAny<tensor::InsertSliceOp>,
-      ConvertAny<tensor::PadOp>,
-      ConvertAny<tensor::ReshapeOp>,
-      ConvertAny<tensor::YieldOp>,
-      ConvertAny<tensor_ext::BitReverseOp>,
-      ConvertAny<ub::PoisonOp>,
-      ConvertAny<vector::BroadcastOp>,
-      ConvertAny<vector::ExtractOp>,
-      ConvertAny<vector::InsertOp>,
-      ConvertAny<vector::SplatOp>,
-      ConvertAny<vector::TransferReadOp>,
-      ConvertAny<vector::TransferWriteOp>
+      ConvertToMont
       // clang-format on
       >(typeConverter, context);
 
+  // Catch-all: converts any op whose operands/results carry field types.
+  // Op-specific patterns above have root-op-name priority in the applicator.
+  patterns.add<ConvertAny<void>>(typeConverter, context);
+
   addStructuralConversionPatterns(typeConverter, patterns, target);
 
-  target.addDynamicallyLegalOp<
-      // clang-format off
-      BitcastOp,
-      ExtFromCoeffsOp,
-      ExtToCoeffsOp,
-      affine::AffineForOp,
-      affine::AffineLoadOp,
-      affine::AffineParallelOp,
-      affine::AffineStoreOp,
-      affine::AffineYieldOp,
-      arith::SelectOp,
-      bufferization::AllocTensorOp,
-      bufferization::MaterializeInDestinationOp,
-      bufferization::ToBufferOp,
-      bufferization::ToTensorOp,
-      elliptic_curve::BitcastOp,
-      elliptic_curve::FromCoordsOp,
-      elliptic_curve::ToCoordsOp,
-      linalg::BroadcastOp,
-      linalg::DotOp,
-      linalg::FillOp,
-      linalg::GenericOp,
-      linalg::MapOp,
-      linalg::MatmulOp,
-      linalg::MatvecOp,
-      linalg::ReduceOp,
-      linalg::TransposeOp,
-      linalg::YieldOp,
-      memref::AllocOp,
-      memref::AllocaOp,
-      memref::CastOp,
-      memref::CopyOp,
-      memref::DimOp,
-      memref::LoadOp,
-      memref::StoreOp,
-      memref::SubViewOp,
-      memref::ViewOp,
-      sparse_tensor::AssembleOp,
-      tensor::CastOp,
-      tensor::ConcatOp,
-      tensor::DimOp,
-      tensor::EmptyOp,
-      tensor::ExtractOp,
-      tensor::ExtractSliceOp,
-      tensor::FromElementsOp,
-      tensor::GenerateOp,
-      tensor::InsertOp,
-      tensor::InsertSliceOp,
-      tensor::PadOp,
-      tensor::ReshapeOp,
-      tensor::YieldOp,
-      tensor_ext::BitReverseOp,
-      ub::PoisonOp,
-      vector::BroadcastOp,
-      vector::ExtractOp,
-      vector::InsertOp,
-      vector::SplatOp,
-      vector::TransferReadOp,
-      vector::TransferWriteOp
-      // clang-format on
-      >([&](auto op) { return typeConverter.isLegal(op); });
+  // Any op not explicitly registered is dynamically legal iff its types are
+  // already converted.  This covers ops from downstream or unrelated dialects.
+  target.markUnknownOpDynamicallyLegal(
+      [&](Operation *op) { return typeConverter.isLegal(op); });
+
+  // Field dialect ops that stay as field ops after type conversion (they keep
+  // the same op name but with mod_arith element types) need an explicit
+  // override because addIllegalDialect<FieldDialect> would otherwise reject
+  // them even after successful conversion.
+  target.addDynamicallyLegalOp<BitcastOp, ExtFromCoeffsOp, ExtToCoeffsOp>(
+      [&](auto op) { return typeConverter.isLegal(op); });
 
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();
