@@ -1,0 +1,56 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "gpu_allocator_config",
+    hdrs = ["gpu_allocator_config.h"],
+)
+
+zkx_cc_library(
+    name = "gpu_client_options",
+    hdrs = ["gpu_client_options.h"],
+    deps = [
+        ":gpu_allocator_config",
+        "//zkx/pjrt/distributed:key_value_store_interface",
+    ],
+)
+
+zkx_cc_library(
+    name = "gpu_pjrt_client",
+    srcs = ["gpu_pjrt_client.cc"],
+    hdrs = ["gpu_pjrt_client.h"],
+    deps = [
+        ":gpu_client_options",
+        "//zkx/pjrt:pjrt_client",
+        "//zkx/pjrt/gpu:se_gpu_pjrt_client",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "gpu_unittests",
+    srcs = ["gpu_pjrt_client_unittest.cc"],
+    tags = ["gpu"],
+    deps = [
+        ":gpu_pjrt_client",
+        "//xla/tsl/platform:statusor",
+        "//zkx/pjrt/gpu:se_gpu_pjrt_client",
+        "//zkx/service:gpu_plugin",
+    ],
+)

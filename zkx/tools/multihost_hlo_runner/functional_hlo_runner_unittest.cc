@@ -405,7 +405,7 @@ TEST_F(FunctionalHloRunnerTest, ShardedAutotuningWorks) {
   for (int node_id = 0; node_id < kNumNodes; ++node_id) {
     std::vector<std::string> argv;
     argv.push_back(binary_name);
-    argv.push_back("--xla_gpu_shard_autotuning");
+    argv.push_back("--zkx_gpu_shard_autotuning");
     argv.push_back(absl::StrFormat("--node_id=%d", node_id));
     child[node_id].SetProgram(binary_name, argv);
     child[node_id].SetChannelAction(tsl::CHAN_STDOUT, tsl::ACTION_PIPE);

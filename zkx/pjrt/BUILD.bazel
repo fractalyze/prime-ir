@@ -163,14 +163,23 @@ zkx_cc_library(
         "//zkx/hlo/builder:zkx_computation",
         "//zkx/hlo/translate/mhlo_to_hlo:mlir_hlo_to_hlo",
         "//zkx/mlir/utils:error_util",
+        "//zkx/mlir_hlo/mhlo/IR:mlir_hlo",
         "//zkx/mlir_hlo/mhlo/transforms:passes",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:vlog_is_on",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@llvm-project//mlir:AllExtensions",
+        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Parser",
         "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:ShapeDialect",
         "@llvm-project//mlir:Transforms",
+        "@stablehlo//stablehlo/dialect:register",
+        "@stablehlo//stablehlo/dialect:version",
+        "@stablehlo//stablehlo/transforms:passes",
     ],
 )
 
@@ -416,6 +425,16 @@ zkx_cc_library(
         ":exceptions",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "stream_executor_executable",
+    srcs = ["stream_executor_executable.cc"],
+    hdrs = ["stream_executor_executable.h"],
+    deps = [
+        ":pjrt_executable",
+        "//xla/tsl/platform:statusor",
     ],
 )
 

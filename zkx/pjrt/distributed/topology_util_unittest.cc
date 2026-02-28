@@ -20,6 +20,7 @@ limitations under the License.
 #include "gtest/gtest.h"
 
 #include "xla/tsl/platform/status.h"
+#include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/platform/thread_pool.h"
 #include "zkx/pjrt/distributed/in_memory_key_value_store.h"
 
@@ -165,6 +166,96 @@ TEST(TopologyTest, ExchangeTopology_TwiceWithDifferentLocalTopology_Fails) {
       });
     }
   }
+}
+
+TEST(TopologyTest, BuildGpuTopology) {
+  std::string slice_0_boot_id = "foo";
+  std::string slice_1_boot_id = "bar";
+  std::vector<LocalTopologyProto> locals(2);
+  // Adds 1 host to slice 0 and 1 host to slice 1.
+  locals[0].set_boot_id(slice_0_boot_id);
+  locals[1].set_boot_id(slice_1_boot_id);
+  locals[0].set_node_id(0);
+  locals[1].set_node_id(1);
+  // Adds 2 devices to host 0 and 2 devices to host 1.
+  DeviceProto* d0 = locals[0].add_devices();
+  d0->set_local_device_ordinal(0);
+  d0->set_core_count(20);
+  DeviceProto* d1 = locals[0].add_devices();
+  d1->set_local_device_ordinal(1);
+  d1->set_core_count(20);
+  DeviceProto* d2 = locals[1].add_devices();
+  d2->set_local_device_ordinal(0);
+  d2->set_core_count(20);
+  DeviceProto* d3 = locals[1].add_devices();
+  d3->set_local_device_ordinal(1);
+  d3->set_core_count(20);
+
+  GlobalTopologyProto global =
+      BuildGlobalTopology(absl::Span<LocalTopologyProto>(locals),
+                          /*assign_global_device_ids=*/true);
+
+  TF_ASSERT_OK_AND_ASSIGN(auto gpu_topology, BuildGpuTopology(global));
+  EXPECT_EQ(gpu_topology.device_ids_size(), 4);
+  EXPECT_EQ(gpu_topology.num_slices(), 2);
+  EXPECT_EQ(gpu_topology.num_hosts_per_slice(), 1);
+  EXPECT_EQ(gpu_topology.num_devices_per_host(), 2);
+}
+
+TEST(TopologyTest, BuildGpuTopologyWithDifferentNumHostsPerSlice) {
+  std::string slice_0_boot_id = "foo";
+  std::string slice_1_boot_id = "bar";
+  std::vector<LocalTopologyProto> locals(3);
+  // Adds 2 hosts to slice 0 and 1 host to slice 1.
+  locals[0].set_boot_id(slice_0_boot_id);
+  locals[1].set_boot_id(slice_0_boot_id);
+  locals[2].set_boot_id(slice_1_boot_id);
+  locals[0].set_node_id(0);
+  locals[1].set_node_id(1);
+  locals[2].set_node_id(2);
+  DeviceProto* d0 = locals[0].add_devices();
+  d0->set_local_device_ordinal(0);
+  DeviceProto* d1 = locals[1].add_devices();
+  d1->set_local_device_ordinal(0);
+  DeviceProto* d2 = locals[2].add_devices();
+  d2->set_local_device_ordinal(0);
+
+  GlobalTopologyProto global =
+      BuildGlobalTopology(absl::Span<LocalTopologyProto>(locals),
+                          /*assign_global_device_ids=*/true);
+
+  TF_ASSERT_OK_AND_ASSIGN(auto gpu_topology, BuildGpuTopology(global));
+  EXPECT_EQ(gpu_topology.device_ids_size(), 3);
+  EXPECT_EQ(gpu_topology.num_slices(), -1);
+  EXPECT_EQ(gpu_topology.num_hosts_per_slice(), -1);
+  EXPECT_EQ(gpu_topology.num_devices_per_host(), -1);
+}
+
+TEST(TopologyTest, BuildGpuTopologyWithDifferentNumDevicesPerHost) {
+  std::string slice_0_boot_id = "foo";
+  std::string slice_1_boot_id = "bar";
+  std::vector<LocalTopologyProto> locals(2);
+  locals[0].set_boot_id(slice_0_boot_id);
+  locals[1].set_boot_id(slice_1_boot_id);
+  locals[0].set_node_id(0);
+  locals[1].set_node_id(1);
+  // Adds 2 devices to host 0 and 1 device to host 1.
+  DeviceProto* d0 = locals[0].add_devices();
+  d0->set_local_device_ordinal(0);
+  DeviceProto* d1 = locals[0].add_devices();
+  d1->set_local_device_ordinal(1);
+  DeviceProto* d2 = locals[1].add_devices();
+  d2->set_local_device_ordinal(0);
+
+  GlobalTopologyProto global =
+      BuildGlobalTopology(absl::Span<LocalTopologyProto>(locals),
+                          /*assign_global_device_ids=*/true);
+
+  TF_ASSERT_OK_AND_ASSIGN(auto gpu_topology, BuildGpuTopology(global));
+  EXPECT_EQ(gpu_topology.device_ids_size(), 3);
+  EXPECT_EQ(gpu_topology.num_slices(), -1);
+  EXPECT_EQ(gpu_topology.num_hosts_per_slice(), -1);
+  EXPECT_EQ(gpu_topology.num_devices_per_host(), -1);
 }
 
 }  // namespace zkx

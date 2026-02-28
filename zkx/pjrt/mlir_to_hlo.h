@@ -17,12 +17,21 @@ limitations under the License.
 #ifndef ZKX_PJRT_MLIR_TO_HLO_H_
 #define ZKX_PJRT_MLIR_TO_HLO_H_
 
+#include <string_view>
+
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/MLIRContext.h"
+#include "mlir/IR/OwningOpRef.h"
 
 #include "zkx/hlo/builder/zkx_computation.h"
 
 namespace zkx {
+
+// Converts an MHLO/CHLO module string to an mlir::Module.
+absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> ParseMlirModuleString(
+    std::string_view mlir_module_str, mlir::MLIRContext& context);
 
 // Converts an MHLO module to ZKX HLO.
 // TODO(b/345414638): Delete `use_shardy` when we move Shardy as the first pass
@@ -31,6 +40,14 @@ absl::Status MlirToZkxComputation(mlir::ModuleOp module,
                                   ZkxComputation& xla_computation,
                                   bool use_tuple_args, bool return_tuple,
                                   bool use_shardy);
+
+// Given a module that might be a portable artifact, deserialize and upgrade it
+// back to StableHLO.
+// If module is not a portable artifact, this method is identity. Only fails
+// on portable artifacts that are outside of the compatibility window.
+// `ParseMlirModuleString` uses this method, and should be preferred to directly
+// calling `UpgradeVersionedStablehlo` where possible.
+absl::Status UpgradeVersionedStablehlo(mlir::ModuleOp mlir_module);
 
 }  // namespace zkx
 

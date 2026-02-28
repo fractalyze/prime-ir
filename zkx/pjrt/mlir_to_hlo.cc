@@ -18,14 +18,21 @@ limitations under the License.
 
 #include "absl/log/log.h"
 #include "absl/log/vlog_is_on.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/IR/MLIRContext.h"
+#include "mlir/Dialect/Shape/IR/Shape.h"
+#include "mlir/InitAllExtensions.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 
+#include "stablehlo/dialect/Register.h"
+#include "stablehlo/dialect/Version.h"
+#include "stablehlo/transforms/Passes.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/translate/mhlo_to_hlo/mlir_hlo_to_hlo.h"
 #include "zkx/mlir/utils/error_util.h"
+#include "zkx/mlir_hlo/mhlo/IR/register.h"
 #include "zkx/mlir_hlo/mhlo/transforms/passes.h"
 
 namespace zkx {
@@ -79,6 +86,47 @@ absl::Status MlirToZkxComputation(mlir::ModuleOp module,
                       mlir::ConvertMlirHloToHloModule(module, options));
 
   zkx_computation = ZkxComputation(hlo_module->ToProto());
+  return absl::OkStatus();
+}
+
+absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> ParseMlirModuleString(
+    std::string_view mlir_module_str, mlir::MLIRContext& context) {
+  mlir::DialectRegistry registry;
+  registry.insert<mlir::arith::ArithDialect>();
+  registry.insert<mlir::func::FuncDialect>();
+  registry.insert<mlir::shape::ShapeDialect>();
+  mlir::func::registerAllExtensions(registry);
+  mlir::mhlo::registerAllMhloDialects(registry);
+  // TODO(chokobole): Uncomment this. Dependency: sdy
+  // mlir::sdy::registerAllDialects(registry);
+  mlir::stablehlo::registerAllDialects(registry);
+  context.appendDialectRegistry(registry);
+
+  mlir::BaseScopedDiagnosticHandler diagnostic_handler(&context);
+  mlir::OwningOpRef<mlir::ModuleOp> module =
+      mlir::parseSourceString<mlir::ModuleOp>(
+          llvm::StringRef(mlir_module_str.data(), mlir_module_str.size()),
+          mlir::ParserConfig{&context});
+  if (!module) {
+    mlir::emitError(mlir::UnknownLoc::get(&context))
+        << "Failed to parse using StableHLO v"
+        << mlir::vhlo::Version::getCurrentVersion() << ", "
+        << "this could indicate forward incompatibility, >12w old "
+           "unsupported plugin, or a portable artifact that needs to be "
+           "further downgraded.";
+    return diagnostic_handler.ConsumeStatus();
+  }
+
+  TF_RETURN_IF_ERROR(UpgradeVersionedStablehlo(*module));
+  return std::move(module);
+}
+
+absl::Status UpgradeVersionedStablehlo(mlir::ModuleOp mlir_module) {
+  // Upgrade if VHLO
+  mlir::PassManager pm(mlir_module->getContext());
+  mlir::stablehlo::createStablehloDeserializePipeline(pm);
+  if (!mlir::succeeded(pm.run(mlir_module)))
+    return absl::InvalidArgumentError("Failed to upgrade versioned StableHLO.");
   return absl::OkStatus();
 }
 

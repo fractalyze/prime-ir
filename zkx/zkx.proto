@@ -300,6 +300,8 @@ message DebugOptions {
   // Rendezvous. Negative value disables the timeout and will not terminate.
   int64 zkx_gpu_nccl_termination_timeout_seconds = 163;
 
+  string zkx_gpu_per_fusion_autotune_cache_dir = 310;
+
   PGLEStrictnessLevel zkx_gpu_pgle_accuracy_checker = 341;
 
   string zkx_gpu_pgle_profile_file_or_directory_path = 210;
@@ -313,6 +315,11 @@ message DebugOptions {
   // e.g., command buffer updates to ensure correctness when running in
   // multi-thread mode.
   bool zkx_gpu_require_exclusive_lock = 347;
+
+  // If true, shards the autotuning work between participating compiler
+  // processes (typically in multi-host setups) and joins the results when
+  // it's done.
+  bool zkx_gpu_shard_autotuning = 304;
 
   // Description of the target platform in GpuTargetConfigProto format; if
   // provided, deviceless compilation is assumed, and the current device is

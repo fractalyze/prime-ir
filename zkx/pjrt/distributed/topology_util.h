@@ -26,6 +26,7 @@ limitations under the License.
 
 #include "zkx/pjrt/distributed/key_value_store_interface.h"
 #include "zkx/pjrt/distributed/protocol.pb.h"
+#include "zkx/pjrt/gpu/gpu_topology.pb.h"
 
 namespace zkx {
 
@@ -57,6 +58,11 @@ absl::Status ExchangeTopologies(std::string_view platform, int node_id,
 GlobalTopologyProto BuildGlobalTopology(
     absl::Span<LocalTopologyProto> local_topologies,
     bool assign_global_device_ids);
+
+// Builds a GpuTopologyProto representing the GPU configuration described in the
+// given GlobalTopologyProto.
+absl::StatusOr<GpuTopologyProto> BuildGpuTopology(
+    const GlobalTopologyProto& global_topology);
 
 }  // namespace zkx
 

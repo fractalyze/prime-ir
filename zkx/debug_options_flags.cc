@@ -101,7 +101,11 @@ DebugOptions DefaultDebugOptionsIgnoringFlags() {
 
   opts.set_zkx_gpu_nccl_terminate_on_error(false);
 
+  opts.set_zkx_gpu_shard_autotuning(true);
+
   opts.set_zkx_syntax_sugar_async_ops(false);
+
+  opts.set_zkx_gpu_per_fusion_autotune_cache_dir("");
 
   opts.set_zkx_gpu_pgle_accuracy_checker(
       DebugOptions::PGLE_STRICTNESS_LEVEL_WARN);
@@ -977,6 +981,12 @@ void MakeDebugOptionsFlags(std::vector<tsl::Flag>* flag_list,
       bool_setter_for(&DebugOptions::set_zkx_gpu_nccl_terminate_on_error),
       debug_options->zkx_gpu_nccl_terminate_on_error(),
       "If set, then NCCL errors will terminate the process."));
+  flag_list->push_back(tsl::Flag(
+      "zkx_gpu_shard_autotuning",
+      bool_setter_for(&DebugOptions::set_zkx_gpu_shard_autotuning),
+      debug_options->zkx_gpu_shard_autotuning(),
+      "Shard autotuning between participating compiler processes (typically in "
+      "multi-host setups) and join the results when it's done."));
   flag_list->push_back(
       tsl::Flag("zkx_syntax_sugar_async_ops",
                 bool_setter_for(&DebugOptions::set_zkx_syntax_sugar_async_ops),
@@ -990,6 +1000,19 @@ void MakeDebugOptionsFlags(std::vector<tsl::Flag>* flag_list,
                 "reused in further compilations; not yet cached kernels are "
                 "compiled as usual and get appended to the cache file whenever "
                 "possible."));
+  flag_list->push_back(tsl::Flag(
+      "zkx_gpu_per_fusion_autotune_cache_dir",
+      string_setter_for(
+          &DebugOptions::set_zkx_gpu_per_fusion_autotune_cache_dir),
+      debug_options->zkx_gpu_per_fusion_autotune_cache_dir(),
+      "Experimental: Maintain a per-fusion autotune cache in the given "
+      "directory. ZKX will try to read existing results when they are needed "
+      "and write new results when they are determined. The directory must "
+      "exist. Cache invalidation has to be handled by the user (e.g. please "
+      "use an empty directory if you want to start with an empty cache). ZKX "
+      "version checks must be done by the user (e.g. if you want to use "
+      "separate caches for different versions of ZKX, please use different "
+      "directories). Default: no cache."));
 }  // NOLINT(readability/fn_size)
 
 namespace {

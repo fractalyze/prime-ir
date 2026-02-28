@@ -252,4 +252,72 @@ absl::Status ExchangeTopologies(std::string_view platform, int node_id,
   return absl::OkStatus();
 }
 
+namespace {
+
+bool IsGpuTopologySymmetric(
+    const std::map<int, std::set<int>>& slice_id_to_node_ids,
+    const std::map<int, int>& node_id_to_device_count) {
+  CHECK(!slice_id_to_node_ids.empty());
+  CHECK(!node_id_to_device_count.empty());
+
+  int num_hosts_per_slice = slice_id_to_node_ids.begin()->second.size();
+  int num_devices_per_host = node_id_to_device_count.begin()->second;
+  for (const auto& [slice_id, node_ids] : slice_id_to_node_ids) {
+    if (node_ids.size() != num_hosts_per_slice) {
+      LOG(INFO) << "GpuTopology is asymmetric as it has different number "
+                   "of hosts per slice.";
+      return false;
+    }
+  }
+  for (const auto& [node_id, device_count] : node_id_to_device_count) {
+    if (device_count != num_devices_per_host) {
+      LOG(INFO) << "GpuTopology is asymmetric as it has different number "
+                   "of devices per host.";
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
+absl::StatusOr<GpuTopologyProto> BuildGpuTopology(
+    const GlobalTopologyProto& global_topology) {
+  GpuTopologyProto gpu_topology;
+  std::map<int, std::set<int>> slice_id_to_node_ids;
+  std::map<int, int> node_id_to_device_count;
+  std::vector<int> device_ids;
+  for (int i = 0; i < global_topology.nodes_size(); ++i) {
+    const LocalTopologyProto& local_topology = global_topology.nodes(i);
+
+    node_id_to_device_count[local_topology.node_id()] =
+        local_topology.devices_size();
+    for (const DeviceProto& device : local_topology.devices()) {
+      if (gpu_topology.platform_version().empty()) {
+        gpu_topology.set_platform_version(device.name());
+      }
+      slice_id_to_node_ids[device.slice_index()].insert(
+          local_topology.node_id());
+      device_ids.push_back(device.global_device_id());
+    }
+  }
+
+  if (IsGpuTopologySymmetric(slice_id_to_node_ids, node_id_to_device_count)) {
+    gpu_topology.set_num_slices(slice_id_to_node_ids.size());
+    gpu_topology.set_num_hosts_per_slice(
+        slice_id_to_node_ids.begin()->second.size());
+    gpu_topology.set_num_devices_per_host(
+        node_id_to_device_count.begin()->second);
+  } else {
+    // If gpu topology is not symmetric, then we don't need to populate
+    // the topology with the slice/host/device information.
+    gpu_topology.set_num_slices(-1);
+    gpu_topology.set_num_hosts_per_slice(-1);
+    gpu_topology.set_num_devices_per_host(-1);
+  }
+  std::sort(device_ids.begin(), device_ids.end());
+  gpu_topology.mutable_device_ids()->Add(device_ids.begin(), device_ids.end());
+  return gpu_topology;
+}
+
 }  // namespace zkx

@@ -107,8 +107,12 @@ zkx_cc_library(
         "hlo_ops_attrs.h.inc",
         "hlo_ops_enums.cc.inc",
         "hlo_ops_enums.h.inc",
+        "init.cc",
     ],
-    hdrs = ["hlo_ops.h"],
+    hdrs = [
+        "hlo_ops.h",
+        "register.h",
+    ],
     strip_include_prefix = ".",
     deps = [
         ":canonicalize_inc_gen",
@@ -129,6 +133,7 @@ zkx_cc_library(
         "@llvm-project//mlir:InliningUtils",
         "@llvm-project//mlir:ShapeDialect",
         "@llvm-project//mlir:SideEffectInterfaces",
+        "@llvm-project//mlir:SparseTensorDialect",
         "@llvm-project//mlir:Support",
         "@llvm-project//mlir:TensorDialect",
         "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
