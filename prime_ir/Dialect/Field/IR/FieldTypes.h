@@ -43,6 +43,7 @@ constexpr size_t kMaxExtDegree = 4;
 constexpr size_t kNumExtDegrees = kMaxExtDegree - kMinExtDegree + 1;
 
 class PrimeFieldType;
+class ExtensionFieldType;
 
 bool isMontgomery(Type type);
 unsigned getIntOrPrimeFieldBitWidth(Type type);
@@ -60,6 +61,17 @@ Attribute maybeToStandard(Type type, Attribute attr);
 // operation.
 Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
                           uint64_t value);
+
+// Creates a constant value for a prime field type from an APInt.
+Value createFieldConstant(PrimeFieldType pfType, ImplicitLocOpBuilder &builder,
+                          const APInt &value);
+
+// Convenience wrappers that extract type from Value/argument.
+Operation::result_range toCoeffs(ImplicitLocOpBuilder &b,
+                                 Value extFieldElement);
+Value fromCoeffs(ImplicitLocOpBuilder &b, Type type, ValueRange coeffs);
+Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
+                      ArrayRef<Value> primeCoeffs);
 
 // Creates a zero constant for a field type.
 inline Value createFieldZero(Type fieldType, ImplicitLocOpBuilder &builder) {

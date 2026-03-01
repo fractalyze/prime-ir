@@ -503,6 +503,36 @@ def EllipticCurve_WindowReduceOp : EllipticCurve_Op_Base<"window_reduce", [Types
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+////////////// PAIRING //////////////
+
+def EllipticCurve_PairingCheckOp : EllipticCurve_Op_Base<"pairing_check"> {
+  let summary = "Multi-pairing check: verifies Prod_i e(Pi, Qi) = 1";
+  let description = [{
+    Verifies that the product of pairings equals the identity in GT:
+      e(P1, Q1) * e(P2, Q2) * ... * e(Pn, Qn) = 1
+
+    Both inputs must be 1D tensors of affine points on compatible
+    pairing-friendly curves (e.g., BN254 G1 and G2). The G1 points must
+    be over a prime base field and the G2 points over a degree-2 extension
+    field. Both tensors must have matching first dimension.
+
+    Returns a boolean (i1) indicating whether the pairing equation holds.
+
+    Example:
+    ```mlir
+    %result = elliptic_curve.pairing_check %g1_points, %g2_points
+        : tensor<2x!g1_affine>, tensor<2x!g2_affine> -> i1
+    ```
+  }];
+  let arguments = (ins
+    1DTensorOf<[EllipticCurve_AffineType]>:$g1Points,
+    1DTensorOf<[EllipticCurve_AffineType]>:$g2Points
+  );
+  let results = (outs I1:$output);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type($g1Points) `,` type($g2Points) `->` type($output)";
+}
+
 ////////////// POINT CONVERSIONS //////////////
 
 def EllipticCurve_ConvertPointTypeOp : EllipticCurve_UnaryOp<"convert_point_type"> {

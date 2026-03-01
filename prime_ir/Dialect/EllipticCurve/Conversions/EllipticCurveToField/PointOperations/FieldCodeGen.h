@@ -18,43 +18,25 @@ limitations under the License.
 
 #include "absl/status/statusor.h"
 #include "mlir/IR/Value.h"
+#include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/FieldDialectArithmetic.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/PointCodeGenBaseForward.h"
 #include "zk_dtypes/include/geometry/point_declarations.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
-// TODO(chokobole): **Architectural Refactoring Required**
+// Generates field.* dialect operations for field arithmetic.
 //
 // Unlike `field::PrimeFieldCodeGen` which generates `mod_arith` dialect
 // operations, this class directly generates operations within the `field`
-// dialect.
-//
-// **Issue:**
-// A naming conflict exists because `field::FieldCodeGen` is already used to
-// wrap both prime and extension field operations. From an elliptic curve
-// perspective, the higher-level logic only requires generic "field operations,"
-// regardless of whether the underlying type is a prime field or an extension
-// field.
-//
-// **Goal:**
-// Once the naming collision and hierarchy are resolved, this class should be
-// unified and moved to the `field` directory to serve as the standard
-// code-generation interface for all field-based arithmetic.
-class FieldCodeGen {
+// dialect. Arithmetic is provided by the FieldDialectArithmetic CRTP base.
+class FieldCodeGen : public FieldDialectArithmetic<FieldCodeGen> {
 public:
   FieldCodeGen() = default;
   explicit FieldCodeGen(Value value) : value(value) {}
   ~FieldCodeGen() = default;
 
   operator Value() const { return value; }
-
-  FieldCodeGen operator+(const FieldCodeGen &other) const;
-  FieldCodeGen &operator+=(const FieldCodeGen &other);
-  FieldCodeGen operator-(const FieldCodeGen &other) const;
-  FieldCodeGen &operator-=(const FieldCodeGen &other);
-  FieldCodeGen operator*(const FieldCodeGen &other) const;
-  FieldCodeGen &operator*=(const FieldCodeGen &other);
-  FieldCodeGen operator-() const;
+  Value getValue() const { return value; }
 
 private:
   template <PointKind Kind>
@@ -66,9 +48,6 @@ private:
   template <typename, typename>
   friend class zk_dtypes::PointXyzzOperation;
 
-  FieldCodeGen Double() const;
-  FieldCodeGen Square() const;
-  FieldCodeGen Inverse() const;
   Value IsZero() const;
   FieldCodeGen CreateConst(int64_t constant) const;
 

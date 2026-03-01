@@ -23,6 +23,7 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveAttributes.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
+#include "prime_ir/Dialect/EllipticCurve/IR/KnownCurves.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointOperation.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
@@ -329,6 +330,82 @@ LogicalResult WindowReduceOp::verify() {
                           "windows tensor ("
                        << windowsType.getNumElements() << ")";
   }
+  return success();
+}
+
+LogicalResult PairingCheckOp::verify() {
+  auto g1TensorType = getG1Points().getType();
+  auto g2TensorType = getG2Points().getType();
+  auto g1PointType = cast<PointTypeInterface>(g1TensorType.getElementType());
+  auto g2PointType = cast<PointTypeInterface>(g2TensorType.getElementType());
+
+  // Both tensors must have matching first dimension
+  if (g1TensorType.hasStaticShape() && g2TensorType.hasStaticShape()) {
+    if (g1TensorType.getNumElements() != g2TensorType.getNumElements()) {
+      return emitError()
+             << "g1 and g2 tensors must have the same number of elements, "
+                "but got "
+             << g1TensorType.getNumElements() << " and "
+             << g2TensorType.getNumElements();
+    }
+  }
+
+  // G1 points must be over a prime field
+  Type g1BaseField = g1PointType.getBaseFieldType();
+  if (!isa<field::PrimeFieldType>(g1BaseField)) {
+    return emitError() << "g1 points must be over a prime base field, but got "
+                       << g1BaseField;
+  }
+
+  // G2 points must be over a degree-2 extension field
+  Type g2BaseField = g2PointType.getBaseFieldType();
+  auto g2ExtField = dyn_cast<field::ExtensionFieldType>(g2BaseField);
+  if (!g2ExtField) {
+    return emitError()
+           << "g2 points must be over an extension base field, but got "
+           << g2BaseField;
+  }
+  if (g2ExtField.getDegree() != 2) {
+    return emitError()
+           << "g2 points must be over a degree-2 extension field, but got "
+              "degree "
+           << g2ExtField.getDegree();
+  }
+
+  // Both curves must be known pairing-friendly short Weierstrass curves
+  auto g1CurveAttr = dyn_cast<ShortWeierstrassAttr>(g1PointType.getCurveAttr());
+  auto g2CurveAttr = dyn_cast<ShortWeierstrassAttr>(g2PointType.getCurveAttr());
+  if (!g1CurveAttr || !g2CurveAttr) {
+    return emitError() << "both curves must be short Weierstrass curves";
+  }
+
+  auto g1Alias = getKnownCurveAlias(g1CurveAttr);
+  auto g2Alias = getKnownCurveAlias(g2CurveAttr);
+  if (!g1Alias || !g2Alias) {
+    return emitError() << "both curves must be known pairing-friendly curves";
+  }
+
+  // Verify they form a valid pairing pair (e.g., bn254_g1 + bn254_g2)
+  llvm::StringRef g1Ref(*g1Alias);
+  llvm::StringRef g2Ref(*g2Alias);
+  if (!g1Ref.ends_with("_g1")) {
+    return emitError() << "g1 points must be on a G1 curve, but identified as "
+                       << *g1Alias;
+  }
+  if (!g2Ref.ends_with("_g2")) {
+    return emitError() << "g2 points must be on a G2 curve, but identified as "
+                       << *g2Alias;
+  }
+
+  // Ensure both curves are from the same family
+  llvm::StringRef g1Family = g1Ref.drop_back(3);
+  llvm::StringRef g2Family = g2Ref.drop_back(3);
+  if (g1Family != g2Family) {
+    return emitError()
+           << "g1 and g2 curves must be from the same curve family, but got "
+           << *g1Alias << " and " << *g2Alias;
+  }
+
   return success();
 }
 

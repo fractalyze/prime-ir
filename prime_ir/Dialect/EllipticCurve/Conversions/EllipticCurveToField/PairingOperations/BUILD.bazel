@@ -20,43 +20,59 @@ package(
 )
 
 cc_library(
-    name = "FieldCodeGen",
-    srcs = ["FieldCodeGen.cpp"],
-    hdrs = ["FieldCodeGen.h"],
+    name = "PairingOutliner",
+    hdrs = ["PairingOutliner.h"],
     deps = [
-        ":PointCodeGenBaseForward",
-        "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField:FieldDialectArithmetic",
         "//prime_ir/Dialect/Field/IR:Field",
-        "//prime_ir/Utils:BuilderContext",
-        "@com_google_absl//absl/status:statusor",
+        "//prime_ir/Utils:IntrinsicFunctionGeneratorBase",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
-        "@zk_dtypes//zk_dtypes:point_declarations",
     ],
 )
 
 cc_library(
-    name = "PointCodeGen",
-    srcs = ["PointCodeGen.cpp"],
-    hdrs = ["PointCodeGen.h"],
+    name = "PairingFieldCodeGen",
+    srcs = [
+        "PairingFieldCodeGen.cpp",
+        "PairingOutliner.cpp",
+    ],
+    hdrs = ["PairingFieldCodeGen.h"],
     deps = [
-        ":FieldCodeGen",
-        ":PointCodeGenBaseForward",
+        ":PairingOutliner",
+        "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField:FieldDialectArithmetic",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:BitSerialAlgorithm",
+        "//prime_ir/Utils:BuilderContext",
+        "//prime_ir/Utils:ZkDtypes",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:TensorDialect",
+        "@zk_dtypes//zk_dtypes:bn254_pairing",
+        "@zk_dtypes//zk_dtypes:extension_field_operation_traits_forward",
+        "@zk_dtypes//zk_dtypes:extension_field_operations",
+        "@zk_dtypes//zk_dtypes:pairing_traits_forward",
+    ],
+)
+
+cc_library(
+    name = "PairingCodeGen",
+    srcs = ["PairingCodeGen.cpp"],
+    hdrs = ["PairingCodeGen.h"],
+    deps = [
+        ":PairingFieldCodeGen",
+        ":PairingOutliner",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField:ConversionUtils",
         "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "//prime_ir/Dialect/EllipticCurve/IR:PointOperationSelector",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Utils:BuilderContext",
         "//prime_ir/Utils:ControlFlowOperation",
         "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:Support",
-        "@zk_dtypes//zk_dtypes:curve_type",
-        "@zk_dtypes//zk_dtypes:point_traits",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:TensorDialect",
+        "@zk_dtypes//zk_dtypes:bn254_pairing",
     ],
-)
-
-cc_library(
-    name = "PointCodeGenBaseForward",
-    hdrs = ["PointCodeGenBaseForward.h"],
-    deps = ["//prime_ir/Dialect/EllipticCurve/IR:PointKind"],
 )

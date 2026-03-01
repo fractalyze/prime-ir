@@ -108,7 +108,13 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   }
 
   pm.addNestedPass<func::FuncOp>(affine::createLoopUnrollPass());
-  pm.addPass(createInlinerPass());
+  // NOTE: The MLIR inliner is intentionally disabled. It inlines ALL callable
+  // functions regardless of visibility, which defeats PairingOutliner's
+  // strategy of outlining CyclotomicSquare/MulBy034/MulBy014 as shared
+  // func.func helpers. In the default "inline" lowering mode for
+  // FieldToModArith, there are no IntrinsicFunctionGenerator functions to
+  // inline either.
+  // pm.addPass(createInlinerPass());
   pm.addPass(affine::createAffineScalarReplacementPass());
   pm.addPass(createCanonicalizerPass());
   pm.addPass(createLowerAffinePass());

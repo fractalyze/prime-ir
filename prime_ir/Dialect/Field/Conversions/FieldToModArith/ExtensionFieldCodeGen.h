@@ -145,7 +145,7 @@ public:
   // zk_dtypes ExtensionFieldOperation methods
   std::array<BaseFieldT, N> ToCoeffs() const {
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    Operation::result_range coeffs = toCoeffs(*b, value);
+    Operation::result_range coeffs = toModArithCoeffs(*b, value);
     std::array<BaseFieldT, N> ret;
     for (size_t i = 0; i < N; ++i) {
       ret[i] = createBaseFieldCodeGen(coeffs[i]);

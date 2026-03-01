@@ -33,6 +33,8 @@ glob_lit_tests(
     timeout_override = {
         "elliptic_curve_msm_runner.mlir": "moderate",
         "elliptic_curve_to_field_runner.mlir": "moderate",
+        "pairing_check_runner.mlir": "long",
+        "pairing_check_4pairs_runner.mlir": "long",
     },
 )
 
