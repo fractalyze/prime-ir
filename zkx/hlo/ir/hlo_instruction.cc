@@ -289,6 +289,11 @@ absl::StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
           CreateMsm(shape, operands(0), operands(1), proto.window_bits());
       break;
     }
+    case HloOpcode::kPairingCheck: {
+      instruction = CreateBinary(shape, HloOpcode::kPairingCheck, operands(0),
+                                 operands(1));
+      break;
+    }
     case HloOpcode::kAsyncStart: {
       TF_RET_CHECK(proto.called_computation_ids_size() == 1)
           << "Async start instruction should have 1 called computation but "
@@ -1270,6 +1275,7 @@ std::unique_ptr<HloInstruction> HloInstruction::CreateBinary(
     case HloOpcode::kMinimum:
     case HloOpcode::kMultiply:
     case HloOpcode::kMsm:
+    case HloOpcode::kPairingCheck:
     case HloOpcode::kPower:
     case HloOpcode::kOr:
     case HloOpcode::kRemainder:
@@ -2347,6 +2353,7 @@ std::unique_ptr<HloInstruction> HloInstruction::CloneWithNewOperands(
     case HloOpcode::kMinimum:
     case HloOpcode::kMsm:
     case HloOpcode::kOr:
+    case HloOpcode::kPairingCheck:
     case HloOpcode::kPower:
     case HloOpcode::kRemainder:
     case HloOpcode::kShiftLeft:
@@ -2718,6 +2725,7 @@ bool HloInstruction::IdenticalSlowPath(
     case HloOpcode::kNot:
     case HloOpcode::kOptimizationBarrier:
     case HloOpcode::kOr:
+    case HloOpcode::kPairingCheck:
     case HloOpcode::kPartitionId:
     case HloOpcode::kPopulationCount:
     case HloOpcode::kPower:
@@ -3940,6 +3948,8 @@ absl::Status HloInstruction::Visit(
       return visitor->HandleMinimum(this);
     case HloOpcode::kMsm:
       return visitor->HandleMsm(this);
+    case HloOpcode::kPairingCheck:
+      return visitor->HandlePairingCheck(this);
     case HloOpcode::kMultiply:
       return visitor->HandleMultiply(this);
     case HloOpcode::kNegate:

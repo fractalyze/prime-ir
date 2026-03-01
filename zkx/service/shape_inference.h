@@ -98,6 +98,9 @@ class ShapeInference {
   // Infers the shape produced by the given MSM type on the given operand.
   static absl::StatusOr<Shape> InferMsmShape(const Shape& bases);
 
+  // Infers the shape produced by a pairing check (returns scalar PRED).
+  static absl::StatusOr<Shape> InferPairingCheckShape();
+
   // Infers the shape produced by an all-gather with the given operand shape,
   // concat dimension, and shard count.
   static absl::StatusOr<Shape> InferAllGatherShape(

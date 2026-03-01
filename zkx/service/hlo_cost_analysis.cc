@@ -747,6 +747,19 @@ absl::Status HloCostAnalysis::HandleMsm(const HloInstruction* msm) {
   return absl::OkStatus();
 }
 
+absl::Status HloCostAnalysis::HandlePairingCheck(
+    const HloInstruction* pairing_check) {
+  // Pairing check: multi-Miller-loop + final exponentiation.
+  // Cost is roughly n_pairs * miller_loop_cost + final_exp_cost.
+  // Miller loop ≈ 64 iterations × (doubling + line_eval) per pair.
+  // Final exponentiation ≈ 3000 Fp12 multiplications.
+  int64_t num_pairs = ShapeUtil::ElementsIn(pairing_check->operand(0)->shape());
+  // Estimate: each pair requires ~64 * 50 field ops for Miller loop,
+  // plus ~3000 field ops for final exponentiation.
+  current_properties_[kFlopsKey] = (num_pairs * 64 * 50 + 3000) * kFmaFlops;
+  return absl::OkStatus();
+}
+
 absl::Status HloCostAnalysis::HandleOptimizationBarrier(
     const HloInstruction* /*hlo*/) {
   return absl::OkStatus();

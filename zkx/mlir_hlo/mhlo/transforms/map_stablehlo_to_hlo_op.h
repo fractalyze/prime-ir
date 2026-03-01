@@ -109,6 +109,7 @@ MAP_STABLEHLO_TO_HLO(OrOp)
 // TODO(chokobole): Uncomment this. Dependency: stablehlo::OutfeedOp
 // MAP_STABLEHLO_TO_HLO(OutfeedOp)
 MAP_STABLEHLO_TO_HLO(PadOp)
+MAP_STABLEHLO_TO_HLO(PairingCheckOp)
 // TODO(chokobole): Uncomment this. Dependency: stablehlo::PartitionIdOp
 // MAP_STABLEHLO_TO_HLO(PartitionIdOp)
 MAP_STABLEHLO_TO_HLO(PopulationCountOp)

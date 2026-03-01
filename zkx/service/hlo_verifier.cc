@@ -265,6 +265,12 @@ absl::Status ShapeVerifier::HandleMsm(HloInstruction* msm) {
   return CheckShape(msm, expected);
 }
 
+absl::Status ShapeVerifier::HandlePairingCheck(HloInstruction* pairing_check) {
+  TF_ASSIGN_OR_RETURN(const Shape expected,
+                      ShapeInference::InferPairingCheckShape());
+  return CheckShape(pairing_check, expected);
+}
+
 absl::Status ShapeVerifier::HandleOptimizationBarrier(HloInstruction* hlo) {
   TF_RETURN_IF_ERROR(CheckOperandCount(hlo, 1));
   return CheckShape(hlo, hlo->operand(0)->shape());

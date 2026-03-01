@@ -164,6 +164,7 @@ bool CanInferShape(HloOpcode code) {
     case HloOpcode::kInfeed:
     case HloOpcode::kIota:
     case HloOpcode::kOutfeed:
+    case HloOpcode::kPairingCheck:
     case HloOpcode::kParameter:
     case HloOpcode::kReshape:
       return false;
@@ -2551,6 +2552,19 @@ HloInstruction* HloParserImpl::CreateInstruction(
       }
       return builder->AddInstruction(HloInstruction::CreateMsm(
           *shape, operands[0], operands[1], window_bits ? *window_bits : 0));
+    }
+    case HloOpcode::kPairingCheck: {
+      if ((!preset_operands &&
+           !ParseOperands(&operands, builder, /*expected_size=*/2)) ||
+          !ParseAttributes(attrs, allow_attributes, shape)) {
+        return nullptr;
+      }
+      if (!maybe_infer_shape(
+              [&] { return ShapeInference::InferPairingCheckShape(); })) {
+        return nullptr;
+      }
+      return builder->AddInstruction(HloInstruction::CreateBinary(
+          *shape, HloOpcode::kPairingCheck, operands[0], operands[1]));
     }
     case HloOpcode::kCompare: {
       std::optional<ComparisonDirection> direction;

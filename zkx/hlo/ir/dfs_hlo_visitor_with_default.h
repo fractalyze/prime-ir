@@ -85,6 +85,9 @@ class DfsHloVisitorWithDefaultBase
   absl::Status HandleMsm(HloInstructionPtr msm) override {
     return DefaultAction(msm);
   }
+  absl::Status HandlePairingCheck(HloInstructionPtr pairing_check) override {
+    return DefaultAction(pairing_check);
+  }
   absl::Status HandleAllGather(HloInstructionPtr crs) override {
     return DefaultAction(crs);
   }

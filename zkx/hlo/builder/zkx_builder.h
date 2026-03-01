@@ -948,6 +948,7 @@ class ZkxBuilder {
                   absl::Span<const int64_t> broadcast_dimensions);
   friend ZkxOp Xor(ZkxOp lhs, ZkxOp rhs,
                    absl::Span<const int64_t> broadcast_dimensions);
+  friend ZkxOp PairingCheck(ZkxOp g1_points, ZkxOp g2_points);
   friend ZkxOp Not(ZkxOp operand);
   friend ZkxOp PopulationCount(ZkxOp operand);
   friend ZkxOp ShiftLeft(ZkxOp lhs, ZkxOp rhs,
@@ -1574,6 +1575,9 @@ ZkxOp Or(ZkxOp op1, ZkxOp op2, ZkxOp op3, const ZkxOpTs&... operands) {
 
 ZkxOp Xor(ZkxOp lhs, ZkxOp rhs,
           absl::Span<const int64_t> broadcast_dimensions = {});
+
+// Enqueues a pairing check instruction onto the computation.
+ZkxOp PairingCheck(ZkxOp g1_points, ZkxOp g2_points);
 
 ZkxOp Not(ZkxOp operand);
 

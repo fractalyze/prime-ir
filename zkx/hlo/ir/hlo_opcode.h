@@ -126,6 +126,7 @@ namespace zkx {
   V(kNot, "not", 1)                                                            \
   V(kOptimizationBarrier, "opt-barrier", 1)                                    \
   V(kOr, "or", 2)                                                              \
+  V(kPairingCheck, "pairing-check", 2)                                         \
   V(kOutfeed, "outfeed", 2)                                                    \
   V(kPad, "pad", 2)                                                            \
   V(kParameter, "parameter", 0)                                                \

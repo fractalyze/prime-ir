@@ -1206,6 +1206,8 @@ absl::StatusOr<Shape> ShapeInference::InferBinaryOpShape(
                                                         broadcast_dimensions));
       return ShapeUtil::ChangeElementType(shape, PRED);
     }
+    case HloOpcode::kPairingCheck:
+      return InferPairingCheckShape();
     default:
       return absl::UnimplementedError(absl::StrFormat(
           "Binary op shape inference: %s; lhs: %s; rhs: %s is not implemented.",
@@ -1398,6 +1400,11 @@ absl::StatusOr<Shape> ShapeInference::InferFftShape(const Shape& in,
 // static
 absl::StatusOr<Shape> ShapeInference::InferMsmShape(const Shape& bases) {
   return ShapeUtil::MakeScalarShape(bases.element_type());
+}
+
+// static
+absl::StatusOr<Shape> ShapeInference::InferPairingCheckShape() {
+  return ShapeUtil::MakeScalarShape(PRED);
 }
 
 // static
