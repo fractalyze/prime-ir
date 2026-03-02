@@ -244,6 +244,7 @@ zkx_cc_library(
         "//zkx/hlo/transforms/simplifiers:conditional_canonicalizer",
         "//zkx/hlo/transforms/simplifiers:dynamic_dimension_simplifier",
         "//zkx/hlo/transforms/simplifiers:flatten_call_graph",
+        "//zkx/hlo/transforms/simplifiers:gather_simplifier",
         "//zkx/hlo/transforms/simplifiers:hlo_constant_folding",
         "//zkx/hlo/transforms/simplifiers:hlo_cse",
         "//zkx/hlo/transforms/simplifiers:hlo_dce",
