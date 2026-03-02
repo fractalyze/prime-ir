@@ -74,6 +74,12 @@ struct FieldToLLVMOptions : public PassPipelineOptions<FieldToLLVMOptions> {
       llvm::cl::desc("Vector size for super-vectorization"),
       llvm::cl::init(16)};
 
+  PassOptions::Option<bool> lazyReduction{
+      *this, "lazy-reduction",
+      llvm::cl::desc("Enable lazy reduction optimization via integer range "
+                     "analysis in mod_arith to arith lowering"),
+      llvm::cl::init(false)};
+
   // Projects out the options for `OneShotBufferizePass`.
   bufferization::OneShotBufferizePassOptions bufferizationOptions() const {
     bufferization::OneShotBufferizePassOptions opts{};
@@ -126,6 +132,12 @@ struct FieldToGPUOptions : public PassPipelineOptions<FieldToGPUOptions> {
   PassOptions::Option<unsigned> targetOptLevel{
       *this, "target-opt-level", llvm::cl::desc("Optimization level"),
       llvm::cl::init(3)};
+
+  PassOptions::Option<bool> lazyReduction{
+      *this, "lazy-reduction",
+      llvm::cl::desc("Enable lazy reduction optimization via integer range "
+                     "analysis in mod_arith to arith lowering"),
+      llvm::cl::init(false)};
 
   PassOptions::Option<unsigned> nvvmIndexBitwidth{
       *this, "nvvm-index-bitwidth", llvm::cl::desc("NVVM index bitwidth"),
