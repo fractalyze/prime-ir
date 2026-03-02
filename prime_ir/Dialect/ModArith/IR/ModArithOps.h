@@ -22,6 +22,7 @@ limitations under the License.
 // Headers needed for ModArithOps.h.inc
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/Interfaces/InferIntRangeInterface.h"
 #include "mlir/Interfaces/InferTypeOpInterface.h"
 // IWYU pragma: end_keep
 
@@ -52,6 +53,9 @@ inline IntegerType getOperandIntegerType(OpType op) {
 
 Type getStandardFormType(Type type);
 Type getMontgomeryFormType(Type type);
+
+// Returns the canonical range [0, p) for a ModArithType.
+ConstantIntRanges getCanonicalRange(Type type);
 
 } // namespace mlir::prime_ir::mod_arith
 

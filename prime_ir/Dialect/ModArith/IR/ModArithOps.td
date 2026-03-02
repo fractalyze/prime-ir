@@ -25,6 +25,7 @@ include "mlir/Interfaces/CastInterfaces.td"
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/CommonTypeConstraints.td"
 include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/InferIntRangeInterface.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
@@ -43,7 +44,8 @@ class ModArith_ArithOp<string mnemonic, list<Trait> traits = []> :
 
 // Base class for unary modular arithmetic.
 class ModArith_UnaryOp<string mnemonic, list<Trait> traits = []> :
-  ModArith_ArithOp<mnemonic, traits>,
+  ModArith_ArithOp<mnemonic, traits #
+    [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>,
   Arguments<(ins ModArithLike:$input)>,
   Results<(outs ModArithLike:$output)> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
@@ -51,13 +53,15 @@ class ModArith_UnaryOp<string mnemonic, list<Trait> traits = []> :
 
 // Base class for binary modular arithmetic.
 class ModArith_BinaryOp<string mnemonic, list<Trait> traits = []> :
-  ModArith_ArithOp<mnemonic, traits>,
+  ModArith_ArithOp<mnemonic, traits #
+    [DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]>,
   Arguments<(ins ModArithLike:$lhs, ModArithLike:$rhs)>,
   Results<(outs ModArithLike:$output)> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-def ModArith_ConstantOp : ModArith_Op_Base<"constant", [ConstantLike]> {
+def ModArith_ConstantOp : ModArith_Op_Base<"constant", [ConstantLike,
+    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Define a constant value via an attribute.";
   let description = [{
     Example:
@@ -79,7 +83,8 @@ def ModArith_ConstantOp : ModArith_Op_Base<"constant", [ConstantLike]> {
 }
 
 def ModArith_BitcastOp : ModArith_Op_Base<"bitcast", [SameOperandsAndResultShape,
-  AllSameTensorDims<["input", "output"]>, DeclareOpInterfaceMethods<CastOpInterface>]> {
+  AllSameTensorDims<["input", "output"]>, DeclareOpInterfaceMethods<CastOpInterface>,
+  DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Bitcast between modular types and to/from integer types";
   let description = [{
     Bitcasts between modular types and to/from integer types.
@@ -106,7 +111,8 @@ def ModArith_BitcastOp : ModArith_Op_Base<"bitcast", [SameOperandsAndResultShape
   let hasCanonicalizeMethod = 1;
 }
 
-def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [SameTypeOperands]> {
+def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [SameTypeOperands,
+    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Montgomery reduction";
   let description = [{
     Performs Montgomery reduction on an integer that is twice the bitwidth of the modulus,
@@ -128,7 +134,9 @@ def ModArith_MontReduceOp : ModArith_Op<"mont_reduce", [SameTypeOperands]> {
   let assemblyFormat = "operands attr-dict `:` type($low) `->` type($output)";
 }
 
-def ModArith_ToMontOp : ModArith_Op<"to_mont", [TypesMatchWith<
+def ModArith_ToMontOp : ModArith_Op<"to_mont", [
+  DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>,
+  TypesMatchWith<
   "input type is standard form of output type", "output", "input", "getStandardFormType($_self)">]> {
   let summary = "Convert from standard form to montgomery representation";
   let description = [{
@@ -147,7 +155,9 @@ def ModArith_ToMontOp : ModArith_Op<"to_mont", [TypesMatchWith<
   let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
-def ModArith_FromMontOp : ModArith_Op<"from_mont", [TypesMatchWith<
+def ModArith_FromMontOp : ModArith_Op<"from_mont", [
+  DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>,
+  TypesMatchWith<
   "input type is montgomery form of output type", "output", "input", "getMontgomeryFormType($_self)">]> {
   let summary = "Convert from montgomery representation to standard form";
   let description = [{
@@ -166,7 +176,9 @@ def ModArith_FromMontOp : ModArith_Op<"from_mont", [TypesMatchWith<
   let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
-def ModArith_CmpOp : ModArith_Op<"cmp", [SameTypeOperands, TypesMatchWith<
+def ModArith_CmpOp : ModArith_Op<"cmp", [SameTypeOperands,
+  DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>,
+  TypesMatchWith<
   "result type has i1 element type and same shape as operands",
   "lhs", "result", "getI1SameShape($_self)">]> {
   let summary = "Modular comparison operation";
@@ -242,7 +254,8 @@ def ModArith_MontSquareOp : ModArith_UnaryOp<"mont_square"> {
   let hasFolder = 1;
 }
 
-def ModArith_InverseOp : ModArith_Op_Base<"inverse", [SameOperandsAndResultType, Involution]> {
+def ModArith_InverseOp : ModArith_Op_Base<"inverse", [SameOperandsAndResultType, Involution,
+    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
   let summary = "Modular inverse operation";
   let description = [{
     Computes the modular inverse of a given modular type integer.
