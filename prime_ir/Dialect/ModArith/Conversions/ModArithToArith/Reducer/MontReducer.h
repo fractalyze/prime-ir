@@ -39,7 +39,12 @@ public:
   // Performs Montgomery reduction on the given input values.
   // Given T = tLow + tHigh * 2ʷ (where w is the modulus bit width),
   // computes T * R⁻¹ mod n, where R is the Montgomery radix.
+  // Returns a value in [0, p).
   Value reduce(Value tLow, Value tHigh);
+
+  // Performs lazy Montgomery reduction (skips final conditional subtraction).
+  // Returns a value in [0, 2p) instead of [0, p).
+  Value reduceLazy(Value tLow, Value tHigh);
 
   // Gets the canonical form from an input value in [0, 2n).
   Value getCanonicalFromExtended(Value input);
@@ -58,13 +63,10 @@ private:
   // Handles splatting for vector types automatically.
   Value createModulusConst(Type inputType);
 
-  // Performs single-limb Montgomery reduction.
-  // Used when the modulus fits in a single limb (2ʷ > modulus).
-  Value reduceSingleLimb(Value tLow, Value tHigh);
-
-  // Performs multi-limb Montgomery reduction.
-  // Used when the modulus requires multiple limbs (2ʷ <= modulus).
-  Value reduceMultiLimb(Value tLow, Value tHigh);
+  // Core REDC implementation shared by reduce() and reduceLazy().
+  // When lazy is true, skips the final conditional subtraction and returns
+  // a value in [0, 2p); when false, returns a value in [0, p).
+  Value reduceImpl(Value tLow, Value tHigh, bool lazy);
 
   // Checks if the input is from a signed multiplication.
   bool isFromSignedMul(Value input);
