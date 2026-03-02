@@ -16,6 +16,11 @@
 // Test that scalar_mul operations use intrinsic functions when
 // lowering-mode=intrinsic is specified, particularly for G2 points
 // over extension fields.
+//
+// Also tests that auto mode chains correctly with field-to-mod-arith:
+// the EC intrinsic function body must be fully lowered before
+// field-to-mod-arith converts the scalar arg from !field.pf to
+// !mod_arith.int.
 
 // RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %s \
 // RUN:   | prime-ir-opt -elliptic-curve-to-field="lowering-mode=intrinsic" \
@@ -29,6 +34,13 @@
 // RUN:   | prime-ir-opt -elliptic-curve-to-field="lowering-mode=inline" \
 // RUN:   | FileCheck %s --check-prefix=CHECK-INLINE
 
+// Chain EC auto mode with field-to-mod-arith to verify the full pipeline.
+// RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %s \
+// RUN:   | prime-ir-opt \
+// RUN:       -elliptic-curve-to-field="lowering-mode=auto" \
+// RUN:       -field-to-mod-arith="lowering-mode=auto" \
+// RUN:   | FileCheck %s --check-prefix=CHECK-AUTO-MODARITH
+
 // =============================================================================
 // Test G1 scalar_mul (prime field points)
 // =============================================================================
@@ -36,6 +48,7 @@
 // CHECK-INTRINSIC-LABEL: @test_g1_scalar_mul
 // CHECK-AUTO-LABEL: @test_g1_scalar_mul
 // CHECK-INLINE-LABEL: @test_g1_scalar_mul
+// CHECK-AUTO-MODARITH-LABEL: @test_g1_scalar_mul
 func.func @test_g1_scalar_mul(%point: !affine, %scalar: !SFm) -> !jacobian {
   // Intrinsic mode: uses intrinsic for all scalar_mul (direct call with high-level types)
   // CHECK-INTRINSIC: call @__prime_ir_ec_scalar_mul_jacobian_{{.*}}_mont
@@ -48,6 +61,10 @@ func.func @test_g1_scalar_mul(%point: !affine, %scalar: !SFm) -> !jacobian {
   // CHECK-INLINE-NOT: call @__prime_ir_ec_scalar_mul
   // CHECK-INLINE: scf.while
 
+  // Auto + field-to-mod-arith: G1 inlined, field ops → mod_arith
+  // CHECK-AUTO-MODARITH-NOT: call @__prime_ir_ec_scalar_mul
+  // CHECK-AUTO-MODARITH: scf.while
+
   %result = elliptic_curve.scalar_mul %scalar, %point : !SFm, !affine -> !jacobian
   return %result : !jacobian
 }
@@ -59,6 +76,7 @@ func.func @test_g1_scalar_mul(%point: !affine, %scalar: !SFm) -> !jacobian {
 // CHECK-INTRINSIC-LABEL: @test_g2_scalar_mul
 // CHECK-AUTO-LABEL: @test_g2_scalar_mul
 // CHECK-INLINE-LABEL: @test_g2_scalar_mul
+// CHECK-AUTO-MODARITH-LABEL: @test_g2_scalar_mul
 func.func @test_g2_scalar_mul(%point: !g2affine, %scalar: !SFm) -> !g2jacobian {
   // Intrinsic mode: uses intrinsic for scalar_mul (direct call with high-level types)
   // CHECK-INTRINSIC: call @__prime_ir_ec_scalar_mul_jacobian_{{.*}}_mont
@@ -70,6 +88,9 @@ func.func @test_g2_scalar_mul(%point: !g2affine, %scalar: !SFm) -> !g2jacobian {
   // CHECK-INLINE-NOT: call @__prime_ir_ec_scalar_mul
   // CHECK-INLINE: scf.while
 
+  // Auto + field-to-mod-arith: G2 uses intrinsic, scalar converted to mod_arith
+  // CHECK-AUTO-MODARITH: call @__prime_ir_ec_scalar_mul_jacobian_{{.*}}_mont
+
   %result = elliptic_curve.scalar_mul %scalar, %point : !SFm, !g2affine -> !g2jacobian
   return %result : !g2jacobian
 }
@@ -80,9 +101,11 @@ func.func @test_g2_scalar_mul(%point: !g2affine, %scalar: !SFm) -> !g2jacobian {
 
 // CHECK-INTRINSIC-LABEL: @test_g2_xyzz_scalar_mul
 // CHECK-AUTO-LABEL: @test_g2_xyzz_scalar_mul
+// CHECK-AUTO-MODARITH-LABEL: @test_g2_xyzz_scalar_mul
 func.func @test_g2_xyzz_scalar_mul(%point: !g2xyzz, %scalar: !SFm) -> !g2xyzz {
   // CHECK-INTRINSIC: call @__prime_ir_ec_scalar_mul_xyzz_{{.*}}_mont
   // CHECK-AUTO: call @__prime_ir_ec_scalar_mul_xyzz_{{.*}}_mont
+  // CHECK-AUTO-MODARITH: call @__prime_ir_ec_scalar_mul_xyzz_{{.*}}_mont
   %result = elliptic_curve.scalar_mul %scalar, %point : !SFm, !g2xyzz -> !g2xyzz
   return %result : !g2xyzz
 }
@@ -98,3 +121,11 @@ func.func @test_g2_xyzz_scalar_mul(%point: !g2xyzz, %scalar: !SFm) -> !g2xyzz {
 
 // CHECK-AUTO-DAG: func.func private @__prime_ir_ec_scalar_mul_jacobian_
 // CHECK-AUTO-DAG: func.func private @__prime_ir_ec_scalar_mul_xyzz_
+
+// Auto + field-to-mod-arith: intrinsic functions exist with lowered bodies.
+// The scalar arg is converted from !field.pf to !mod_arith.int, and the body
+// contains mod_arith ops + scf.while (bit-serial loop was inlined by EC pass).
+// CHECK-AUTO-MODARITH-LABEL: func.func private @__prime_ir_ec_scalar_mul_jacobian_
+// CHECK-AUTO-MODARITH: mod_arith.from_mont
+// CHECK-AUTO-MODARITH: mod_arith.bitcast
+// CHECK-AUTO-MODARITH: scf.while
