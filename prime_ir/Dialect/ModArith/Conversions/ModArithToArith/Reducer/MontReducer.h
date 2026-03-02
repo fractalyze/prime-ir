@@ -39,7 +39,12 @@ public:
   // Performs Montgomery reduction on the given input values.
   // Given T = tLow + tHigh * 2ʷ (where w is the modulus bit width),
   // computes T * R⁻¹ mod n, where R is the Montgomery radix.
+  // Returns a value in [0, p).
   Value reduce(Value tLow, Value tHigh);
+
+  // Performs lazy Montgomery reduction (skips final conditional subtraction).
+  // Returns a value in [0, 2p) instead of [0, p).
+  Value reduceLazy(Value tLow, Value tHigh);
 
   // Gets the canonical form from an input value in [0, 2n).
   Value getCanonicalFromExtended(Value input);

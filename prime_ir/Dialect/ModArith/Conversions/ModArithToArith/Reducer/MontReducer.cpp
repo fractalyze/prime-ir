@@ -236,4 +236,114 @@ Value MontReducer::reduce(Value tLow, Value tHigh) {
   return reduceMultiLimb(tLow, tHigh);
 }
 
+Value MontReducer::reduceLazy(Value tLow, Value tHigh) {
+  TypedAttr nPrimeAttr = montAttr.getNPrime();
+  const unsigned modBitWidth =
+      cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
+  const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
+  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+
+  if (numLimbs == 1) {
+    // Single-limb lazy REDC: same as reduceSingleLimb but without the
+    // final conditional subtraction. Returns value in [0, 2p).
+    TypedAttr nInvAttr = montAttr.getNInv();
+    Type limbType = nInvAttr.getType();
+    if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
+      limbType = shapedType.cloneWith(std::nullopt, limbType);
+      nInvAttr = SplatElementsAttr::get(cast<ShapedType>(limbType), nInvAttr);
+    }
+    auto nInvConst = b.create<arith::ConstantOp>(nInvAttr);
+    auto modConst = createModulusConst(tLow.getType());
+
+    auto m = b.create<arith::MulIOp>(tLow, nInvConst);
+    Value mNHigh;
+    if (isFromSignedMul(tLow)) {
+      auto mN = b.create<arith::MulSIExtendedOp>(m, modConst);
+      mNHigh = mN.getHigh();
+    } else {
+      auto mN = b.create<arith::MulUIExtendedOp>(m, modConst);
+      mNHigh = mN.getHigh();
+    }
+
+    // tHigh - mNHigh can underflow, so add p to ensure non-negative.
+    // Result is in [0, 2p).
+    auto sub = b.create<arith::SubIOp>(tHigh, mNHigh);
+    auto add = b.create<arith::AddIOp>(sub, modConst);
+    return add.getResult();
+  }
+
+  // Multi-limb lazy REDC: same as reduceMultiLimb but skip the final
+  // getCanonicalFromExtended. The intermediate tLow is already in [0, 2p).
+  TypedAttr bInvAttr = montAttr.getBInv();
+  const unsigned numLimbsLocal = numLimbs;
+  Type limbType = nPrimeAttr.getType();
+  TypedAttr limbWidthAttr =
+      b.getIntegerAttr(getElementTypeOrSelf(tLow), limbWidth);
+  TypedAttr limbMaskAttr =
+      b.getIntegerAttr(getElementTypeOrSelf(tLow),
+                       APInt::getAllOnes(limbWidth).zext(modBitWidth));
+  TypedAttr limbShiftAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow),
+                                             (numLimbsLocal - 1) * limbWidth);
+  TypedAttr oneAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), 1);
+  TypedAttr modAttrLocal = modAttr;
+
+  if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
+    limbType = shapedType.cloneWith(std::nullopt, limbType);
+    nPrimeAttr = SplatElementsAttr::get(cast<ShapedType>(limbType), nPrimeAttr);
+    limbWidthAttr = SplatElementsAttr::get(shapedType, limbWidthAttr);
+    limbMaskAttr = SplatElementsAttr::get(shapedType, limbMaskAttr);
+    limbShiftAttr = SplatElementsAttr::get(shapedType, limbShiftAttr);
+    modAttrLocal = isa<VectorType>(modAttrLocal.getType())
+                       ? modAttrLocal
+                       : SplatElementsAttr::get(shapedType, modAttrLocal);
+    bInvAttr = SplatElementsAttr::get(shapedType, bInvAttr);
+    oneAttr = SplatElementsAttr::get(shapedType, oneAttr);
+  }
+
+  auto nPrimeConst = b.create<arith::ConstantOp>(nPrimeAttr);
+  auto limbWidthConst = b.create<arith::ConstantOp>(limbWidthAttr);
+  auto limbMaskConst = b.create<arith::ConstantOp>(limbMaskAttr);
+  auto limbShiftConst = b.create<arith::ConstantOp>(limbShiftAttr);
+  auto modConst = b.create<arith::ConstantOp>(modAttrLocal);
+  auto bInvConst = b.create<arith::ConstantOp>(bInvAttr);
+  auto oneConst = b.create<arith::ConstantOp>(oneAttr);
+
+  auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
+      b.getContext(),
+      arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
+
+  for (unsigned i = 0; i < numLimbsLocal - 1; ++i) {
+    Value freeCoeff = b.create<arith::AndIOp>(tLow, limbMaskConst);
+    tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
+    Value tHighLowerLimb = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
+    tLow = b.create<arith::OrIOp>(tLow, tHighLowerLimb);
+    tHigh = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
+
+    auto m = b.create<arith::MulUIExtendedOp>(freeCoeff, bInvConst);
+    tLow = b.create<arith::AddIOp>(tLow, m.getLow());
+    Value carry =
+        b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, tLow, m.getLow());
+    tHigh = b.create<arith::AddIOp>(tHigh, m.getHigh(), noOverflow);
+    auto tHighPlusOne = b.create<arith::AddIOp>(tHigh, oneConst, noOverflow);
+    tHigh = b.create<arith::SelectOp>(carry, tHighPlusOne, tHigh);
+  }
+
+  Value freeCoeff = b.create<arith::TruncIOp>(limbType, tLow);
+  auto m = b.create<arith::MulIOp>(freeCoeff, nPrimeConst);
+  Value mExt = b.create<arith::ExtUIOp>(tLow.getType(), m);
+  auto mN = b.create<arith::MulUIExtendedOp>(modConst, mExt);
+  tLow = b.create<arith::AddIOp>(tLow, mN.getLow());
+  auto carry =
+      b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, tLow, mN.getLow());
+  tHigh = b.create<arith::AddIOp>(tHigh, mN.getHigh(), noOverflow);
+  auto tHighPlusOne = b.create<arith::AddIOp>(tHigh, oneConst, noOverflow);
+  tHigh = b.create<arith::SelectOp>(carry, tHighPlusOne, tHigh);
+  tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
+  tHigh = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
+  tLow = b.create<arith::OrIOp>(tLow, tHigh);
+
+  // Skip getCanonicalFromExtended — return value in [0, 2p).
+  return tLow;
+}
+
 } // namespace mlir::prime_ir::mod_arith
