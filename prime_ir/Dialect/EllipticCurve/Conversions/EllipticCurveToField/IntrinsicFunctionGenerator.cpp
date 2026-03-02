@@ -140,10 +140,8 @@ Value IntrinsicFunctionGenerator::emitScalarMulCall(OpBuilder &builder,
   if (point.getType() != outputType)
     convertedPoint = builder.create<ConvertPointTypeOp>(loc, outputType, point);
 
-  // Decompose point to field coordinates
-  auto pti = cast<PointTypeInterface>(outputType);
-  auto coordTypes =
-      SmallVector<Type>(pti.getNumCoords(), pti.getBaseFieldType());
+  // Decompose point to field coordinates (derive types from function signature)
+  auto coordTypes = func.getFunctionType().getInputs().drop_back();
   auto coords = builder.create<ToCoordsOp>(loc, coordTypes, convertedPoint);
 
   // Build call args: [coords..., scalar]
