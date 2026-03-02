@@ -77,6 +77,10 @@ TYPED_TEST(PrimeFieldToIntegerTest, RoundTripR0) {
     EXPECT_EQ(int_lit.Get<uint32_t>({}), uint32_t{42});
   } else if constexpr (kIntType == U64) {
     EXPECT_EQ(int_lit.Get<uint64_t>({}), uint64_t{42});
+  } else if constexpr (kIntType == U128) {
+    EXPECT_EQ(static_cast<uint64_t>(int_lit.Get<u128>({})), uint64_t{42});
+  } else if constexpr (kIntType == U256) {
+    EXPECT_EQ(static_cast<uint64_t>(int_lit.Get<u256>({})), uint64_t{42});
   }
 
   // Round-trip: integer → field should give back the same element.
@@ -146,6 +150,8 @@ TYPED_TEST(ExtFieldToIntegerTest, ConvertToInteger) {
     EXPECT_EQ(int_lit.Get<uint64_t>({}), uint64_t{77});
   } else if constexpr (kIntType == U128) {
     EXPECT_EQ(static_cast<uint64_t>(int_lit.Get<u128>({})), uint64_t{77});
+  } else if constexpr (kIntType == U256) {
+    EXPECT_EQ(static_cast<uint64_t>(int_lit.Get<u256>({})), uint64_t{77});
   }
 }
 
