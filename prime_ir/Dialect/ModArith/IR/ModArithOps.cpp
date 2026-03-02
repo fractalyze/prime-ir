@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "mlir/Interfaces/InferIntRangeInterface.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
@@ -482,6 +483,172 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
   return foldMultiplicativeBinaryOp(this, adaptor,
                                     [](auto a, auto b) { return a * b; });
+}
+
+//===----------------------------------------------------------------------===//
+// InferIntRangeInterface implementations
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// Clamp a (potentially wider) APInt to w bits, saturating at maxValue(w).
+APInt clampToWidth(const APInt &val, unsigned w) {
+  if (val.getActiveBits() > w)
+    return APInt::getMaxValue(w);
+  return val.trunc(w);
+}
+
+// Set range to canonical [0, p) for ops that always produce a reduced result.
+void setCanonicalRange(Value result, SetIntRangeFn setResultRange) {
+  setResultRange(result, getCanonicalRange(result.getType()));
+}
+
+// Set range to [0, 2p) for ops using lazy REDC (mont_mul, mont_square, etc.).
+void setLazyRedcRange(Value result, SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(result.getType()));
+  unsigned w = modType.getStorageBitWidth();
+  APInt p = modType.getModulus().getValue().zextOrTrunc(w);
+  APInt twoP = clampToWidth(p.zext(w + 1) * APInt(w + 1, 2) - 1, w);
+  setResultRange(result,
+                 ConstantIntRanges::fromUnsigned(APInt::getZero(w), twoP));
+}
+
+} // namespace
+
+ConstantIntRanges getCanonicalRange(Type type) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(type));
+  unsigned w = modType.getStorageBitWidth();
+  APInt p = modType.getModulus().getValue().zextOrTrunc(w);
+  return ConstantIntRanges::fromUnsigned(APInt::getZero(w), p - 1);
+}
+
+void ConstantOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                   SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  unsigned w = modType.getStorageBitWidth();
+  auto attr = dyn_cast<IntegerAttr>(getValue());
+  if (attr) {
+    APInt val = attr.getValue().zextOrTrunc(w);
+    setResultRange(getResult(), ConstantIntRanges::fromUnsigned(val, val));
+  } else {
+    // Dense attr: conservative range [0, p - 1].
+    setCanonicalRange(getResult(), setResultRange);
+  }
+}
+
+void BitcastOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
+                                  SetIntRangeFn setResultRange) {
+  auto outModType = dyn_cast<ModArithType>(getElementTypeOrSelf(getType()));
+  if (!outModType) {
+    // Mod -> int bitcast: pass through.
+    setResultRange(getResult(), argRanges[0]);
+    return;
+  }
+  auto inModType =
+      dyn_cast<ModArithType>(getElementTypeOrSelf(getInput().getType()));
+  if (inModType) {
+    // Mod -> mod bitcast: pass through.
+    setResultRange(getResult(), argRanges[0]);
+  } else {
+    // Int -> mod bitcast: conservative.
+    unsigned w = outModType.getStorageBitWidth();
+    setResultRange(getResult(), ConstantIntRanges::maxRange(w));
+  }
+}
+
+void MontReduceOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                     SetIntRangeFn setResultRange) {
+  setLazyRedcRange(getResult(), setResultRange);
+}
+
+void ToMontOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                 SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void FromMontOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                   SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void CmpOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                              SetIntRangeFn setResultRange) {
+  setResultRange(getResult(), ConstantIntRanges::fromUnsigned(APInt::getZero(1),
+                                                              APInt(1, 1)));
+}
+
+void NegateOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                 SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void DoubleOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
+                                 SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  unsigned w = modType.getStorageBitWidth();
+  // double(x) = 2x, so umax = 2 * input.umax, clamped to w bits.
+  APInt doubleMax = argRanges[0].umax().zext(w + 1) * APInt(w + 1, 2);
+  APInt umax = clampToWidth(doubleMax, w);
+  setResultRange(getResult(),
+                 ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
+}
+
+void SquareOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                 SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void MontSquareOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                     SetIntRangeFn setResultRange) {
+  setLazyRedcRange(getResult(), setResultRange);
+}
+
+void InverseOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                  SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void MontInverseOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                      SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void AddOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
+                              SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  unsigned w = modType.getStorageBitWidth();
+  // Sum of two unsigned ranges, clamped to w bits.
+  APInt sumMax =
+      argRanges[0].umax().zext(w + 1) + argRanges[1].umax().zext(w + 1);
+  APInt umax = clampToWidth(sumMax, w);
+  setResultRange(getResult(),
+                 ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
+}
+
+void SubOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
+                              SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  unsigned w = modType.getStorageBitWidth();
+  APInt p = modType.getModulus().getValue().zextOrTrunc(w);
+  // lhs + correction - rhs where correction = ceil(rhs.umax / p) * p.
+  APInt rhsMax = argRanges[1].umax().zext(w + 1);
+  APInt pExt = p.zext(w + 1);
+  // correction = ceil(rhsMax / p) * p = ((rhsMax + p - 1) / p) * p
+  APInt correction = ((rhsMax + pExt - 1).udiv(pExt)) * pExt;
+  APInt resultMax = argRanges[0].umax().zext(w + 1) + correction;
+  APInt umax = clampToWidth(resultMax, w);
+  setResultRange(getResult(),
+                 ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
+}
+
+void MulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                              SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void MontMulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                  SetIntRangeFn setResultRange) {
+  setLazyRedcRange(getResult(), setResultRange);
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
