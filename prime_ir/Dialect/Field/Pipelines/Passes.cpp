@@ -83,7 +83,8 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
 
-  pm.addPass(mod_arith::createModArithToArith());
+  pm.addPass(mod_arith::createModArithToArith(
+      mod_arith::ModArithToArithOptions{options.lazyReduction}));
   pm.addPass(createCanonicalizerPass());
 
   pm.addPass(tensor_ext::createTensorExtToTensor());
@@ -146,7 +147,8 @@ void buildFieldToGPU(OpPassManager &pm, const FieldToGPUOptions &options) {
   pm.addPass(createBinaryFieldToArith());
   pm.addPass(createCanonicalizerPass());
 
-  pm.addPass(mod_arith::createModArithToArith());
+  pm.addPass(mod_arith::createModArithToArith(
+      mod_arith::ModArithToArithOptions{options.lazyReduction}));
   pm.addPass(createCanonicalizerPass());
 
   pm.addPass(tensor_ext::createTensorExtToTensor());
