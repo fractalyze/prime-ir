@@ -851,6 +851,23 @@ void CreateFromInteger(absl::Span<const NativeSrcT> src_data, void* dst_base) {
   }
 }
 
+/// Converts prime/extension field elements to integers by extracting raw
+/// stored values. This is the inverse of CreateFromInteger — symmetric with
+/// the FromUnchecked/value() pair.
+template <typename NativeSrcT, typename NativeDestT>
+void CreateToInteger(absl::Span<const NativeSrcT> src_data, void* dst_base) {
+  static_assert(!std::is_same_v<NativeSrcT, NativeDestT>);
+
+  NativeDestT* dest_data = static_cast<NativeDestT*>(dst_base);
+  for (const NativeSrcT& src : src_data) {
+    if constexpr (zk_dtypes::IsPrimeField<NativeSrcT>) {
+      *(dest_data++) = static_cast<NativeDestT>(src.value());
+    } else if constexpr (zk_dtypes::IsExtensionField<NativeSrcT>) {
+      *(dest_data++) = static_cast<NativeDestT>(src.values()[0].value());
+    }
+  }
+}
+
 template <PrimitiveType kSrcType>
 absl::Status ConvertIfDestTypeMatches(const LiteralBase& src_literal,
                                       MutableLiteralBase& dst_literal) {
@@ -901,6 +918,21 @@ absl::Status ConvertIfDestTypeMatches(const LiteralBase& src_literal,
               return absl::InvalidArgumentError(
                   "ec point conversion from a wider integer type is not "
                   "supported");
+            }
+            // NOLINTNEXTLINE(readability/braces)
+          } else if constexpr ((primitive_util::IsPrimeFieldType(kSrcType) ||
+                                primitive_util::IsExtensionFieldType(
+                                    kSrcType)) &&
+                               primitive_util::IsIntegralType(
+                                   primitive_type_constant)) {
+            if constexpr (primitive_util::ByteWidth(kSrcType) <=
+                          primitive_util::ByteWidth(primitive_type_constant)) {
+              CreateToInteger<NativeSrcT, NativeDestT>(src_data, dst_base);
+              return absl::OkStatus();
+            } else {
+              return absl::InvalidArgumentError(
+                  "field to integer conversion to a narrower integer type is "
+                  "not supported");
             }
           }
           return absl::UnimplementedError("Undefined conversion");
