@@ -28,13 +28,18 @@ namespace mlir::prime_ir::elliptic_curve {
 /// which can generate thousands of instructions when inlined with extension
 /// field coordinates (e.g., G2 points over Fp2).
 ///
-/// Intrinsic functions use high-level point and scalar types directly in their
-/// signatures. The lowering pass handles type decomposition automatically.
+/// Intrinsic functions use field coordinate types in their signatures,
+/// avoiding EC types that downstream passes cannot convert. At call sites,
+/// EC points are decomposed to coordinates before the call and reconstructed
+/// after.
 ///
-/// Example intrinsic signature for scalar_mul:
+/// Example intrinsic signature for scalar_mul (jacobian, 3 coordinates):
 ///   func @__prime_ir_ec_scalar_mul_<curve_hash>(
-///       %point: !elliptic_curve.jacobian<...>,
-///       %scalar: !field.prime<...>) -> !elliptic_curve.jacobian<...>
+///       %x: !field.ext<2x!field.prime<...>>,
+///       %y: !field.ext<2x!field.prime<...>>,
+///       %z: !field.ext<2x!field.prime<...>>,
+///       %scalar: !field.prime<...>)
+///       -> (!field.ext<...>, !field.ext<...>, !field.ext<...>)
 class IntrinsicFunctionGenerator
     : public IntrinsicFunctionGeneratorBase<IntrinsicFunctionGenerator> {
   using Base = IntrinsicFunctionGeneratorBase<IntrinsicFunctionGenerator>;
