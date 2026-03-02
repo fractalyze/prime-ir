@@ -327,6 +327,35 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "tree_reduction_rewriter",
+    srcs = ["tree_reduction_rewriter.cc"],
+    hdrs = ["tree_reduction_rewriter.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/ir:dfs_hlo_visitor_with_default",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:collective_ops_utils",
+        "//zkx/service:hlo_module_config",
+        "//zkx/service/gpu:reduction_utils",
+        "//zkx/stream_executor:device_description",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/numeric:bits",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_library(
     name = "variadic_op_splitter",
     srcs = ["variadic_op_splitter.cc"],
     hdrs = ["variadic_op_splitter.h"],
@@ -358,6 +387,7 @@ zkx_cc_unittest(
         "priority_fusion_unittest.cc",
         "schedule_postprocessing_unittest.cc",
         "scheduling_instruction_annotator_unittest.cc",
+        "tree_reduction_rewriter_unittest.cc",
         "variadic_op_splitter_unittest.cc",
     ],
     deps = [
@@ -372,6 +402,7 @@ zkx_cc_unittest(
         ":priority_fusion",
         ":schedule_postprocessing",
         ":scheduling_instruction_annotator",
+        ":tree_reduction_rewriter",
         ":variadic_op_splitter",
         "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
