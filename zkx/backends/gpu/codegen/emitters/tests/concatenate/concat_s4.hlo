@@ -1,0 +1,26 @@
+// Copyright 2026 The ZKX Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// ==============================================================================
+
+// RUN: fusion_to_mlir %s | emitters_opt -zkx-gpu-test-optimize |\
+// RUN:   FileCheck %s
+// RUN: gpu_test_correctness %s
+
+fusion {
+  param0 = s4[200]{0:E(4)} parameter(0)
+  param1 = s4[400]{0:E(4)} parameter(1)
+  param2 = s4[300]{0:E(4)} parameter(2)
+  ROOT concat = s4[900]{0:E(4)} concatenate(param0, param1, param2), dimensions={0}
+}
+// CHECK: zkx.pure_call @fusion_concat

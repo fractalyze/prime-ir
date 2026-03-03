@@ -21,7 +21,7 @@ lit_test_suite(
     cfg = "//zkx:lit.cfg.py",
     tools = [
         "//zkx/backends/gpu/codegen/tools:fusion_to_mlir",
-        "//zkx/backends/gpu/codegen/tools:test_correctness",
+        "//zkx/backends/gpu/codegen/tools:gpu_test_correctness",
         "//zkx/codegen/tools:emitters_opt",
         "@llvm-project//llvm:FileCheck",
     ],

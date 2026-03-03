@@ -1,0 +1,48 @@
+// Copyright 2026 The ZKX Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// ==============================================================================
+
+// RUN: fusion_to_mlir %s | emitters_opt -zkx-gpu-test-optimize |\
+// RUN:   FileCheck %s
+// RUN: gpu_test_correctness %s
+
+fusion {
+  param0 = s32[200] parameter(0)
+  param1 = s32[400] parameter(1)
+  param2 = s32[300] parameter(2)
+  ROOT concat = s32[900] concatenate(param0, param1, param2), dimensions={0}
+}
+
+// The first loop mapping is the same as the output indexing map so it is CSE'd.
+// CHECK-DAG: #[[MAP:.*]] = #zkx.indexing_map<"(th_x, bl_x){{.*}} -> (bl_x * 128 + th_x)
+// CHECK-DAG: #[[LOOPMAP_2:.*]] = #zkx.indexing_map<"(th_x, bl_x){{.*}} -> (bl_x * 128 + th_x + 200)
+// CHECK-DAG: #[[LOOPMAP_3:.*]] = #zkx.indexing_map<"(th_x, bl_x){{.*}} -> (bl_x * 128 + th_x + 600)
+
+// CHECK:       func.func @main
+// CHECK-SAME:    %[[ARG_0:[a-zA-Z0-9]*]]: {{[^,]*}},
+// CHECK-SAME:    %[[ARG_1:[a-zA-Z0-9]*]]: {{[^,]*}},
+// CHECK-SAME:    %[[ARG_2:[a-zA-Z0-9]*]]: {{[^,]*}},
+// CHECK-SAME:    %[[OUTPUT:[a-zA-Z0-9]*]]: {{[^,]*}}
+
+// CHECK: zkx.loop ({{.*}}){{.*}} -> (%[[RA:.*]]) in #[[MAP]]
+// CHECK:   %[[VAL_1:.*]] = zkx.pure_call @fusion_param0
+// CHECK:   %[[INSERTED_1:.*]] = tensor.insert %[[VAL_1:.*]] into {{.*}}[%[[RA]]]
+
+// CHECK: zkx.loop ({{.*}}){{.*}} -> (%[[RA:.*]]) in #[[LOOPMAP_2]]
+// CHECK:   %[[VAL_2:.*]] = zkx.pure_call @fusion_param1
+// CHECK:   %[[INSERTED_2:.*]] = tensor.insert %[[VAL_2:.*]] into {{.*}}[%[[RA]]]
+
+// CHECK: zkx.loop ({{.*}}){{.*}} -> (%[[RA:.*]]) in #[[LOOPMAP_3]]
+// CHECK:   %[[VAL_3:.*]] = zkx.pure_call @fusion_param2
+// CHECK:   %[[INSERTED_3:.*]] = tensor.insert %[[VAL_3:.*]] into {{.*}}[%[[RA]]]
