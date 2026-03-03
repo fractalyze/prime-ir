@@ -1513,9 +1513,72 @@ absl::Status DynamicDimensionInferenceVisitor::HandleMap(HloInstruction* hlo) {
 
 absl::Status DynamicDimensionInferenceVisitor::HandleScatter(
     HloInstruction* hlo) {
-  // TODO(chokobole): Implement this. Dependency: HloScatterInstruction
-  return absl::UnimplementedError(
-      "DynamicDimensionInferenceVisitor::HandleScatter not implemented");
+  if (!CanInfer(hlo)) {
+    return absl::OkStatus();
+  }
+  return ForEachOperandDynamicDimension(
+      hlo,
+      [&](HloInstruction* operand, ShapeIndex dynamic_index, int64_t dimension,
+          int64_t operand_index,
+          HloInstruction* operand_dynamic_size) -> absl::Status {
+        if (operand_index == 0) {
+          SetDynamicSize(hlo, {}, dimension, operand_dynamic_size);
+          return absl::OkStatus();
+        }
+
+        const ScatterDimensionNumbers& scatter_dims =
+            hlo->scatter_dimension_numbers();
+        if (operand_index == 2 &&
+            absl::c_linear_search(scatter_dims.update_window_dims(),
+                                  dimension)) {
+          // Dynamic update window dimension is only allowed if it is exactly
+          // the same as the corresponding operand dimension.
+          std::vector<int64_t> update_window_dims_in_operand;
+          for (int64_t i = 0; i < hlo->operand(0)->shape().rank(); ++i) {
+            if (absl::c_linear_search(scatter_dims.inserted_window_dims(), i)) {
+              continue;
+            }
+            update_window_dims_in_operand.push_back(i);
+          }
+
+          for (int64_t i = 0; i < scatter_dims.update_window_dims_size(); ++i) {
+            if (scatter_dims.update_window_dims(i) == dimension) {
+              const Shape& operand_shape = hlo->operand(0)->shape();
+              const Shape& update_shape = hlo->operand(2)->shape();
+              int64_t dim_in_operand = update_window_dims_in_operand[i];
+              if (operand_shape.dimensions(dim_in_operand) !=
+                  update_shape.dimensions(dimension)) {
+                return absl::UnimplementedError(absl::StrFormat(
+                    "Dynamic dimension of update window dims that are not "
+                    "the same as corresponding operand dim is not supported: "
+                    "%s : %d : %d : %d",
+                    hlo->ToString(), i, update_shape.dimensions(dimension),
+                    operand_shape.dimensions(dim_in_operand)));
+              }
+              HloInstruction* base_dynamic_size = parent_->GetDynamicSize(
+                  hlo->mutable_operand(0), {}, dim_in_operand);
+              // Sometimes the incoming operand dimension is no longer dynamic,
+              // Simply return OK in this case.
+              if (base_dynamic_size == nullptr ||
+                  !operand_shape.is_dynamic_dimension(dim_in_operand)) {
+                return absl::OkStatus();
+              }
+              if (base_dynamic_size != operand_dynamic_size) {
+                return absl::UnimplementedError(absl::StrFormat(
+                    "Dynamic dimension size of update window dims that are "
+                    "not the same as corresponding operand dim is not "
+                    "supported: %s.\n Dynamic dim size of base: %s, dynamic "
+                    "dim size of update: %s",
+                    hlo->ToString(), base_dynamic_size->ToString(),
+                    operand_dynamic_size->ToString()));
+              }
+            }
+          }
+        }
+        // The dynamic dimension is collapsed and won't show up in the output.
+        // Do nothing here.
+        return absl::OkStatus();
+      });
 }
 
 absl::Status DynamicDimensionInferenceVisitor::HandleWhile(
