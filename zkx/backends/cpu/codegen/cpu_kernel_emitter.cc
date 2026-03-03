@@ -217,6 +217,8 @@ void AddPasses(mlir::PassManager& pm, CpuKernelEmitter::PassFlag& flag) {
     VLOG(2) << "add pass: -elliptic-curve-to-field";
     flag.enable_field_to_arith = true;
     pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToField());
+    pm.addPass(mlir::createCanonicalizerPass());
+    pm.addPass(mlir::createCSEPass());
   }
 
   if (flag.enable_linalg_generalize_named_ops) {
@@ -235,8 +237,10 @@ void AddPasses(mlir::PassManager& pm, CpuKernelEmitter::PassFlag& flag) {
     flag.enable_expand_strided_metadata = true;
     pm.addPass(mlir::prime_ir::field::createFieldToModArith());
     pm.addPass(mlir::createCanonicalizerPass());
+    pm.addPass(mlir::createCSEPass());
     pm.addPass(mlir::prime_ir::mod_arith::createModArithToArith());
     pm.addPass(mlir::createCanonicalizerPass());
+    pm.addPass(mlir::createCSEPass());
   }
 
   if (flag.enable_tensor_ext_to_tensor) {

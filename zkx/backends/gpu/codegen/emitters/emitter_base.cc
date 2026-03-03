@@ -625,8 +625,14 @@ void AddLoweringPasses(mlir::OpPassManager& pm,
   pm.addNestedPass<FuncOp>(emitters::CreateConvertPureCallOpsPass());
 
   pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToField());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
   pm.addPass(mlir::prime_ir::field::createFieldToModArith());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
   pm.addPass(mlir::prime_ir::mod_arith::createModArithToArith());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
   pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToLLVM());
   pm.addPass(mlir::prime_ir::field::createExtFieldToLLVM());
 
