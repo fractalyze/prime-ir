@@ -15,6 +15,7 @@
 
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda_is_configured")
 load("//bazel:zkx_cc.bzl", "zkx_cc_binary", "zkx_cc_library")
+load("//zkx/tests:build_defs.bzl", "zkx_test")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -123,6 +124,30 @@ zkx_cc_binary(
         "@zkbench_cpp//zkbench:benchmark_main",
         "@zkbench_cpp//zkbench:hash",
     ] + RUNNER_RUNTIME_DEPS + if_cuda_is_configured([
+        "//zkx/stream_executor/cuda:cuda_platform",
+    ]),
+)
+
+zkx_test(
+    name = "stablehlo_compilation_test",
+    srcs = ["stablehlo_compilation_test.cc"],
+    backends = ["gpu"],
+    data = [
+        "ntt.stablehlo.mlir",
+        "poseidon2_permutation.stablehlo.mlir",
+    ],
+    deps = [
+        ":stablehlo_utils",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:test_util",
+        "//zkx/backends/gpu/runtime:command_buffer_cmd",
+        "//zkx/backends/gpu/runtime:command_buffer_cmd_emitter",
+        "//zkx/backends/gpu/runtime:command_buffer_thunk",
+        "//zkx/service/gpu:gpu_compiler",
+        "//zkx/tests:hlo_test_base",
+        "@com_google_absl//absl/status:status_matchers",
+        "@com_google_absl//absl/strings",
+    ] + if_cuda_is_configured([
         "//zkx/stream_executor/cuda:cuda_platform",
     ]),
 )
