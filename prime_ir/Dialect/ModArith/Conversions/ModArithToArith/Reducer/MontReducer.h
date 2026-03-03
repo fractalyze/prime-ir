@@ -50,7 +50,7 @@ public:
   // For bound <= 1 returns the input as-is; for bound == 2 uses a single
   // conditional subtraction; for bound > 2 uses binary conditional subtraction
   // in ceil(log₂(bound)) steps.
-  Value getCanonicalFromExtended(Value input, unsigned bound = 2);
+  Value getCanonicalFromExtended(Value input, uint64_t bound = 2);
 
   // Gets the canonical form from an input value in [0, 2n) and an overflow
   // flag.

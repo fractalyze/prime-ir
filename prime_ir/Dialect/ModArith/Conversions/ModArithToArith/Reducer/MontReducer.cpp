@@ -37,7 +37,7 @@ Value MontReducer::createModulusConst(Type inputType) {
   return b.create<arith::ConstantOp>(modAttr);
 }
 
-Value MontReducer::getCanonicalFromExtended(Value input, unsigned bound) {
+Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
   if (bound <= 1)
     return input;
 
@@ -49,10 +49,10 @@ Value MontReducer::getCanonicalFromExtended(Value input, unsigned bound) {
   APInt mod = cast<IntegerAttr>(modAttr).getValue();
   unsigned w = mod.getBitWidth();
   unsigned m = 0;
-  for (unsigned k = bound - 1; k > 0; k >>= 1)
+  for (uint64_t k = bound - 1; k > 0; k >>= 1)
     ++m;
   for (int i = m - 1; i >= 0; --i) {
-    APInt multiple = mod.zext(w) * APInt(w, 1u << i);
+    APInt multiple = mod.zext(w) * APInt(w, uint64_t{1} << i);
     TypedAttr multipleAttr = IntegerAttr::get(modAttr.getType(), multiple);
     if (auto shapedType = dyn_cast<ShapedType>(input.getType()))
       multipleAttr = SplatElementsAttr::get(shapedType, multipleAttr);

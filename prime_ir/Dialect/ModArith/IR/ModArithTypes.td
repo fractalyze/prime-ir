@@ -94,7 +94,7 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
       return getStorageType().getWidth();
     }
     // Returns floor((2^storageWidth - 1) / modulus).
-    unsigned getMaxBound() const {
+    uint64_t getMaxBound() const {
       APInt mod = getModulus().getValue();
       unsigned w = getStorageBitWidth();
       APInt maxVal = APInt::getMaxValue(w).zext(w + 1);
