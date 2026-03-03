@@ -154,6 +154,24 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "gather_simplifier",
+    srcs = ["gather_simplifier.cc"],
+    hdrs = ["gather_simplifier.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:literal_util",
+        "//zkx:permutation_util",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/transforms/expanders:op_expander_pass",
+        "//zkx/service:gather_scatter_utils",
+        "//zkx/service:hlo_creation_utils",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "hlo_constant_folding",
     srcs = ["hlo_constant_folding.cc"],
     hdrs = ["hlo_constant_folding.h"],
@@ -338,6 +356,7 @@ zkx_cc_unittest(
         "dynamic_dimension_simplifier_unittest.cc",
         "flatten_call_graph_unittest.cc",
         "fusion_constant_sinking_unittest.cc",
+        "gather_simplifier_unittest.cc",
         "hlo_constant_folding_unittest.cc",
         "hlo_cse_unittest.cc",
         "hlo_dce_unittest.cc",
@@ -356,6 +375,7 @@ zkx_cc_unittest(
         ":dynamic_dimension_simplifier",
         ":flatten_call_graph",
         ":fusion_constant_sinking",
+        ":gather_simplifier",
         ":hlo_constant_folding",
         ":hlo_cse",
         ":hlo_dce",

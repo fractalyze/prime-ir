@@ -71,6 +71,7 @@ limitations under the License.
 #include "zkx/hlo/transforms/simplifiers/conditional_canonicalizer.h"
 #include "zkx/hlo/transforms/simplifiers/dynamic_dimension_simplifier.h"
 #include "zkx/hlo/transforms/simplifiers/flatten_call_graph.h"
+#include "zkx/hlo/transforms/simplifiers/gather_simplifier.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_constant_folding.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_cse.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_dce.h"
@@ -401,7 +402,7 @@ absl::Status RunOptimizationPasses(
 
     pipeline.AddPass<ZeroSizedHloElimination>();
 
-    // TODO(batzor): Add GatherSimplifier
+    pipeline.AddPass<GatherSimplifier>();
     // TODO(batzor): Add GatherExpander (kEliminateSimpleGathers)
     pipeline.AddPass<ScatterSimplifier>();
     pipeline.AddPass<ScatterExpander>(
