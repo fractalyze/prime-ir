@@ -98,6 +98,7 @@ limitations under the License.
 #include "zkx/service/gpu/transforms/dynamic_slice_fusion_rewriter.h"
 #include "zkx/service/gpu/transforms/fusion_wrapper.h"
 #include "zkx/service/gpu/transforms/layout_assignment.h"
+#include "zkx/service/gpu/transforms/tree_reduction_rewriter.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
 #include "zkx/service/scatter_expander.h"
@@ -691,7 +692,8 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
     // TODO(batzor): Add ReductionLayoutNormalizer
     // TODO(batzor): Add ReductionDimensionGrouper
     // TODO(batzor): Add ReductionSplitter
-    // TODO(batzor): Add TreeReductionRewriter
+    pipeline.AddPass<HloPassFix<TreeReductionRewriter>>(
+        gpu_target_config.device_description);
 
     pipeline.AddPass<SubByteNormalization>(
         SubByteNormalization::SET_ELEMENT_SIZE);

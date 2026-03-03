@@ -267,6 +267,7 @@ zkx_cc_library(
         "//zkx/service/gpu/transforms:dynamic_slice_fusion_rewriter",
         "//zkx/service/gpu/transforms:fusion_wrapper",
         "//zkx/service/gpu/transforms:layout_assignment",
+        "//zkx/service/gpu/transforms:tree_reduction_rewriter",
         "//zkx/service/llvm_ir:llvm_command_line_options",
         "//zkx/service/llvm_ir:llvm_util",
         "//zkx/stream_executor",
