@@ -369,9 +369,10 @@ struct ConvertNegate : public BoundMapPattern<NegateOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value input = adaptor.getInput();
-    if (lookupBound(op.getInput()) > 1) {
+    unsigned inputBound = lookupBound(op.getInput());
+    if (inputBound > 1) {
       MontReducer reducer(b, getResultModArithType(op));
-      input = reducer.getCanonicalFromExtended(input);
+      input = reducer.getCanonicalFromExtended(input, inputBound);
     }
 
     Type intType = modulusType(op);
@@ -481,9 +482,10 @@ struct ConvertInverse : public BoundMapPattern<InverseOp> {
 
     // Reduce lazy input before inverting.
     Value input = adaptor.getInput();
-    if (lookupBound(op.getInput()) > 1) {
+    unsigned inputBound = lookupBound(op.getInput());
+    if (inputBound > 1) {
       MontReducer reducer(b, modType);
-      input = reducer.getCanonicalFromExtended(input);
+      input = reducer.getCanonicalFromExtended(input, inputBound);
     }
 
     BYInverter inverter(b, op.getInput().getType());
@@ -546,9 +548,10 @@ struct ConvertMontInverse : public BoundMapPattern<MontInverseOp> {
 
     // Reduce lazy input before inverting.
     Value input = adaptor.getInput();
-    if (lookupBound(op.getInput()) > 1) {
+    unsigned inputBound = lookupBound(op.getInput());
+    if (inputBound > 1) {
       MontReducer reducer(b, modType);
-      input = reducer.getCanonicalFromExtended(input);
+      input = reducer.getCanonicalFromExtended(input, inputBound);
     }
 
     BYInverter inverter(b, op.getInput().getType());
@@ -615,9 +618,9 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     Value rhs = adaptor.getRhs();
     if (lhsBound + rhsBound > maxBound) {
       if (lhsBound > 1)
-        lhs = montReducer.getCanonicalFromExtended(lhs);
+        lhs = montReducer.getCanonicalFromExtended(lhs, lhsBound);
       if (rhsBound > 1)
-        rhs = montReducer.getCanonicalFromExtended(rhs);
+        rhs = montReducer.getCanonicalFromExtended(rhs, rhsBound);
     }
 
     Value result;
@@ -674,7 +677,7 @@ struct ConvertDouble : public BoundMapPattern<DoubleOp> {
     Value input = adaptor.getInput();
     if (2 * inputBound > maxBound) {
       if (inputBound > 1)
-        input = montReducer.getCanonicalFromExtended(input);
+        input = montReducer.getCanonicalFromExtended(input, inputBound);
     }
 
     Value result;
@@ -725,9 +728,9 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
     Value rhs = adaptor.getRhs();
     if (lhsBound + rhsBound > maxBound) {
       if (lhsBound > 1)
-        lhs = montReducer.getCanonicalFromExtended(lhs);
+        lhs = montReducer.getCanonicalFromExtended(lhs, lhsBound);
       if (rhsBound > 1)
-        rhs = montReducer.getCanonicalFromExtended(rhs);
+        rhs = montReducer.getCanonicalFromExtended(rhs, rhsBound);
       lhsBound = 1;
       rhsBound = 1;
     }
@@ -955,9 +958,9 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
     MontReducer reducer(b, modType);
     if (lhsBound * rhsBound > maxBound) {
       if (lhsBound > 1)
-        lhs = reducer.getCanonicalFromExtended(lhs);
+        lhs = reducer.getCanonicalFromExtended(lhs, lhsBound);
       if (rhsBound > 1)
-        rhs = reducer.getCanonicalFromExtended(rhs);
+        rhs = reducer.getCanonicalFromExtended(rhs, rhsBound);
     }
 
     Value signedLhs = getSignedFormFromCanonical(lhs, modAttr);
@@ -1188,7 +1191,7 @@ struct ConvertMontSquare : public BoundMapPattern<MontSquareOp> {
     MontReducer reducer(b, modType);
     if (inputBound * inputBound > maxBound) {
       if (inputBound > 1)
-        input = reducer.getCanonicalFromExtended(input);
+        input = reducer.getCanonicalFromExtended(input, inputBound);
     }
 
     auto sqResult = squareExtended(b, op, input);
@@ -1217,14 +1220,13 @@ struct ConvertCmp : public BoundMapPattern<CmpOp> {
     // Reduce lazy operands before comparison.
     Value lhs = adaptor.getLhs();
     Value rhs = adaptor.getRhs();
-    if (lookupBound(op.getLhs()) > 1) {
-      MontReducer reducer(b, modArithType);
-      lhs = reducer.getCanonicalFromExtended(lhs);
-    }
-    if (lookupBound(op.getRhs()) > 1) {
-      MontReducer reducer(b, modArithType);
-      rhs = reducer.getCanonicalFromExtended(rhs);
-    }
+    MontReducer reducer(b, modArithType);
+    unsigned lhsBound = lookupBound(op.getLhs());
+    if (lhsBound > 1)
+      lhs = reducer.getCanonicalFromExtended(lhs, lhsBound);
+    unsigned rhsBound = lookupBound(op.getRhs());
+    if (rhsBound > 1)
+      rhs = reducer.getCanonicalFromExtended(rhs, rhsBound);
 
     auto cmpOp = b.create<arith::CmpIOp>(op.getPredicate(), lhs, rhs);
     rewriter.replaceOp(op, cmpOp);
@@ -1259,10 +1261,11 @@ struct ConvertReturnWithReduction : public BoundMapPattern<func::ReturnOp> {
       Value convertedOperand = adaptor.getOperands()[i];
       auto modType =
           dyn_cast<ModArithType>(getElementTypeOrSelf(origOperand.getType()));
-      if (modType && lookupBound(origOperand) > 1) {
+      unsigned bound = lookupBound(origOperand);
+      if (modType && bound > 1) {
         MontReducer reducer(b, modType);
         newOperands.push_back(
-            reducer.getCanonicalFromExtended(convertedOperand));
+            reducer.getCanonicalFromExtended(convertedOperand, bound));
         changed = true;
       } else {
         newOperands.push_back(convertedOperand);
@@ -1290,11 +1293,12 @@ struct ConvertStoreWithReduction : public BoundMapPattern<memref::StoreOp> {
     Value storedValue = op.getValue();
     auto modType =
         dyn_cast<ModArithType>(getElementTypeOrSelf(storedValue.getType()));
-    if (!modType || lookupBound(storedValue) <= 1)
+    unsigned bound = lookupBound(storedValue);
+    if (!modType || bound <= 1)
       return failure();
 
     MontReducer reducer(b, modType);
-    Value reduced = reducer.getCanonicalFromExtended(adaptor.getValue());
+    Value reduced = reducer.getCanonicalFromExtended(adaptor.getValue(), bound);
     rewriter.replaceOpWithNewOp<memref::StoreOp>(
         op, reduced, adaptor.getMemref(), adaptor.getIndices());
     return success();
@@ -1322,10 +1326,11 @@ struct ConvertYieldWithReduction : public BoundMapPattern<scf::YieldOp> {
       Value convertedOperand = adaptor.getOperands()[i];
       auto modType =
           dyn_cast<ModArithType>(getElementTypeOrSelf(origOperand.getType()));
-      if (modType && lookupBound(origOperand) > 1) {
+      unsigned bound = lookupBound(origOperand);
+      if (modType && bound > 1) {
         MontReducer reducer(b, modType);
         newOperands.push_back(
-            reducer.getCanonicalFromExtended(convertedOperand));
+            reducer.getCanonicalFromExtended(convertedOperand, bound));
         changed = true;
       } else {
         newOperands.push_back(convertedOperand);
@@ -1355,11 +1360,13 @@ struct ConvertMaterializeWithReduction
     Value source = op.getSource();
     auto modType =
         dyn_cast<ModArithType>(getElementTypeOrSelf(source.getType()));
-    if (!modType || lookupBound(source) <= 1)
+    unsigned bound = lookupBound(source);
+    if (!modType || bound <= 1)
       return failure();
 
     MontReducer reducer(b, modType);
-    Value reduced = reducer.getCanonicalFromExtended(adaptor.getSource());
+    Value reduced =
+        reducer.getCanonicalFromExtended(adaptor.getSource(), bound);
     rewriter.replaceOpWithNewOp<bufferization::MaterializeInDestinationOp>(
         op, reduced, adaptor.getDest());
     return success();

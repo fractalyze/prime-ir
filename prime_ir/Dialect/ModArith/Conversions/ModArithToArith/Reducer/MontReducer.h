@@ -46,8 +46,11 @@ public:
   // Returns a value in [0, 2p) instead of [0, p).
   Value reduceLazy(Value tLow, Value tHigh);
 
-  // Gets the canonical form from an input value in [0, 2n).
-  Value getCanonicalFromExtended(Value input);
+  // Reduces a value in [0, bound * p) to canonical form [0, p).
+  // For bound <= 1 returns the input as-is; for bound == 2 uses a single
+  // conditional subtraction; for bound > 2 uses binary conditional subtraction
+  // in ceil(log₂(bound)) steps.
+  Value getCanonicalFromExtended(Value input, unsigned bound = 2);
 
   // Gets the canonical form from an input value in [0, 2n) and an overflow
   // flag.

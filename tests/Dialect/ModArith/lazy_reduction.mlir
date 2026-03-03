@@ -28,7 +28,8 @@
 // LAZY:           arith.addi {{.*}} overflow<nsw, nuw>
 // LAZY-NOT:       arith.cmpi ult
 // LAZY:           arith.addi {{.*}} overflow<nsw, nuw>
-// LAZY:           arith.cmpi ult
+//   Binary reduction for bound=3: subtract 2p then p → 2 selects.
+// LAZY:           arith.select
 // LAZY:           arith.select
 // LAZY:           return
 
@@ -76,11 +77,13 @@ func.func @test_lazy_sub(%lhs : !Zp, %rhs : !Zp) -> !Zp {
 
 !Zp = !mod_arith.int<65537 : i32>
 
-// Chained adds — no intermediate reductions. Lazy produces exactly one
-// arith.select (at boundary); eager produces one per add.
+// Chained adds — no intermediate reductions. Lazy skips inline reduction
+// on both adds; boundary uses binary reduction for bound=3 ([0, 3p)):
+// subtract 2p then p → 2 selects. Eager produces one select per add.
 
 // LAZY-LABEL:     @test_chain
 // LAZY-COUNT-2:   arith.addi {{.*}} overflow<nsw, nuw>
+// LAZY:           arith.select
 // LAZY:           arith.select
 // LAZY-NOT:       arith.select
 // LAZY:           return
@@ -250,7 +253,8 @@ func.func @test_mont_mul_chain(%a : !Zp, %b : !Zp) -> !Zp {
 // LAZY:           arith.shli {{.*}} overflow<nsw, nuw>
 // LAZY-NOT:       arith.cmpi ult
 // LAZY:           arith.addi {{.*}} overflow<nsw, nuw>
-// LAZY:           arith.cmpi ult
+//   Binary reduction for bound=3: subtract 2p then p → 2 selects.
+// LAZY:           arith.select
 // LAZY:           arith.select
 // LAZY:           return
 

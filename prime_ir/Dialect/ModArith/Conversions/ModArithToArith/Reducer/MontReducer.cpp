@@ -37,18 +37,38 @@ Value MontReducer::createModulusConst(Type inputType) {
   return b.create<arith::ConstantOp>(modAttr);
 }
 
-Value MontReducer::getCanonicalFromExtended(Value input) {
-  auto cmod = createModulusConst(input.getType());
-  if (isa<VectorType>(input.getType())) {
-    auto sub = b.create<arith::SubIOp>(input, cmod);
-    auto min = b.create<arith::MinUIOp>(sub, input);
-    return min.getResult();
-  } else {
-    auto iflt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, input, cmod);
-    auto sub = b.create<arith::SubIOp>(input, cmod);
-    auto select = b.create<arith::SelectOp>(iflt, input, sub);
-    return select.getResult();
+Value MontReducer::getCanonicalFromExtended(Value input, unsigned bound) {
+  if (bound <= 1)
+    return input;
+
+  // Binary reduction: ceil(log₂(bound)) conditional subtractions.
+  // For [0, k * p), iterate from i = ceil(log₂(k)) - 1 down to 0:
+  //   if (v >= 2ⁱ * p) v -= 2ⁱ * p
+  // Each step halves the worst-case range. For bound == 2 this is a single
+  // conditional subtraction of p (equivalent to the old special case).
+  APInt mod = cast<IntegerAttr>(modAttr).getValue();
+  unsigned w = mod.getBitWidth();
+  unsigned m = 0;
+  for (unsigned k = bound - 1; k > 0; k >>= 1)
+    ++m;
+  for (int i = m - 1; i >= 0; --i) {
+    APInt multiple = mod.zext(w) * APInt(w, 1u << i);
+    TypedAttr multipleAttr = IntegerAttr::get(modAttr.getType(), multiple);
+    if (auto shapedType = dyn_cast<ShapedType>(input.getType()))
+      multipleAttr = SplatElementsAttr::get(shapedType, multipleAttr);
+    auto threshConst = b.create<arith::ConstantOp>(multipleAttr);
+
+    if (isa<VectorType>(input.getType())) {
+      auto sub = b.create<arith::SubIOp>(input, threshConst);
+      input = b.create<arith::MinUIOp>(sub, input).getResult();
+    } else {
+      auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, input,
+                                         threshConst);
+      auto sub = b.create<arith::SubIOp>(input, threshConst);
+      input = b.create<arith::SelectOp>(cmp, input, sub).getResult();
+    }
   }
+  return input;
 }
 
 Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
