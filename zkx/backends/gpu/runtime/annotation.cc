@@ -312,10 +312,10 @@ std::string_view GetLongestOpNamePrefix(const HloInstruction& inst) {
 
 std::string MakeTitle(const HloModule& mod, std::string_view longest_prefix) {
   if (longest_prefix.empty()) {
-    return absl::StrFormat("XlaModule:#hlo_module=%s,program_id=%d#",
+    return absl::StrFormat("ZkxModule:#hlo_module=%s,program_id=%d#",
                            mod.name(), mod.unique_id());
   }
-  return absl::StrFormat("XlaModule:#prefix=%s,hlo_module=%s,program_id=%d#",
+  return absl::StrFormat("ZkxModule:#prefix=%s,hlo_module=%s,program_id=%d#",
                          longest_prefix, mod.name(), mod.unique_id());
 }
 
@@ -374,7 +374,7 @@ std::pair<StringHandle, int32_t> GetLongestSourceLocationPrefix(
 }  // namespace
 
 ModuleAnnotation::ModuleAnnotation(std::string_view module_name_)
-    : title_str_(absl::StrFormat("XlaModule:#hlo_module=%s#", module_name_)),
+    : title_str_(absl::StrFormat("ZkxModule:#hlo_module=%s#", module_name_)),
       title_(RegisterString(title_str_)),
       module_name_(RegisterString(std::string{module_name_})) {}
 
@@ -421,7 +421,7 @@ uint64_t ModuleAnnotation::NvtxSchemaId() {
             NVTX_PAYLOAD_SCHEMA_ATTR_TYPE | NVTX_PAYLOAD_SCHEMA_ATTR_ENTRIES |
             NVTX_PAYLOAD_SCHEMA_ATTR_NUM_ENTRIES |
             NVTX_PAYLOAD_SCHEMA_ATTR_STATIC_SIZE,
-        /* .name = */ "XlaModule",
+        /* .name = */ "ZkxModule",
         /* .type = */ NVTX_PAYLOAD_SCHEMA_TYPE_STATIC,
         /* .flags = */ NVTX_PAYLOAD_SCHEMA_FLAG_NONE,
         /* .entries = */ schema,
@@ -497,7 +497,7 @@ uint64_t KernelAnnotation::NvtxSchemaId() {
             NVTX_PAYLOAD_SCHEMA_ATTR_TYPE | NVTX_PAYLOAD_SCHEMA_ATTR_ENTRIES |
             NVTX_PAYLOAD_SCHEMA_ATTR_NUM_ENTRIES |
             NVTX_PAYLOAD_SCHEMA_ATTR_STATIC_SIZE,
-        /* .name = */ "XlaKernel",
+        /* .name = */ "ZkxKernel",
         /* .type = */ NVTX_PAYLOAD_SCHEMA_TYPE_STATIC,
         /* .flags = */ NVTX_PAYLOAD_SCHEMA_FLAG_NONE,
         /* .entries = */ schema,

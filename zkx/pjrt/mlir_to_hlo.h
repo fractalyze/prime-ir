@@ -37,7 +37,7 @@ absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> ParseMlirModuleString(
 // TODO(b/345414638): Delete `use_shardy` when we move Shardy as the first pass
 // in the ZKX pipeline.
 absl::Status MlirToZkxComputation(mlir::ModuleOp module,
-                                  ZkxComputation& xla_computation,
+                                  ZkxComputation& zkx_computation,
                                   bool use_tuple_args, bool return_tuple,
                                   bool use_shardy);
 

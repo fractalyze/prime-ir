@@ -1315,7 +1315,7 @@ TEST_F(MultiOutputFusionTest, DoNotGroupTooManyReductions) {
 
 TEST_F(MultiOutputFusionTest, NoFusionToAvoidUsingTooMuchSharedMemory) {
   auto module = ParseAndReturnVerifiedModule(R"(
-  HloModule xla_computation_update_step.10931
+  HloModule zkx_computation_update_step.10931
 
 %scalar_add_computation.1 (scalar_lhs.1: s64[], scalar_rhs.1: s64[]) -> s64[] {
   %scalar_lhs.1 = s64[] parameter(0)

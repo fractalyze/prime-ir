@@ -408,6 +408,17 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "raw_buffer",
+    srcs = ["raw_buffer.cc"],
+    hdrs = ["raw_buffer.h"],
+    deps = [
+        ":pjrt_future",
+        "//xla/tsl/concurrency:ref_count",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "semaphore",
     srcs = ["semaphore.cc"],
     hdrs = ["semaphore.h"],
@@ -495,6 +506,13 @@ zkx_cc_library(
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/types:span",
     ],
+)
+
+zkx_cc_library(
+    name = "triton",
+    srcs = ["triton_stub.cc"],
+    hdrs = ["triton.h"],
+    deps = ["@com_google_absl//absl/status:statusor"],
 )
 
 zkx_cc_library(

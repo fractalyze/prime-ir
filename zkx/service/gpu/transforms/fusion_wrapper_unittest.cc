@@ -19,7 +19,7 @@ limitations under the License.
 #include <cstdint>
 #include <optional>
 
-#include <gtest/gtest.h>  // NOLINT(build/include_order)
+#include "gtest/gtest.h"
 
 #include "zkx/hlo/testlib/hlo_hardware_independent_test_base.h"
 #include "zkx/service/gpu/gpu_device_info_for_tests.h"

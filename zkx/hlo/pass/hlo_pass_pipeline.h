@@ -92,7 +92,7 @@ class HloPassPipeline : public HloPassInterface {
 
  private:
   // Returns the set of passes which are enabled. DebugOptions can selectively
-  // disable passes via --xla_disable_hlo_passes flag.
+  // disable passes via --zkx_disable_hlo_passes flag.
   std::vector<HloPassInterface*> GetEnabledPasses(
       const DebugOptions& debug_options);
 

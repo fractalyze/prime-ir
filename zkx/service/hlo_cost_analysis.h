@@ -512,7 +512,7 @@ class HloCostAnalysis : public ConstDfsHloVisitor {
       const HloInstruction* add_dependency) override;
   absl::Status HandleAfterAll(const HloInstruction* token) override;
   absl::Status HandleTranspose(const HloInstruction* transpose) override;
-  absl::Status HandleWhile(const HloInstruction* xla_while) override;
+  absl::Status HandleWhile(const HloInstruction* zkx_while) override;
   absl::Status HandleConditional(const HloInstruction* conditional) override;
   absl::Status HandleGather(const HloInstruction* gather) override;
   absl::Status HandleScatter(const HloInstruction* hlo) override;

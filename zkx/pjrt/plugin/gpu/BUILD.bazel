@@ -35,6 +35,7 @@ zkx_cc_library(
     name = "gpu_pjrt_client",
     srcs = ["gpu_pjrt_client.cc"],
     hdrs = ["gpu_pjrt_client.h"],
+    tags = ["gpu"],
     deps = [
         ":gpu_client_options",
         "//zkx/pjrt:pjrt_client",

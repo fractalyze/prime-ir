@@ -213,7 +213,7 @@ TEST(TfOpUtilsTest, JaxOpNameWithMetadataTest) {
   EXPECT_TRUE(IsJaxOpNameAndType(kOpName, kOpType));
 }
 
-TEST(TfOpUtilsTest, OtherXlaOpTest) {
+TEST(TfOpUtilsTest, OtherZkxOpTest) {
   const std::string_view kName =
       "namescope.1/namespace__opname2d:namespace__opname2d";
   TfOp tf_op = ParseTfOpFullname(kName);
@@ -223,7 +223,7 @@ TEST(TfOpUtilsTest, OtherXlaOpTest) {
   EXPECT_EQ(TfOpEventName(kName), "namespace__opname2d");
 }
 
-TEST(TfOpUtilsTest, OtherXlaOpNameTest) {
+TEST(TfOpUtilsTest, OtherZkxOpNameTest) {
   const std::string_view kOpName = "namescope.1/namespace__opname2d";
   const std::string_view kOpType = "namespace__opname2d";
   EXPECT_TRUE(IsJaxOpNameAndType(kOpName, kOpType));

@@ -793,7 +793,7 @@ CpuCompiler::CompileCpuExecutable(std::unique_ptr<HloModule> module) {
 
   return with_hlo_proto(std::move(cpu_executable));
   // TODO(chokobole): Implement other branch.
-  // if (!module->config().debug_options().xla_cpu_use_thunk_runtime()) {
+  // if (!module->config().debug_options().zkx_cpu_use_thunk_runtime()) {
 }
 
 absl::StatusOr<std::unique_ptr<Executable>> CpuCompiler::RunBackend(

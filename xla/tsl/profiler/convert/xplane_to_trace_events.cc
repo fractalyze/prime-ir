@@ -67,7 +67,7 @@ void ConvertXPlaneToTraceEvents(uint32_t device_id, const XPlaneVisitor& xplane,
   // Convert events.
   xplane.ForEachLine([device_id, &container](const XLineVisitor& xline) {
     uint32_t resource_id = xline.DisplayId();
-    if (xline.DisplayName() == tsl::profiler::kXlaAsyncOpLineName) {
+    if (xline.DisplayName() == tsl::profiler::kZkxAsyncOpLineName) {
       return;
     }
     xline.ForEachEvent(

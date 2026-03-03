@@ -36,6 +36,7 @@ limitations under the License.
 #include "absl/strings/str_format.h"
 #include "absl/synchronization/mutex.h"
 #include "google/protobuf/text_format.h"
+#include "third_party/gpus/cuda/include/cuda.h"
 
 #include "xla/tsl/lib/strings/proto_serialization.h"
 #include "xla/tsl/platform/errors.h"
@@ -57,6 +58,7 @@ limitations under the License.
 #include "zkx/pjrt/tracked_device_buffer.h"
 #include "zkx/pjrt/worker_thread.h"
 #include "zkx/service/global_device_id.h"
+#include "zkx/service/gpu/gpu_memory_space_assignment.h"
 #include "zkx/service/local_service.h"
 #include "zkx/service/platform_util.h"
 #include "zkx/service/shaped_buffer.h"
@@ -65,6 +67,7 @@ limitations under the License.
 #include "zkx/status_macros.h"
 #include "zkx/stream_executor/device_description.h"
 #include "zkx/stream_executor/device_memory.h"
+#include "zkx/stream_executor/gpu/gpu_cudamallocasync_allocator.h"
 #include "zkx/stream_executor/integrations/tf_allocator_adapter.h"
 #include "zkx/stream_executor/platform.h"
 #include "zkx/stream_executor/stream.h"
@@ -858,8 +861,8 @@ CreateCudaAsyncAllocator(const LocalDeviceState& device, double memory_fraction,
   int64_t free_memory;
   int64_t total_memory;
   if (!executor->DeviceMemoryUsage(&free_memory, &total_memory)) {
-    return Unavailable("Failed to query available memory from device %i",
-                       device_ordinal);
+    return absl::UnavailableError(absl::StrFormat(
+        "Failed to query available memory from device %i", device_ordinal));
   }
   // To allow full GPU memory to be visible to the Cuda Async allocator
   // if using unified memory.
@@ -867,11 +870,11 @@ CreateCudaAsyncAllocator(const LocalDeviceState& device, double memory_fraction,
   // setting memory_fraction > 1.
   size_t allocator_memory = total_memory * memory_fraction;
   if (reserve_memory) {
-    LOG(INFO) << "XLA backend allocating " << allocator_memory
+    LOG(INFO) << "ZKX backend allocating " << allocator_memory
               << " bytes on device " << device_ordinal
               << " for CudaAsyncAllocator.";
   } else {
-    LOG(INFO) << "XLA backend will use up to " << allocator_memory
+    LOG(INFO) << "ZKX backend will use up to " << allocator_memory
               << " bytes on device " << device_ordinal
               << " for CudaAsyncAllocator.";
   }

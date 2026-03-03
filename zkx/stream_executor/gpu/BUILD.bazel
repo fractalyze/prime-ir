@@ -76,6 +76,33 @@ gpu_only_cc_library(
 )
 
 zkx_cc_library(
+    name = "gpu_cudamallocasync_allocator",
+    srcs = ["gpu_cudamallocasync_allocator.cc"],
+    hdrs = ["gpu_cudamallocasync_allocator.h"],
+    tags = [
+        "cuda-only",
+        "gpu",
+    ],
+    deps = [
+        ":gpu_init",
+        "//xla/tsl/framework:allocator",
+        "//xla/tsl/framework:device_id",
+        "//xla/tsl/platform:status",
+        "//xla/tsl/util:env_var",
+        "//zkx/stream_executor",
+        "//zkx/stream_executor:namespace_alias",
+        "//zkx/stream_executor/cuda:cuda_status",
+        "@com_google_absl//absl/base:core_headers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/log:vlog_is_on",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/synchronization",
+    ],
+)
+
+zkx_cc_library(
     name = "gpu_diagnostics",
     hdrs = ["gpu_diagnostics.h"],
     deps = [
@@ -113,6 +140,7 @@ zkx_cc_library(
     #     "TENSORFLOW_USE_ROCM=1",
     # ]) +
     deps = [
+        "//xla/tsl/cuda:cudart",
         "//zkx/stream_executor:namespace_alias",
         "//zkx/stream_executor:platform",
         "//zkx/stream_executor:platform_manager",
@@ -283,6 +311,7 @@ zkx_cc_unittest(
         "tma_metadata_unittest.cc",
     ] + if_cuda_is_configured([
         "gpu_command_buffer_unittest.cc",
+        "gpu_cudamallocasync_allocator_unittest.cc",
         "gpu_executor_unittest.cc",
         "gpu_device_info_unittest.cc",
         "gpu_kernel_unittest.cc",
@@ -309,6 +338,7 @@ zkx_cc_unittest(
         "@com_google_absl//absl/status:status_matchers",
         "@llvm-project//llvm:Support",
     ] + if_cuda_is_configured([
+        ":gpu_cudamallocasync_allocator",
         ":gpu_executor",
         ":gpu_test_kernels",
         ":gpu_test_kernels_fatbin",

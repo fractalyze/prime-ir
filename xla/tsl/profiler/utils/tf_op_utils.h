@@ -87,10 +87,10 @@ inline bool IsInfeedEnqueueOp(const TfOp& tf_op) {
          IsInfeedEnqueueOp(tf_op.type);
 }
 
-// Returns true if the given op has XlaSendToHost/XlaRecvFromHost in fullname.
+// Returns true if the given op has ZkxSendToHost/ZkxRecvFromHost in fullname.
 inline bool IsOutsideCompilationOp(std::string_view tf_op_fullname) {
-  if (absl::EndsWith(tf_op_fullname, ":XlaSendToHost")) return true;
-  if (absl::EndsWith(tf_op_fullname, ":XlaRecvFromHost")) return true;
+  if (absl::EndsWith(tf_op_fullname, ":ZkxSendToHost")) return true;
+  if (absl::EndsWith(tf_op_fullname, ":ZkxRecvFromHost")) return true;
   return false;
 }
 

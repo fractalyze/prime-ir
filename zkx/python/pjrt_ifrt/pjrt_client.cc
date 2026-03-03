@@ -1060,7 +1060,7 @@ absl::StatusOr<std::vector<ArrayRef>> PjRtClient::MakeErrorArrays(
         array_spec.sharding->devices()->AddressableDeviceList()->devices();
     TF_ASSIGN_OR_RETURN(Shape shard_shape,
                         array_spec.sharding->GetShardShape(array_spec.shape));
-    zkx::Shape xla_shape =
+    zkx::Shape zkx_shape =
         zkx::ShapeUtil::MakeShape(primitive_type, shard_shape.dims());
 
     PjRtArray::PjRtBuffers buffers;
@@ -1088,7 +1088,7 @@ absl::StatusOr<std::vector<ArrayRef>> PjRtClient::MakeErrorArrays(
       TF_ASSIGN_OR_RETURN(
           buffers.emplace_back(),
           pjrt_client_->CreateErrorBuffer(
-              error, xla_shape,
+              error, zkx_shape,
               tensorflow::down_cast<PjRtMemory*>(memory)->pjrt_memory()));
     }
     TF_ASSIGN_OR_RETURN(

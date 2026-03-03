@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda_is_configured")
 load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
@@ -36,8 +37,14 @@ zkx_cc_library(
 
 zkx_cc_library(
     name = "nvtx_utils",
-    srcs = ["nvtx_utils_stub.cc"],
+    srcs = if_cuda_is_configured(
+        ["nvtx_utils.cc"],
+        ["nvtx_utils_stub.cc"],
+    ),
     hdrs = ["nvtx_utils.h"],
+    local_defines = ["NVTX_VERSION_3_1=1"],
+    visibility = ["//visibility:public"],
+    deps = if_cuda_is_configured(["@nvtx_archive//:headers"]),
 )
 
 zkx_cc_library(

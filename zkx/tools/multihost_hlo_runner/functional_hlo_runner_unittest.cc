@@ -165,7 +165,7 @@ TEST_F(FunctionalHloRunnerTest, SingleDeviceHloWithExecutionProfile) {
 //   TF_ASSERT_OK(env->GetFileSystemForFile(profile_dump_path, &fs));
 
 //   FunctionalHloRunner::RawCompileOptions raw_compile_options;
-//   raw_compile_options.xla_gpu_dump_xspace_to = profile_dump_path;
+//   raw_compile_options.zkx_gpu_dump_xspace_to = profile_dump_path;
 
 //   TF_ASSERT_OK_AND_ASSIGN(
 //       PjRtEnvironment pjrt_env,
@@ -339,7 +339,7 @@ TEST_F(FunctionalHloRunnerTest, ShardedComputationUnderStreamCapture) {
 // TEST_F(FunctionalHloRunnerTest, CanCompileWithoutHavingEnoughGpus) {
 //   // This test corresponds to:
 //   // --use_spmd_partitioning=true --num_replicas=1 --num_partitions=16
-//   // --run=false --xla_dump_to=dump_dir
+//   // --run=false --zkx_dump_to=dump_dir
 
 //   tsl::Env* env = tsl::Env::Default();
 //   std::string dump_dir;

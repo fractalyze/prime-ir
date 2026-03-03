@@ -16,7 +16,7 @@ limitations under the License.
 
 #include "zkx/window_util.h"
 
-#include <gtest/gtest.h>
+#include "gtest/gtest.h"
 
 #include "zkx/zkx_data.pb.h"
 

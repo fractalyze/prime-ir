@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda")
 load("@rules_cc//cc:defs.bzl", "cc_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
@@ -99,6 +100,8 @@ zkx_cc_library(
     name = "se_gpu_pjrt_client",
     srcs = ["se_gpu_pjrt_client.cc"],
     hdrs = ["se_gpu_pjrt_client.h"],
+    local_defines = if_cuda(["GOOGLE_CUDA=1"]),
+    tags = ["gpu"],
     deps = [
         ":gpu_helpers",
         ":gpu_metrics",
@@ -143,6 +146,7 @@ zkx_cc_library(
         "//zkx/service:shaped_buffer",
         "//zkx/service:transfer_manager",
         "//zkx/service/gpu:gpu_executable_run_options",
+        "//zkx/service/gpu:gpu_memory_space_assignment",
         "//zkx/stream_executor",
         "//zkx/stream_executor:device_description",
         "//zkx/stream_executor:device_memory",
@@ -168,13 +172,18 @@ zkx_cc_library(
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
         "@com_google_protobuf//:protobuf",
-    ],
+    ] + if_cuda([
+        # keep sorted
+        "//zkx/stream_executor/gpu:gpu_cudamallocasync_allocator",
+        "@local_config_cuda//cuda:cuda_headers",
+    ]),
 )
 
 zkx_cc_library(
     name = "se_gpu_pjrt_compiler",
     srcs = ["se_gpu_pjrt_compiler.cc"],
     hdrs = ["se_gpu_pjrt_compiler.h"],
+    tags = ["gpu"],
     deps = [
         ":se_gpu_pjrt_client",
         "//xla/tsl/platform:casts",

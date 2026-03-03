@@ -27,6 +27,6 @@ constexpr std::string_view kHloSparseCoreV0InfeedWait =
     "sparsecorev0 infeed wait";
 constexpr std::string_view kHloSparseCoreV0InfeedTransform =
     "sparsecorev0 infeed transform";
-// LINT.ThenChange(//tensorflow/compiler/xla/tsl/profiler/convert/google/xla_op_utils.cc)
+// LINT.ThenChange(//tensorflow/compiler/xla/tsl/profiler/convert/google/zkx_op_utils.cc)
 
 }  // namespace tsl::profiler

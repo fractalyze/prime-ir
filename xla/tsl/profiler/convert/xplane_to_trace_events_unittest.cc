@@ -84,7 +84,7 @@ TEST(ConvertXPlaneToTraceEvents, SkipAsyncOps) {
   device_plane.SetName(GpuPlaneName(0));
 
   XLineBuilder async_ops = device_plane.GetOrCreateLine(10);
-  async_ops.SetName(kXlaAsyncOpLineName);
+  async_ops.SetName(kZkxAsyncOpLineName);
 
   XEventBuilder event1 =
       async_ops.AddEvent(*device_plane.GetOrCreateEventMetadata("event1"));

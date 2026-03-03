@@ -1502,7 +1502,7 @@ absl::Status GpuCompiler::RunPreSchedulingPasses(
   pipeline.AddPass<FusionWrapper>(gpu_device_info);
   // TODO(batzor): Uncomment this. Dependency: GpuHloCostAnalysis,
   // GpuCostModelStatsCollection, SolGpuCostModelStatsCollection
-  // if (module->config().debug_options().xla_gpu_collect_cost_model_stats()) {
+  // if (module->config().debug_options().zkx_gpu_collect_cost_model_stats()) {
   //   GpuHloCostAnalysis::Options cost_analysis_options{
   //       ShapeSizeBytesFunction(),
   //       /*per_second_rates=*/{},
@@ -1534,12 +1534,12 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
 
   //   if (module->config()
   //               .debug_options()
-  //               .xla_gpu_experimental_pipeline_parallelism_opt_level() ==
+  //               .zkx_gpu_experimental_pipeline_parallelism_opt_level() ==
   //           DebugOptions::PIPELINE_PARALLELISM_OPT_LEVEL_DISABLE &&
   //       (module->config()
   //            .debug_options()
-  //            .xla_gpu_enable_pipelined_collectives() ||
-  //        module->config().debug_options().xla_gpu_enable_pipelined_p2p())) {
+  //            .zkx_gpu_enable_pipelined_collectives() ||
+  //        module->config().debug_options().zkx_gpu_enable_pipelined_p2p())) {
   //     pipeline.AddPass<PipelinedP2PRewriter>();
   //   }
   //   pipeline.AddPass<GpuConvertAsyncCollectivesToSync>();
@@ -1589,10 +1589,10 @@ absl::Status GpuCompiler::RunPostSchedulingPipelines(
 
   // clang-format off
   // TODO(batzor): Uncomment this. Dependency: HloVerifierOpts
-  // if (module->config().debug_options().xla_gpu_pgle_accuracy_checker() ==
+  // if (module->config().debug_options().zkx_gpu_pgle_accuracy_checker() ==
   //     DebugOptions::PGLE_STRICTNESS_LEVEL_ERROR) {
   //   AddHloVerifier(&main_pipeline,
-  //                  module->config().debug_options().xla_ignore_channel_id(),
+  //                  module->config().debug_options().zkx_ignore_channel_id(),
   //                  HloVerifierOpts{}.VerifyInstructionNameUnchanged());
   // }
   // clang-format on

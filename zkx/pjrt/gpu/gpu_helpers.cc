@@ -184,25 +184,25 @@ absl::StatusOr<std::unique_ptr<tsl::BFCAllocator>> GetGpuHostAllocator(
                                       /*index=*/0,
                                       /*alloc_visitors=*/{},
                                       /*free_visitors=*/{}));
-  bool xla_pjrt_gpu_host_memory_preallocate;
+  bool zkx_pjrt_gpu_host_memory_preallocate;
   TF_RETURN_IF_ERROR(
-      tsl::ReadBoolFromEnvVar("XLA_PJRT_GPU_HOST_MEMORY_PREALLOCATE", false,
-                              &xla_pjrt_gpu_host_memory_preallocate));
+      tsl::ReadBoolFromEnvVar("ZKX_PJRT_GPU_HOST_MEMORY_PREALLOCATE", false,
+                              &zkx_pjrt_gpu_host_memory_preallocate));
 
-  const int64_t default_xla_pjrt_gpu_host_memory_limit_gb =
-      xla_pjrt_gpu_host_memory_preallocate ? 16 : 64;
+  const int64_t default_zkx_pjrt_gpu_host_memory_limit_gb =
+      zkx_pjrt_gpu_host_memory_preallocate ? 16 : 64;
 
-  int64_t xla_pjrt_gpu_host_memory_limit_gb;
+  int64_t zkx_pjrt_gpu_host_memory_limit_gb;
   TF_RETURN_IF_ERROR(
-      tsl::ReadInt64FromEnvVar("XLA_PJRT_GPU_HOST_MEMORY_LIMIT_GB",
-                               default_xla_pjrt_gpu_host_memory_limit_gb,
-                               &xla_pjrt_gpu_host_memory_limit_gb));
+      tsl::ReadInt64FromEnvVar("ZKX_PJRT_GPU_HOST_MEMORY_LIMIT_GB",
+                               default_zkx_pjrt_gpu_host_memory_limit_gb,
+                               &zkx_pjrt_gpu_host_memory_limit_gb));
 
   const int64_t kGpuHostMemoryLimitBytes =
-      xla_pjrt_gpu_host_memory_limit_gb * (1LL << 30);
+      zkx_pjrt_gpu_host_memory_limit_gb * (1LL << 30);
 
   tsl::BFCAllocator::Options opts;
-  opts.allow_growth = !xla_pjrt_gpu_host_memory_preallocate;
+  opts.allow_growth = !zkx_pjrt_gpu_host_memory_preallocate;
   return std::make_unique<tsl::BFCAllocator>(std::move(sub_allocator),
                                              kGpuHostMemoryLimitBytes,
                                              /*name=*/"zkx_gpu_host_bfc", opts);

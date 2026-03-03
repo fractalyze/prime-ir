@@ -60,23 +60,23 @@ std::string FilenameFor(int unique_id, std::string_view module_name,
 std::string FilenameFor(const HloModule& module, std::string_view prefix,
                         std::string_view suffix);
 
-// Writes the given string to a file in the xla_dump_to directory specified by
+// Writes the given string to a file in the zkx_dump_to directory specified by
 // module's DebugOptions.
 //
-// If module doesn't have an xla_dump_to directory, does nothing.
+// If module doesn't have an zkx_dump_to directory, does nothing.
 void DumpToFileInDir(const HloModule& module, std::string_view file_prefix,
                      std::string_view file_suffix, std::string_view contents);
 void DumpToFileInDir(const DebugOptions& debug_options,
                      std::string_view filename, std::string_view contents);
 
-// Like DumpToFileInDir, except if module doesn't have an xla_dump_to directory
+// Like DumpToFileInDir, except if module doesn't have an zkx_dump_to directory
 // specified, or if that directory is equal to "-", writes to stdout instead.
 void DumpToFileInDirOrStdout(const HloModule& module,
                              std::string_view file_prefix,
                              std::string_view file_suffix,
                              std::string_view contents);
 
-// Like DumpToFileInDir, except if debug_options doesn't have an xla_dump_to
+// Like DumpToFileInDir, except if debug_options doesn't have an zkx_dump_to
 // directory specified, or if that directory is equal to "-", writes to stdout
 // instead.
 void DumpToFileInDirOrStdout(const DebugOptions& debug_options, int unique_id,
@@ -85,10 +85,10 @@ void DumpToFileInDirOrStdout(const DebugOptions& debug_options, int unique_id,
                              std::string_view file_suffix,
                              std::string_view contents);
 
-// Writes the given op to a file in the xla_dump_to directory specified by
+// Writes the given op to a file in the zkx_dump_to directory specified by
 // module's DebugOptions. Sets the op's source locations to that file.
 //
-// If module doesn't have an xla_dump_to directory, does nothing.
+// If module doesn't have an zkx_dump_to directory, does nothing.
 void DumpToFileInDirOrStdout(const HloModule& module,
                              std::string_view file_prefix, mlir::Operation* op);
 
@@ -140,7 +140,7 @@ void DumpHloModuleDuringPassIfEnabled(std::string_view pass_name,
                                       std::string_view step,
                                       const HloModule& module);
 
-// Dumps the given HloSnapshot to the module's xla_dump_dir, if this is enabled.
+// Dumps the given HloSnapshot to the module's zkx_dump_dir, if this is enabled.
 //
 // Prefer the first overload below, as this will give filenames that are
 // consistent with the other methods here. The second overload (which doesn't
@@ -151,7 +151,7 @@ void DumpHloSnapshotIfEnabled(const HloModule& module,
 void DumpHloSnapshotIfEnabled(const HloSnapshot& snapshot,
                               const DebugOptions& opts);
 
-// Dumps the given HloUnoptimisedSnapshot to the module's xla_dump_dir, if this
+// Dumps the given HloUnoptimisedSnapshot to the module's zkx_dump_dir, if this
 // is enabled.
 void DumpHloUnoptimizedSnapshotIfEnabled(
     const HloUnoptimizedSnapshot& hlo_snapshot, const DebugOptions& opts);

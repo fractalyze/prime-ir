@@ -1,0 +1,77 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
+
+package(default_visibility = ["//visibility:public"])
+
+zkx_cc_library(
+    name = "plugin_tracer",
+    srcs = ["plugin_tracer.cc"],
+    hdrs = ["plugin_tracer.h"],
+    deps = [
+        ":profiler_c_api",
+        "//xla/tsl/profiler/lib:profiler_interface",
+        "//xla/tsl/profiler/protobuf:profiler_options_cc_proto",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "@com_google_absl//absl/log",
+    ],
+)
+
+zkx_cc_library(
+    name = "plugin_tracer_impl",
+    srcs = ["plugin_tracer_impl.cc"],
+    hdrs = ["plugin_tracer_impl.h"],
+    deps = [
+        ":profiler_c_api",
+        ":profiler_error",
+        "//xla/tsl/profiler/lib:profiler_collection",
+        "//xla/tsl/profiler/lib:profiler_factory",
+        "//xla/tsl/profiler/lib:profiler_interface",
+        "//xla/tsl/profiler/protobuf:profiler_options_cc_proto",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+    ],
+)
+
+zkx_cc_library(
+    name = "profiler_c_api",
+    hdrs = ["profiler_c_api.h"],
+)
+
+zkx_cc_library(
+    name = "profiler_error",
+    srcs = ["profiler_error.cc"],
+    hdrs = ["profiler_error.h"],
+    deps = [
+        ":profiler_c_api",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "plugin_unittests",
+    srcs = ["plugin_tracer_impl_unittest.cc"],
+    deps = [
+        ":plugin_tracer",
+        ":plugin_tracer_impl",
+        ":profiler_error",
+        "//xla/tsl/profiler/lib:profiler_factory",
+        "//xla/tsl/profiler/utils:xplane_builder",
+        "//xla/tsl/profiler/utils:xplane_visitor",
+        "@com_google_absl//absl/status",
+    ],
+)

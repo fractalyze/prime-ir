@@ -472,18 +472,18 @@ TEST(XplaneUtilsTest, TestAggregateXPlanesWithNonUniqueMetadataNames) {
   step2.SetOffsetNs(10);
   step2.SetDurationNs(10);
 
-  XLineBuilder xla_line = builder.GetOrCreateLine(2);
-  xla_line.SetName(kXlaOpLineName);
-  XEventBuilder event1 = xla_line.AddEvent(event_metadata1);
+  XLineBuilder zkx_line = builder.GetOrCreateLine(2);
+  zkx_line.SetName(kZkxOpLineName);
+  XEventBuilder event1 = zkx_line.AddEvent(event_metadata1);
   event1.SetOffsetNs(0);
   event1.SetDurationNs(5);
-  XEventBuilder event2 = xla_line.AddEvent(event_metadata1p2);
+  XEventBuilder event2 = zkx_line.AddEvent(event_metadata1p2);
   event2.SetOffsetNs(0);
   event2.SetDurationNs(5);
-  XEventBuilder event3 = xla_line.AddEvent(event_metadata1);
+  XEventBuilder event3 = zkx_line.AddEvent(event_metadata1);
   event3.SetOffsetNs(5);
   event3.SetDurationNs(5);
-  XEventBuilder event4 = xla_line.AddEvent(event_metadata1p2);
+  XEventBuilder event4 = zkx_line.AddEvent(event_metadata1p2);
   event4.SetOffsetNs(5);
   event4.SetDurationNs(5);
 
@@ -516,7 +516,7 @@ TEST(XPlaneUtilsTest, TestAggregateXPlaneWithCycleStats) {
       *builder.GetOrCreateEventMetadata("EventMetadata3");
 
   XLineBuilder line = builder.GetOrCreateLine(1);
-  line.SetName(kXlaOpLineName);
+  line.SetName(kZkxOpLineName);
   XEventBuilder event1 = line.AddEvent(event_metadata1);
   event1.SetOffsetNs(0);
   event1.SetDurationNs(5);
@@ -553,7 +553,7 @@ TEST(XPlaneUtilsTest, TestAggregateXPlaneWithCycleStats) {
 
   XPlaneVisitor visitor = CreateTfXPlaneVisitor(&aggregated_xplane);
   visitor.ForEachLine([&](const XLineVisitor& line) {
-    EXPECT_EQ(line.Name(), kXlaOpLineName);
+    EXPECT_EQ(line.Name(), kZkxOpLineName);
     line.ForEachEvent([&](const XEventVisitor& event) {
       EXPECT_EQ(event.OffsetPs(), 0);
       if (event.Metadata().Name() == "EventMetadata1") {
@@ -779,7 +779,7 @@ TEST(XplaneUtilsTest, XPlaneGroupingPropagatesGroupId) {
   XStatMetadata* kGroupId =
       builder.GetOrCreateStatMetadata(GetStatTypeStr(StatType::kGroupId));
   XLineBuilder line = builder.GetOrCreateLine(1);
-  line.SetName(kXlaOpLineName);
+  line.SetName(kZkxOpLineName);
   XEventBuilder event_builder = line.AddEvent(*event_metadata1);
   event_builder.SetDurationNs(100);
   event_builder.SetOffsetNs(100);

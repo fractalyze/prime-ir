@@ -13,6 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
+load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda_is_configured")
 load("//bazel:zkx_cc.bzl", "zkx_cc_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -23,6 +24,7 @@ zkx_cc_library(
     srcs = ["file_check.cc"],
     hdrs = ["file_check.h"],
     data = ["@llvm-project//llvm:FileCheck"],
+    local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]),
     deps = [
         "//xla/tsl/platform",
         "//xla/tsl/platform:env",

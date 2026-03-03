@@ -12,6 +12,7 @@ ignore-words-list =
   fo,
   fpt,
   hsa,
+  inout,
   interm,
   kinf,
   kno,

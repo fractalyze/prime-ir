@@ -22,6 +22,7 @@ zkx_cc_library(
     name = "annotation",
     srcs = ["annotation.cc"],
     hdrs = ["annotation.h"],
+    local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]),
     deps = [
         "//xla/tsl/platform:errors",
         "//xla/tsl/profiler/lib:nvtx_utils",

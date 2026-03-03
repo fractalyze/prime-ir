@@ -156,7 +156,7 @@ void CopyEvent(const XEventVisitor& src_event, const XPlaneVisitor& src,
 }
 
 bool IsOpLineName(std::string_view line_name) {
-  return line_name == kXlaOpLineName || line_name == kTensorFlowOpLineName;
+  return line_name == kZkxOpLineName || line_name == kTensorFlowOpLineName;
 }
 
 Timespan GetEventTimespan(const XEventVisitor& event) {
@@ -473,11 +473,11 @@ void AddFlowsToXplane(int32_t host_id, bool is_host_plane, bool connect_traceme,
 }
 
 uint64_t GetDevicePlaneFingerprint(const XPlane& plane) {
-  const XLine* xla_module_line = FindLineWithName(plane, kXlaModuleLineName);
-  if (!xla_module_line) return 0ULL;
+  const XLine* zkx_module_line = FindLineWithName(plane, kZkxModuleLineName);
+  if (!zkx_module_line) return 0ULL;
 
   XPlaneVisitor xplane(&plane);
-  XLineVisitor xline(&xplane, xla_module_line);
+  XLineVisitor xline(&xplane, zkx_module_line);
   std::set<uint64_t> ordered_module_fps;
   xline.ForEachEvent([&](const XEventVisitor& xevent) {
     ordered_module_fps.insert(Fingerprint64(xevent.Name()));

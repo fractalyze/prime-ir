@@ -177,7 +177,7 @@ void AddFlowsToXplane(int32_t host_id, bool is_host_plane, bool connect_traceme,
 // Get a fingerprint of device plane for deduplicating derived lines in similar
 // device planes. The fingerprint is a hash of sorted HLO modules name which
 // were appeared on current plane.
-// Returns 0 when such "Xla Modules" line don't exist.
+// Returns 0 when such "Zkx Modules" line don't exist.
 uint64_t GetDevicePlaneFingerprint(const XPlane& plane);
 template <typename XPlanePointerIterator>
 void SortPlanesById(XPlanePointerIterator begin, XPlanePointerIterator end) {
