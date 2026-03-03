@@ -18,8 +18,10 @@ limitations under the License.
 #define ZKX_SERVICE_HLO_CREATION_UTILS_H_
 
 #include <memory>
+#include <optional>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
@@ -28,6 +30,7 @@ limitations under the License.
 #include "zkx/hlo/builder/zkx_computation.h"
 #include "zkx/hlo/ir/hlo_computation.h"
 #include "zkx/hlo/ir/hlo_instruction.h"
+#include "zkx/hlo/ir/hlo_instructions.h"
 #include "zkx/hlo/ir/hlo_opcode.h"
 #include "zkx/literal_util.h"
 #include "zkx/primitive_util.h"
@@ -161,6 +164,19 @@ HloInstruction* MakeBitcastConvertToHlo(HloInstruction* hlo, PrimitiveType type,
 // Creates an Iota HLO instruction.
 HloInstruction* MakeIotaHlo(HloComputation* computation, const Shape& shape,
                             int64_t iota_dimension);
+
+// Creates a Dot HLO instruction and adds it to the computation containing `lhs`
+// and `rhs` (both must be in the same computation). If the result shape has
+// integral element type, an optional preferred_element_type can be specified to
+// override the element type. If 'sparsity' is set, then 'sparse_meta' must also
+// be present (and have the same size).
+absl::StatusOr<HloInstruction*> MakeDotHlo(
+    HloInstruction* lhs, HloInstruction* rhs,
+    const DotDimensionNumbers& dim_numbers,
+    std::optional<PrimitiveType> preferred_element_type,
+    std::vector<SparsityDescriptor> sparsity = {},
+    absl::Span<HloInstruction* const> sparse_meta = {},
+    const OpMetadata* metadata = nullptr);
 
 // Creates a Map HLO instruction and adds it to the computation containing the
 // operands. All operands must be in the same computation.

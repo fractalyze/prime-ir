@@ -1357,6 +1357,44 @@ class HloInstructionPatternOpcodeImpl {
 };
 
 // An HloInstructionPattern implementation that matches only if the instruction
+// has one of a given list of custom call targets.
+class HloInstructionCustomCallTargetImpl {
+ public:
+  explicit HloInstructionCustomCallTargetImpl(
+      absl::Span<const std::string_view> custom_call_targets)
+      : custom_call_targets_(custom_call_targets.begin(),
+                             custom_call_targets.end()) {}
+
+  bool Match(const HloInstruction* inst, MatchOption option) const {
+    if (inst->opcode() != HloOpcode::kCustomCall ||
+        !absl::c_linear_search(custom_call_targets_,
+                               inst->custom_call_target())) {
+      if (custom_call_targets_.size() == 1) {
+        EXPLAIN << "HloInstruction is not a custom call with a target '"
+                << custom_call_targets_.front() << "'";
+      } else {
+        EXPLAIN << "HloInstruction is not a custom call with a target in {"
+                << absl::StrJoin(custom_call_targets_, ", ") << "}";
+      }
+      return false;
+    }
+    return true;
+  }
+
+  void DescribeTo(std::ostream* os, int64_t indent = 0) const {
+    if (custom_call_targets_.size() == 1) {
+      *os << "custom call with target '" << custom_call_targets_.front() << "'";
+    } else {
+      *os << "custom call with target in {"
+          << absl::StrJoin(custom_call_targets_, ", ") << "}";
+    }
+  }
+
+ private:
+  absl::InlinedVector<std::string, 1> custom_call_targets_;
+};
+
+// An HloInstructionPattern implementation that matches only if the instruction
 // has the given number of operands.
 class HloInstructionPatternNumOperandsImpl {
  public:
@@ -2230,14 +2268,10 @@ class HloInstructionPattern {
   }
 
   // Modifies the pattern to match a custom call with one of the given targets.
-  // clang-format off
-  // TODO(chokobole): Uncomment this. Dependency: HloInstructionCustomCallTargetImpl
-  // clang-format on
-  // auto WithCustomCallTarget(
-  //     absl::Span<const std::string_view> custom_call_targets) const {
-  //   return
-  //   AppendImpl(HloInstructionCustomCallTargetImpl(custom_call_targets));
-  // }
+  auto WithCustomCallTarget(
+      absl::Span<const std::string_view> custom_call_targets) const {
+    return AppendImpl(HloInstructionCustomCallTargetImpl(custom_call_targets));
+  }
 
   auto WithNumOperands(int64_t num_operands) const {
     return AppendImpl(HloInstructionPatternNumOperandsImpl(num_operands));
@@ -2543,6 +2577,7 @@ ZKX_UNOP_PATTERN(CollectiveBroadcast)
 ZKX_UNOP_PATTERN(CollectivePermute)
 ZKX_UNOP_PATTERN(CollectivePermuteStart)
 ZKX_UNOP_PATTERN(CollectivePermuteDone)
+ZKX_UNOP_PATTERN(Convert)
 ZKX_UNOP_PATTERN(Copy)
 ZKX_UNOP_PATTERN(Domain)
 ZKX_UNOP_PATTERN(GetTupleElement)
@@ -2707,6 +2742,7 @@ ZKX_VARIADIC_OP_PATTERN(Fusion);
 ZKX_VARIADIC_OP_PATTERN(Map)
 ZKX_VARIADIC_OP_PATTERN(Reduce);
 ZKX_VARIADIC_OP_PATTERN(ReduceScatter)
+ZKX_VARIADIC_OP_PATTERN(ReduceWindow);
 ZKX_VARIADIC_OP_PATTERN(Scatter);
 ZKX_VARIADIC_OP_PATTERN(Sort);
 ZKX_VARIADIC_OP_PATTERN(Tuple);

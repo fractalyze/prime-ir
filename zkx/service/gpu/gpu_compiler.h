@@ -30,6 +30,7 @@ limitations under the License.
 #include "zkx/hlo/analysis/hlo_dataflow_analysis.h"
 #include "zkx/service/gpu/buffer_sharing.h"
 #include "zkx/service/gpu/compile_module_to_llvm_ir.h"
+#include "zkx/service/gpu/transforms/algebraic_simplifier.h"
 #include "zkx/service/llvm_compiler.h"
 #include "zkx/shape_util.h"
 #include "zkx/stream_executor/device_description.h"
@@ -111,9 +112,8 @@ class GpuCompiler : public LlvmCompiler {
     return false;
   }
 
-  // TODO(chokobole): Uncomment this. Dependency: AlgebraicSimplifierOptions
-  // static AlgebraicSimplifierOptions GetAlgebraicSimplifierOptions(
-  //     const HloModuleConfig& config);
+  static AlgebraicSimplifierOptions GetAlgebraicSimplifierOptions(
+      const HloModuleConfig& config);
 
  protected:
   struct BackendCompileResult {

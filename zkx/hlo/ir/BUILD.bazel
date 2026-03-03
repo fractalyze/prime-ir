@@ -171,6 +171,17 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "hlo_instruction_utils",
+    srcs = ["hlo_instruction_utils.cc"],
+    hdrs = ["hlo_instruction_utils.h"],
+    deps = [
+        ":hlo",
+        ":hlo_opcode",
+        "@com_google_absl//absl/algorithm:container",
+    ],
+)
+
+zkx_cc_library(
     name = "hlo_module_group",
     srcs = ["hlo_module_group.cc"],
     hdrs = ["hlo_module_group.h"],

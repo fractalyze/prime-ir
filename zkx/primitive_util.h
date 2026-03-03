@@ -644,6 +644,81 @@ inline PrimitiveType HigherPrecisionType(PrimitiveType a, PrimitiveType b) {
   return a;
 }
 
+// Returns true if a cast from `from_type` to `to_type` is lossless.
+inline bool CastPreservesValues(PrimitiveType from_type,
+                                PrimitiveType to_type) {
+  // * -> *
+  if (from_type == to_type) {
+    return true;
+  }
+  // PRED -> *
+  if (from_type == PRED) {
+    return true;
+  }
+  // ~PRED -> PRED is not safe because it drops almost all numbers.
+  if (to_type == PRED) {
+    return false;
+  }
+  // U -> PrimeField: safe if all unsigned integer values are below the modulus.
+  if (IsUnsignedIntegralType(from_type) && IsPrimeFieldType(to_type)) {
+    return FieldTypeSwitch<bool>(
+        [&](auto primitive_type_constant) {
+          using FieldT = NativeTypeOf<primitive_type_constant>;
+          if constexpr (IsPrimeFieldType(primitive_type_constant)) {
+            return IntegralTypeSwitch<bool>(
+                [](auto int_type_constant) {
+                  using IntT = NativeTypeOf<int_type_constant>;
+                  return static_cast<uint64_t>(
+                             std::numeric_limits<IntT>::max()) <
+                         static_cast<uint64_t>(FieldT::Config::kModulus);
+                },
+                from_type);
+          }
+          return false;
+        },
+        to_type);
+  }
+  // PrimeField -> Integer: safe if all field elements (0 to p-1) fit.
+  if (IsPrimeFieldType(from_type) && IsIntegralType(to_type)) {
+    return FieldTypeSwitch<bool>(
+        [&](auto primitive_type_constant) {
+          using FieldT = NativeTypeOf<primitive_type_constant>;
+          if constexpr (IsPrimeFieldType(primitive_type_constant)) {
+            return IntegralTypeSwitch<bool>(
+                [](auto int_type_constant) {
+                  using IntT = NativeTypeOf<int_type_constant>;
+                  return static_cast<uint64_t>(FieldT::Config::kModulus) - 1 <=
+                         static_cast<uint64_t>(
+                             std::numeric_limits<IntT>::max());
+                },
+                to_type);
+          }
+          return false;
+        },
+        from_type);
+  }
+  // S -> Field is not safe because fields cannot represent negative numbers.
+  // Remaining cross-kind casts (e.g., EC point) are not safe.
+  if (!IsIntegralType(from_type) || !IsIntegralType(to_type)) {
+    return false;
+  }
+
+  int from_width = BitWidth(from_type);
+  int to_width = BitWidth(to_type);
+  bool from_signed = IsSignedIntegralType(from_type);
+  bool to_signed = IsSignedIntegralType(to_type);
+  // If signedness are same, the bitwidth should be wider or equal.
+  if (from_signed == to_signed) {
+    return to_width >= from_width;
+  }
+  // S -> U is not safe because it drops negative numbers.
+  if (from_signed) {
+    return false;
+  }
+  // U -> S is safe if the signed representation has strictly wider bitwidth.
+  return to_width > from_width;
+}
+
 // Returns the lower-case name of the given primitive type.
 std::string_view LowercasePrimitiveTypeName(PrimitiveType s);
 
@@ -684,6 +759,29 @@ bool IsCanonicalRepresentation(PrimitiveType type) {
         return false;
       },
       type);
+}
+
+inline bool FitsInIntegralType(int64_t x, PrimitiveType ty) {
+  if (!IsIntegralType(ty)) return false;
+  return IntegralTypeSwitch<bool>(
+      [&](auto primitive_type_constant) -> bool {
+        using NativeT = NativeTypeOf<primitive_type_constant>;
+        if constexpr (std::numeric_limits<NativeT>::is_integer) {
+          if constexpr (sizeof(NativeT) >= sizeof(int64_t)) {
+            // For unsigned types >= 64 bits, only non-negative values fit.
+            if constexpr (!std::numeric_limits<NativeT>::is_signed) {
+              return x >= 0;
+            }
+            return true;
+          } else {
+            // For smaller types, min()/max() promote to int64_t safely.
+            return std::numeric_limits<NativeT>::min() <= x &&
+                   x <= std::numeric_limits<NativeT>::max();
+          }
+        }
+        return false;
+      },
+      ty);
 }
 
 constexpr bool IsSubByteNonPredType(PrimitiveType type) {

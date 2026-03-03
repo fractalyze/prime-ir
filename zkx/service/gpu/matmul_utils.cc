@@ -20,13 +20,17 @@ limitations under the License.
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "zkx/hlo/ir/hlo_opcode.h"
+#include "zkx/service/gpu/matmul_indexing_utils.h"
 #include "zkx/shape_util.h"
 #include "zkx/status_macros.h"
 #include "zkx/util.h"
+#include "zkx/zkx_data.pb.h"
 
 namespace zkx::gpu {
 
@@ -151,6 +155,42 @@ absl::StatusOr<Shape> GetBatchRowColumnShape(
   auto col_dims = absl::Span<const int64_t>(dims).last(rhs_num_col_dims);
 
   return MatrixLayout::For(shape, batch_dims, row_dims, col_dims);
+}
+
+absl::StatusOr<bool> IsMatrixMultiplicationTooSmallForRewriting(
+    const HloInstruction& dot, int64_t threshold) {
+  CHECK_EQ(dot.opcode(), HloOpcode::kDot);
+
+  const Shape& lhs_shape = dot.operand(0)->shape();
+  const Shape& rhs_shape = dot.operand(1)->shape();
+  const DotDimensionNumbers& dot_dims = dot.dot_dimension_numbers();
+
+  int64_t contracting_size = 1;
+  for (int64_t dim : dot_dims.lhs_contracting_dimensions()) {
+    contracting_size *= lhs_shape.dimensions(dim);
+  }
+
+  TF_ASSIGN_OR_RETURN(
+      std::vector<int64_t> lhs_non_contracting_dims,
+      GetNonContractingDims(lhs_shape, dot_dims.lhs_batch_dimensions(),
+                            dot_dims.lhs_contracting_dimensions()));
+  int64_t lhs_non_contracting_size = 1;
+  for (int64_t dim : lhs_non_contracting_dims) {
+    lhs_non_contracting_size *= lhs_shape.dimensions(dim);
+  }
+
+  TF_ASSIGN_OR_RETURN(
+      std::vector<int64_t> rhs_non_contracting_dims,
+      GetNonContractingDims(rhs_shape, dot_dims.rhs_batch_dimensions(),
+                            dot_dims.rhs_contracting_dimensions()));
+  int64_t rhs_non_contracting_size = 1;
+  for (int64_t dim : rhs_non_contracting_dims) {
+    rhs_non_contracting_size *= rhs_shape.dimensions(dim);
+  }
+
+  return (rhs_non_contracting_size + lhs_non_contracting_size) *
+             contracting_size <
+         threshold;
 }
 
 }  // namespace zkx::gpu

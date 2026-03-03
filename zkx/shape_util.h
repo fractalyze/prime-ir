@@ -177,6 +177,18 @@ class ShapeUtil {
   // size also includes padding if present in the layout.
   static int64_t ByteSizeOfElements(const Shape& shape);
 
+  // Returns the size in bytes for the serialized form of this shape.
+  // This serialized size includes the header of the serialized format, and so
+  // should not be used for subshapes.  Use SerializedSizeOfData for that
+  // purpose.
+  static absl::StatusOr<int64_t> SerializedSize(const Shape& shape);
+
+  // As above, but assumes the given ShapeProto is the result of
+  // shape.ToProto().  This can be used to avoid converting the shape to a
+  // protobuf multiple times.
+  static absl::StatusOr<int64_t> SerializedSizeWithProto(
+      const Shape& shape, const ShapeProto& proto);
+
   // Prints a human-readable string that represents the given shape, with or
   // without layout. e.g. "u32[42x12] {0, 1}" or "u32[64]".
   static void PrintHumanString(Printer* printer, const Shape& shape);
@@ -721,6 +733,20 @@ class ShapeUtil {
   //   those of size y.
   static std::vector<std::pair<int64_t, int64_t>> DimensionsUnmodifiedByReshape(
       const Shape& input_shape, const Shape& output_shape);
+
+  // Return whether the given reshape instruction leaves the dimensions at the
+  // given input indices unmodified, and returns their output indices.
+  //
+  // Example:
+  //   input_dim_indices = {2, 3}
+  //   input  shape = T[a, b, x, y, cd]
+  //   output shape = T[ab, x, 1, y, c, d]
+  //   return value = {1, 3}
+  //
+  // Precondition: input_dim_indices is sorted.
+  static std::optional<std::vector<int64_t>> ReshapeLeavesDimensionsUnmodified(
+      const Shape& from_shape, const Shape& to_shape,
+      absl::Span<const int64_t> input_dim_indices);
 
   // Returns whether a transpose from input_shape to output_shape with dimension
   // mapping `dimension_mapping` produces a result which is bit-wise identical

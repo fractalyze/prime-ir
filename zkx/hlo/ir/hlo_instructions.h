@@ -1805,6 +1805,7 @@ class HloReduceWindowInstruction : public HloInstruction {
       absl::Span<HloInstruction* const> init_values, const Window& window,
       HloComputation* reduce_computation);
   const Window& window() const override { return window_; }
+  void set_window(const Window& window) override { window_ = window; }
   // Returns a serialized representation of this instruction.
   HloInstructionProto ToProto() const override;
   // Returns the number of input arrays (and, consequently, the number of
@@ -1831,6 +1832,18 @@ class HloReduceWindowInstruction : public HloInstruction {
     absl::InlinedVector<const Shape*, 2> shapes;
     for (const auto* op : init_values()) {
       shapes.push_back(&op->shape());
+    }
+    return shapes;
+  }
+  // Returns the shapes of the reduced output tensors.
+  absl::InlinedVector<const Shape*, 2> output_shapes() const {
+    absl::InlinedVector<const Shape*, 2> shapes;
+    if (shape().IsArray()) {
+      shapes.push_back(&shape());
+    } else {
+      for (const Shape& tuple_element_shape : shape().tuple_shapes()) {
+        shapes.push_back(&tuple_element_shape);
+      }
     }
     return shapes;
   }

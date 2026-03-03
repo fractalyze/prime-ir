@@ -82,6 +82,12 @@ class LiteralUtil {
   static Literal Zero(PrimitiveType primitive_type);
   // Creates a scalar literal value one of the given primitive type.
   static Literal One(PrimitiveType primitive_type);
+  // Creates a scalar literal value containing the minimum value of the given
+  // primitive type.
+  static Literal MinValue(PrimitiveType primitive_type);
+  // Creates a scalar literal value containing the maximum value of the given
+  // primitive type.
+  static Literal MaxValue(PrimitiveType primitive_type);
 
   // Creates a literal of the given shape where each element is `value`.
   template <typename NativeT>

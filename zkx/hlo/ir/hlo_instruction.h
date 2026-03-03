@@ -813,6 +813,20 @@ class HloInstruction {
       const Shape& shape, HloInstruction* operand,
       absl::Span<const int64_t> broadcast_dimensions);
 
+  // Creates a sequence of instructions that performs an explicit broadcast of
+  // the operand to the target shape.
+  //
+  // Interior HLOs are passed to "adder", but the "root" HLO of the sequence is
+  // returned as a unique_ptr for API consistency with other factory methods in
+  // this interface.
+  //
+  // TODO(b/72173833) Ideally HloComputations would always be present, and so
+  // the adder being passed by the caller would not be necessary.
+  static std::unique_ptr<HloInstruction> CreateBroadcastSequence(
+      const Shape& output_shape, HloInstruction* operand,
+      absl::FunctionRef<HloInstruction*(std::unique_ptr<HloInstruction>)>
+          adder);
+
   // Creates a pad instruction, where the operand is padded on the edges with
   // the given padding value.
   static std::unique_ptr<HloInstruction> CreatePad(
@@ -840,8 +854,8 @@ class HloInstruction {
 
   // Creates a n-ary sort op with a 'compare' computation which is used for
   // comparisons in the sorting algorithm. 'compare' gets 2 * n parameters,
-  // where parameters 2 * i and 2 * i + 1 are the values of the i-th operand at
-  // specific index positions which should be compared, and should return a
+  // where parameters 2 * i and 2 * i + 1 are the values of the i-th operand
+  // at specific index positions which should be compared, and should return a
   // PRED. 'is_stable' specifies whether stable sorting is required.
   static std::unique_ptr<HloInstruction> CreateSort(
       const Shape& shape, int64_t dimension,
@@ -902,8 +916,8 @@ class HloInstruction {
       absl::Span<HloInstruction* const> operands,
       HloComputation* fusion_computation, std::string_view prefix = "");
 
-  // Creates a call instruction that applies the given computation on the given
-  // operands. "shape" is the resultant shape.
+  // Creates a call instruction that applies the given computation on the
+  // given operands. "shape" is the resultant shape.
   static std::unique_ptr<HloInstruction> CreateCall(
       const Shape& shape, HloInstruction* called_computation_root);
 
@@ -911,8 +925,8 @@ class HloInstruction {
       const Shape& shape, absl::Span<HloInstruction* const> operands,
       HloComputation* computation);
 
-  // Creates a composite call instruction that applies the given computation on
-  // the given operands. "shape" is the resultant shape.
+  // Creates a composite call instruction that applies the given computation
+  // on the given operands. "shape" is the resultant shape.
   static std::unique_ptr<HloInstruction> CreateCompositeCall(
       const Shape& shape, HloInstruction* decomposition_root,
       const std::string& name, const std::string& attributes, int64_t version);
@@ -953,8 +967,8 @@ class HloInstruction {
       std::string opaque = "",
       CustomCallApiVersion api_version = API_VERSION_ORIGINAL);
 
-  // Creates a tuple instruction with the given elements. This is a convenience
-  // wrapper around CreateVariadic.
+  // Creates a tuple instruction with the given elements. This is a
+  // convenience wrapper around CreateVariadic.
   static std::unique_ptr<HloInstruction> CreateTuple(
       absl::Span<HloInstruction* const> elements);
 
@@ -976,11 +990,11 @@ class HloInstruction {
   static std::unique_ptr<HloInstruction> CreateAfterAll(
       absl::Span<HloInstruction* const> operands);
 
-  // Creates an AfterAll instruction which creates a token type out of thin air
-  // (no operands). This is a separate method from CreateAfterAll to facility
-  // the removal of operand-less AfterAll instructions.
-  // TODO(b/110532604): Remove this capability of creating a token from nothing
-  // when we plumb a primordial token from the entry computation.
+  // Creates an AfterAll instruction which creates a token type out of thin
+  // air (no operands). This is a separate method from CreateAfterAll to
+  // facility the removal of operand-less AfterAll instructions.
+  // TODO(b/110532604): Remove this capability of creating a token from
+  // nothing when we plumb a primordial token from the entry computation.
   static std::unique_ptr<HloInstruction> CreateToken();
 
   static std::unique_ptr<HloInstruction> CreateGetDimensionSize(
@@ -1011,8 +1025,9 @@ class HloInstruction {
   // Does this instruction have no users.
   bool IsDead() const { return users_.empty() && !IsRoot(); }
 
-  // Returns true if this instruction has a side effect, irrespective of whether
-  // any called computations may contain an instruction with side effects.
+  // Returns true if this instruction has a side effect, irrespective of
+  // whether any called computations may contain an instruction with side
+  // effects.
   bool HasSideEffectNoRecurse() const;
 
   // Returns true if this instruction has a side effect. An instruction has a
@@ -1101,7 +1116,8 @@ class HloInstruction {
   //
   // Depending on the use cases we see in practice, in the future we may
   // consider folding the logic here into Clone, CloneWithNewOperands and
-  // ReplaceAllUsesWith by treating control dependencies like data dependencies.
+  // ReplaceAllUsesWith by treating control dependencies like data
+  // dependencies.
   absl::Status CopyAllControlDepsFrom(const HloInstruction* inst) {
     return inst->CopyAllControlDepsTo(this, this);
   }
@@ -1114,8 +1130,8 @@ class HloInstruction {
                                     HloInstruction* end) const;
 
   // Returns the set of control predecessors (successors) of this
-  // instruction. Control predecessors (successors) must execute before (after)
-  // the current instruction.
+  // instruction. Control predecessors (successors) must execute before
+  // (after) the current instruction.
   const PtrVec<HloInstruction*>& control_predecessors() const {
     return rare()->control_predecessors;
   }
@@ -1123,7 +1139,8 @@ class HloInstruction {
     return rare()->control_successors;
   }
 
-  // Returns true if 'other' performs the same computation as this instruction.
+  // Returns true if 'other' performs the same computation as this
+  // instruction.
   bool Identical(
       const HloInstruction& other,
       absl::FunctionRef<bool(const HloInstruction*, const HloInstruction*)>
@@ -1216,8 +1233,9 @@ class HloInstruction {
   // Replaces the specified operand with new_operand. The old and new operands
   // must have compatible shapes ignoring floating-point precision.
   //
-  // This function does NOT remove duplicated operands even if this instruction
-  // is a fusion, so that the existing operand numbers do not change.
+  // This function does NOT remove duplicated operands even if this
+  // instruction is a fusion, so that the existing operand numbers do not
+  // change.
   absl::Status ReplaceOperandWith(int64_t operand_num,
                                   HloInstruction* new_operand);
 
@@ -1226,17 +1244,17 @@ class HloInstruction {
                                                 HloInstruction* new_operand);
 
   // Replaces all uses of this instruction with the new producer. If
-  // new_producer is a user of this instruction then new_producer remains a use
-  // of this instruction to avoid introducing cycles into the graph.
+  // new_producer is a user of this instruction then new_producer remains a
+  // use of this instruction to avoid introducing cycles into the graph.
   //
-  // If this instruction is the root of its computation, sets the computation's
-  // root to new_producer.
+  // If this instruction is the root of its computation, sets the
+  // computation's root to new_producer.
   //
   // The new producer must have a compatible shape ignoring floating-point
   // precision.
   //
-  // If a user is a fusion instruction, this function will remove any duplicated
-  // operands of it which could be created due to this replacement.
+  // If a user is a fusion instruction, this function will remove any
+  // duplicated operands of it which could be created due to this replacement.
   //
   // trigger is a string used in the error message if the new and the
   // current instruction don't have a compatible shape.
@@ -1253,8 +1271,8 @@ class HloInstruction {
       absl::Span<HloInstruction* const> users, HloInstruction* new_producer);
 
   // Performs a postorder DFS visit using this node as the root. If
-  // `call_finish_visit` is true, then DfsHloVisitor::FinishVisit is called when
-  // complete. If ignore_control_predecessors is true, instructions only
+  // `call_finish_visit` is true, then DfsHloVisitor::FinishVisit is called
+  // when complete. If ignore_control_predecessors is true, instructions only
   // reachable via control dependencies will not be visited, and the postorder
   // will not take control dependencies into account. It is as if the control
   // dependencies didn't exist in the graph at all. If cross_computation is
@@ -1302,7 +1320,8 @@ class HloInstruction {
     return {const_cast<HloInstruction*>(rv.first), rv.second};
   }
 
-  // Same as LatestNonGteAncestorAndIndex, but just returns the HloInstruction.
+  // Same as LatestNonGteAncestorAndIndex, but just returns the
+  // HloInstruction.
   const HloInstruction* LatestNonGteAncestor() const;
 
   HloInstruction* LatestNonGteAncestor() {
@@ -1310,9 +1329,9 @@ class HloInstruction {
         const_cast<const HloInstruction*>(this)->LatestNonGteAncestor());
   }
 
-  // Returns true whether this instruction is effectively a bitcast. Currently,
-  // this means it either is a bitcast, or it is a transpose that is effectively
-  // a bitcast.
+  // Returns true whether this instruction is effectively a bitcast.
+  // Currently, this means it either is a bitcast, or it is a transpose that
+  // is effectively a bitcast.
   bool IsEffectiveBitcast() const;
 
   // Gets/sets the to_apply HloComputation for Call, Map, Reduce, etc.
@@ -1366,8 +1385,9 @@ class HloInstruction {
   // param because gdb ignores default params, but does resolve overloads.)
   //
   // TODO(b/73348663): Make ToString() adaptive to the size of the string by
-  // default, backing off on providing full information for very large strings,
-  // or provide a different name for a ToString-like function that does that.
+  // default, backing off on providing full information for very large
+  // strings, or provide a different name for a ToString-like function that
+  // does that.
   std::string ToString() const;
   std::string ToString(const HloPrintOptions& options) const;
 
@@ -1399,8 +1419,8 @@ class HloInstruction {
 
   // Prints an instruction to a string.
   //
-  // The canonical string representation needs to name operands and instruction
-  // names in a consistent way. This is implemented through the
+  // The canonical string representation needs to name operands and
+  // instruction names in a consistent way. This is implemented through the
   // canonical_name_map.
   void PrintWithCanonicalNameMap(Printer* printer,
                                  const HloPrintOptions& options,
@@ -1437,7 +1457,8 @@ class HloInstruction {
   }
   std::shared_ptr<const HloSharding> sharding_ptr() const { return sharding_; }
 
-  // Returns the sharding applied to this operator, or default_ if none exists.
+  // Returns the sharding applied to this operator, or default_ if none
+  // exists.
   const HloSharding& sharding_or_default(const HloSharding& default_) const {
     return sharding_ ? *sharding_ : default_;
   }
@@ -1457,9 +1478,9 @@ class HloInstruction {
     sharding_ = std::move(sharding);
   }
   // Copies the sharding of another instruction, this is more efficient than
-  // set_sharding(hlo->sharding()) because it avoids a deep copy and shares the
-  // storage. Note that if the other instruction has no sharding set, it also
-  // clears the sharding of the current instruction.
+  // set_sharding(hlo->sharding()) because it avoids a deep copy and shares
+  // the storage. Note that if the other instruction has no sharding set, it
+  // also clears the sharding of the current instruction.
   void copy_sharding(const HloInstruction* hlo) {
     set_sharding(hlo->sharding_ptr());
   }
@@ -1481,18 +1502,19 @@ class HloInstruction {
     return other->has_sharding() ? sharding() == other->sharding() : false;
   }
 
-  // When creating a new instruction which either replaces, or shifts up (kCopy
-  // insertion case), another instruction, we need to make sure the certain
-  // properties of the new instruction are copied into the derived one. As of
-  // today, the metadata and sharding will be propagated to the derived
-  // instruction.
+  // When creating a new instruction which either replaces, or shifts up
+  // (kCopy insertion case), another instruction, we need to make sure the
+  // certain properties of the new instruction are copied into the derived
+  // one. As of today, the metadata and sharding will be propagated to the
+  // derived instruction.
   void SetupDerivedInstruction(HloInstruction* derived_instruction) const;
 
-  // Clones the HLO instruction. The clone will have the same opcode, shape, and
-  // operands. After creation the clone has no uses. "this" (the instruction
-  // cloned from) is not changed. Suffix is the string to append to the name of
-  // the instruction to form the name of the cloned instruction.
-  // Ignores the control predecessors and successors of this HLO instruction.
+  // Clones the HLO instruction. The clone will have the same opcode, shape,
+  // and operands. After creation the clone has no uses. "this" (the
+  // instruction cloned from) is not changed. Suffix is the string to append
+  // to the name of the instruction to form the name of the cloned
+  // instruction. Ignores the control predecessors and successors of this HLO
+  // instruction.
   std::unique_ptr<HloInstruction> Clone(
       const std::string& suffix = "clone",
       HloCloneContext* context = nullptr) const;
@@ -1547,12 +1569,12 @@ class HloInstruction {
 
   // Clears out the called computations.
   //
-  // This is, in particular, necessary when inlining function bodies into their
-  // caller. If there were side-effecting operations in the called computations,
-  // the call itself is considered side-effecting and thus cannot be removed. By
-  // clearing out the computations, we reflect the fact that all side-effecting
-  // properties have been reflected in the caller, and make the call HLO
-  // removable.
+  // This is, in particular, necessary when inlining function bodies into
+  // their caller. If there were side-effecting operations in the called
+  // computations, the call itself is considered side-effecting and thus
+  // cannot be removed. By clearing out the computations, we reflect the fact
+  // that all side-effecting properties have been reflected in the caller, and
+  // make the call HLO removable.
   virtual void ClearCalledComputations() {
     if (has_rare()) {
       mutable_rare()->called_computations.clear();
@@ -1560,12 +1582,12 @@ class HloInstruction {
   }
 
   // Returns true if this instruction performs an elementwise operation on
-  // `operand_idx`-th operand. An instruction is elementwise on an operand iff,
-  // to compute the output at index {i_0,i_1,...,i_n}, the only element required
-  // from the operand (if any) is the element at {i_0,i_1,...,i_n}.
+  // `operand_idx`-th operand. An instruction is elementwise on an operand
+  // iff, to compute the output at index {i_0,i_1,...,i_n}, the only element
+  // required from the operand (if any) is the element at {i_0,i_1,...,i_n}.
   //
-  // Note on performance: when this instruction is kFusion, this method, in the
-  // worst case, scans all fused instructions. We could speed this up by
+  // Note on performance: when this instruction is kFusion, this method, in
+  // the worst case, scans all fused instructions. We could speed this up by
   // caching.
   bool IsElementwiseOnOperand(int64_t operand_idx) const;
 
@@ -1587,9 +1609,9 @@ class HloInstruction {
       const HloInstruction* operand) const;
 
   // Convenience helper for ShapeUtil::InsertedOrDeleted1SizedDimensions. If
-  // this reshape merely inserts or deletes 1-sized dimensions, return the input
-  // indices of the deleted dimensions and the output indices of the inserted
-  // dimensions.
+  // this reshape merely inserts or deletes 1-sized dimensions, return the
+  // input indices of the deleted dimensions and the output indices of the
+  // inserted dimensions.
   //
   // Precondition: this op must be a reshape.
   std::optional<ShapeUtil::ShapeEqualityDescriptor>
@@ -1598,8 +1620,8 @@ class HloInstruction {
   // Gets the string identifier for this instruction.
   std::string_view name() const { return name_; }
 
-  // Sets the string identifier for this instruction. Name will be sanitized to
-  // match the regexp "[a-zA-Z_][a-zA-Z0-9_.-]*".
+  // Sets the string identifier for this instruction. Name will be sanitized
+  // to match the regexp "[a-zA-Z_][a-zA-Z0-9_.-]*".
   //
   // See also HloModule::SetAndUniquifyInstrName(), which does this plus
   // UniquifyName().
@@ -1607,8 +1629,8 @@ class HloInstruction {
     name_ = NameUniquer::GetSanitizedName(name);
   }
 
-  // Use the given NameUniquer to select a unique name for the instruction based
-  // on the instruction's existing name.
+  // Use the given NameUniquer to select a unique name for the instruction
+  // based on the instruction's existing name.
   //
   // See also HloModule::SetAndUniquifyInstrName(), which does this plus
   // SetAndSanitizeName().
@@ -1623,8 +1645,8 @@ class HloInstruction {
   // Assigns a new unique ID to this instruction from the module's ID pool.
   void UniquifyId(HloModule* module);
 
-  // Clear the unique ID of the instruction so that it can be re-assigned, such
-  // as for the purpose of compacting the instruction unique IDs.
+  // Clear the unique ID of the instruction so that it can be re-assigned,
+  // such as for the purpose of compacting the instruction unique IDs.
   void ClearUniqueIdInternal() { unique_id_ = -1; }
 
   // Set the unique id for this instruction to "id"
@@ -1729,12 +1751,12 @@ class HloInstruction {
   using EnableIfProto = typename std::enable_if_t<
       std::is_base_of<google::protobuf::Message, T>::value>;
 
-  // Returns the backend-specific configuration for how a backend should compile
-  // this HLO. The meaning of the field is backend specific. Not for use before
-  // or during general HLO optimization, since HLO optimizations do not preserve
-  // this field and they cannot interpret it due to its meaning being backend
-  // specific. Except for CustomCall, where this field is preserved and no
-  // general HLO optimization needs to interpret it.
+  // Returns the backend-specific configuration for how a backend should
+  // compile this HLO. The meaning of the field is backend specific. Not for
+  // use before or during general HLO optimization, since HLO optimizations do
+  // not preserve this field and they cannot interpret it due to its meaning
+  // being backend specific. Except for CustomCall, where this field is
+  // preserved and no general HLO optimization needs to interpret it.
   //
   // ConfigProto should be a protobuf Message type.
   template <typename ConfigProto, EnableIfProto<ConfigProto>* = nullptr>
@@ -1781,8 +1803,8 @@ class HloInstruction {
   }
   const OpMetadata& metadata() const { return *metadata_; }
 
-  // Set/get the computation containing this instruction. set_parent should only
-  // be called by HloComputation methods which add/remove instructions to
+  // Set/get the computation containing this instruction. set_parent should
+  // only be called by HloComputation methods which add/remove instructions to
   // computations.
   void set_parent(HloComputation* computation) { parent_ = computation; }
   const HloComputation* parent() const { return parent_; }
@@ -1791,9 +1813,10 @@ class HloInstruction {
   // Returns the module for this instruction.
   HloModule* GetModule() const;
 
-  // A method that sorts users_, control_predecessors_, and control_successors_
-  // according to the orders used in sorted_instruction. The sorting is used
-  // during cloning, to make clone behavior match uncloned behavior.
+  // A method that sorts users_, control_predecessors_, and
+  // control_successors_ according to the orders used in sorted_instruction.
+  // The sorting is used during cloning, to make clone behavior match uncloned
+  // behavior.
   void SortInstructionUsersAndControlLists(
       const MappedPtrContainerSorter<HloInstruction>::MapPtrFn& map_fn,
       const HloInstruction& sorted_instruction);
@@ -1927,7 +1950,8 @@ class HloInstruction {
   void set_parameter_replicated_at_leaf_buffers(
       const std::vector<bool>& parameter_replicated_at_leaf_buffers);
 
-  // Delegates to HloParameterInstruction::parameter_replicated_at_leaf_buffers.
+  // Delegates to
+  // HloParameterInstruction::parameter_replicated_at_leaf_buffers.
   const std::optional<std::vector<bool>>& parameter_replicated_at_leaf_buffers()
       const;
 
@@ -2080,8 +2104,8 @@ class HloInstruction {
   ComparisonOrder comparison_order() const;
 
  protected:
-  // Internal constructor for a given opcode/shape, other fields must be filled
-  // by factory methods.
+  // Internal constructor for a given opcode/shape, other fields must be
+  // filled by factory methods.
   HloInstruction(HloOpcode opcode, const Shape& shape);
 
   void RemoveAllOperands() { operands_.clear(); }
@@ -2098,8 +2122,8 @@ class HloInstruction {
 
   void DetachFrom(HloInstruction* usee) { usee->RemoveUser(this); }
 
-  // Indices of computations in called_computations for instructions which call
-  // multiple computations.
+  // Indices of computations in called_computations for instructions which
+  // call multiple computations.
   enum {
     // kWhile computations.
     kBodyComputationIndex = 0,
@@ -2133,8 +2157,8 @@ class HloInstruction {
   // Implementation for IsElementwise if operand_idx is nullopt and for
   // IsElementwiseOnOperand if otherwise.
   //
-  // NOTE: For all instructions other than kFusion, being elementwise on one of
-  // the operands is equivalent to being elementwise on all the operands.
+  // NOTE: For all instructions other than kFusion, being elementwise on one
+  // of the operands is equivalent to being elementwise on all the operands.
   virtual bool IsElementwiseImpl(
       const std::optional<int64_t>& operand_idx) const;
 
@@ -2175,9 +2199,9 @@ class HloInstruction {
 
     // The set of control predecessors of this instruction.
     // Note that the order of the instructions in the vector influences the
-    // order computed in HloComputation::ComputeInstructionPostOrder, which may
-    // influence the result of the compilation by changing the scheduling. We
-    // are not sure if it matters.
+    // order computed in HloComputation::ComputeInstructionPostOrder, which
+    // may influence the result of the compilation by changing the scheduling.
+    // We are not sure if it matters.
     PtrVec<HloInstruction*> control_predecessors;
 
     // The set of control successors of this instruction.
@@ -2198,8 +2222,8 @@ class HloInstruction {
     // Used by kCall to determine if the Call instruction is a composite.
     bool is_composite;
 
-    // Used to render an HLO graph when tracking the propagation desired values
-    // through it.
+    // Used to render an HLO graph when tracking the propagation desired
+    // values through it.
     StatisticsViz statistics_viz;
   };
 
@@ -2222,8 +2246,8 @@ class HloInstruction {
     return rare_.get();
   }
 
-  // Users holds the list of users of an HloInstruction, plus it provides a fast
-  // way for checking for presence of a potential user.
+  // Users holds the list of users of an HloInstruction, plus it provides a
+  // fast way for checking for presence of a potential user.
   class Users {
    public:
     Users() = default;
@@ -2290,8 +2314,8 @@ class HloInstruction {
   // for things that are rarely filled
   std::unique_ptr<Rare> rare_;
 
-  // The users of this instruction. Users are HLOs where this instruction is an
-  // operand.
+  // The users of this instruction. Users are HLOs where this instruction is
+  // an operand.
   Users users_;
 
   // The computation in which this instruction is contained.
@@ -2317,8 +2341,8 @@ class HloInstruction {
   // graph.
   std::shared_ptr<OriginalValue> original_value_ = nullptr;
 
-  // Metadata for debugging.  Allocate it on heap, so that it does not increase
-  // the memory footprint of HloInstruction.
+  // Metadata for debugging.  Allocate it on heap, so that it does not
+  // increase the memory footprint of HloInstruction.
   std::unique_ptr<OpMetadata> metadata_ = std::make_unique<OpMetadata>();
 };
 

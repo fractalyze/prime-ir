@@ -33,11 +33,14 @@ limitations under the License.
 #include "absl/base/attributes.h"
 #include "absl/functional/function_ref.h"
 #include "absl/log/check.h"
+#include "absl/status/status.h"
+#include "absl/strings/str_format.h"
 
 #include "xla/tsl/lib/core/bitmap.h"
 #include "zkx/array.h"
 #include "zkx/array2d.h"
 #include "zkx/array3d.h"
+#include "zkx/array4d.h"
 #include "zkx/index_util.h"
 #include "zkx/layout_util.h"
 #include "zkx/maybe_owning.h"
@@ -94,6 +97,38 @@ class LiteralBase {
   // the given ShapeIndex is not array.
   const void* untyped_data(const ShapeIndex& shape_index = {}) const;
   int64_t size_bytes(const ShapeIndex& shape_index = {}) const;
+
+  // Computes the size in bytes of the output of the Serialize method.
+  absl::StatusOr<int64_t> SerializedSize() const {
+    return ShapeUtil::SerializedSize(shape());
+  }
+
+  // Serialize the Literal into the given output iterator, whose value_type must
+  // be char.  It's up to the caller to ensure that output can store
+  // SerializedSize() bytes of data.  This can be ensured by using
+  // std::back_inserter, or by manually resizing the target container.
+  // This serializer is useful for bypassing the 2GB protobuf serialization
+  // limit with very large literals, and it should be faster than protobuf
+  // serialization when performance is a concern.
+  // The serialization format should not be relied on for forward/backward
+  // compatibility.  If compatibility is required, you should use protobuf
+  // serialization instead.
+  template <typename OutputIterator>
+  absl::Status Serialize(OutputIterator output) const {
+    return SerializeWithShapeProto(shape().ToProto(), output);
+  }
+
+  // Serialize the Literal into the given string.  This method has the same
+  // caveats as the Serialize() method above.
+  absl::Status SerializeToString(std::string* output) const;
+
+  // Serialize the Literal into a string and return it.  This method has the
+  // same caveats as the Serialize() method above.
+  absl::StatusOr<std::string> SerializeAsString() const;
+
+  // Returns this literal's data as a string. This literal must be a rank-1 U8
+  // array.
+  std::string GetR1U8AsString() const;
 
   // Prints a string representation of the literal value. The Shape of the
   // literal is a prefix of the literal value in the string.
@@ -188,6 +223,24 @@ class LiteralBase {
   std::optional<int64_t> GetIntegralAsS64(
       absl::Span<const int64_t> multi_index) const;
 
+  // Invokes the "per cell" callback for each element in the provided
+  // literal with the element's indices and a string representation of
+  // the element's value.
+  //
+  // This function is useful if you want a polymorphic representation
+  // of the tensor's elements (turning it to a string for something
+  // like representation in a protobuf).
+  //
+  // This literal must have a dense layout.
+  void EachCellAsString(
+      absl::FunctionRef<void(absl::Span<const int64_t> indices,
+                             const std::string& value)>
+          per_cell) const;
+  template <typename NativeT>
+  void EachCell(
+      absl::FunctionRef<void(absl::Span<const int64_t> indices, NativeT value)>
+          per_cell) const;
+
   // Checks whether all of this literal's values are equal to the given scalar
   // literal.
   //
@@ -218,6 +271,22 @@ class LiteralBase {
   //
   // Returns false if this literal is not an array.
   bool IsAllFirst() const;
+
+  // Returns the number of elements that have value equal to the given value.
+  // Returns 0 if value does not fit in this literal's type or if the literal
+  // is not an array.
+  template <typename T>
+  int64_t CountEqual(T value) const;
+
+  // Literal consists entirely of an iota.
+  bool IsR1Iota() const;
+
+  // Returns the stride if the literal is a strided iota.
+  std::optional<int64_t> IsR1StridedIota() const;
+
+  // Returns whether this literal is zero at the specified index. This literal
+  // must be an array with a dense layout.
+  bool IsZero(absl::Span<const int64_t> indices) const;
 
   // Returns the count of the elements in the array at the given shape index in
   // this literal.
@@ -426,6 +495,13 @@ class LiteralBase {
   // This literal must be an array.
   Literal BitReverse(absl::Span<const int64_t> dimensions) const;
 
+  // Creates a literal with a prepended dimension with bound "times"; e.g. a
+  // s32[3x2] with times=4 will produce a s32[4x3x2] with the 3x2 from this
+  // literal replicated four times.
+  // This literal must be an array.
+  template <typename NativeT>
+  Literal Replicate(int64_t times) const;
+
   // Returns true if the leaf arrays of the literal within the given shape index
   // are all determined.
   // See comments on ArrayValueState for detailed explanation.
@@ -447,9 +523,9 @@ class LiteralBase {
   // MutableLiteralBase::Populate can be used instead.
   static Literal CreateFromShape(const Shape& shape);
 
-  // WARNING: These two functions are only supposed to be used by
-  // HloEvaluator. The rest of ZKX assumes all literals are known. Similar to
-  // CreateFromShape() but marks all leaf arrays as unknown.
+  // WARNING: These two functions are only supposed to be used by HloEvaluator.
+  // The rest of ZKX assumes all literals are known.
+  // Similar to CreateFromShape() but marks all leaf arrays as unknown.
   static Literal CreateFromShapeWithUnknownLeafArrays(const Shape& shape);
   // Similar to CreateFromShape() but marks all leaf arrays as undetermined.
   static Literal CreateFromShapeWithUndeterminedLeafArrays(const Shape& shape);
@@ -465,6 +541,191 @@ class LiteralBase {
   // of the given piece with the given shape.
   void BuildPieceSubtree(const Shape& shape, Piece* piece);
 
+  template <typename OutputIterator>
+  absl::Status SerializeWithShapeProto(const ShapeProto& proto,
+                                       OutputIterator output) const;
+
+  template <typename OutputIterator>
+  class SerializeState {
+   public:
+    SerializeState(const ShapeProto& shape, OutputIterator output)
+        : output_(output) {
+      WriteShape(shape);
+    }
+
+    int64_t num_written() const { return num_written_; }
+
+    template <typename NativeT>
+    void WriteElement(NativeT element) {
+      constexpr PrimitiveType primitive_type =
+          primitive_util::NativeToPrimitiveType<NativeT>();
+      static_assert(primitive_util::BitWidth(primitive_type) % 8 == 0);
+      constexpr int bytes = primitive_util::BitWidth(primitive_type) / 8;
+      const char* p = reinterpret_cast<const char*>(&element);
+      for (int i = 0; i < bytes; ++i) {
+        *output_++ = p[i];
+        ++num_written_;
+      }
+    }
+
+    template <typename NativeT>
+    void WriteElements(absl::Span<const NativeT> elements) {
+      constexpr PrimitiveType primitive_type =
+          primitive_util::NativeToPrimitiveType<NativeT>();
+      constexpr int bits_per_element = primitive_util::BitWidth(primitive_type);
+      if constexpr (bits_per_element < 8) {
+        static_assert(8 % bits_per_element == 0);
+
+        constexpr int elements_per_byte = 8 / bits_per_element;
+        int64_t bytes = elements.size() / elements_per_byte;
+        for (int64_t i = 0; i < bytes; ++i) {
+          uint8_t byte = 0;
+          for (int b = 0; b < elements_per_byte; ++b) {
+            uint8_t src = Eigen::numext::bit_cast<uint8_t>(
+                              elements[i * elements_per_byte + b]) &
+                          LsbMask<uint8_t>(bits_per_element);
+            byte |= src << (b * bits_per_element);
+          }
+          WriteElement(byte);
+        }
+        int64_t rest = elements.size() % elements_per_byte;
+        if (rest != 0) {
+          uint8_t byte = 0;
+          for (int64_t b = 0; b < rest; ++b) {
+            uint8_t src = Eigen::numext::bit_cast<uint8_t>(
+                              elements[bytes * elements_per_byte + b]) &
+                          LsbMask<uint8_t>(bits_per_element);
+            byte |= src << (b * bits_per_element);
+          }
+          WriteElement(byte);
+        }
+      } else {
+        for (NativeT element : elements) {
+          WriteElement(element);
+        }
+      }
+    }
+
+    void WriteDynamicSizes(absl::Span<const DynamicSizeType> sizes) {
+      WriteElements(sizes);
+    }
+
+   private:
+    void WriteShape(const ShapeProto& proto) {
+      std::string shape_bytes = proto.SerializeAsString();
+      uint64_t shape_size = shape_bytes.size();
+      WriteElement(shape_size);
+      output_ = std::copy(shape_bytes.begin(), shape_bytes.end(), output_);
+      num_written_ += shape_bytes.size();
+    }
+
+    OutputIterator output_;
+    int64_t num_written_ = 0;
+  };
+
+  template <typename InputIterator>
+  class DeserializeState {
+   public:
+    DeserializeState(InputIterator input, InputIterator end)
+        : input_(input), end_(end) {}
+
+    int64_t num_read() const { return num_read_; }
+
+    template <typename NativeT>
+    ABSL_MUST_USE_RESULT bool ReadElement(NativeT& element) {
+      constexpr PrimitiveType primitive_type =
+          primitive_util::NativeToPrimitiveType<NativeT>();
+      static_assert(primitive_util::BitWidth(primitive_type) % 8 == 0);
+      constexpr int bytes = primitive_util::BitWidth(primitive_type) / 8;
+      char* p = reinterpret_cast<char*>(&element);
+      for (int i = 0; i < bytes; ++i) {
+        if (at_end()) {
+          return false;
+        }
+        p[i] = *input_++;
+        ++num_read_;
+      }
+      return true;
+    }
+
+    template <typename NativeT>
+    ABSL_MUST_USE_RESULT bool ReadElements(absl::Span<NativeT> elements) {
+      constexpr PrimitiveType primitive_type =
+          primitive_util::NativeToPrimitiveType<NativeT>();
+      constexpr int bits_per_element = primitive_util::BitWidth(primitive_type);
+      if constexpr (bits_per_element < 8) {
+        static_assert(8 % bits_per_element == 0);
+
+        constexpr auto cast = [](uint8_t x) -> NativeT {
+          return static_cast<NativeT>(x);
+        };
+
+        constexpr int elements_per_byte = 8 / bits_per_element;
+        int64_t bytes = elements.size() / elements_per_byte;
+        for (int64_t i = 0; i < bytes; ++i) {
+          uint8_t byte;
+          if (!ReadElement(byte)) {
+            return false;
+          }
+          for (int b = 0; b < elements_per_byte; ++b) {
+            elements[i * elements_per_byte + b] =
+                cast(byte & LsbMask<uint8_t>(bits_per_element));
+            byte >>= bits_per_element;
+          }
+        }
+        int64_t rest = elements.size() % elements_per_byte;
+        if (rest != 0) {
+          uint8_t byte;
+          if (!ReadElement(byte)) {
+            return false;
+          }
+          for (int64_t b = 0; b < rest; ++b) {
+            elements[bytes * elements_per_byte + b] =
+                cast(byte & LsbMask<uint8_t>(bits_per_element));
+            byte >>= bits_per_element;
+          }
+        }
+      } else {
+        for (NativeT& element : elements) {
+          if (!ReadElement(element)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    bool ReadDynamicSizes(absl::Span<DynamicSizeType> sizes) {
+      return ReadElements(sizes);
+    }
+
+    absl::StatusOr<Shape> ReadShape(uint64_t size) {
+      std::string shape_bytes;
+      shape_bytes.reserve(size);
+      while (shape_bytes.size() < size) {
+        if (at_end()) {
+          return absl::InvalidArgumentError("Failed to read shape data");
+        }
+        shape_bytes.push_back(*input_++);
+        ++num_read_;
+      }
+      ShapeProto proto;
+      if (!proto.ParseFromString(shape_bytes)) {
+        return absl::InvalidArgumentError("Failed to parse shape protobuf");
+      }
+      Shape shape(proto);
+      TF_RETURN_IF_ERROR(ShapeUtil::ValidateShapeWithOptionalLayout(shape));
+      return std::move(shape);
+    }
+
+    bool at_end() const { return input_ == end_; }
+
+   private:
+    InputIterator input_;
+    InputIterator end_;
+    int64_t num_read_ = 0;
+  };
+
   // Array literals could be in one of the following three states:
   //   1) Known: we have evaluated and known the value of the array literal.
   //   2) Unknown: we have tried to evaluate the array literal, but its value
@@ -477,6 +738,9 @@ class LiteralBase {
   //  of such literals causes undefined behavior.
   enum class ArrayValueState { kKnown = 0, kUnknown = 1, kUndetermined = 2 };
 
+  // A data structure representing a subshape at a particular ShapeIndex within
+  // the literal. For array-shaped ShapeIndexes, this data structure holds the
+  // pointer to the memory allocated for the array data.
   class Piece {
    public:
     ArrayValueState get_array_value_state() const { return array_value_state_; }
@@ -681,10 +945,18 @@ class LiteralBase {
     //  - `scalar`'s type matches that of `this`.
     bool IsAll(const Literal& scalar) const;
 
+    // Returns the number of elements with equal value to the given literal.
+    // Returns 0 if this Piece is not an array.
+    int64_t CountAll(const Literal& scalar) const;
+
     // Returns true if this piece and 'other' contain the same data. This piece
     // and 'other' must be array-shaped and compatible. If a literal has dynamic
     // shape, comparison is done only for the valid elements.
     bool EqualElements(const Piece& other) const;
+
+    // Returns true if this piece and other pieces have the same dynamic
+    // dimension sizes.
+    bool EqualDynamicSize(const Piece& other) const;
 
     // Writes the shape and data (if array-shaped) into the given proto.
     void WriteToProto(LiteralProto* proto) const;
@@ -702,6 +974,15 @@ class LiteralBase {
     bool IsDetermined() const;
 
     bool IsKnown() const;
+
+    // Serialize the data contained by this Piece into the given serialization
+    // state.
+    template <typename NativeT, typename OutputIterator>
+    void SerializeData(SerializeState<OutputIterator>& state) const;
+
+    // Deserialize the data for this Piece from the given serialization state.
+    template <typename NativeT, typename InputIterator>
+    bool DeserializeData(DeserializeState<InputIterator>& state);
 
    private:
     // Uninitialized state representation.
@@ -817,6 +1098,7 @@ class LiteralBase {
   virtual const Piece& root_piece() const = 0;
 };
 
+// Abstract base class representing a mutable literal in ZKX.
 class MutableLiteralBase : public LiteralBase {
  public:
   ~MutableLiteralBase() override = 0;
@@ -845,6 +1127,11 @@ class MutableLiteralBase : public LiteralBase {
   void* untyped_data(const ShapeIndex& shape_index = {});
   // Unhide const method from parent class.
   using LiteralBase::untyped_data;
+
+  template <typename NativeT>
+  void MutableEachCell(absl::FunctionRef<NativeT(
+                           absl::Span<const int64_t> indices, NativeT value)>
+                           per_cell);
 
   // Copy values from 'src_literal' rooted at 'src_shape_index' into this
   // literal rooted at 'dest_shape_index'. The subshape of this literal rooted
@@ -886,6 +1173,11 @@ class MutableLiteralBase : public LiteralBase {
   template <typename NativeT>
   void Set(absl::Span<const int64_t> multi_index, NativeT value);
 
+  // As Set(), but truncates `value` to the literal element type before storing.
+  // This literal must be an array.
+  absl::Status SetIntegralAsS64(absl::Span<const int64_t> multi_index,
+                                int64_t value);
+
   // Populate this literal with the given values. Examples:
   //
   //   // Populate with floats.
@@ -909,6 +1201,8 @@ class MutableLiteralBase : public LiteralBase {
   void PopulateR2FromArray2D(const Array2D<NativeT>& values);
   template <typename NativeT>
   void PopulateR3FromArray3D(const Array3D<NativeT>& values);
+  template <typename NativeT>
+  void PopulateR4FromArray4D(const Array4D<NativeT>& values);
 
   // Populates literal values by calling the generator function for every cell
   // in this literal object.
@@ -1042,6 +1336,23 @@ class Literal : public MutableLiteralBase {
   // ref-qualified with &&.
   std::vector<Literal> DecomposeTuple();
 
+  // Returns a subliteral specified by given shape_index. No data is copied, the
+  // current literal becomes invalid after this function call.
+  //
+  // TODO(jlebar): Because this function invalidates `this`, it should be
+  // ref-qualified with &&.
+  Literal SubLiteral(ShapeIndexView shape_index);
+
+  // Deserialize a Literal from the given iterator range, whose value type must
+  // be char.  See the comments on the Serialize() method for caveats.
+  template <typename InputIterator>
+  static absl::StatusOr<Literal> Deserialize(InputIterator begin,
+                                             InputIterator end);
+
+  static absl::StatusOr<Literal> DeserializeFromString(std::string_view data) {
+    return Deserialize(data.data(), data.data() + data.size());
+  }
+
  private:
   friend class LiteralBase;
   friend class MutableLiteralBase;
@@ -1153,6 +1464,121 @@ class BorrowingLiteral : public LiteralBase {
   std::unique_ptr<Shape> shape_;
 };
 
+template <typename NativeT, typename OutputIterator>
+void LiteralBase::Piece::SerializeData(
+    SerializeState<OutputIterator>& state) const {
+  CHECK_EQ(subshape().element_type(),
+           primitive_util::NativeToPrimitiveType<NativeT>());
+  if (subshape().is_dynamic()) {
+    absl::Span<const DynamicSizeType> sizes(dynamic_size_buffer(),
+                                            subshape().rank());
+    state.WriteDynamicSizes(sizes);
+  }
+  state.WriteElements(data<NativeT>());
+}
+
+template <typename NativeT, typename InputIterator>
+bool LiteralBase::Piece::DeserializeData(
+    DeserializeState<InputIterator>& state) {
+  CHECK_EQ(subshape().element_type(),
+           primitive_util::NativeToPrimitiveType<NativeT>());
+  if (subshape().is_dynamic()) {
+    absl::Span<DynamicSizeType> sizes(dynamic_size_buffer(), subshape().rank());
+    if (!state.ReadDynamicSizes(sizes)) {
+      return false;
+    }
+  }
+  return state.ReadElements(data<NativeT>());
+}
+
+// Description of the native serialization format:
+//
+// - All data are stored in little-endian order.
+//
+// - The serialized format begins with a header.
+//
+// - The first 8 bytes (int64_t) of the header are the size of the serialized
+//   ShapeProto that provides the shape of the literal.
+//
+// - The remaining bytes of the header provide the serialized ShapeProto itself.
+//
+// - After the header, each piece of the literal is serialized, as produced
+//   through a depth-first traversal of the tuple tree.
+//
+// - If a piece is dynamic, we first write the sizes of the dynamic dimensions.
+//
+// - The elements of the piece are then written.  Elements smaller than a single
+//   byte (PRED, S4, U4) are packed into bytes.  Otherwise, they are written in
+//   little-endian byte order.
+template <typename OutputIterator>
+absl::Status LiteralBase::SerializeWithShapeProto(const ShapeProto& shape_proto,
+                                                  OutputIterator output) const {
+  SerializeState<OutputIterator> state(shape_proto, output);
+  TF_RETURN_IF_ERROR(root_piece().ForEachSubpieceWithStatus(
+      [&](const ShapeIndex& shape_index, const Piece& piece) -> absl::Status {
+        const Shape& subshape = piece.subshape();
+        if (subshape.IsTuple()) {
+          return absl::OkStatus();
+        }
+        if (!subshape.IsArray()) {
+          return absl::InvalidArgumentError(absl::StrFormat(
+              "Shape cannot be serialized: %s", shape().ToString()));
+        }
+        primitive_util::ArrayTypeSwitch<void>(
+            [&](auto primitive_type) {
+              using NativeT = primitive_util::NativeTypeOf<primitive_type>;
+              piece.SerializeData<NativeT>(state);
+            },
+            subshape.element_type());
+        return absl::OkStatus();
+      }));
+  DCHECK_EQ(state.num_written(), SerializedSize().value())
+      << shape().ToString();
+  return absl::OkStatus();
+}
+
+template <typename InputIterator>
+absl::StatusOr<Literal> Literal::Deserialize(InputIterator begin,
+                                             InputIterator end) {
+  DeserializeState<InputIterator> state(begin, end);
+  uint64_t shape_size;
+  if (!state.ReadElement(shape_size)) {
+    return absl::InvalidArgumentError("Failed to read shape size");
+  }
+  TF_ASSIGN_OR_RETURN(Shape shape, state.ReadShape(shape_size));
+  Literal literal(shape);
+  TF_RETURN_IF_ERROR(
+      literal.mutable_root_piece().ForEachMutableSubpieceWithStatus(
+          [&](const ShapeIndex& shape_index, Piece* piece) -> absl::Status {
+            const Shape& subshape = piece->subshape();
+            if (subshape.IsTuple()) {
+              return absl::OkStatus();
+            }
+            if (!subshape.IsArray()) {
+              return absl::InvalidArgumentError(absl::StrFormat(
+                  "Shape cannot be deserialized: %s", shape.ToString()));
+            }
+            bool ok = primitive_util::ArrayTypeSwitch<bool>(
+                [&](auto primitive_type) {
+                  using NativeT = primitive_util::NativeTypeOf<primitive_type>;
+                  return piece->DeserializeData<NativeT>(state);
+                },
+                subshape.element_type());
+            if (!ok) {
+              return absl::InvalidArgumentError(absl::StrFormat(
+                  "Failed to deserialize all data for shape: %s",
+                  shape.ToString()));
+            }
+            return absl::OkStatus();
+          }));
+  DCHECK_EQ(state.num_read(), ShapeUtil::SerializedSize(shape).value())
+      << shape.ToString();
+  if (!state.at_end()) {
+    return absl::InvalidArgumentError("Did not consume all input data");
+  }
+  return std::move(literal);
+}
+
 template <typename NativeT>
 absl::Span<const NativeT> LiteralBase::Piece::data() const {
   DCHECK(LayoutUtil::IsDenseArray(subshape()))
@@ -1248,6 +1674,61 @@ NativeT LiteralBase::GetFirstElement() const {
   return data<NativeT>().at(0);
 }
 
+template <typename T>
+int64_t LiteralBase::CountEqual(T value) const {
+  PrimitiveType ty = shape().element_type();
+  if (!primitive_util::IsArrayType(ty)) {
+    return 0;
+  }
+  Literal scalar(ShapeUtil::MakeScalarShape(ty));
+  return primitive_util::ArrayTypeSwitch<int64_t>(
+      [&](auto primitive_type_constant) -> int64_t {
+        using NativeT = primitive_util::NativeTypeOf<primitive_type_constant>;
+        scalar.Set<NativeT>({}, static_cast<NativeT>(value));
+        return root_piece().CountAll(scalar);
+      },
+      ty);
+}
+
+template <typename NativeT>
+ABSL_ATTRIBUTE_NOINLINE void LiteralBase::EachCell(
+    absl::FunctionRef<void(absl::Span<const int64_t> indices, NativeT value)>
+        per_cell) const {
+  CHECK(LayoutUtil::IsDenseArray(shape()))
+      << __func__ << " is only supported for dense arrays: " << shape();
+  if (ShapeUtil::IsZeroElementArray(shape())) {
+    return;
+  }
+  std::vector<int64_t> indices(shape().rank(), 0);
+
+  Shape shape_dynamic = shape();
+  for (int64_t i = 0; i < shape_dynamic.rank(); ++i) {
+    shape_dynamic.set_dimensions(i, GetDynamicSize(i));
+  }
+  do {
+    per_cell(indices, Get<NativeT>(indices));
+  } while (IndexUtil::BumpIndices(shape_dynamic, absl::MakeSpan(indices)));
+}
+
+template <typename NativeT>
+ABSL_ATTRIBUTE_NOINLINE void MutableLiteralBase::MutableEachCell(
+    absl::FunctionRef<NativeT(absl::Span<const int64_t> indices, NativeT value)>
+        per_cell) {
+  CHECK(LayoutUtil::IsDenseArray(shape()))
+      << __func__ << " is only supported for dense arrays: " << shape();
+  if (ShapeUtil::IsZeroElementArray(shape())) {
+    return;
+  }
+  std::vector<int64_t> indices(shape().rank(), 0);
+  Shape shape_dynamic = shape();
+  for (int64_t i = 0; i < shape_dynamic.rank(); ++i) {
+    shape_dynamic.set_dimensions(i, GetDynamicSize(i));
+  }
+  do {
+    Set<NativeT>(indices, per_cell(indices, Get<NativeT>(indices)));
+  } while (IndexUtil::BumpIndices(shape_dynamic, absl::MakeSpan(indices)));
+}
+
 template <typename NativeT>
 ABSL_ATTRIBUTE_NOINLINE void MutableLiteralBase::PopulateR1(
     absl::Span<const NativeT> values) {
@@ -1329,6 +1810,11 @@ void MutableLiteralBase::PopulateR3FromArray3D(const Array3D<NativeT>& values) {
 }
 
 template <typename NativeT>
+void MutableLiteralBase::PopulateR4FromArray4D(const Array4D<NativeT>& values) {
+  PopulateFromArray(values);
+}
+
+template <typename NativeT>
 ABSL_ATTRIBUTE_NOINLINE absl::Status MutableLiteralBase::PopulateInternal(
     absl::FunctionRef<NativeT(absl::Span<const int64_t>, int)> generator,
     bool parallel) {
@@ -1379,6 +1865,43 @@ void MutableLiteralBase::PopulateWithValue(NativeT value) {
   for (NativeT& element : data<NativeT>()) {
     element = value;
   }
+}
+
+template <typename NativeT>
+Literal LiteralBase::Replicate(int64_t times) const {
+  CHECK(LayoutUtil::IsDenseArray(shape()))
+      << __func__ << " is only supported for dense arrays: " << shape();
+  DimensionVector bounds = {times};
+  bounds.reserve(shape().dimensions_size() + 1);
+  for (int64_t bound : shape().dimensions()) {
+    bounds.push_back(bound);
+  }
+  Literal literal(ShapeUtil::MakeShape(shape().element_type(), bounds));
+  int64_t elements = ShapeUtil::ElementsIn(literal.shape());
+  if (elements == 0) {
+    return literal;
+  }
+
+  DimensionVector output_indices(bounds.size(), 0);
+  absl::Span<const int64_t> input_indices = output_indices;
+  input_indices.remove_prefix(1);
+
+  bool done = false;
+  while (!done) {
+    const auto element = Get<NativeT>(input_indices);
+    literal.Set<NativeT>(output_indices, element);
+
+    done = true;
+    for (int n = 0; n < output_indices.size(); ++n) {
+      ++output_indices[n];
+      if (output_indices[n] < bounds[n]) {
+        done = false;
+        break;
+      }
+      output_indices[n] = 0;
+    }
+  }
+  return literal;
 }
 
 }  // namespace zkx

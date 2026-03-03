@@ -53,6 +53,7 @@ limitations under the License.
 #include "xla/tsl/platform/cpu_info.h"
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
+#include "xla/tsl/platform/numbers.h"
 #include "xla/tsl/platform/path.h"
 #include "xla/tsl/platform/statusor.h"
 #include "xla/tsl/profiler/lib/scoped_annotation.h"
@@ -91,6 +92,7 @@ limitations under the License.
 #include "zkx/service/gpu/ir_emitter_context.h"
 #include "zkx/service/gpu/ir_emitter_unnested.h"
 #include "zkx/service/gpu/kernel_reuse_cache.h"
+#include "zkx/service/gpu/model/gpu_hlo_cost_analysis.h"
 #include "zkx/service/gpu/prepare_hlo_for_ir_emitting_pipeline.h"
 #include "zkx/service/gpu/transforms/command_buffer_scheduling.h"
 #include "zkx/service/gpu/transforms/dynamic_slice_fusion_rewriter.h"
@@ -315,6 +317,30 @@ void LogDebugOptions(HloModule* hlo_module) {
                          hlo_module->config().debug_options().DebugString()));
 }
 
+AlgebraicSimplifierOptions LayoutInsensitiveAlgebraicSimplifierOptions(
+    const HloModuleConfig& hlo_module_config,
+    const Compiler::TargetConfig& gpu_target_config,
+    AlgebraicSimplifierOptions opts_from_compiler) {
+  AlgebraicSimplifierOptions layout_insensitive_algsimp_opts =
+      opts_from_compiler;
+  layout_insensitive_algsimp_opts.set_enable_dot_strength_reduction(true);
+
+  // GPU only supports canonical convolutions.
+  layout_insensitive_algsimp_opts.set_supports_non_canonical_dots(false);
+
+  // Always simplify reduce(transpose(x)) and reduce(reshape(x)), even when
+  // the transpose/reshape has multiple users.  This helps int8 models, which
+  // tend to have lots of transpose+reshape's (converting between NCHW and
+  // NCHW_VECT_C).  Without this, those reshape+transposes can get materialized
+  // out, which is really bad for perf.
+  layout_insensitive_algsimp_opts
+      .set_unconditionally_simplify_reduce_of_transpose_or_reshape(true);
+
+  layout_insensitive_algsimp_opts
+      .set_enable_unconditional_reduce_of_concat_replacement(false);
+  return layout_insensitive_algsimp_opts;
+}
+
 absl::Status RunPreSPMDPartitionerPasses(HloModule* hlo_module) {
   HloPassPipeline pre_spmd_pipeline("pre-spmd-partitioner");
   // Run some IR cleanup passes before running the SPMD partitioning passes.
@@ -327,10 +353,8 @@ absl::Status RunPreSPMDPartitionerPasses(HloModule* hlo_module) {
 }
 
 absl::Status RunOptimizationPasses(
-    HloModule* hlo_module, const Compiler::TargetConfig& gpu_target_config) {
-  const se::GpuComputeCapability gpu_version =
-      gpu_target_config.device_description.gpu_compute_capability();
-
+    HloModule* hlo_module, const Compiler::TargetConfig& gpu_target_config,
+    const AlgebraicSimplifierOptions& layout_insensitive_algsimp_opts) {
   HloPassPipeline pipeline("optimization");
   // TODO(batzor): Add HloVerifier
   // TODO(batzor): Add BatchedGatherScatterNormalizer
@@ -365,6 +389,9 @@ absl::Status RunOptimizationPasses(
   // TODO(batzor): Add DynamicPadder
   // TODO(batzor): Add StableSortExpander
 
+  const se::GpuComputeCapability gpu_version =
+      gpu_target_config.device_description.gpu_compute_capability();
+
   // Build simplification pipeline. The passes in here are run to a fixed
   // point.
   [&, &pipeline =
@@ -379,7 +406,8 @@ absl::Status RunOptimizationPasses(
     pipeline.AddPass<ScatterExpander>(
         ScatterExpander::kEliminateSimpleScatters);
     // TODO(batzor): Add ScatterSliceSimplifier
-    // TODO(batzor): Add GpuAlgebraicSimplifier
+    pipeline.AddPass<GpuAlgebraicSimplifier>(layout_insensitive_algsimp_opts,
+                                             gpu_version);
     // TODO(batzor): Add BitcastDtypesExpander
     // TODO(batzor): Add DotMerger
     // TODO(batzor): Add SortSimplifier
@@ -395,7 +423,18 @@ absl::Status RunOptimizationPasses(
     pipeline.AddPass<HloDCE>();
   }();
 
-  // TODO(batzor): Add ConvertMover + GpuAlgebraicSimplifier
+  // ConvertMover and ReshapeMover fight with each other: ConvertMover wants
+  // to move some converts down the graph, but ReshapeMover wants to move them
+  // up the graph.  As a compromise, let ReshapeMover run to a fixed point,
+  // and then run ConvertMover + algsimp to a fixed point.
+  [&, &pipeline =
+          pipeline.AddPass<HloPassFix<HloPassPipeline>>("simplification-2")] {
+    // TODO(batzor): Uncomment this. Dependency: ConvertMover
+    // pipeline.AddPass<ConvertMover>();
+    pipeline.AddPass<GpuAlgebraicSimplifier>(layout_insensitive_algsimp_opts,
+                                             gpu_version);
+  }();
+
   // TODO(batzor): Add HloComputationDeduplicator
   return pipeline.Run(hlo_module).status();
 }
@@ -465,11 +504,19 @@ absl::Status RunLayoutNormalizationPasses(
     HloModule* hlo_module, const se::GpuComputeCapability& gpu_version) {
   HloPassPipeline layout_normalization_pipeline("layout normalization");
 
+  AlgebraicSimplifierOptions opts =
+      GpuCompiler::GetAlgebraicSimplifierOptions(hlo_module->config());
+  opts.set_supports_non_canonical_dots(false);
+  opts.set_is_layout_sensitive(true);
+  opts.set_enable_unconditional_reduce_of_concat_replacement(false);
+
   layout_normalization_pipeline.AddPass<ReshapeDecomposer>();
   // TODO(batzor): Add HloPassFix<MoveCopyToUsers>
   // TODO(batzor): Add LayoutNormalization
-  // TODO(batzor): Add HloPassFix<GpuAlgebraicSimplifier>
-
+  // The LayoutAssignment pass may leave behind kCopy instructions which are
+  // duplicate or NOPs, so remove them with algebraic simplification and CSE.
+  layout_normalization_pipeline.AddPass<HloPassFix<GpuAlgebraicSimplifier>>(
+      opts, gpu_version);
   // Layout normalization will create broadcasts that are not canonical.
   layout_normalization_pipeline.AddPass<BroadcastCanonicalizer>();
   // Layout normalization will create scatters that are not simplified and
@@ -511,11 +558,17 @@ absl::Status GpuCompiler::OptimizeHloModule(
       /*default_thread_pool=*/options.thread_pool,
       /*default_parallelism=*/tsl::port::MaxParallelism());
 
+  AlgebraicSimplifierOptions layout_insensitive_algsimp_opts =
+      LayoutInsensitiveAlgebraicSimplifierOptions(
+          hlo_module->config(), gpu_target_config,
+          GetAlgebraicSimplifierOptions(hlo_module->config()));
+
   TF_RETURN_IF_ERROR(RunPreSPMDPartitionerPasses(hlo_module));
   // TODO(chokobole): Uncomment this. Dependency: RunSPMDPasses
   // TF_RETURN_IF_ERROR(RunSPMDPasses(hlo_module, gpu_target_config,
   //                                  layout_insensitive_algsimp_opts));
-  TF_RETURN_IF_ERROR(RunOptimizationPasses(hlo_module, gpu_target_config));
+  TF_RETURN_IF_ERROR(RunOptimizationPasses(hlo_module, gpu_target_config,
+                                           layout_insensitive_algsimp_opts));
   se::GpuComputeCapability gpu_version =
       gpu_target_config.device_description.gpu_compute_capability();
   // clang-format off
@@ -577,6 +630,13 @@ absl::Status GpuCompiler::OptimizeHloModule(
   return absl::OkStatus();
 }  // NOLINT(readability/fn_size)
 
+AlgebraicSimplifierOptions GpuCompiler::GetAlgebraicSimplifierOptions(
+    const HloModuleConfig& config) {
+  AlgebraicSimplifierOptions opts;
+  opts.set_enable_dot_strength_reduction(true);
+  return opts;
+}
+
 // Modifies the given HLO module so that it will be accepted by IrEmitter.
 // Unlike optimization passes, the passes are necessary for correctness.
 absl::Status GpuCompiler::PrepareHloModuleForIrEmitting(
@@ -594,19 +654,33 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
     tsl::thread::ThreadPool* /*thread_pool*/) {
   const se::GpuComputeCapability gpu_version =
       gpu_target_config.device_description.gpu_compute_capability();
+  const AlgebraicSimplifierOptions simplifier_options = [&] {
+    AlgebraicSimplifierOptions opts =
+        GetAlgebraicSimplifierOptions(hlo_module->config());
+    opts.set_supports_non_canonical_dots(false);
+    opts.set_is_layout_sensitive(true);
+    opts.set_enable_unconditional_reduce_of_concat_replacement(false);
+    return opts;
+  }();
 
   {
     HloPassPipeline pipeline("hlo normalization");
 
-    // TODO(batzor): Add HloPassFix<GpuAlgebraicSimplifier>
+    // The LayoutAssignment pass may leave behind kCopy instructions which are
+    // duplicate or NOPs, so remove them with algebraic simplification and CSE.
+    pipeline.AddPass<HloPassFix<GpuAlgebraicSimplifier>>(simplifier_options,
+                                                         gpu_version);
 
     pipeline.AddPass<TransposeFolding>();
     pipeline.AddPass<ReshapeDecomposer>();
     // TODO(batzor): Add ReduceDecomposer
-    // TODO(batzor): Add LayoutNormalization
-    // TODO(batzor): Add HloPassFix<GpuAlgebraicSimplifier>
     // TODO(batzor): Add DotNormalizer
+    // TODO(batzor): Add LayoutNormalization
 
+    // Remove any redundant operations (such as bitcasts) introduced by layout
+    // normalization.
+    pipeline.AddPass<HloPassFix<GpuAlgebraicSimplifier>>(simplifier_options,
+                                                         gpu_version);
     // Layout normalization will create scatters that are not simplified and
     // also have unsorted update_window_dims.
     pipeline.AddPass<ScatterSimplifier>();
@@ -624,35 +698,40 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
     TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
   }
 
-  {
-    HloPassPipeline pipeline("post-layout_assignment");
-    // TODO(batzor): Add HloVerifier
+  HloPassPipeline pipeline("post-layout_assignment");
+  // TODO(batzor): Add HloVerifier
 
-    pipeline.AddPass<CallInliner>();
-    // Recover host-offloader invariants (such as the single-use broadcast
-    // buffer initialization before loops) by re-running the offload legalizer.
-    pipeline.AddPass<HostOffloadLegalize>(
-        static_cast<int64_t>(se::MemoryType::kHost),
-        /*after_layout=*/true);
-    // TODO(batzor): Add LayoutNormalization
+  // Inline back the calls which have better performance with cuBLAS.
+  pipeline.AddPass<CallInliner>();
+  // Recover host-offloader invariants (such as the single-use broadcast buffer
+  // initialization before loops) by re-running the offload legalizer.
+  pipeline.AddPass<HostOffloadLegalize>(
+      static_cast<int64_t>(se::MemoryType::kHost),
+      /*after_layout=*/true);
+  // TODO(batzor): Add LayoutNormalization
 
-    // Layout normalization will create scatters that are not simplified and
-    // also have unsorted update_window_dims.
-    pipeline.AddPass<ScatterSimplifier>();
+  // Layout normalization will create scatters that are not simplified and
+  // also have unsorted update_window_dims.
+  pipeline.AddPass<ScatterSimplifier>();
 
-    // TODO(batzor): Add HostOffloader
+  // TODO(batzor): Add HostOffloader
 
-    pipeline.AddPass<TupleSimplifier>();
+  // Clean up new_tuple described above.
+  pipeline.AddPass<TupleSimplifier>();
 
-    // TODO(batzor): Add HloPassFix<GpuAlgebraicSimplifier>
+  AlgebraicSimplifierOptions post_layout_opts =
+      GetAlgebraicSimplifierOptions(hlo_module->config());
+  post_layout_opts.set_supports_non_canonical_dots(false);
+  post_layout_opts.set_is_layout_sensitive(true);
+  post_layout_opts.set_enable_unconditional_reduce_of_concat_replacement(false);
+  pipeline.AddPass<HloPassFix<GpuAlgebraicSimplifier>>(post_layout_opts,
+                                                       gpu_version);
 
-    pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
+  pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
 
-    // TODO(batzor): Add HostMemoryTransferAsyncifier
+  // TODO(batzor): Add HostMemoryTransferAsyncifier
 
-    TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
-  }
-
+  TF_RETURN_IF_ERROR(pipeline.Run(hlo_module).status());
   return absl::OkStatus();
 }
 
@@ -1329,20 +1408,19 @@ absl::StatusOr<std::unique_ptr<Executable>> GpuCompiler::RunBackend(
       gpu_target_config.device_description;
 
   if (module->config().hlo_profiling_enabled() || VLOG_IS_ON(1)) {
-    // TODO(chokobole): Uncomment this. Dependency: GpuHloCostAnalysis
-    // HloCostAnalysis::Options cost_analysis_options{ShapeSizeBytesFunction()};
-    // cost_analysis_options.set_bytes_per_second(
-    //     gpu_device_info.memory_bandwidth());
-    // GpuHloCostAnalysis cost_analysis(cost_analysis_options, gpu_device_info);
-    // TF_RETURN_IF_ERROR(module->entry_computation()->Accept(&cost_analysis));
-    // if (!options.is_autotuning_compilation) {
-    //   VLOG(1) << "HLO memory read+written: "
-    //           << tsl::strings::HumanReadableNumBytes(
-    //                  cost_analysis.bytes_accessed());
-    // }
-    // if (module->config().hlo_profiling_enabled()) {
-    //   LOG(ERROR) << "--zkx_hlo_profile for GPU is unsupported.";
-    // }
+    HloCostAnalysis::Options cost_analysis_options{ShapeSizeBytesFunction()};
+    cost_analysis_options.set_bytes_per_second(
+        gpu_device_info.memory_bandwidth());
+    GpuHloCostAnalysis cost_analysis(cost_analysis_options);
+    TF_RETURN_IF_ERROR(module->entry_computation()->Accept(&cost_analysis));
+    if (!options.is_autotuning_compilation) {
+      VLOG(1) << "HLO memory read+written: "
+              << tsl::strings::HumanReadableNumBytes(
+                     cost_analysis.bytes_accessed());
+    }
+    if (module->config().hlo_profiling_enabled()) {
+      LOG(ERROR) << "--zkx_hlo_profile for GPU is unsupported.";
+    }
   }
 
   TF_ASSIGN_OR_RETURN(

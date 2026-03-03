@@ -18,6 +18,23 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "algebraic_simplifier",
+    srcs = ["algebraic_simplifier.cc"],
+    hdrs = ["algebraic_simplifier.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx/base:logging",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/transforms/simplifiers:algebraic_simplifier",
+        "//zkx/service/gpu:matmul_utils",
+        "//zkx/stream_executor:device_description",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "async_collective_annotator",
     srcs = ["async_collective_annotator.cc"],
     hdrs = ["async_collective_annotator.h"],
@@ -347,6 +364,7 @@ zkx_cc_library(
 zkx_cc_unittest(
     name = "transforms_unittests",
     srcs = [
+        "algebraic_simplifier_unittest.cc",
         "async_collective_annotator_unittest.cc",
         "copy_fusion_unittest.cc",
         "dynamic_slice_fusion_rewriter_unittest.cc",
@@ -361,6 +379,7 @@ zkx_cc_unittest(
         "variadic_op_splitter_unittest.cc",
     ],
     deps = [
+        ":algebraic_simplifier",
         ":async_collective_annotator",
         ":copy_fusion",
         ":dynamic_slice_fusion_rewriter",
@@ -389,6 +408,7 @@ zkx_cc_unittest(
         "//zkx/hlo/testlib:file_check",
         "//zkx/hlo/testlib:hlo_hardware_independent_test_base",
         "//zkx/hlo/testlib:pattern_matcher_gmock",
+        "//zkx/hlo/transforms/simplifiers:algebraic_simplifier",
         "//zkx/hlo/transforms/simplifiers:hlo_dce",
         "//zkx/hlo/utils:hlo_matchers",
         "//zkx/hlo/utils:hlo_query",

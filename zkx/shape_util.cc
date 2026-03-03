@@ -917,6 +917,49 @@ int64_t ShapeUtil::ByteSizeOfElements(const Shape& shape) {
 }
 
 // static
+absl::StatusOr<int64_t> ShapeUtil::SerializedSize(const Shape& shape) {
+  return SerializedSizeWithProto(shape, shape.ToProto());
+}
+
+// static
+absl::StatusOr<int64_t> ShapeUtil::SerializedSizeWithProto(
+    const Shape& shape, const ShapeProto& proto) {
+  // The size computed here must be kept in sync with the serialized format as
+  // described in the comments for LiteralBase::SerializeWithShapeProto in
+  // literal.h.
+  TF_RETURN_IF_ERROR(ValidateShapeWithOptionalLayout(shape));
+  int64_t size = sizeof(int64_t) + proto.ByteSizeLong();
+
+  TF_RETURN_IF_ERROR(ForEachSubshapeWithStatus(
+      shape, [&](const Shape& subshape, const ShapeIndex&) -> absl::Status {
+        if (subshape.IsTuple()) {
+          return absl::OkStatus();
+        }
+        if (!subshape.IsArray()) {
+          return ShapeError(shape, "Shape cannot be serialized.");
+        }
+        if (subshape.is_dynamic()) {
+          size += sizeof(DynamicSizeType) * subshape.rank();
+        }
+        if (subshape.element_type() == PRED) {
+          // PRED is packed 8 elements per byte.
+          size += tsl::MathUtil::CeilOfRatio<int64_t>(ElementsIn(subshape), 8);
+        } else if (primitive_util::IsSubByteNonPredType(
+                       subshape.element_type())) {
+          // 4-bit types are packed 2 elements per byte.
+          size += tsl::MathUtil::CeilOfRatio<int64_t>(
+              ElementsIn(subshape),
+              8 / primitive_util::BitWidth(subshape.element_type()));
+        } else {
+          size += ByteSizeOfElements(subshape);
+        }
+        return absl::OkStatus();
+      }));
+
+  return size;
+}
+
+// static
 absl::Status ShapeUtil::ValidateShapeWithOptionalLayout(const Shape& shape) {
   TF_RETURN_IF_ERROR(ValidateNonLayoutProperties(shape));
 
@@ -1200,6 +1243,35 @@ ShapeUtil::DimensionsUnmodifiedByReshape(const Shape& input_shape,
   common_factors.pop_back();
   return std::vector<std::pair<int64_t, int64_t>>(common_factors.begin(),
                                                   common_factors.end());
+}
+
+// static
+std::optional<std::vector<int64_t>>
+ShapeUtil::ReshapeLeavesDimensionsUnmodified(
+    const Shape& from_shape, const Shape& to_shape,
+    absl::Span<const int64_t> input_dim_indices) {
+  if (!std::is_sorted(input_dim_indices.begin(), input_dim_indices.end())) {
+    return std::nullopt;
+  }
+
+  std::vector<int64_t> output_dim_indices;
+  std::vector<std::pair<int64_t, int64_t>> unmodified_dims =
+      ShapeUtil::DimensionsUnmodifiedByReshape(from_shape, to_shape);
+  size_t i = 0;  // index to unmodified_dims
+  for (int64_t input_dim_index : input_dim_indices) {
+    // Search unmodified_dims for input_dim_index. We can search from the last
+    // matching position because input_dim_indices is guaranteed to be sorted.
+    while (i < unmodified_dims.size() &&
+           unmodified_dims[i].first < input_dim_index) {
+      ++i;
+    }
+    if (i >= unmodified_dims.size() ||
+        unmodified_dims[i].first != input_dim_index) {
+      return std::nullopt;
+    }
+    output_dim_indices.push_back(unmodified_dims[i].second);
+  }
+  return output_dim_indices;
 }
 
 // static

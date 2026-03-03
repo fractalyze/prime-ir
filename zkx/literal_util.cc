@@ -69,6 +69,36 @@ struct IsValidScalarType {
       std::is_integral_v<T> || zk_dtypes::IsField<T> || zk_dtypes::IsEcPoint<T>;
 };
 
+template <typename NativeT>
+NativeT GetMaxImpl() {
+  if constexpr (std::numeric_limits<NativeT>::is_integer) {
+    return std::numeric_limits<NativeT>::max();
+  } else if constexpr (zk_dtypes::IsComparable<NativeT>) {
+    return NativeT::Max();
+  }
+  LOG(FATAL) << "No max value for given type.";
+}
+
+template <typename NativeT>
+NativeT GetMinImpl() {
+  if constexpr (std::numeric_limits<NativeT>::is_integer) {
+    return std::numeric_limits<NativeT>::min();
+  } else if constexpr (zk_dtypes::IsComparable<NativeT>) {
+    return NativeT::Min();
+  }
+  LOG(FATAL) << "No min value for given type.";
+}
+
+template <PrimitiveType kType>
+struct MaxProvider {
+  NativeT<kType> operator()() const { return GetMaxImpl<NativeT<kType>>(); }
+};
+
+template <PrimitiveType kType>
+struct MinProvider {
+  NativeT<kType> operator()() const { return GetMinImpl<NativeT<kType>>(); }
+};
+
 template <PrimitiveType kType>
 struct FirstElementProvider {
   NativeT<kType> operator()(const LiteralBase& literal) const {
@@ -370,6 +400,16 @@ Literal LiteralUtil::Zero(PrimitiveType primitive_type) {
 // static
 Literal LiteralUtil::One(PrimitiveType primitive_type) {
   return CreateScalar<OneProvider>(primitive_type);
+}
+
+// static
+Literal LiteralUtil::MinValue(PrimitiveType primitive_type) {
+  return CreateScalar<MinProvider>(primitive_type);
+}
+
+// static
+Literal LiteralUtil::MaxValue(PrimitiveType primitive_type) {
+  return CreateScalar<MaxProvider>(primitive_type);
 }
 
 absl::StatusOr<Literal> MakeFakeLiteral(

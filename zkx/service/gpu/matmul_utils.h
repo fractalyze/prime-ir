@@ -23,9 +23,15 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 
+#include "zkx/hlo/ir/hlo_instruction.h"
 #include "zkx/shape.h"
 
 namespace zkx::gpu {
+
+// Returns true if the sum of the sizes of the unbatched operand matrices
+// for the dot is smaller than the given threshold.
+absl::StatusOr<bool> IsMatrixMultiplicationTooSmallForRewriting(
+    const HloInstruction& dot, int64_t threshold);
 
 // Returns a (batch, rows, columns) shape derived from the input shape by
 // combining batch, row and column dimensions into single dimensions.

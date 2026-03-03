@@ -20,7 +20,6 @@ limitations under the License.
 #include <cstdint>
 #include <iterator>
 #include <numeric>
-#include <vector>
 
 #include "absl/algorithm/container.h"
 #include "absl/log/check.h"
@@ -332,6 +331,24 @@ HloInstruction* MakeIotaHlo(HloComputation* computation, const Shape& shape,
                             int64_t iota_dimension) {
   return computation->AddInstruction(
       HloInstruction::CreateIota(shape, iota_dimension));
+}
+
+absl::StatusOr<HloInstruction*> MakeDotHlo(
+    HloInstruction* lhs, HloInstruction* rhs,
+    const DotDimensionNumbers& dim_numbers,
+    std::optional<PrimitiveType> preferred_element_type,
+    std::vector<SparsityDescriptor> sparsity,
+    absl::Span<HloInstruction* const> sparse_meta, const OpMetadata* metadata) {
+  HloComputation* computation = lhs->parent();
+  CHECK_EQ(computation, rhs->parent());
+  TF_ASSIGN_OR_RETURN(Shape dot_shape,
+                      ShapeInference::InferDotOpShape(
+                          lhs->shape(), rhs->shape(), dim_numbers,
+                          preferred_element_type, absl::MakeSpan(sparsity)));
+  return computation->AddInstruction(
+      HloInstruction::CreateDot(dot_shape, lhs, rhs, dim_numbers, sparsity,
+                                sparse_meta),
+      metadata);
 }
 
 absl::StatusOr<HloInstruction*> MakeMapHlo(
