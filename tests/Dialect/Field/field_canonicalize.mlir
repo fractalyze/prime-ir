@@ -969,6 +969,41 @@ func.func @test_tensor_splat_fold() -> tensor<4x!PF17> {
   return %1 : tensor<4x!PF17>
 }
 
+// CHECK-LABEL: @test_reshape_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_reshape_splat_constant_fold() -> tensor<2x2x!PF17> {
+  %0 = field.constant dense<5> : tensor<4x!PF17>
+  %shape = arith.constant dense<[2, 2]> : tensor<2xi32>
+  %1 = tensor.reshape %0(%shape) : (tensor<4x!PF17>, tensor<2xi32>) -> tensor<2x2x!PF17>
+  // CHECK: %[[C:.*]] = field.constant dense<5> : [[T]]
+  // CHECK-NOT: tensor.reshape
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x2x!PF17>
+}
+
+// CHECK-LABEL: @test_extract_slice_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_extract_slice_splat_constant_fold() -> tensor<2x!PF17> {
+  %0 = field.constant dense<7> : tensor<4x!PF17>
+  %1 = tensor.extract_slice %0[1] [2] [1] : tensor<4x!PF17> to tensor<2x!PF17>
+  // CHECK: %[[C:.*]] = field.constant dense<7> : [[T]]
+  // CHECK-NOT: tensor.extract_slice
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!PF17>
+}
+
+// CHECK-LABEL: @test_gather_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_gather_splat_constant_fold() -> tensor<2x1x!PF17> {
+  %0 = field.constant dense<3> : tensor<4x!PF17>
+  %indices = arith.constant dense<[[0], [2]]> : tensor<2x1xindex>
+  %1 = tensor.gather %0[%indices] gather_dims([0]) : (tensor<4x!PF17>, tensor<2x1xindex>) -> tensor<2x1x!PF17>
+  // CHECK: %[[C:.*]] = field.constant dense<3> : [[T]]
+  // CHECK-NOT: tensor.gather
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x1x!PF17>
+}
+
 //===----------------------------------------------------------------------===//
 // Vector operations
 //===----------------------------------------------------------------------===//
