@@ -95,6 +95,13 @@ TYPED_TEST(FieldR2TensorBinaryTest, Add) {
   this->RunAndVerify();
 }
 
+TYPED_TEST_SUITE(FieldR2TransposeTest, FieldTypes);
+
+TYPED_TEST(FieldR2TransposeTest, Transpose) {
+  this->SetUpTranspose();
+  this->RunAndVerify();
+}
+
 // TODO(chokobole): Add FFT, IFFT test
 // TODO(chokobole): Add CSRMatrixVectorMultiplication test
 

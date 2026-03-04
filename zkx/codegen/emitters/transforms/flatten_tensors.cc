@@ -46,6 +46,8 @@ limitations under the License.
 #include "mlir/Support/WalkResult.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
+#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "zkx/backends/gpu/codegen/emitters/ir/zkx_gpu_ops.h"
 #include "zkx/hlo/analysis/indexing_analysis.h"
 #include "zkx/layout_util.h"
@@ -270,6 +272,55 @@ struct RewriteConstant : OpRewritePattern<mlir::arith::ConstantOp> {
     auto new_type = GetFlattenedType(op.getType());
     Value new_constant = rewriter.create<mlir::arith::ConstantOp>(
         op.getLoc(), dense_attr.reshape(new_type));
+    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, op.getType(),
+                                                            new_constant);
+    return mlir::success();
+  }
+};
+
+using ECConstantOp = mlir::prime_ir::elliptic_curve::ConstantOp;
+using FieldConstantOp = mlir::prime_ir::field::ConstantOp;
+
+struct RewriteFieldConstant : OpRewritePattern<FieldConstantOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(FieldConstantOp op,
+                                PatternRewriter& rewriter) const override {
+    if (IsScalarOrFlat(op.getType())) {
+      return rewriter.notifyMatchFailure(
+          op, "the tensor or vector is already flat");
+    }
+    auto dense_attr = mlir::dyn_cast<mlir::DenseElementsAttr>(op.getValue());
+    auto new_type = GetFlattenedType(op.getType());
+    // The dense attr stores integer storage elements, so reshape using the
+    // attr's own element type to satisfy the element type invariant.
+    auto reshape_type =
+        VectorType::get(mlir::cast<VectorType>(new_type).getShape(),
+                        dense_attr.getElementType());
+    Value new_constant =
+        rewriter.create<FieldConstantOp>(op.getLoc(), new_type,
+                                         mlir::cast<mlir::DenseIntElementsAttr>(
+                                             dense_attr.reshape(reshape_type)));
+    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, op.getType(),
+                                                            new_constant);
+    return mlir::success();
+  }
+};
+
+struct RewriteECConstant : OpRewritePattern<ECConstantOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ECConstantOp op,
+                                PatternRewriter& rewriter) const override {
+    if (IsScalarOrFlat(op.getType())) {
+      return rewriter.notifyMatchFailure(
+          op, "the tensor or vector is already flat");
+    }
+    auto new_type = GetFlattenedType(op.getType());
+    // EC constants store an ArrayAttr of point coordinates which is
+    // shape-independent, so just create a new constant with the flat type.
+    Value new_constant = rewriter.create<ECConstantOp>(op.getLoc(), new_type,
+                                                       op.getCoordsAttr());
     rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(op, op.getType(),
                                                             new_constant);
     return mlir::success();
@@ -692,6 +743,8 @@ class FlattenTensorsPass
         RewriteAllocateShared,
         RewriteAtomicRMW,
         RewriteConstant,
+        RewriteECConstant,
+        RewriteFieldConstant,
         RewriteFor,
         RewriteFunctionSignatures,
         RewriteIf,

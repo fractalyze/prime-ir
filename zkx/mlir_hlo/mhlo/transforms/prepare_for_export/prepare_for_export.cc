@@ -66,7 +66,7 @@ void prepareConstantOp(Operation *op, SplatElementsAttr attr) {
   ImplicitLocOpBuilder b(op->getLoc(), op);
   auto tensorType = RankedTensorType::get({}, returnType.getElementType());
   auto reshapedAttr =
-      attr.reshape(RankedTensorType::get({}, attr.getElementType()));
+      attr.resizeSplat(RankedTensorType::get({}, attr.getElementType()));
   ConstantOp cst = b.create<ConstantOp>(tensorType, reshapedAttr);
   auto broadcast =
       b.create<BroadcastInDimOp>(returnType, cst, b.getI64TensorAttr({}));

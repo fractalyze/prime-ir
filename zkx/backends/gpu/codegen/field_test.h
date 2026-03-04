@@ -474,6 +474,63 @@ class FieldR2TensorBinaryTest : public CudaKernelEmitterTest {
   std::vector<std::vector<F>> expected_;
 };
 
+template <typename F>
+class FieldR2TransposeTest : public CudaKernelEmitterTest {
+ public:
+  constexpr static int64_t M = 32;
+  constexpr static int64_t N = 64;
+
+  void SetUp() override {
+    CudaKernelEmitterTest::SetUp();
+    x_typename_ = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<F>());
+    x_ = base::CreateVector(M, []() {
+      return base::CreateVector(N, []() { return F::Random(); });
+    });
+    Array2D<F> x_array(M, N);
+    for (int64_t i = 0; i < M; ++i) {
+      for (int64_t j = 0; j < N; ++j) {
+        x_array({i, j}) = x_[i][j];
+      }
+    }
+    literals_.push_back(LiteralUtil::CreateR2FromArray2D(x_array));
+  }
+
+ protected:
+  void Verify(const Literal& ret_literal) const override {
+    for (int64_t i = 0; i < N; ++i) {
+      for (int64_t j = 0; j < M; ++j) {
+        EXPECT_EQ(ret_literal.Get<F>({i, j}), expected_[i][j]);
+      }
+    }
+  }
+
+  void SetUpTranspose() {
+    hlo_text_ = absl::Substitute(R"(
+      %f {
+        %x = $0[$1, $2]{1, 0} parameter(0)
+
+        ROOT %transpose = $0[$2, $1]{1, 0} transpose(%x), dimensions={1, 0}
+      }
+
+      ENTRY %main {
+        %x = $0[$1, $2]{1, 0} parameter(0)
+
+        ROOT %ret = $0[$2, $1]{1, 0} fusion(%x), kind=kInput, calls=%f
+      }
+    )",
+                                 x_typename_, M, N);
+
+    expected_ = base::CreateVector(N, [this](size_t i) {
+      return base::CreateVector(M, [this, i](size_t j) { return x_[j][i]; });
+    });
+  }
+
+ private:
+  std::vector<std::vector<F>> x_;
+  std::vector<std::vector<F>> expected_;
+};
+
 }  // namespace zkx::gpu
 
 #endif  // ZKX_BACKENDS_GPU_CODEGEN_FIELD_TEST_H_
