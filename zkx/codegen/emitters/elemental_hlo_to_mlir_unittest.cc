@@ -431,6 +431,66 @@ TEST_F(ElementalHloToMlirTest, ConcatenateUnsigned) {
   )"));
 }
 
+TEST_F(ElementalHloToMlirTest, BitReverse) {
+  TF_EXPECT_OK(Run(R"(
+    ENTRY main {
+      p0 = s32[8,16] parameter(0)
+      ROOT br = s32[8,16] bit-reverse(p0), dimensions={1}
+    })",
+                   R"(
+    // CHECK:      @main_br(
+    // CHECK-SAME:     %[[ARG0:.*]]: tensor<8x16xi32>,
+    // CHECK-SAME:     %[[X:.*]]: index {{{.*}}}, %[[Y:.*]]: index {{{.*}}}
+    // CHECK:        %[[TRUNC:.*]] = arith.index_castui %[[Y]] : index to i4
+    // CHECK:        %[[REV:.*]] = llvm.intr.bitreverse(%[[TRUNC]]) : (i4) -> i4
+    // CHECK:        %[[EXT:.*]] = arith.index_castui %[[REV]] : i4 to index
+    // CHECK:        %[[RET:.*]] = tensor.extract %[[ARG0]][%[[X]], %[[EXT]]]
+    // CHECK:        return %[[RET]]
+  )"));
+}
+
+TEST_F(ElementalHloToMlirTest, BitReverseTwoDims) {
+  TF_EXPECT_OK(Run(R"(
+    ENTRY main {
+      p0 = s32[8,16] parameter(0)
+      ROOT br = s32[8,16] bit-reverse(p0), dimensions={0,1}
+    })",
+                   R"(
+    // CHECK:      @main_br(
+    // CHECK-SAME:     %[[ARG0:.*]]: tensor<8x16xi32>,
+    // CHECK-SAME:     %[[X:.*]]: index {{{.*}}}, %[[Y:.*]]: index {{{.*}}}
+    // CHECK-DAG:    %[[TRUNC0:.*]] = arith.index_castui %[[X]] : index to i3
+    // CHECK-DAG:    %[[REV0:.*]] = llvm.intr.bitreverse(%[[TRUNC0]]) : (i3) -> i3
+    // CHECK-DAG:    %[[EXT0:.*]] = arith.index_castui %[[REV0]] : i3 to index
+    // CHECK-DAG:    %[[TRUNC1:.*]] = arith.index_castui %[[Y]] : index to i4
+    // CHECK-DAG:    %[[REV1:.*]] = llvm.intr.bitreverse(%[[TRUNC1]]) : (i4) -> i4
+    // CHECK-DAG:    %[[EXT1:.*]] = arith.index_castui %[[REV1]] : i4 to index
+    // CHECK:        %[[RET:.*]] = tensor.extract %[[ARG0]][%[[EXT0]], %[[EXT1]]]
+    // CHECK:        return %[[RET]]
+  )"));
+}
+
+TEST_F(ElementalHloToMlirTest, BitReverseDimSizeOne) {
+  TF_EXPECT_OK(Run(R"(
+    ENTRY main {
+      p0 = s32[1,16] parameter(0)
+      ROOT br = s32[1,16] bit-reverse(p0), dimensions={0,1}
+    })",
+                   R"(
+    // CHECK:      @main_br(
+    // CHECK-SAME:     %[[ARG0:.*]]: tensor<1x16xi32>,
+    // CHECK-SAME:     %[[X:.*]]: index {{{.*}}}, %[[Y:.*]]: index {{{.*}}}
+    // Dim 0 (size 1): no bitreverse emitted, index passed through.
+    // CHECK-NOT:    arith.index_castui %[[X]]
+    // Dim 1 (size 16): bitreverse on i4.
+    // CHECK:        %[[TRUNC:.*]] = arith.index_castui %[[Y]] : index to i4
+    // CHECK:        %[[REV:.*]] = llvm.intr.bitreverse(%[[TRUNC]]) : (i4) -> i4
+    // CHECK:        %[[EXT:.*]] = arith.index_castui %[[REV]] : i4 to index
+    // CHECK:        %[[RET:.*]] = tensor.extract %[[ARG0]][%[[X]], %[[EXT]]]
+    // CHECK:        return %[[RET]]
+  )"));
+}
+
 TEST_F(ElementalHloToMlirTest, Gather) {
   TF_EXPECT_OK(Run(R"(
     ENTRY main {

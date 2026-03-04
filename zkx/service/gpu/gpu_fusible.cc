@@ -360,6 +360,7 @@ bool IsUniversallyLoopFusible(const HloInstruction& instr) {
       return instr.fusion_kind() == HloInstruction::FusionKind::kLoop;
 
     case HloOpcode::kBitcast:
+    case HloOpcode::kBitReverse:
     case HloOpcode::kBroadcast:
     case HloOpcode::kConcatenate:
     case HloOpcode::kDynamicSlice:

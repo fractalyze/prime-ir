@@ -76,6 +76,7 @@ bool IsFusible(const HloInstruction& instr) {
     case HloOpcode::kConstant:
     case HloOpcode::kReduce:
     case HloOpcode::kBitcast:
+    case HloOpcode::kBitReverse:
     case HloOpcode::kBroadcast:
     case HloOpcode::kConcatenate:
     case HloOpcode::kDynamicSlice:

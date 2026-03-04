@@ -42,6 +42,7 @@ class OpcodeCollector : public ConstDfsHloVisitorWithDefault {
       case HloOpcode::kNegate:
       case HloOpcode::kSign:
       case HloOpcode::kNot:
+      case HloOpcode::kBitReverse:
       case HloOpcode::kClz:
       case HloOpcode::kPopulationCount:
       case HloOpcode::kConvert:

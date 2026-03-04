@@ -29,11 +29,13 @@ limitations under the License.
 #include "absl/functional/bind_front.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/numeric/bits.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/STLExtras.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
@@ -418,6 +420,30 @@ absl::StatusOr<SmallVector<Value, 1>> EmitGather(
   return operand_provider(instr, 0, operand_indices);
 }
 
+absl::StatusOr<SmallVector<Value, 1>> EmitBitReverse(
+    const HloInstruction* instr, ValueRange indices,
+    const OperandProvider& operand_provider, ImplicitLocOpBuilder& b) {
+  SmallVector<Value> input_indices(indices.begin(), indices.end());
+
+  for (int64_t dim : instr->dimensions()) {
+    int64_t dim_size = instr->shape().dimensions(dim);
+    unsigned k = absl::bit_width(static_cast<uint64_t>(dim_size)) - 1;
+    if (k == 0) {
+      // dim_size == 1: bit-reverse is identity, skip.
+      continue;
+    }
+
+    // index → iK → llvm.bitreverse → index
+    auto int_type = b.getIntegerType(k);
+    Value idx = b.create<arith::IndexCastUIOp>(int_type, indices[dim]);
+    Value reversed = b.create<mlir::LLVM::BitReverseOp>(idx);
+    input_indices[dim] =
+        b.create<arith::IndexCastUIOp>(b.getIndexType(), reversed);
+  }
+
+  return operand_provider(instr, 0, input_indices);
+}
+
 // For a given instruction, deduces the indices of each parameter that are
 // needed for a given output index.
 SmallVector<SmallVector<Value, 3>, 2> GetInputIndices(
@@ -787,6 +813,8 @@ absl::StatusOr<SmallVector<Value, 1>> HloToMlir(
       return EmitDynamicSlice(instr, indices, operand_provider, builder);
     case HloOpcode::kDynamicUpdateSlice:
       return EmitDynamicUpdateSlice(instr, indices, operand_provider, builder);
+    case HloOpcode::kBitReverse:
+      return EmitBitReverse(instr, indices, operand_provider, builder);
     case HloOpcode::kGather:
       return EmitGather(instr, indices, operand_provider, builder);
     case HloOpcode::kIota:
