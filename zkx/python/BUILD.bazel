@@ -18,6 +18,21 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "aggregate_profile",
+    srcs = ["aggregate_profile.cc"],
+    hdrs = ["aggregate_profile.h"],
+    compatible_with = [],
+    copts = ["-fexceptions"],
+    features = ["-use_header_modules"],
+    deps = [
+        ":xplane_to_profile_instructions",
+        "//xla/tsl/profiler/protobuf:profiled_instructions_cc_proto",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+cc_library(
     name = "nb_absl_flat_hash_map",
     hdrs = ["nb_absl_flat_hash_map.h"],
     compatible_with = [],
@@ -91,6 +106,18 @@ cc_library(
 )
 
 cc_library(
+    name = "profiler_utils",
+    srcs = ["profiler_utils.cc"],
+    hdrs = ["profiler_utils.h"],
+    compatible_with = [],
+    copts = ["-fexceptions"],
+    features = ["-use_header_modules"],
+    deps = [
+        "@com_google_absl//absl/log",
+    ],
+)
+
+cc_library(
     name = "safe_static_init",
     hdrs = ["safe_static_init.h"],
     deps = [
@@ -135,4 +162,35 @@ cc_library(
         "@rules_python//python/cc:current_py_cc_headers",
         "@zk_dtypes//zk_dtypes:all_types",
     ],
+)
+
+cc_library(
+    name = "xplane_to_profile_instructions",
+    srcs = ["xplane_to_profile_instructions.cc"],
+    hdrs = ["xplane_to_profile_instructions.h"],
+    compatible_with = [],
+    copts = ["-fexceptions"],
+    features = ["-use_header_modules"],
+    deps = [
+        "//xla/tsl/platform:env",
+        "//xla/tsl/profiler/convert:zkx_op_utils",
+        "//xla/tsl/profiler/protobuf:profiled_instructions_cc_proto",
+        "//xla/tsl/profiler/protobuf:xplane_cc_proto",
+        "//xla/tsl/profiler/utils:file_system_utils",
+        "//xla/tsl/profiler/utils:tf_xplane_visitor",
+        "//xla/tsl/profiler/utils:xplane_schema",
+        "//xla/tsl/profiler/utils:xplane_utils",
+        "//xla/tsl/profiler/utils:xplane_visitor",
+        "//zkx:zkx_cc_proto",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service:hlo_cc_proto",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+exports_files(
+    ["profiler.cc"],
+    visibility = ["//visibility:public"],
 )

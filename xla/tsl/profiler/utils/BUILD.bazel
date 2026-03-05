@@ -198,6 +198,15 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "file_system_utils",
+    hdrs = ["file_system_utils.h"],
+    deps = [
+        "//xla/tsl/platform",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
     name = "xplane_utils",
     srcs = ["xplane_utils.cc"],
     hdrs = ["xplane_utils.h"],

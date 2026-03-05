@@ -36,7 +36,7 @@ namespace internal {
 #ifdef _WIN32
 #define DECL_DLL_EXPORT __declspec(dllexport)
 #else
-#define DECL_DLL_EXPORT
+#define DECL_DLL_EXPORT __attribute__((visibility("default")))
 #endif
 // DLL imported variables cannot be initialized on Windows. This file is
 // included only on DLL exports.
