@@ -77,9 +77,11 @@ class ExtensionFieldCodeGen
       N, BaseFieldT, ExtensionFieldCodeGen<N, BaseFieldT>>::Type;
 
 public:
-  // Bring base class operator* into scope. Without this, the derived class's
-  // operator*(const BaseFieldT&) hides all operator* overloads from Base.
+  // Bring base class operators into scope. Without these, the derived class's
+  // overloads hide the base class versions.
   using Base::operator*;
+  using Base::operator+;
+  using Base::operator-;
   // TODO(junbeomlee): Remove these using declarations after refactoring
   // zk_dtypes to not define these methods in QuarticExtensionFieldOperation.
   using VandermondeMatrix<
@@ -102,6 +104,20 @@ public:
     for (size_t i = 0; i < N; ++i) {
       coeffs[i] = coeffs[i] * scalar;
     }
+    return FromCoeffs(coeffs);
+  }
+
+  // BaseField addition: only the constant coefficient is affected.
+  ExtensionFieldCodeGen operator+(const BaseFieldT &scalar) const {
+    std::array<BaseFieldT, N> coeffs = ToCoeffs();
+    coeffs[0] = coeffs[0] + scalar;
+    return FromCoeffs(coeffs);
+  }
+
+  // BaseField subtraction: only the constant coefficient is affected.
+  ExtensionFieldCodeGen operator-(const BaseFieldT &scalar) const {
+    std::array<BaseFieldT, N> coeffs = ToCoeffs();
+    coeffs[0] = coeffs[0] - scalar;
     return FromCoeffs(coeffs);
   }
 
