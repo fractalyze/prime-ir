@@ -623,19 +623,6 @@ void AddLoopTransformationPasses(mlir::OpPassManager& pm,
 void AddLoweringPasses(mlir::OpPassManager& pm,
                        const se::DeviceDescription& device) {
   pm.addNestedPass<FuncOp>(emitters::CreateConvertPureCallOpsPass());
-
-  pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToField());
-  pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(mlir::createCSEPass());
-  pm.addPass(mlir::prime_ir::field::createFieldToModArith());
-  pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(mlir::createCSEPass());
-  pm.addPass(mlir::prime_ir::mod_arith::createModArithToArith());
-  pm.addPass(mlir::createCanonicalizerPass());
-  pm.addPass(mlir::createCSEPass());
-  pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToLLVM());
-  pm.addPass(mlir::prime_ir::field::createExtFieldToLLVM());
-
   pm.addPass(emitters::CreateLowerTensorsPass(device));
   pm.addPass(emitters::CreateMergePointersToSameSlicePass());
 
@@ -655,6 +642,19 @@ void AddLoweringPasses(mlir::OpPassManager& pm,
   pm.addPass(mlir::createCSEPass());
 
   pm.addPass(mlir::createLowerAffinePass());
+
+  pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToField());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::prime_ir::field::createFieldToModArith());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::prime_ir::mod_arith::createModArithToArith());
+  pm.addPass(mlir::createCanonicalizerPass());
+  pm.addPass(mlir::createCSEPass());
+  pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToLLVM());
+  pm.addPass(mlir::prime_ir::field::createExtFieldToLLVM());
+
   pm.addPass(mlir::createSCFToControlFlowPass());
   pm.addPass(emitters::CreateLowerToLLVMPass(device));
   pm.addPass(mlir::createReconcileUnrealizedCastsPass());

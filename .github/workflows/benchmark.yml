@@ -178,3 +178,51 @@ jobs:
           name: benchmark-zkx-ntt-gpu
           path: benchmark_results.json
           retention-days: 90
+
+  benchmark-sumcheck-gpu:
+    runs-on: [self-hosted, zkx]
+    needs: benchmark-ntt-gpu
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        log_size: [20, 22, 24, 26]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          clean: false
+
+      - name: Build icicle_sumcheck_benchmark (GPU)
+        run: |
+          bazel --bazelrc=.bazelrc.ci build \
+            --config=ci \
+            --config=cuda_clang \
+            -c opt \
+            //zkx/tools/stablehlo_runner:icicle_sumcheck_benchmark
+
+      - uses: fractalyze/benchmark-action@main
+        with:
+          benchmark_cmd: |
+            ./bazel-bin/zkx/tools/stablehlo_runner/icicle_sumcheck_benchmark \
+              zkx/tools/stablehlo_runner/icicle_sumcheck_fs_${{ matrix.log_size }}.stablehlo.mlir \
+              --platform=gpu \
+              --benchmark_repetitions=10 \
+              --benchmark_min_time=0.5s \
+              --zkbench_out=benchmark_results.json
+          implementation: zkx-icicle-sumcheck-l${{ matrix.log_size }}-gpu
+          tags: "gpu"
+          regression_threshold: "0.10"
+          rolling_window: "5"
+          results_dir: benchmark_data/gpu
+          baseline_path: benchmark_data/gpu/baseline.json
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
+          slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
+          store_results: ${{ github.ref == 'refs/heads/main' }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-zkx-icicle-sumcheck-l${{ matrix.log_size }}-gpu
+          path: benchmark_results.json
+          retention-days: 90

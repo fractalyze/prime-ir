@@ -37,7 +37,19 @@ mlir::Value GetConstantOrSplat(mlir::ImplicitLocOpBuilder& b, mlir::Type t,
   return b.create<mlir::arith::ConstantOp>(t, mlir::cast<mlir::TypedAttr>(v));
 }
 
+// Registers PrimeIR type conversions so that an LLVMTypeConverter can map
+// field / EC types to their LLVM representations. Used by LowerTensors,
+// LowerToLLVM, and any other pass that needs to resolve PrimeIR types to
+// LLVM types (e.g., for GEP element-type or store-value conversion).
 void PopulateTypeConverterWithPrimeIR(mlir::LLVMTypeConverter& converter) {
+  converter.addConversion(
+      [](mlir::prime_ir::field::PrimeFieldType type) -> mlir::Type {
+        return type.getStorageType();
+      });
+  converter.addConversion(
+      [](mlir::prime_ir::field::BinaryFieldType type) -> mlir::Type {
+        return type.getStorageType();
+      });
   mlir::prime_ir::field::populateExtFieldToLLVMTypeConversion(converter);
   mlir::prime_ir::elliptic_curve::populateEllipticCurveToLLVMTypeConversion(
       converter);

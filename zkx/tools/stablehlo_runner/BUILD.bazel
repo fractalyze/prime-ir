@@ -14,7 +14,7 @@
 # ==============================================================================*/
 
 load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda_is_configured")
-load("//bazel:zkx_cc.bzl", "zkx_cc_binary", "zkx_cc_library")
+load("//bazel:zkx_cc.bzl", "zkx_cc_binary", "zkx_cc_library", "zkx_cc_unittest")
 load("//zkx/tests:build_defs.bzl", "zkx_test")
 
 package(default_visibility = ["//visibility:public"])
@@ -148,6 +148,72 @@ zkx_test(
         "@com_google_absl//absl/status:status_matchers",
         "@com_google_absl//absl/strings",
     ] + if_cuda_is_configured([
+        "//zkx/stream_executor/cuda:cuda_platform",
+    ]),
+)
+
+zkx_cc_library(
+    name = "sumcheck_testlib",
+    hdrs = ["sumcheck_testlib.h"],
+    deps = [
+        "//zkx:literal",
+        "//zkx:primitive_util",
+        "@eigen_archive//:eigen3",
+        "@zk_dtypes//zk_dtypes:babybear",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "stablehlo_runner_unittests",
+    srcs = ["icicle_sumcheck_unittest.cc"],
+    data = ["icicle_sumcheck_fs_20.stablehlo.mlir"],
+    tags = ["gpu"],
+    deps = [
+        ":stablehlo_utils",
+        ":sumcheck_testlib",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:path",
+        "//xla/tsl/platform:status",
+        "//xla/tsl/platform:statusor",
+        "//xla/tsl/platform:test_util",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:primitive_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service:hlo_runner",
+        "//zkx/service:platform_util",
+        "@llvm-project//mlir:IR",
+    ] + RUNNER_RUNTIME_DEPS + if_cuda_is_configured([
+        "//zkx/stream_executor/cuda:cuda_platform",
+    ]),
+)
+
+zkx_cc_binary(
+    name = "icicle_sumcheck_benchmark",
+    srcs = ["icicle_sumcheck_benchmark.cc"],
+    deps = [
+        ":stablehlo_utils",
+        ":sumcheck_testlib",
+        "//xla/tsl/platform:env",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:primitive_util",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service:executable",
+        "//zkx/service:hlo_runner",
+        "//zkx/service:platform_util",
+        "//zkx/service:shaped_buffer",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@com_google_benchmark//:benchmark",
+        "@zkbench_cpp//zkbench:benchmark_context",
+        "@zkbench_cpp//zkbench:benchmark_main",
+        "@zkbench_cpp//zkbench:hash",
+    ] + RUNNER_RUNTIME_DEPS + if_cuda_is_configured([
         "//zkx/stream_executor/cuda:cuda_platform",
     ]),
 )
