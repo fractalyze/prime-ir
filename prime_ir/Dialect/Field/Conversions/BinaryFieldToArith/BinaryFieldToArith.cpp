@@ -379,22 +379,18 @@ struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
         ConvertBinaryFieldInverse,
         ConvertBinaryFieldCmp,
         ConvertBinaryFieldUnrealizedCast,
-        ConvertBinaryFieldBitcast,
-        ConvertAny<tensor::ExtractOp>,
-        ConvertAny<tensor::FromElementsOp>,
-        ConvertAny<tensor::InsertOp>
+        ConvertBinaryFieldBitcast
         // clang-format on
         >(typeConverter, context);
 
+    // Catch-all: converts any op whose operands/results carry binary field
+    // types.
+    patterns.add<ConvertAny<void>>(typeConverter, context);
+
     addStructuralConversionPatterns(typeConverter, patterns, target);
 
-    target.addDynamicallyLegalOp<
-        // clang-format off
-        tensor::ExtractOp,
-        tensor::FromElementsOp,
-        tensor::InsertOp
-        // clang-format on
-        >([&](auto op) { return typeConverter.isLegal(op); });
+    target.markUnknownOpDynamicallyLegal(
+        [&](Operation *op) { return typeConverter.isLegal(op); });
 
     if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
       signalPassFailure();
