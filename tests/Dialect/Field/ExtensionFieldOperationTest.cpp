@@ -25,6 +25,15 @@ limitations under the License.
 
 namespace mlir::prime_ir::field {
 
+// Helper to convert a zk_dtypes base field element to the corresponding
+// prime-ir BaseFieldT type for a given ExtensionFieldOperation.
+template <typename EfOp, typename ZkBaseF>
+auto baseFieldFromZkDtype(MLIRContext *context, const ZkBaseF &b) {
+  using BaseFieldT =
+      typename zk_dtypes::ExtensionFieldOperationTraits<EfOp>::BaseField;
+  return BaseFieldT::fromZkDtype(context, b);
+}
+
 template <typename ExtF>
 class ExtensionFieldOperationTest : public testing::Test {
 public:
@@ -178,6 +187,73 @@ TYPED_TEST(ExtensionFieldOperationTest, Inverse) {
       [](const auto &a) { return a.inverse(); },
       /*aMustBeNonZero=*/true);
 }
+
+//===----------------------------------------------------------------------===//
+// BaseField Mixed Operations
+//===----------------------------------------------------------------------===//
+
+TYPED_TEST(ExtensionFieldOperationTest, AddBaseField) {
+  using ExtF = TypeParam;
+  using BaseF = typename ExtF::Config::BaseField;
+  using EfOp = typename TestFixture::EfOp;
+
+  auto a = ExtF::Random();
+  auto b = BaseF::Random();
+  auto efA = EfOp::fromZkDtype(&this->context, a);
+  auto efB = baseFieldFromZkDtype<EfOp>(&this->context, b);
+
+  auto expected = EfOp::fromZkDtype(&this->context, a + b);
+  EXPECT_EQ(expected, efA + efB);
+}
+
+TYPED_TEST(ExtensionFieldOperationTest, SubBaseField) {
+  using ExtF = TypeParam;
+  using BaseF = typename ExtF::Config::BaseField;
+  using EfOp = typename TestFixture::EfOp;
+
+  auto a = ExtF::Random();
+  auto b = BaseF::Random();
+  auto efA = EfOp::fromZkDtype(&this->context, a);
+  auto efB = baseFieldFromZkDtype<EfOp>(&this->context, b);
+
+  auto expected = EfOp::fromZkDtype(&this->context, a - b);
+  EXPECT_EQ(expected, efA - efB);
+}
+
+TYPED_TEST(ExtensionFieldOperationTest, MulBaseField) {
+  using ExtF = TypeParam;
+  using BaseF = typename ExtF::Config::BaseField;
+  using EfOp = typename TestFixture::EfOp;
+
+  auto a = ExtF::Random();
+  auto b = BaseF::Random();
+  auto efA = EfOp::fromZkDtype(&this->context, a);
+  auto efB = baseFieldFromZkDtype<EfOp>(&this->context, b);
+
+  auto expected = EfOp::fromZkDtype(&this->context, a * b);
+  EXPECT_EQ(expected, efA * efB);
+}
+
+TYPED_TEST(ExtensionFieldOperationTest, DivBaseField) {
+  using ExtF = TypeParam;
+  using BaseF = typename ExtF::Config::BaseField;
+  using EfOp = typename TestFixture::EfOp;
+
+  auto a = ExtF::Random();
+  auto b = BaseF::Random();
+  while (b.IsZero()) {
+    b = BaseF::Random();
+  }
+  auto efA = EfOp::fromZkDtype(&this->context, a);
+  auto efB = baseFieldFromZkDtype<EfOp>(&this->context, b);
+
+  auto expected = EfOp::fromZkDtype(&this->context, a / b);
+  EXPECT_EQ(expected, efA / efB);
+}
+
+//===----------------------------------------------------------------------===//
+// Zero and One
+//===----------------------------------------------------------------------===//
 
 TYPED_TEST(ExtensionFieldOperationTest, ZeroAndOne) {
   using ExtensionFieldType = TypeParam;

@@ -203,6 +203,9 @@ class ExtensionFieldOperation
     : public ExtensionFieldOperationSelector<N>::template Type<
           ExtensionFieldOperation<N, BaseFieldT>>,
       public VandermondeMatrix<ExtensionFieldOperation<N, BaseFieldT>> {
+  using CRTPBase = typename ExtensionFieldOperationSelector<N>::template Type<
+      ExtensionFieldOperation<N, BaseFieldT>>;
+
 public:
   // Override zk_dtypes::VandermondeMatrix::GetVandermondeInverseMatrix to avoid
   // static caching conflicts between Montgomery and standard domains.
@@ -441,6 +444,45 @@ public:
   }
   ExtensionFieldOperation &operator/=(const ExtensionFieldOperation &other) {
     return *this = *this / other;
+  }
+
+  // BaseField compound assignment operators.
+  template <typename B = BaseFieldT,
+            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
+  ExtensionFieldOperation &operator+=(const B &other) {
+    return *this = *this + other;
+  }
+  template <typename B = BaseFieldT,
+            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
+  ExtensionFieldOperation &operator-=(const B &other) {
+    return *this = *this - other;
+  }
+
+  // Bring base class operators into scope. Without this, the specialized
+  // class's operator*(const Derived&) hides the grandparent's operators,
+  // and our member operator/ hides the inherited operator/(Derived).
+  using CRTPBase::operator*;
+  using CRTPBase::operator/;
+
+  // BaseField scalar multiplication — explicit definition because the
+  // specialized CRTP class's operator*(Derived) hides the grandparent's
+  // operator*(BaseField) and the using declaration above only recovers the
+  // immediate parent's overloads, not the grandparent's.
+  template <typename B = BaseFieldT,
+            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
+  ExtensionFieldOperation operator*(const B &scalar) const {
+    std::array<BaseFieldT, N> result = coeffs;
+    for (auto &c : result) {
+      c = c * scalar;
+    }
+    return fromUnchecked(result, efType);
+  }
+
+  // BaseField scalar division via inverse.
+  template <typename B = BaseFieldT,
+            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
+  ExtensionFieldOperation operator/(const B &scalar) const {
+    return *this * scalar.inverse();
   }
 
   ExtensionFieldOperation dbl() const { return this->Double(); }
