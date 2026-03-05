@@ -18,6 +18,8 @@ limitations under the License.
 
 #include <array>
 #include <functional>
+#include <optional>
+#include <string_view>
 
 #include "absl/status/status_matchers.h"
 #include "gmock/gmock.h"
@@ -31,6 +33,7 @@ limitations under the License.
 #include "zkx/hlo/parser/hlo_parser.h"
 #include "zkx/hlo/testlib/pattern_matcher_gmock.h"
 #include "zkx/service/pattern_matcher.h"
+#include "zkx/window_util.h"
 
 namespace zkx {
 
@@ -216,11 +219,29 @@ TEST(ZkxBuilderTest, XPlusX) {
               GmockMatch(m::Add(m::Parameter(0), m::Parameter(0))));
 }
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, TestBinaryOpImplicitBroadcast) {
+TEST(ZkxBuilderTest, TestBinaryOpImplicitBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[1]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[2, 2]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[2,2]"));
+  Add(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+      /*broadcast_dimensions=*/{1});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, TestBinaryOpImplicitBroadcastBounded) {
+TEST(ZkxBuilderTest, TestBinaryOpImplicitBroadcastBounded) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[1]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[<=2, <=2]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[<=2, <=2]"));
+  Add(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+      /*broadcast_dimensions=*/{1});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, ShapeInferenceError) {
   ZkxBuilder b(TestName());
@@ -233,8 +254,15 @@ TEST(ZkxBuilderTest, ShapeInferenceError) {
               HasSubstr("Shapes must be equal rank"));
 }
 
-// TODO(chokobole): Add test. Dependency: SetDimensionSize
-// TEST(ZkxBuilderTest, DynamicDimensionReshapeToR0) {
+TEST(ZkxBuilderTest, DynamicDimensionReshapeToR0) {
+  ZkxBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {1}), "x");
+  auto y = Parameter(&b, 1, ShapeUtil::MakeShape(S32, {}), "dyn_dim");
+  auto dx = SetDimensionSize(x, y, 0);
+  Reshape(dx, {});
+  auto statusor = BuildHloModule(b);
+  ASSERT_TRUE(statusor.ok());
+}
 
 TEST(ZkxBuilderTest, ParameterAlreadyRegistered) {
   ZkxBuilder b_call("add");
@@ -250,35 +278,232 @@ TEST(ZkxBuilderTest, ParameterAlreadyRegistered) {
               HasSubstr("parameter 0 already registered"));
 }
 
-// TODO(chokobole): Add test. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, Call) {
+TEST(ZkxBuilderTest, Call) {
+  ZkxBuilder b_call("the_only_to_apply");
+  auto p0 = Parameter(&b_call, 0, ShapeUtil::MakeShape(U32, {}), "p0");
+  auto p1 = Parameter(&b_call, 1, ShapeUtil::MakeShape(U32, {}), "p1");
+  Add(p0, p1);
+  TF_ASSERT_OK_AND_ASSIGN(const auto call, b_call.Build());
+  ZkxBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {}), "x");
+  auto y = Parameter(&b, 1, ShapeUtil::MakeShape(U32, {}), "y");
+  auto one = ConstantR0<uint32_t>(&b, 1);
+  auto two = ConstantR0<uint32_t>(&b, 2);
+  Add(Call(&b, call, {x, y}), Call(&b, call, {one, two}));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Add(m::Call(m::Parameter(), m::Parameter()),
+                                m::Call(m::Constant(), m::Constant()))));
+}
 
-// TODO(chokobole): Add test. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, CompositeCall) {
+TEST(ZkxBuilderTest, CompositeCall) {
+  ZkxBuilder b(TestName());
+  const Shape shape = ShapeUtil::MakeShape(U32, {});
 
-// TODO(chokobole): Add test. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, CompositeCallFrontendAttributesStayLocal) {
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, shape, "arg0"), Parameter(&bsum, 1, shape, "arg1"));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation computation, bsum.Build());
 
-// TODO(chokobole): Implement this. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, CompositeCallMissingName) {
+  std::vector<ZkxOp> operands = {Parameter(&b, 0, shape, "arg0"),
+                                 Parameter(&b, 1, shape, "arg1")};
+  CompositeCall(&b, computation, absl::MakeSpan(operands),
+                /*name=*/"foo.bar",
+                /*attributes=*/"{n = 1 : i32, tensor = dense<1> : tensor<i32>}",
+                /*version=*/1);
 
-// TODO(chokobole): Implement this. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, CompositeCallMissingAttribute) {
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Call(m::Parameter(), m::Parameter())));
+}
 
-// TODO(chokobole): Implement this. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, CompositeCallNonNegativeVersion) {
+TEST(ZkxBuilderTest, CompositeCallFrontendAttributesStayLocal) {
+  ZkxBuilder b(TestName());
+  const Shape shape = ShapeUtil::MakeShape(U32, {});
 
-// TODO(chokobole): Implement this. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, CompositeCallOptionalVersionAndAttribute) {
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, shape, "arg0"), Parameter(&bsum, 1, shape, "arg1"));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation computation, bsum.Build());
 
-// TODO(chokobole): Implement this. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, CompositeCallWithExtraFrontendAttributes) {
+  std::vector<ZkxOp> operands = {Parameter(&b, 0, shape, "arg0"),
+                                 Parameter(&b, 1, shape, "arg1")};
+  CompositeCall(&b, computation, absl::MakeSpan(operands),
+                /*name=*/"foo.bar",
+                /*attributes=*/"{n = 1 : i32, tensor = dense<1> : tensor<i32>}",
+                /*version=*/1);
+  Add(operands[0], operands[1]);
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, BinopHasDegenerateBroadcast) {
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_TRUE(GetRoot(*module)->frontend_attributes().map().empty());
+}
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, BinopHasInDimAndDegenerateBroadcast) {
+TEST(ZkxBuilderTest, CompositeCallMissingName) {
+  ZkxBuilder b(TestName());
+  const Shape shape = ShapeUtil::MakeShape(U32, {});
+
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, shape, "arg0"), Parameter(&bsum, 1, shape, "arg1"));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation computation, bsum.Build());
+
+  std::vector<ZkxOp> operands = {Parameter(&b, 0, shape, "arg0"),
+                                 Parameter(&b, 1, shape, "arg1")};
+  CompositeCall(&b, computation, absl::MakeSpan(operands), /*name=*/"",
+                /*attributes=*/"{n = 1 : i32, tensor = dense<1> : tensor<i32>}",
+                /*version=*/1);
+
+  auto statusor = BuildHloModule(b);
+  ASSERT_FALSE(statusor.ok());
+  EXPECT_THAT(statusor.status().message(),
+              HasSubstr("A composite call op must have frontend attributes "
+                        "with key composite.name whose value is non-empty"));
+}
+
+TEST(ZkxBuilderTest, CompositeCallMissingAttribute) {
+  ZkxBuilder b(TestName());
+  const Shape shape = ShapeUtil::MakeShape(U32, {});
+
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, shape, "arg0"), Parameter(&bsum, 1, shape, "arg1"));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation computation, bsum.Build());
+
+  std::vector<ZkxOp> operands = {Parameter(&b, 0, shape, "arg0"),
+                                 Parameter(&b, 1, shape, "arg1")};
+  CompositeCall(&b, computation, absl::MakeSpan(operands), /*name=*/"foo.bar",
+                /*attributes=*/"", /*version=*/1);
+
+  auto statusor = BuildHloModule(b);
+  ASSERT_FALSE(statusor.ok());
+  EXPECT_THAT(
+      statusor.status().message(),
+      HasSubstr(
+          "A composite call op must have frontend attributes with key "
+          "composite.attributes whose value is default: {} or non-empty"));
+}
+
+TEST(ZkxBuilderTest, CompositeCallNonNegativeVersion) {
+  ZkxBuilder b(TestName());
+
+  FrontendAttributes frontend_attributes = b.frontend_attributes();
+  frontend_attributes.mutable_map()->insert({"foo", "bar"});
+  b.SetFrontendAttributes(frontend_attributes);
+
+  const Shape shape = ShapeUtil::MakeShape(U32, {});
+
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, shape, "arg0"), Parameter(&bsum, 1, shape, "arg1"));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation computation, bsum.Build());
+
+  std::vector<ZkxOp> operands = {Parameter(&b, 0, shape, "arg0"),
+                                 Parameter(&b, 1, shape, "arg1")};
+  CompositeCall(&b, computation, absl::MakeSpan(operands),
+                /*name=*/"foo.bar",
+                /*attributes=*/"{n = 1 : i32, tensor = dense<1> : tensor<i32>}",
+                /*version=*/-1);
+
+  auto statusor = BuildHloModule(b);
+  ASSERT_FALSE(statusor.ok());
+  EXPECT_THAT(statusor.status().message(),
+              HasSubstr("A composite call op must have frontend attributes "
+                        "with a composite.version whose value is a "
+                        "non-negative integer but got: -1"));
+}
+
+TEST(ZkxBuilderTest, CompositeCallOptionalVersionAndAttribute) {
+  ZkxBuilder b(TestName());
+  const Shape shape = ShapeUtil::MakeShape(U32, {});
+
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, shape, "arg0"), Parameter(&bsum, 1, shape, "arg1"));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation computation, bsum.Build());
+
+  std::vector<ZkxOp> operands = {Parameter(&b, 0, shape, "arg0"),
+                                 Parameter(&b, 1, shape, "arg1")};
+  CompositeCall(&b, computation, absl::MakeSpan(operands), /*name=*/"foo.bar");
+
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  ASSERT_THAT(GetRoot(*module),
+              GmockMatch(m::Call(m::Parameter(), m::Parameter())));
+  ASSERT_TRUE(GetRoot(*module)->frontend_attributes().map().contains(
+      "composite.attributes"));
+  EXPECT_EQ(
+      GetRoot(*module)->frontend_attributes().map().at("composite.attributes"),
+      "{}");
+  EXPECT_EQ(
+      GetRoot(*module)->frontend_attributes().map().at("composite.version"),
+      "0");
+}
+
+TEST(ZkxBuilderTest, CompositeCallWithExtraFrontendAttributes) {
+  ZkxBuilder b(TestName());
+
+  FrontendAttributes frontend_attributes = b.frontend_attributes();
+  frontend_attributes.mutable_map()->insert({"foo", "bar"});
+  b.SetFrontendAttributes(frontend_attributes);
+
+  const Shape shape = ShapeUtil::MakeShape(U32, {});
+
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, shape, "arg0"), Parameter(&bsum, 1, shape, "arg1"));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation computation, bsum.Build());
+
+  std::vector<ZkxOp> operands = {Parameter(&b, 0, shape, "arg0"),
+                                 Parameter(&b, 1, shape, "arg1")};
+  CompositeCall(&b, computation, absl::MakeSpan(operands),
+                /*name=*/"foo.bar",
+                /*attributes=*/"{n = 1 : i32, tensor = dense<1> : tensor<i32>}",
+                /*version=*/1);
+
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Call(m::Parameter(), m::Parameter())));
+  ASSERT_TRUE(GetRoot(*module)->frontend_attributes().map().contains("foo"));
+  EXPECT_EQ(GetRoot(*module)->frontend_attributes().map().at("foo"), "bar");
+}
+
+TEST(ZkxBuilderTest, BinopHasDegenerateBroadcast) {
+  ZkxBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {1, 2, 3}), "x");
+  auto y = Parameter(&b, 1, ShapeUtil::MakeShape(U32, {1, 2, 1}), "y");
+  Add(x, y);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+
+  // Expected:
+  //
+  //  x: u32[1,2,3]  y: u32[1,2,1]
+  //      |               |
+  //      |          reshape: u32[1,2]
+  //      |               |
+  //      |          broadcast: u32[1,2,3]
+  //       \             /
+  //            add
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Add(m::Parameter(0),
+                                m::Broadcast(m::Reshape(m::Parameter(1))))));
+}
+
+TEST(ZkxBuilderTest, BinopHasInDimAndDegenerateBroadcast) {
+  ZkxBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {2, 3}), "x");
+  auto y = Parameter(&b, 1, ShapeUtil::MakeShape(U32, {2, 1, 4}), "y");
+  Add(x, y, /*broadcast_dimensions=*/{0, 1});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+
+  // The binary operation has in-dim broadcast and degenerate broadcast, should
+  // first do the in-dim broadcast then convert the degenerate broadcast into a
+  // reshape and a broadcast.
+  //
+  // Expected:
+  //
+  //  x: u32[2,3]            y: u32[2,1,4]
+  //      |                        |
+  //  broadcast: u32[2,3,4]  reshape: u32[2,4]
+  //      |                        |
+  //      |                  broadcast: u32[2,3,4]
+  //       \                      /
+  //                 add
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Add(m::Broadcast(m::Parameter(0)),
+                                m::Broadcast(m::Reshape(m::Parameter(1))))));
+}
 
 TEST(ZkxBuilderTest, BroadcastInDim) {
   ZkxBuilder b(TestName());
@@ -289,8 +514,15 @@ TEST(ZkxBuilderTest, BroadcastInDim) {
   EXPECT_THAT(GetRoot(*module), GmockMatch(m::Broadcast()));
 }
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, BroadcastInDimWithDegeneratedDim) {
+TEST(ZkxBuilderTest, BroadcastInDimWithDegeneratedDim) {
+  ZkxBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {2, 1, 4}), "x");
+  BroadcastInDim(x, {2, 3, 4},
+                 /*broadcast_dimensions=*/{0, 1, 2});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Broadcast(m::Reshape(m::Broadcast()))));
+}
 
 TEST(ZkxBuilderTest, BroadcastInDimWithBoundedDim) {
   ZkxBuilder b(TestName());
@@ -326,14 +558,30 @@ TEST(ZkxBuilderTest, OperandFromWrongBuilder) {
           "built by builder 'b1', but is trying to use it in builder 'main'"));
 }
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, ReshapeDefaultOrder) {
+TEST(ZkxBuilderTest, ReshapeDefaultOrder) {
+  ZkxBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {2, 3, 5, 7}), "x");
+  Reshape(x, /*new_sizes=*/{6, 35});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module), GmockMatch(m::Reshape(m::Parameter())));
+}
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, ReshapeHasTranspose) {
+TEST(ZkxBuilderTest, ReshapeHasTranspose) {
+  ZkxBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {2, 3, 5, 7}), "x");
+  Reshape(x, /*dimensions=*/{3, 2, 1, 0}, /*new_sizes=*/{6, 35});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Reshape(m::Transpose(m::Parameter()))));
+}
 
-// TODO(chokobole): Add test. Dependency: HloTransposeInstruction
-// TEST(ZkxBuilderTest, Transpose) {
+TEST(ZkxBuilderTest, Transpose) {
+  ZkxBuilder b(TestName());
+  auto x = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {5, 7}), "x");
+  Transpose(x, /*permutation=*/{1, 0});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module), GmockMatch(m::Transpose(m::Parameter())));
+}
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::AllGather
 // TEST(ZkxBuilderTest, AllGatherR1) {
@@ -375,8 +623,14 @@ TEST(ZkxBuilderTest, OperandFromWrongBuilder) {
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::MultiCollectivePermute
 // TEST(ZkxBuilderTest, CombinedCollectivePermute) {
 
-// TODO(chokobole): Add test. Dependency: HloGetDimensionSizeInstruction
-// TEST(ZkxBuilderTest, GetDimensionSize) {
+TEST(ZkxBuilderTest, GetDimensionSize) {
+  ZkxBuilder b(TestName());
+  auto x =
+      Parameter(&b, 0, ShapeUtil::MakeShape(U32, {5, 7}, {false, true}), "x");
+  GetDimensionSize(x, 1);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_EQ(GetRoot(*module)->opcode(), HloOpcode::kGetDimensionSize);
+}
 
 TEST(ZkxBuilderTest, GetDimensionSizeConstant) {
   ZkxBuilder b(TestName());
@@ -490,14 +744,48 @@ TEST(ZkxBuilderTest, DynamicParameter) {
   EXPECT_TRUE(param_shape.is_dynamic_dimension(0));
 }
 
-// TODO(chokobole): Add test. Dependency: HloSetDimensionSizeInstruction
-// TEST(ZkxBuilderTest, SetDimensionSize) {
+TEST(ZkxBuilderTest, SetDimensionSize) {
+  ZkxBuilder b(TestName());
+  auto p0 = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {10}), "p0");
+  auto p1 = Parameter(&b, 1, ShapeUtil::MakeShape(S32, {}), "p1");
+  auto set_dim_size = SetDimensionSize(p0, p1, 0);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module,
+                          BuildHloModule(b, /*root=*/set_dim_size));
+  const Shape& root_shape =
+      module->entry_computation()->root_instruction()->shape();
+  EXPECT_TRUE(root_shape.is_dynamic_dimension(0));
+}
 
-// TODO(chokobole): Add test. Dependency: HloSetDimensionSizeInstruction
-// TEST(ZkxBuilderTest, RemoveDynamicDimension) {
+TEST(ZkxBuilderTest, RemoveDynamicDimension) {
+  ZkxBuilder b(TestName());
+  auto p0 = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {10}), "p0");
+  auto p1 = Parameter(&b, 1, ShapeUtil::MakeShape(S32, {}), "p1");
+  auto set_dim_size = SetDimensionSize(p0, p1, 0);
+  auto remove_dim_size = RemoveDynamicDimension(set_dim_size, 0);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module,
+                          BuildHloModule(b, /*root=*/remove_dim_size));
+  const Shape& root_shape =
+      module->entry_computation()->root_instruction()->shape();
+  // Dynamic dimension has been removed.
+  EXPECT_FALSE(root_shape.is_dynamic_dimension(0));
+}
 
-// TODO(chokobole): Add test. Dependency: HloSetDimensionSizeInstruction
-// TEST(ZkxBuilderTest, RemoveDynamicDimensionMultiDims) {
+TEST(ZkxBuilderTest, RemoveDynamicDimensionMultiDims) {
+  ZkxBuilder b(TestName());
+  auto p0 = Parameter(&b, 0, ShapeUtil::MakeShape(U32, {10, 10}), "p0");
+  auto p1 = Parameter(&b, 1, ShapeUtil::MakeShape(S32, {}), "p1");
+  auto set_dim_size = SetDimensionSize(p0, p1, 0);
+  set_dim_size = SetDimensionSize(set_dim_size, p1, 1);
+  auto remove_dim_size = RemoveDynamicDimension(set_dim_size, 0);
+  remove_dim_size = RemoveDynamicDimension(remove_dim_size, 1);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module,
+                          BuildHloModule(b, /*root=*/remove_dim_size));
+  const Shape& root_shape =
+      module->entry_computation()->root_instruction()->shape();
+  // Dynamic dimensions are removed.
+  EXPECT_FALSE(root_shape.is_dynamic_dimension(0));
+  EXPECT_FALSE(root_shape.is_dynamic_dimension(1));
+}
 
 TEST(ZkxBuilderTest, DynamicUnary) {
   ZkxBuilder b(TestName());
@@ -560,8 +848,21 @@ TEST(ZkxBuilderTest, DynamicBroadcast) {
       << result_shape;
 }
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, DynamicBinaryHasDegenerateBroadcast) {
+TEST(ZkxBuilderTest, DynamicBinaryHasDegenerateBroadcast) {
+  ZkxBuilder b(TestName());
+  const Shape tuple_param_shape = ShapeUtil::MakeTupleShape(
+      {ShapeUtil::MakeShape(U32, {10}, {true}),
+       ShapeUtil::MakeShape(U32, {1, 15}), ShapeUtil::MakeShape(U32, {})});
+  auto p0 = Parameter(&b, 0, tuple_param_shape, "p0");
+  auto gte0 = GetTupleElement(p0, 0);
+  auto gte1 = GetTupleElement(p0, 1);
+  Add(gte0, gte1, /*broadcast_dimensions=*/{0});  // u32[<=10, 15]
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  const Shape& result_shape =
+      module->entry_computation()->root_instruction()->shape();
+  EXPECT_THAT(result_shape.dynamic_dimensions(), ElementsAre(true, false))
+      << result_shape;
+}
 
 TEST(ZkxBuilderTest, DynamicSelectOnlyPredDynamic) {
   ZkxBuilder b(TestName());
@@ -581,20 +882,123 @@ TEST(ZkxBuilderTest, DynamicSelectOnlyPredDynamic) {
       << result_shape;
 }
 
-// TODO(chokobole): Add test. Dependency: HloInstruction::CreateConditional
-// TEST(ZkxBuilderTest, SelectIntoConditional) {
+TEST(ZkxBuilderTest, SelectIntoConditional) {
+  ZkxBuilder b(TestName());
+  const Shape selector_shape = ShapeUtil::MakeShape(PRED, {});
+  const Shape tuple_param_shape = ShapeUtil::MakeTupleShape(
+      {ShapeUtil::MakeShape(S32, {}), ShapeUtil::MakeShape(U32, {})});
+  const ZkxOp p0 = Parameter(&b, 0, selector_shape, "p0");
+  const ZkxOp p1 = Parameter(&b, 1, tuple_param_shape, "p1");
+  const ZkxOp p2 = Parameter(&b, 2, tuple_param_shape, "p2");
 
-// TODO(chokobole): Add test. Dependency: HloPadInstruction
-// TEST(ZkxBuilderTest, DynamicPad) {
+  Select(p0, p1, p2);
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::DotGeneral
-// TEST(ZkxBuilderTest, DynamicDot) {
+  TF_ASSERT_OK_AND_ASSIGN(const std::unique_ptr<HloModule> module,
+                          BuildHloModule(b));
+  EXPECT_THAT(module->entry_computation()->root_instruction(),
+              GmockMatch(m::Conditional(m::Parameter(0), m::Parameter(1),
+                                        m::Parameter(2))));
+  EXPECT_THAT(module->entry_computation()
+                  ->root_instruction()
+                  ->branch_computation(0)
+                  ->root_instruction(),
+              GmockMatch(m::Parameter(0)));
+  EXPECT_THAT(module->entry_computation()
+                  ->root_instruction()
+                  ->branch_computation(1)
+                  ->root_instruction(),
+              GmockMatch(m::Parameter(0)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloReduceInstruction
-// TEST(ZkxBuilderTest, DynamicReduce) {
+TEST(ZkxBuilderTest, DynamicPad) {
+  ZkxBuilder b(TestName());
+  const Shape tuple_param_shape = ShapeUtil::MakeTupleShape(
+      {ShapeUtil::MakeShape(S32, {5, 4}, {true, false}),
+       ShapeUtil::MakeShape(U32, {})});
+  auto p0 = Parameter(&b, 0, tuple_param_shape, "p0");
+  auto pad_val = ConstantR0<int32_t>(&b, -1);
+  auto gte = GetTupleElement(p0, 0);
+  PaddingConfig padding_config;
+  for (int i = 0; i < 2; i++) {
+    auto dimension = padding_config.add_dimensions();
+    dimension->set_edge_padding_low(0);
+    dimension->set_edge_padding_high(0);
+  }
+  Pad(gte, pad_val, padding_config);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  const Shape& result_shape =
+      module->entry_computation()->root_instruction()->shape();
+  EXPECT_THAT(result_shape.dynamic_dimensions(), ElementsAre(true, false))
+      << result_shape;
+}
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, DynamicReshape) {
+TEST(ZkxBuilderTest, DynamicDot) {
+  ZkxBuilder b(TestName());
+  const Shape tuple_param_shape = ShapeUtil::MakeTupleShape(
+      {ShapeUtil::MakeShape(U32, {2, 3, 4}, {true, true, false}),
+       ShapeUtil::MakeShape(U32, {2, 4, 5}, {true, false, false}),
+       ShapeUtil::MakeShape(U32, {}), ShapeUtil::MakeShape(U32, {})});
+  auto p0 = Parameter(&b, 0, tuple_param_shape, "p0");
+
+  auto lhs = GetTupleElement(p0, 0);
+  auto rhs = GetTupleElement(p0, 1);
+  DotDimensionNumbers dnums;
+  dnums.add_lhs_contracting_dimensions(2);
+  dnums.add_rhs_contracting_dimensions(1);
+  dnums.add_lhs_batch_dimensions(0);
+  dnums.add_rhs_batch_dimensions(0);
+  DotGeneral(lhs, rhs, dnums);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  const Shape& result_shape =
+      module->entry_computation()->root_instruction()->shape();
+  EXPECT_THAT(result_shape.dynamic_dimensions(), ElementsAre(true, true, false))
+      << result_shape;
+}
+
+TEST(ZkxBuilderTest, DynamicReduce) {
+  ZkxBuilder b(TestName());
+  const Shape tuple_param_shape = ShapeUtil::MakeTupleShape(
+      {ShapeUtil::MakeShape(U32, {5, 4, 3}, {false, true, false}),
+       ShapeUtil::MakeShape(U32, {})});
+  auto p0 = Parameter(&b, 0, tuple_param_shape, "p0");
+  auto init = ConstantR0<uint32_t>(&b, 0);
+  auto gte = GetTupleElement(p0, 0);
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, ShapeUtil::MakeShape(U32, {}), "x"),
+      Parameter(&bsum, 1, ShapeUtil::MakeShape(U32, {}), "y"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto sum, bsum.Build());
+  Reduce(gte, init, sum, {0});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  const Shape& result_shape =
+      module->entry_computation()->root_instruction()->shape();
+  EXPECT_THAT(result_shape.dynamic_dimensions(), ElementsAre(true, false))
+      << result_shape;
+}
+
+// TODO(batzor): Add test. Dependency: ReduceWindow with Padding overload
+// TEST(ZkxBuilderTest, DynamicReduceWindow) {
+
+// TODO(batzor): Add test. Dependency: ReduceWindow with Padding overload
+// TEST(ZkxBuilderTest, VariadicDynamicReduceWindow) {
+
+TEST(ZkxBuilderTest, DynamicReshape) {
+  ZkxBuilder b(TestName());
+  const Shape tuple_param_shape = ShapeUtil::MakeTupleShape(
+      {ShapeUtil::MakeShape(U32, {2, 3, 4, 5, 6},
+                            {false, false, true, true, false}),
+       ShapeUtil::MakeShape(U32, {}), ShapeUtil::MakeShape(U32, {})});
+  auto p0 = Parameter(&b, 0, tuple_param_shape, "p0");
+  auto gte = GetTupleElement(p0, 0);  // u32[2, 3, <=4, <=5, 6]
+  Reshape(gte, /*new_sizes=*/{6, 4, 5, 2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  const Shape& result_shape =
+      module->entry_computation()->root_instruction()->shape();
+  EXPECT_TRUE(result_shape.is_dynamic_dimension(1));
+  EXPECT_TRUE(result_shape.is_dynamic_dimension(2));
+  EXPECT_THAT(result_shape.dynamic_dimensions(),
+              ElementsAre(false, true, true, false, false))
+      << result_shape;
+}
 
 TEST(ZkxBuilderTest, DynamicSelect) {
   ZkxBuilder b(TestName());
@@ -632,10 +1036,23 @@ TEST(ZkxBuilderTest, DynamicSelectNotCompatible) {
   ASSERT_TRUE(status.ok());
 }
 
-// TODO(chokobole): Add test. Dependency: HloTransposeInstruction
-// TEST(ZkxBuilderTest, DynamicTranspose) {
+TEST(ZkxBuilderTest, DynamicTranspose) {
+  ZkxBuilder b(TestName());
+  const Shape tuple_param_shape = ShapeUtil::MakeTupleShape(
+      {ShapeUtil::MakeShape(U32, {3, 5}, {true, false}),
+       ShapeUtil::MakeShape(U32, {})});
+  auto p0 = Parameter(&b, 0, tuple_param_shape, "p0");
+  auto gte = GetTupleElement(p0, 0);
+  Transpose(gte, /*permutation=*/{1, 0});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  const Shape& result_shape =
+      module->entry_computation()->root_instruction()->shape();
+  EXPECT_THAT(result_shape.dynamic_dimensions(), ElementsAre(false, true))
+      << result_shape;
+}
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::DotGeneral
+// TODO(chokobole): Add test. Dependency: ZkxBuilder::DotGeneral with
+// preferred_element_type.
 // TEST(ZkxBuilderTest, DotWithPreferredElementType) {
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::SparseDot
@@ -939,25 +1356,104 @@ TEST(ZkxBuilderTest, StableLookUpInstructionByHandle) {
 // Experimental Test
 //============================================================================//
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::MhloDynamicBroadcastInDim
-// TEST(ZkxBuilderTest, MhloDynamicBroadcastInDimExportSuccess) {
+TEST(ZkxBuilderTest, MhloDynamicBroadcastInDimExportSuccess) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[1, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_dimensions, ParseShape("s32[3]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_shape, ParseShape("u32[1, 2, 3]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[1, 2, 3]"));
+  MhloDynamicBroadcastInDim(
+      Parameter(&b, 0, operand, "operand"),
+      Parameter(&b, 1, output_dimensions, "output_dimensions"),
+      /*broadcast_dimensions=*/{1, 2}, output_shape);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(module->ToString(), HasSubstr("mhlo.dynamic_broadcast_in_dim"));
+  EXPECT_THAT(module->ToString(), HasSubstr("broadcast_dimensions=[1,2]"));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::MhloDynamicBroadcastInDim
-// TEST(ZkxBuilderTest,
-//      MhloDynamicBroadcastInDimNonBroadcastDimSizeGreaterThanOne) {
+TEST(ZkxBuilderTest,
+     MhloDynamicBroadcastInDimNonBroadcastDimSizeGreaterThanOne) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_dimensions, ParseShape("s32[3]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_shape, ParseShape("u32[2, 2, 3]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[2, 2, 3]"));
+  MhloDynamicBroadcastInDim(
+      Parameter(&b, 0, operand, "operand"),
+      Parameter(&b, 1, output_dimensions, "output_dimensions"),
+      /*broadcast_dimensions=*/{1, 2}, output_shape);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(module->ToString(), HasSubstr("mhlo.dynamic_broadcast_in_dim"));
+  EXPECT_THAT(module->ToString(), HasSubstr("broadcast_dimensions=[1,2]"));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::MhloDynamicBroadcastInDim
-// TEST(ZkxBuilderTest, MhloDynamicBroadcastInDimDynamicResultSize) {
+TEST(ZkxBuilderTest, MhloDynamicBroadcastInDimDynamicResultSize) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[1, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_dimensions, ParseShape("s32[3]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_shape, ParseShape("u32[1, 2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[1, 2, ?]"));
+  MhloDynamicBroadcastInDim(
+      Parameter(&b, 0, operand, "operand"),
+      Parameter(&b, 1, output_dimensions, "output_dimensions"),
+      /*broadcast_dimensions=*/{1, 2}, output_shape);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(module->ToString(), HasSubstr("mhlo.dynamic_broadcast_in_dim"));
+  EXPECT_THAT(module->ToString(), HasSubstr("broadcast_dimensions=[1,2]"));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::MhloDynamicBroadcastInDim
-// TEST(ZkxBuilderTest,
-//      MhloDynamicBroadcastInDimInvalidOutputDimensionsElementType) {
+TEST(ZkxBuilderTest,
+     MhloDynamicBroadcastInDimInvalidOutputDimensionsElementType) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_dimensions, ParseShape("pred[3]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_shape, ParseShape("u32[2, 3, 3]"));
+  MhloDynamicBroadcastInDim(
+      Parameter(&b, 0, operand, "operand"),
+      Parameter(&b, 1, output_dimensions, "output_dimensions"),
+      /*broadcast_dimensions=*/{1, 2}, output_shape);
+  EXPECT_THAT(
+      BuildHloModule(b),
+      StatusIs(_,
+               HasSubstr("output_dimensions must be an integer type pred[3]")));
+}
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::MhloDynamicBroadcastInDim
-// TEST(ZkxBuilderTest, MhloDynamicBroadcastInDimInvalidOutputDimensionsRank) {
+TEST(ZkxBuilderTest, MhloDynamicBroadcastInDimInvalidOutputDimensionsRank) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_dimensions,
+                          ParseShape("s32[2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_shape, ParseShape("u32[2, 3, 3]"));
+  MhloDynamicBroadcastInDim(
+      Parameter(&b, 0, operand, "operand"),
+      Parameter(&b, 1, output_dimensions, "output_dimensions"),
+      /*broadcast_dimensions=*/{1, 2}, output_shape);
+  EXPECT_THAT(
+      BuildHloModule(b),
+      StatusIs(_,
+               HasSubstr("output_dimensions must be rank 1 but got rank 2")));
+}
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::MhloDynamicBroadcastInDim
-// TEST(ZkxBuilderTest, MhloDynamicBroadcastInDimIncompatibleBroadcastSize) {
+TEST(ZkxBuilderTest, MhloDynamicBroadcastInDimIncompatibleBroadcastSize) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_dimensions, ParseShape("s32[3]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape output_shape, ParseShape("u32[2, 3, 3]"));
+  MhloDynamicBroadcastInDim(
+      Parameter(&b, 0, operand, "operand"),
+      Parameter(&b, 1, output_dimensions, "output_dimensions"),
+      /*broadcast_dimensions=*/{1, 2}, output_shape);
+  EXPECT_THAT(
+      BuildHloModule(b),
+      StatusIs(_, HasSubstr("size of operand dimension 0 (2) is not compatible "
+                            "with size of result dimension 1 (3)")));
+}
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::MhloDynamicReshape
 // TEST(ZkxBuilderTest, MhloDynamicReshapeExportSuccess) {
@@ -981,13 +1477,26 @@ struct UnaryOpTestCase {
   std::function<ZkxOp(ZkxOp)> unary_op;
 };
 
+struct BinaryOpTestCase {
+  std::string lhs;
+  std::string rhs;
+  absl::Span<const int64_t> broadcast_dimensions;
+  std::string expected;
+  std::function<ZkxOp(ZkxOp, ZkxOp, absl::Span<const int64_t>)> binary_op;
+  std::optional<std::string_view> error_message;
+};
+
 constexpr std::string_view kBroadcastDimensionMismatch =
     "Broadcast dimension 0 mismatch: 2 != -9223372036854775808; u32[2] and "
     "u32[?,10].";
+std::array<const int64_t, 0> empty_array = {};
 std::array<const int64_t, 1> zero_array = {0};
 
 class ZkxBuilderUnboundedUnaryOpTest
     : public ::testing::TestWithParam<UnaryOpTestCase> {};
+
+class ZkxBuilderUnboundedBinaryOpTest
+    : public ::testing::TestWithParam<BinaryOpTestCase> {};
 
 TEST_P(ZkxBuilderUnboundedUnaryOpTest, UnboundedUnaryOpTest) {
   ZkxBuilder b(TestName());
@@ -1001,14 +1510,48 @@ TEST_P(ZkxBuilderUnboundedUnaryOpTest, UnboundedUnaryOpTest) {
               GmockMatch(m::Op().WithShapeEqualTo(&expected)));
 }
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST_P(ZkxBuilderUnboundedBinaryOpTest, UnboundedBinaryOpTest) {
+TEST_P(ZkxBuilderUnboundedBinaryOpTest, UnboundedBinaryOpTest) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape(GetParam().lhs));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape(GetParam().rhs));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape(GetParam().expected));
+  GetParam().binary_op(Parameter(&b, 0, lhs, "lhs"),
+                       Parameter(&b, 1, rhs, "rhs"),
+                       GetParam().broadcast_dimensions);
+  if (const auto result = BuildHloModule(b); result.ok()) {
+    ASSERT_NE(*result, nullptr);
+    EXPECT_THAT(GetRoot(**result),
+                GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+  } else {
+    ASSERT_TRUE(GetParam().error_message.has_value());
+    EXPECT_THAT(result, StatusIs(_, HasSubstr(*GetParam().error_message)));
+  }
+}
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedAddScalarBroadcast) {
+TEST(ZkxBuilderTest, UnboundedAddScalarBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Add(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+      /*broadcast_dimensions=*/empty_array);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedAddDegenerateBroadcast) {
+TEST(ZkxBuilderTest, UnboundedAddDegenerateBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[1, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Add(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+      /*broadcast_dimensions=*/{0, 1});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, UnboundedAddUnsupportedImplicitBroadcast) {
   ZkxBuilder b(TestName());
@@ -1051,8 +1594,20 @@ TEST(ZkxBuilderTest, UnboundedAddUnsupportedImplicitBroadcast) {
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::AllToAllTuple
 // TEST(ZkxBuilderTest, BoundedAllToAllUnsupported) {
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedAnd) {
+TEST(ZkxBuilderTest, UnboundedAnd) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs,
+                          ParseShape("s32[1, ?, 2, ?, <=2, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs,
+                          ParseShape("s32[?, 1, ?, 2, ?, <=2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("s32[?, ?, 2, 2, <=2, <=2, ?]"));
+  And(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+      /*broadcast_dimensions=*/empty_array);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, UnboundedBitcastConvert) {
   ZkxBuilder b(TestName());
@@ -1105,8 +1660,25 @@ TEST(ZkxBuilderTest, UnboundedBroadcastInDimUnsupported) {
                                     "static or bounded dynamic")));
 }
 
-// TODO(chokobole): Add test. Dependency: HloCallInstruction
-// TEST(ZkxBuilderTest, UnboundedCall) {
+TEST(ZkxBuilderTest, UnboundedCall) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+
+  ZkxComputation computation;
+  {
+    const std::unique_ptr<ZkxBuilder> sub_builder = b.CreateSubBuilder("add");
+    Add(Parameter(sub_builder.get(), 0, operand, "arg0"),
+        Parameter(sub_builder.get(), 1, operand, "arg1"));
+    TF_ASSERT_OK_AND_ASSIGN(computation, sub_builder->Build());
+  }
+
+  Call(/*builder=*/&b, /*computation=*/computation, /*operands=*/
+       {Parameter(&b, 0, operand, "arg0"), Parameter(&b, 1, operand, "arg1")});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, UnboundedClamp) {
   ZkxBuilder b(TestName());
@@ -1125,17 +1697,57 @@ TEST(ZkxBuilderTest, UnboundedClamp) {
               GmockMatch(m::Op().WithShapeEqualTo(&expected)));
 }
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedClampScalarMinImplicitBroadcast) {
+TEST(ZkxBuilderTest, UnboundedClampScalarMinImplicitBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape ehs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Clamp(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+        Parameter(&b, 2, ehs, "ehs"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedClampScalarMinMaxImplicitBroadcast) {
+TEST(ZkxBuilderTest, UnboundedClampScalarMinMaxImplicitBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape ehs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Clamp(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+        Parameter(&b, 2, ehs, "ehs"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedClampScalarOperandMaxImplicitBroadcast) {
+TEST(ZkxBuilderTest, UnboundedClampScalarOperandMaxImplicitBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape ehs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Clamp(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+        Parameter(&b, 2, ehs, "ehs"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedClampScalarMinOperandImplicitBroadcast) {
+TEST(ZkxBuilderTest, UnboundedClampScalarMinOperandImplicitBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape ehs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Clamp(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+        Parameter(&b, 2, ehs, "ehs"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest,
      UnboundedClampUnsupportedDegenerateOperandImplicitBroadcast) {
@@ -1155,11 +1767,40 @@ TEST(ZkxBuilderTest,
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::CollectivePermute
 // TEST(ZkxBuilderTest, UnboundedCollectivePermute) {
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedCompare) {
+TEST(ZkxBuilderTest, UnboundedCompare) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs,
+                          ParseShape("u32[1, ?, 2, ?, <=2, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs,
+                          ParseShape("u32[?, 1, ?, 2, ?, <=2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("pred[?, ?, 2, 2, <=2, <=2, ?]"));
+  Compare(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+          ComparisonDirection::kEq);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloConcatenateInstruction
-// TEST(ZkxBuilderTest, UnboundedConcatenate) {
+TEST(ZkxBuilderTest, UnboundedConcatenate) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand1,
+                          ParseShape("u32[3, ?, 2, ?, <=2, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand2,
+                          ParseShape("u32[?, 4, ?, 2, ?, <=2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand3,
+                          ParseShape("u32[?, ?, 2, 2, <=2, <=2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("u32[3, 4, ?, 2, <=2, <=2, ?]"));
+  ConcatInDim(&b,
+              {Parameter(&b, 0, operand1, "operand1"),
+               Parameter(&b, 1, operand2, "operand2"),
+               Parameter(&b, 2, operand3, "operand3")},
+              2);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, UnboundedConvert) {
   ZkxBuilder b(TestName());
@@ -1174,17 +1815,80 @@ TEST(ZkxBuilderTest, UnboundedConvert) {
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::Dot
 // TEST(ZkxBuilderTest, UnboundedDot) {
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::DotGeneral
-// TEST(ZkxBuilderTest, UnboundedDotGeneral) {
+TEST(ZkxBuilderTest, UnboundedDotGeneral) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("u32[?, <=3, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[2, 4, 5]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, <=3, 5]"));
 
-// TODO(chokobole): Add test. Dependency: HloDynamicSliceInstruction
-// TEST(ZkxBuilderTest, UnboundedDynamicSlice) {
+  DotDimensionNumbers dnums;
+  dnums.add_lhs_contracting_dimensions(2);
+  dnums.add_rhs_contracting_dimensions(1);
+  dnums.add_lhs_batch_dimensions(0);
+  dnums.add_rhs_batch_dimensions(0);
 
-// TODO(chokobole): Add test. Dependency: HloDynamicUpdateSliceInstruction
-// TEST(ZkxBuilderTest, UnboundedDynamicUpdateSlice) {
+  DotGeneral(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"), dnums);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::Gather
-// TEST(ZkxBuilderTest, UnboundedGather) {
+TEST(ZkxBuilderTest, UnboundedDynamicSlice) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape start_indices, ParseShape("s32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[2, 2]"));
+  DynamicSlice(Parameter(&b, 0, operand, "operand"),
+               /*start_indices=*/
+               {
+                   Parameter(&b, 1, start_indices, "start_indices0"),
+                   Parameter(&b, 2, start_indices, "start_indices1"),
+               },
+               /*slice_sizes=*/{2, 2});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
+
+TEST(ZkxBuilderTest, UnboundedDynamicUpdateSlice) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape update, ParseShape("u32[?, 5]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape start_indices, ParseShape("s32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  DynamicUpdateSlice(Parameter(&b, 0, operand, "operand"),
+                     Parameter(&b, 1, update, "update"),
+                     /*start_indices=*/
+                     {Parameter(&b, 2, start_indices, "start_indices0"),
+                      Parameter(&b, 3, start_indices, "start_indices1")});
+  TF_ASSERT_OK_AND_ASSIGN(const std::unique_ptr<HloModule> module,
+                          BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
+
+TEST(ZkxBuilderTest, UnboundedGather) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[3, 4, 2]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape start_indices,
+                          ParseShape("s32[?, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, ?, 2, 2]"));
+
+  GatherDimensionNumbers dimension_numbers;
+  dimension_numbers.add_offset_dims(2);
+  dimension_numbers.add_offset_dims(3);
+  dimension_numbers.add_collapsed_slice_dims(0);
+  dimension_numbers.add_start_index_map(1);
+  dimension_numbers.add_start_index_map(0);
+  dimension_numbers.set_index_vector_dim(2);
+
+  Gather(Parameter(&b, 0, operand, "operand"),
+         Parameter(&b, 1, start_indices, "start_indices"), dimension_numbers,
+         /*slice_sizes=*/{1, 2, 2});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, UnboundedGetTupleElement) {
   ZkxBuilder b(TestName());
@@ -1203,14 +1907,52 @@ TEST(ZkxBuilderTest, UnboundedGetTupleElement) {
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::InfeedWithToken
 // TEST(ZkxBuilderTest, UnboundedInfeedWithToken) {
 
-// TODO(chokobole): Add test. Dependency: HloMapInstruction
-// TEST(ZkxBuilderTest, UnboundedMap) {
+TEST(ZkxBuilderTest, UnboundedMap) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand0, ParseShape("u32[2, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand1, ParseShape("u32[?, 3, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[2, ?, ?]"));
+
+  ZkxComputation computation;
+  {
+    const std::unique_ptr<ZkxBuilder> sub_builder = b.CreateSubBuilder("add");
+    Add(Parameter(sub_builder.get(), 0, ShapeUtil::MakeScalarShape(U32),
+                  "arg0"),
+        Parameter(sub_builder.get(), 1, ShapeUtil::MakeScalarShape(U32),
+                  "arg1"));
+    TF_ASSERT_OK_AND_ASSIGN(computation, sub_builder->Build());
+  }
+
+  Map(&b, /*operands=*/
+      {Parameter(&b, 0, operand0, "operand0"),
+       Parameter(&b, 1, operand1, "operand1")},
+      computation, /*dimensions=*/{0, 1, 2},
+      /*static_operands=*/{});
+
+  TF_ASSERT_OK_AND_ASSIGN(const std::unique_ptr<HloModule> module,
+                          BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::OptimizationBarrier
 // TEST(ZkxBuilderTest, UnboundedOptimizationBarrier) {
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedOr) {
+TEST(ZkxBuilderTest, UnboundedOr) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs,
+                          ParseShape("s32[1, ?, 2, ?, <=2, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs,
+                          ParseShape("s32[?, 1, ?, 2, ?, <=2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("s32[?, ?, 2, 2, <=2, <=2, ?]"));
+  Or(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+     /*broadcast_dimensions=*/empty_array);
+  TF_ASSERT_OK_AND_ASSIGN(const std::unique_ptr<HloModule> module,
+                          BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::Outfeed
 // TEST(ZkxBuilderTest, UnboundedOutfeed) {
@@ -1218,8 +1960,22 @@ TEST(ZkxBuilderTest, UnboundedGetTupleElement) {
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::OutfeedWithToken
 // TEST(ZkxBuilderTest, UnboundedOutfeedWithToken) {
 
-// TODO(chokobole): Add test. Dependency: HloPadInstruction
-// TEST(ZkxBuilderTest, UnboundedPad) {
+TEST(ZkxBuilderTest, UnboundedPad) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 12]"));
+  PaddingConfig padding_config;
+  for (int i = 0; i < 2; i++) {
+    auto dimension = padding_config.add_dimensions();
+    dimension->set_edge_padding_low(1);
+    dimension->set_edge_padding_high(1);
+  }
+  Pad(Parameter(&b, 0, operand, "operand"),
+      /*padding_value=*/ConstantR0<uint32_t>(&b, 0), padding_config);
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::Recv
 // TEST(ZkxBuilderTest, UnboundedRecv) {
@@ -1230,14 +1986,69 @@ TEST(ZkxBuilderTest, UnboundedGetTupleElement) {
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::RecvWithToken
 // TEST(ZkxBuilderTest, UnboundedRecvWithToken) {
 
-// TODO(chokobole): Add test. Dependency: HloReduceInstruction
-// TEST(ZkxBuilderTest, UnboundedReduce) {
+TEST(ZkxBuilderTest, UnboundedReduce) {
+  ZkxBuilder b(TestName());
+  const Shape shape = ShapeUtil::MakeShape(U32, {7}, {false});
+  const Shape expected = ShapeUtil::MakeTupleShape({shape, shape, shape});
+
+  TF_ASSERT_OK_AND_ASSIGN(const Shape input0, ParseShape("u32[7, 5]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape input1, ParseShape("u32[?, 5]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape input2, ParseShape("u32[7, ?]"));
+  const Shape scalar_u32 = ShapeUtil::MakeShape(U32, {});
+  const ZkxOp init = Parameter(&b, 3, scalar_u32, "init");
+
+  ZkxBuilder bsum(TestName());
+  std::vector<ZkxOp> output_operands = {
+      Add(Parameter(&bsum, 0, scalar_u32, "arg0"),
+          Parameter(&bsum, 1, scalar_u32, "arg1")),
+      Add(Parameter(&bsum, 2, scalar_u32, "arg2"),
+          Parameter(&bsum, 3, scalar_u32, "arg3")),
+      Add(Parameter(&bsum, 4, scalar_u32, "arg4"),
+          Parameter(&bsum, 5, scalar_u32, "arg5"))};
+  Tuple(&bsum, absl::MakeSpan(output_operands));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation sum, bsum.Build());
+  Reduce(
+      &b,
+      {Parameter(&b, 0, input0, "input0"), Parameter(&b, 1, input1, "input1"),
+       Parameter(&b, 2, input2, "input2")},
+      {init, init, init}, sum, {1});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::ReduceScatter
 // TEST(ZkxBuilderTest, UnboundedReduceScatter) {
 
-// TODO(chokobole): Add test. Dependency: HloReshapeInstruction
-// TEST(ZkxBuilderTest, UnboundedReshape) {
+TEST(ZkxBuilderTest, UnboundedReduceWindow) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape input, ParseShape("u32[?, 4, 8]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 3, 5]"));
+
+  ZkxBuilder bsum(TestName());
+  Add(Parameter(&bsum, 0, ShapeUtil::MakeShape(U32, {}), "x"),
+      Parameter(&bsum, 1, ShapeUtil::MakeShape(U32, {}), "y"));
+  TF_ASSERT_OK_AND_ASSIGN(const ZkxComputation sum, bsum.Build());
+
+  ReduceWindow(Parameter(&b, 0, input, "input"), ConstantR0<uint32_t>(&b, 0),
+               sum,
+               window_util::MakeWindow(/*sizes=*/{1, 2, 4},
+                                       /*strides=*/{1, 1, 1}));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
+
+TEST(ZkxBuilderTest, UnboundedReshape) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[2,3]"));
+  Reshape(Parameter(&b, 0, operand, "operand"), /*dimensions=*/{0},
+          /*new_sizes=*/{2, 3});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, UnboundedReshapeUnsupportedOutputShape) {
   ZkxBuilder b(TestName());
@@ -1262,11 +2073,62 @@ TEST(ZkxBuilderTest, UnboundedReshapeUnsupportedInferredShape) {
                    "Reshaping with unbounded result shape is not supported.")));
 }
 
-// TODO(chokobole): Add test. Dependency: HloReverseInstruction
-// TEST(ZkxBuilderTest, UnboundedReverse) {
+TEST(ZkxBuilderTest, UnboundedReverse) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Rev(Parameter(&b, 0, operand, "operand"), /*dimensions=*/{0, 1});
+  TF_ASSERT_OK_AND_ASSIGN(const std::unique_ptr<HloModule> module,
+                          BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: ZkxBuilder::Scatter
-// TEST(ZkxBuilderTest, UnboundedScatter) {
+// TODO(chokobole): Add test. Dependency: ZkxBuilder::RngBitGenerator
+// TEST(ZkxBuilderTest, UnboundedRngBitGenerator) {
+
+// TODO(chokobole): Add test. Dependency: ZkxBuilder::RngNormal
+// TEST(ZkxBuilderTest, UnboundedRngNormal) {
+
+// TODO(chokobole): Add test. Dependency: ZkxBuilder::RngUniform
+// TEST(ZkxBuilderTest, UnboundedRngUniform) {
+
+TEST(ZkxBuilderTest, UnboundedScatter) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape input, ParseShape("u32[?, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape scatter_indices,
+                          ParseShape("s32[?, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape updates, ParseShape("u32[?, ?, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, ?, ?]"));
+
+  ZkxComputation update_computation;
+  {
+    const std::unique_ptr<ZkxBuilder> sub_builder = b.CreateSubBuilder("add");
+    Add(Parameter(sub_builder.get(), 0, ShapeUtil::MakeScalarShape(U32),
+                  "arg0"),
+        Parameter(sub_builder.get(), 1, ShapeUtil::MakeScalarShape(U32),
+                  "arg1"));
+    TF_ASSERT_OK_AND_ASSIGN(update_computation, sub_builder->Build());
+  }
+
+  ScatterDimensionNumbers dimension_numbers;
+  dimension_numbers.add_update_window_dims(2);
+  dimension_numbers.add_update_window_dims(3);
+  dimension_numbers.add_inserted_window_dims(0);
+  dimension_numbers.add_scatter_dims_to_operand_dims(1);
+  dimension_numbers.add_scatter_dims_to_operand_dims(0);
+  dimension_numbers.set_index_vector_dim(2);
+
+  Scatter(Parameter(&b, 0, input, "input"),
+          Parameter(&b, 1, scatter_indices, "scatter_indices"),
+          Parameter(&b, 2, updates, "updates"), update_computation,
+          dimension_numbers, /*indices_are_sorted=*/false,
+          /*unique_indices=*/false);
+
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, UnboundedSelect) {
   ZkxBuilder b(TestName());
@@ -1285,17 +2147,57 @@ TEST(ZkxBuilderTest, UnboundedSelect) {
               GmockMatch(m::Op().WithShapeEqualTo(&expected)));
 }
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedSelectScalarPred) {
+TEST(ZkxBuilderTest, UnboundedSelectScalarPred) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("pred[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape ehs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Select(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+         Parameter(&b, 2, ehs, "ehs"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedSelectScalarOnTrueOnFalseImplicitBroadcast) {
+TEST(ZkxBuilderTest, UnboundedSelectScalarOnTrueOnFalseImplicitBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("pred[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape ehs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Select(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+         Parameter(&b, 2, ehs, "ehs"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedSelectScalarPredOnFalseImplicitBroadcast) {
+TEST(ZkxBuilderTest, UnboundedSelectScalarPredOnFalseImplicitBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("pred[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape ehs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Select(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+         Parameter(&b, 2, ehs, "ehs"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedSelectScalarPredOnTrueImplicitBroadcast) {
+TEST(ZkxBuilderTest, UnboundedSelectScalarPredOnTrueImplicitBroadcast) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs, ParseShape("pred[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs, ParseShape("u32[]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape ehs, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
+  Select(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+         Parameter(&b, 2, ehs, "ehs"));
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest,
      UnboundedSelectUnsupportedDegenerateOperandImplicitBroadcast) {
@@ -1308,6 +2210,9 @@ TEST(ZkxBuilderTest,
   EXPECT_THAT(BuildHloModule(b),
               StatusIs(_, HasSubstr("Unimplemented implicit broadcast.")));
 }
+
+// TODO(batzor): Add test. Dependency: ZkxBuilder::SelectAndScatter
+// TEST(ZkxBuilderTest, UnboundedSelectAndScatter) {
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::Send
 // TEST(ZkxBuilderTest, UnboundedSend) {
@@ -1332,11 +2237,43 @@ TEST(ZkxBuilderTest, UnboundedSlice) {
               GmockMatch(m::Op().WithShapeEqualTo(&expected)));
 }
 
-// TODO(chokobole): Add test. Dependency: HloSortInstruction
-// TEST(ZkxBuilderTest, UnboundedSort) {
+TEST(ZkxBuilderTest, UnboundedSort) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand, ParseShape("u32[?, 10]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?, 10]"));
 
-// TODO(chokobole): Add test. Dependency: HloTransposeInstruction
-// TEST(ZkxBuilderTest, UnboundedTranspose) {
+  ZkxComputation comparator;
+  {
+    const std::unique_ptr<ZkxBuilder> sub_builder =
+        b.CreateSubBuilder("compare");
+    Compare(Parameter(sub_builder.get(), 0, ShapeUtil::MakeScalarShape(U32),
+                      "arg0"),
+            Parameter(sub_builder.get(), 1, ShapeUtil::MakeScalarShape(U32),
+                      "arg1"),
+            ComparisonDirection::kLt);
+    TF_ASSERT_OK_AND_ASSIGN(comparator, sub_builder->Build());
+  }
+
+  Sort({Parameter(&b, 0, operand, "operand")}, comparator,
+       /*dimension=*/0, /*is_stable=*/true);
+  TF_ASSERT_OK_AND_ASSIGN(const std::unique_ptr<HloModule> module,
+                          BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
+
+TEST(ZkxBuilderTest, UnboundedTranspose) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape operand,
+                          ParseShape("u32[1, ?, 2, ?, <=2]{4,3,2,1,0}"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("u32[<=2, 1, ?, 2, ?]{0,2,3,4,1}"));
+  Transpose(Parameter(&b, 0, operand, "operand"),
+            /*permutation=*/{4, 0, 3, 2, 1});
+  TF_ASSERT_OK_AND_ASSIGN(const auto module, BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 TEST(ZkxBuilderTest, UnboundedTuple) {
   ZkxBuilder b(TestName());
@@ -1349,11 +2286,63 @@ TEST(ZkxBuilderTest, UnboundedTuple) {
               GmockMatch(m::Op().WithShapeEqualTo(&expected)));
 }
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedWhile) {
+TEST(ZkxBuilderTest, UnboundedWhile) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape init, ParseShape("u32[?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected, ParseShape("u32[?]"));
 
-// TODO(chokobole): Add test. Dependency: HloCustomCallInstruction
-// TEST(ZkxBuilderTest, UnboundedXor) {
+  ZkxComputation add;
+  {
+    const std::unique_ptr<ZkxBuilder> sub_builder = b.CreateSubBuilder("add");
+    Add(Parameter(sub_builder.get(), 0, ShapeUtil::MakeScalarShape(U32),
+                  "arg0"),
+        Parameter(sub_builder.get(), 1, ShapeUtil::MakeScalarShape(U32),
+                  "arg1"));
+    TF_ASSERT_OK_AND_ASSIGN(add, sub_builder->Build());
+  }
+
+  ZkxComputation condition;
+  {
+    const std::unique_ptr<ZkxBuilder> sub_builder =
+        b.CreateSubBuilder("compare");
+    Ge(/*lhs=*/ConstantR0<uint32_t>(sub_builder.get(), 10),
+       /*rhs=*/Reduce(/*operand=*/Parameter(sub_builder.get(), 0, init, "prev"),
+                      ConstantR0<uint32_t>(sub_builder.get(), 0), add,
+                      /*dimensions_to_reduce=*/{0}));
+    TF_ASSERT_OK_AND_ASSIGN(condition, sub_builder->Build());
+  }
+
+  ZkxComputation body;
+  {
+    const std::unique_ptr<ZkxBuilder> sub_builder = b.CreateSubBuilder("add");
+    Add(ConstantR1<uint32_t>(sub_builder.get(), {1}),
+        Parameter(sub_builder.get(), 0, init, "prev"),
+        /*broadcast_dimensions=*/{0});
+    TF_ASSERT_OK_AND_ASSIGN(body, sub_builder->Build());
+  }
+
+  While(condition, body, Parameter(&b, 0, init, "init"));
+  TF_ASSERT_OK_AND_ASSIGN(const std::unique_ptr<HloModule> module,
+                          BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
+
+TEST(ZkxBuilderTest, UnboundedXor) {
+  ZkxBuilder b(TestName());
+  TF_ASSERT_OK_AND_ASSIGN(const Shape lhs,
+                          ParseShape("s32[1, ?, 2, ?, <=2, ?, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape rhs,
+                          ParseShape("s32[?, 1, ?, 2, ?, <=2, ?]"));
+  TF_ASSERT_OK_AND_ASSIGN(const Shape expected,
+                          ParseShape("s32[?, ?, 2, 2, <=2, <=2, ?]"));
+  Xor(Parameter(&b, 0, lhs, "lhs"), Parameter(&b, 1, rhs, "rhs"),
+      /*broadcast_dimensions=*/empty_array);
+  TF_ASSERT_OK_AND_ASSIGN(const std::unique_ptr<HloModule> module,
+                          BuildHloModule(b));
+  EXPECT_THAT(GetRoot(*module),
+              GmockMatch(m::Op().WithShapeEqualTo(&expected)));
+}
 
 INSTANTIATE_TEST_SUITE_P(UnboundedDynamism, ZkxBuilderUnboundedUnaryOpTest,
                          ::testing::ValuesIn<UnaryOpTestCase>(
@@ -1363,6 +2352,67 @@ INSTANTIATE_TEST_SUITE_P(UnboundedDynamism, ZkxBuilderUnboundedUnaryOpTest,
                               {"s32[?]", "s32[?]", &Not},
                               {"u32[?]", "u32[?]", &PopulationCount},
                               {"s32[?]", "s32[?]", &Sign}}));
+INSTANTIATE_TEST_SUITE_P(
+    UnboundedDynamism, ZkxBuilderUnboundedBinaryOpTest,
+    ::testing::ValuesIn<BinaryOpTestCase>({
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &Add},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &Add},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &Div},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &Div},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &Max},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &Max},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &Min},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &Min},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &Mul},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &Mul},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "pred[?, 10]", &Ne},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &Pow},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &Pow},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &Rem},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &Rem},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &ShiftLeft},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &ShiftLeft},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &ShiftRightArithmetic},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &ShiftRightArithmetic},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &ShiftRightLogical},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &ShiftRightLogical},
+        {"u32[1, ?, 2, ?, <=2, ?, ?]", "u32[?, 1, ?, 2, ?, <=2, ?]",
+         /*broadcast_dimensions=*/empty_array, "u32[?, ?, 2, 2, <=2, <=2, ?]",
+         &Sub},
+        {"u32[?, 10]", "u32[1]", /*broadcast_dimensions=*/zero_array,
+         "u32[?, 10]", &Sub},
+    }));
 
 // TODO(chokobole): Add test. Dependency: ZkxBuilder::Infeed
 // TEST(ZkxBuilderTest, UnorderedInfeed) {

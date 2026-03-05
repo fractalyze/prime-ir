@@ -425,6 +425,14 @@ class ZkxBuilder {
   ZkxOp BroadcastInDim(ZkxOp operand, absl::Span<const int64_t> out_dim_size,
                        absl::Span<const int64_t> broadcast_dimensions);
 
+  // This is an experimental API for creating the mhlo.dynamic_broadcast_in_dim
+  // op from the ZkxBuilder. This is only intended for export to MHLO or
+  // StableHLO, and cannot be compiled.
+  ZkxOp MhloDynamicBroadcastInDim(
+      ZkxOp operand, ZkxOp output_dimensions,
+      absl::Span<const int64_t> broadcast_dimensions,
+      const Shape& output_shape);
+
   ZkxOp Pad(ZkxOp operand, ZkxOp padding_value,
             const PaddingConfig& padding_config);
   ZkxOp PadInDim(ZkxOp operand, ZkxOp padding_value, int64_t dimno,
@@ -830,6 +838,11 @@ class ZkxBuilder {
   friend ZkxOp BroadcastInDim(ZkxOp operand,
                               absl::Span<const int64_t> out_dim_size,
                               absl::Span<const int64_t> broadcast_dimensions);
+
+  friend ZkxOp MhloDynamicBroadcastInDim(
+      ZkxOp operand, ZkxOp output_dimensions,
+      absl::Span<const int64_t> broadcast_dimensions,
+      const Shape& output_shape);
 
   friend ZkxOp Copy(ZkxOp operand);
 
@@ -1294,6 +1307,13 @@ ZkxOp DynamicReshape(ZkxOp operand, absl::Span<const ZkxOp> dim_sizes,
 // ZkxBuilder. This is only intended for export to MHLO or StableHLO, and cannot
 // be compiled.
 ZkxOp MhloDynamicReshape(ZkxOp operand, ZkxOp output_shape, const Shape& shape);
+
+// This is an experimental API for creating the mhlo.dynamic_broadcast_in_dim
+// op from the ZkxBuilder. This is only intended for export to MHLO or
+// StableHLO, and cannot be compiled.
+ZkxOp MhloDynamicBroadcastInDim(ZkxOp operand, ZkxOp output_dimensions,
+                                absl::Span<const int64_t> broadcast_dimensions,
+                                const Shape& output_shape);
 
 // Enqueues an operation onto the computation that collapses the operand,
 // from first to last dimension (C order), then reshapes it to the given

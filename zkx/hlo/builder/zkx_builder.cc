@@ -565,6 +565,72 @@ absl::Status ZkxBuilder::PopulateInputOutputAliasAndBufferDonor(
   return absl::OkStatus();
 }
 
+ZkxOp ZkxBuilder::MhloDynamicBroadcastInDim(
+    ZkxOp operand, ZkxOp output_dimensions,
+    absl::Span<const int64_t> broadcast_dimensions, const Shape& output_shape) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    TF_ASSIGN_OR_RETURN(const Shape* operand_shape, GetShapePtr(operand));
+    TF_ASSIGN_OR_RETURN(const Shape* output_dimensions_shape,
+                        GetShapePtr(output_dimensions));
+
+    if (!output_dimensions_shape->IsInteger()) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("output_dimensions must be an integer type %s",
+                          ShapeUtil::HumanString(*output_dimensions_shape)));
+    }
+
+    if (output_dimensions_shape->rank() != 1) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("output_dimensions must be rank 1 but got rank %d",
+                          output_dimensions_shape->rank()));
+    }
+
+    int64_t operand_rank = operand_shape->rank();
+    int64_t result_rank = output_shape.rank();
+    int64_t broadcast_dimensions_size = broadcast_dimensions.size();
+    if (broadcast_dimensions_size != operand_rank) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "broadcast_dimensions size (%d) does not match operand rank (%d)",
+          broadcast_dimensions_size, operand_rank));
+    }
+
+    if (result_rank < operand_rank) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("result rank (%d) is less than operand rank (%d)",
+                          result_rank, operand_rank));
+    }
+
+    for (int64_t i = 0; i != broadcast_dimensions_size; ++i) {
+      int64_t dim_index = broadcast_dimensions[i];
+      if (dim_index < 0 || dim_index >= result_rank) {
+        return absl::InvalidArgumentError(absl::StrFormat(
+            "broadcast_dimensions contains invalid value %d for result with "
+            "rank %d",
+            dim_index, result_rank));
+      }
+
+      int64_t dim_size = operand_shape->dimensions(i);
+      int64_t result_dim_size = output_shape.dimensions(dim_index);
+
+      if (dim_size != 1 && dim_size != result_dim_size &&
+          dim_size != Shape::kUnboundedSize) {
+        return absl::InvalidArgumentError(absl::StrFormat(
+            "size of operand dimension %d (%d) is not compatible with size of "
+            "result dimension %d (%d)",
+            i, dim_size, dim_index, result_dim_size));
+      }
+    }
+
+    return zkx::CustomCall(
+        operand.builder(), "mhlo.dynamic_broadcast_in_dim",
+        /*operands=*/{operand, output_dimensions},
+        /*shape=*/output_shape,
+        /*opaque=*/
+        absl::StrCat("{broadcast_dimensions=[",
+                     absl::StrJoin(broadcast_dimensions, ","), "]}"));
+  });
+}
+
 absl::StatusOr<ZkxOp> ZkxBuilder::InDimBroadcast(
     const Shape& shape, ZkxOp operand,
     absl::Span<const int64_t> broadcast_dimensions) {
@@ -694,6 +760,95 @@ absl::StatusOr<ZkxOp> BroadcastToTargetRank(
   return BroadcastInDim(origin, target_size, broadcast_dimensions);
 }
 
+absl::StatusOr<std::vector<ZkxOp>> ExtractDimensionSizesAndPadOnesToLeft(
+    ZkxBuilder* builder, ZkxOp op, size_t num_dims, int pad_count) {
+  TF_ASSIGN_OR_RETURN(const Shape* op_shape, builder->GetShapePtr(op));
+  std::vector<ZkxOp> op_dims(
+      pad_count, ConstantR1<int32_t>(/*builder=*/builder, /*values=*/{1}));
+  for (size_t i = 0; i < num_dims; i++) {
+    op_dims.push_back(
+        op_shape->is_static_dimension(i)
+            ? ConstantR1<int32_t>(
+                  /*builder=*/builder,
+                  /*values=*/{static_cast<int32_t>(op_shape->dimensions(i))})
+            : Reshape(GetDimensionSize(op, i), {1}));
+  }
+  return op_dims;
+}
+
+absl::StatusOr<ZkxOp> BroadcastScalarToOutputShapeWithUnbounded(
+    ZkxBuilder* builder, ZkxOp scalar, ZkxOp output,
+    const Shape& output_shape) {
+  TF_ASSIGN_OR_RETURN(const Shape* scalar_shape, builder->GetShapePtr(scalar));
+  CHECK(ShapeUtil::IsScalar(*scalar_shape));
+
+  std::vector<ZkxOp> output_sizes(output_shape.rank());
+  for (size_t i = 0; i < output_shape.rank(); i++) {
+    output_sizes[i] =
+        output_shape.is_static_dimension(i)
+            ? ConstantR1<int32_t>(
+                  /*builder=*/builder,
+                  /*values=*/{static_cast<int32_t>(output_shape.dimensions(i))})
+            : Reshape(GetDimensionSize(output, i), {1});
+  }
+  return MhloDynamicBroadcastInDim(
+      scalar, /*output_dimensions=*/ConcatInDim(builder, output_sizes, 0), {},
+      output_shape);
+}
+
+absl::StatusOr<ZkxOp> DegenerateBroadcastWithUnbounded(
+    ZkxBuilder* builder, ZkxOp operand, ZkxOp output_dimensions,
+    const Shape& output_shape) {
+  TF_ASSIGN_OR_RETURN(const Shape* operand_shape,
+                      builder->GetShapePtr(operand));
+
+  std::vector<int64_t> broadcast_dimensions(operand_shape->rank());
+  std::iota(broadcast_dimensions.begin(), broadcast_dimensions.end(),
+            output_shape.rank() - operand_shape->rank());
+
+  return MhloDynamicBroadcastInDim(operand, output_dimensions,
+                                   broadcast_dimensions, output_shape);
+}
+
+// Helper struct to store the result of `BroadcastToOutputShapeWithUnbounded`.
+struct UnboundedBroadcastResult {
+  ZkxOp lhs;
+  ZkxOp rhs;
+};
+
+absl::StatusOr<UnboundedBroadcastResult> BroadcastToOutputShapeWithUnbounded(
+    ZkxBuilder* builder, ZkxOp lhs, const Shape& lhs_shape, ZkxOp rhs,
+    const Shape rhs_shape, const Shape& output_shape,
+    absl::Span<const int64_t> broadcast_dimensions) {
+  const int64_t lhs_rank = lhs_shape.rank();
+  const int64_t rhs_rank = rhs_shape.rank();
+  const int64_t output_rank = output_shape.rank();
+
+  // If the rank of the op is less than the output rank, pad the dimension
+  // sizes of the op with 1's to match the output rank.
+  TF_ASSIGN_OR_RETURN(std::vector<ZkxOp> lhs_dims,
+                      ExtractDimensionSizesAndPadOnesToLeft(
+                          builder, lhs, lhs_rank, output_rank - lhs_rank));
+  TF_ASSIGN_OR_RETURN(std::vector<ZkxOp> rhs_dims,
+                      ExtractDimensionSizesAndPadOnesToLeft(
+                          builder, rhs, rhs_rank, output_rank - rhs_rank));
+
+  // The output dimensions of the dynamic broadcast is the maximum of the input
+  // shapes. The `output_dimensions` refer to the runtime shape and should not
+  // contain any dynamic sizes at run time.
+  ZkxOp output_dimensions =
+      Max(ConcatInDim(builder, lhs_dims, 0), ConcatInDim(builder, rhs_dims, 0));
+
+  // Broadcast `lhs` and `rhs` to `output_shape`.
+  TF_ASSIGN_OR_RETURN(ZkxOp lhs_result,
+                      DegenerateBroadcastWithUnbounded(
+                          builder, lhs, output_dimensions, output_shape));
+  TF_ASSIGN_OR_RETURN(ZkxOp rhs_result,
+                      DegenerateBroadcastWithUnbounded(
+                          builder, rhs, output_dimensions, output_shape));
+  return UnboundedBroadcastResult{lhs_result, rhs_result};
+}
+
 }  // namespace
 
 ZkxOp ZkxBuilder::BinaryOp(HloOpcode binop, ZkxOp lhs, ZkxOp rhs,
@@ -733,9 +888,29 @@ ZkxOp ZkxBuilder::BinaryOp(HloOpcode binop, ZkxOp lhs, ZkxOp rhs,
                             AddBroadcastSequence(shape, updated_rhs));
       }
     } else {
-      return absl::UnimplementedError(
-          "A case that lhs_shape or rhs_shape is unbounded dynamic is not "
-          "supported.");
+      if (ShapeUtil::IsScalar(*lhs_shape) || ShapeUtil::IsScalar(*rhs_shape)) {
+        if (ShapeUtil::IsScalar(*lhs_shape)) {
+          TF_ASSIGN_OR_RETURN(updated_lhs,
+                              BroadcastScalarToOutputShapeWithUnbounded(
+                                  this, lhs, rhs, *rhs_shape));
+        }
+        if (ShapeUtil::IsScalar(*rhs_shape)) {
+          TF_ASSIGN_OR_RETURN(updated_rhs,
+                              BroadcastScalarToOutputShapeWithUnbounded(
+                                  this, rhs, lhs, *lhs_shape));
+        }
+      } else {
+        if (!ShapeUtil::SameDimensions(*lhs_shape, *rhs_shape)) {
+          Shape output_shape = shape;
+          output_shape.set_element_type(lhs_shape->element_type());
+          TF_ASSIGN_OR_RETURN(UnboundedBroadcastResult broadcast_result,
+                              BroadcastToOutputShapeWithUnbounded(
+                                  this, lhs, *lhs_shape, rhs, *rhs_shape,
+                                  output_shape, broadcast_dimensions));
+          updated_lhs = broadcast_result.lhs;
+          updated_rhs = broadcast_result.rhs;
+        }
+      }
     }
 
     if (binop == HloOpcode::kCompare) {
@@ -775,12 +950,17 @@ absl::StatusOr<ZkxOp> ZkxBuilder::Compare(const Shape& shape, ZkxOp lhs,
 
 absl::StatusOr<ZkxOp> ZkxBuilder::BroadcastScalarToOutputShape(ZkxOp scalar,
                                                                ZkxOp output) {
+  TF_ASSIGN_OR_RETURN(const Shape* scalar_shape, GetShapePtr(scalar));
   TF_ASSIGN_OR_RETURN(const Shape* output_shape, GetShapePtr(output));
 
   ZkxOp updated_output = scalar;
   if (output_shape->is_unbounded_dynamic()) {
-    return absl::UnimplementedError(
-        "A case that output_shape is unbounded dynamic is not supported.");
+    Shape output_shape_copy = *output_shape;
+    output_shape_copy.set_element_type(scalar_shape->element_type());
+    TF_ASSIGN_OR_RETURN(updated_output,
+                        BroadcastScalarToOutputShapeWithUnbounded(
+                            this, scalar, output, output_shape_copy));
+    return updated_output;
   }
 
   TF_ASSIGN_OR_RETURN(updated_output,
@@ -2503,6 +2683,14 @@ ZkxOp BroadcastInDim(const ZkxOp operand,
                      absl::Span<const int64_t> broadcast_dimensions) {
   return operand.builder()->BroadcastInDim(operand, out_dim_size,
                                            broadcast_dimensions);
+}
+
+ZkxOp MhloDynamicBroadcastInDim(const ZkxOp operand,
+                                const ZkxOp output_dimensions,
+                                absl::Span<const int64_t> broadcast_dimensions,
+                                const Shape& output_shape) {
+  return operand.builder()->MhloDynamicBroadcastInDim(
+      operand, output_dimensions, broadcast_dimensions, output_shape);
 }
 
 ZkxOp Copy(const ZkxOp operand) {

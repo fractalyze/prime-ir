@@ -75,6 +75,7 @@ zkx_cc_unittest(
         ":zkx_computation",
         "//xla/tsl/platform:statusor",
         "//zkx:debug_options_flags",
+        "//zkx:window_util",
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/parser:hlo_parser",
         "//zkx/hlo/testlib:pattern_matcher_gmock",
