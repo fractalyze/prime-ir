@@ -123,6 +123,7 @@ zkx_cc_library(
     name = "ffi_api",
     srcs = ["ffi_api.cc"],
     hdrs = ["ffi_api.h"],
+    force_exceptions = True,
     deps = [
         ":call_frame",
         ":execution_context",
