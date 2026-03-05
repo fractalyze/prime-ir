@@ -287,7 +287,12 @@ int main(int argc, char** argv) {
 
   int ret = zkbench::BenchmarkMain(argc, argv, "zkx-icicle-sumcheck", "0.1.0");
 
-  // Tear down global state before CUDA context is destroyed at exit.
-  g_state = {};
+  // Tear down in reverse dependency order: device buffers must be freed while
+  // the runner (and its allocator) is still alive.
+  g_state.device_buffers.clear();
+  g_state.executable.reset();
+  g_state.input_ptrs.clear();
+  g_state.inputs.clear();
+  g_state.runner.reset();
   return ret;
 }
