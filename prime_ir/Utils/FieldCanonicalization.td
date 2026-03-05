@@ -27,7 +27,7 @@ limitations under the License.
 // - Distributivity: a * (b + c) = a*b + a*c
 //
 // These patterns use direct operation construction (e.g., AddOp instead of
-// CreateAddOp) since field operations have SameOperandsAndResultType trait.
+// CreateAddOp) with InferTypeOpInterface for result type inference.
 //
 // Requirements for the including file:
 // 1. Define `GetAsConstant`: A helper to materialize a constant of the same

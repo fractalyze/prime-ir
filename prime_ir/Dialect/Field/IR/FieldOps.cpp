@@ -1393,9 +1393,83 @@ OpFoldResult foldUnaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn,
       .Default([](auto) { return OpFoldResult{}; });
 }
 
+// Returns the extension field type if one element type is an extension field
+// and the other is its base field. Returns nullptr otherwise.
+ExtensionFieldType getMixedExtFieldType(Type lhsElemType, Type rhsElemType) {
+  if (auto efType = dyn_cast<ExtensionFieldType>(lhsElemType)) {
+    if (efType.getBaseField() == rhsElemType) {
+      return efType;
+    }
+  }
+  if (auto efType = dyn_cast<ExtensionFieldType>(rhsElemType)) {
+    if (efType.getBaseField() == lhsElemType) {
+      return efType;
+    }
+  }
+  return nullptr;
+}
+
+// Returns the mixed-type result type, preserving tensor shape if present.
+// For scalar operands, returns the extension field type directly.
+// For tensor operands, returns tensor<shape x efType>.
+Type getMixedResultType(Type lhsType, Type rhsType) {
+  Type lhsElemType = getElementTypeOrSelf(lhsType);
+  Type rhsElemType = getElementTypeOrSelf(rhsType);
+  auto efType = getMixedExtFieldType(lhsElemType, rhsElemType);
+  if (!efType)
+    return nullptr;
+
+  // If either operand is a shaped type, wrap the result in the same shape.
+  if (auto shapedType = dyn_cast<ShapedType>(lhsType)) {
+    return shapedType.clone(efType);
+  }
+  if (auto shapedType = dyn_cast<ShapedType>(rhsType)) {
+    return shapedType.clone(efType);
+  }
+  return efType;
+}
+
+// Fold a binary op with mixed types. Constructs FieldOperation for each
+// operand from its attribute and type, then applies the given function.
+template <typename Op, typename Func>
+OpFoldResult foldMixedBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
+                               Func fn) {
+  Attribute lhsAttr = adaptor.getLhs();
+  Attribute rhsAttr = adaptor.getRhs();
+  if (!lhsAttr || !rhsAttr)
+    return {};
+
+  Type lhsElemType = getElementTypeOrSelf(op->getLhs().getType());
+  Type rhsElemType = getElementTypeOrSelf(op->getRhs().getType());
+
+  auto lhsTypedAttr = dyn_cast<TypedAttr>(lhsAttr);
+  auto rhsTypedAttr = dyn_cast<TypedAttr>(rhsAttr);
+  if (!lhsTypedAttr || !rhsTypedAttr)
+    return {};
+
+  FieldOperation lhsOp =
+      FieldOperation::fromUnchecked(lhsTypedAttr, lhsElemType);
+  FieldOperation rhsOp =
+      FieldOperation::fromUnchecked(rhsTypedAttr, rhsElemType);
+
+  FieldOperation result = fn(lhsOp, rhsOp);
+
+  // Result is always the extension field type.
+  auto efType = cast<ExtensionFieldType>(getElementTypeOrSelf(op->getType()));
+  SmallVector<APInt> flatCoeffs = static_cast<SmallVector<APInt>>(result);
+  auto towerShape = efType.getAttrShape();
+  auto tensorType = RankedTensorType::get(
+      towerShape, efType.getBasePrimeField().getStorageType());
+  return DenseIntElementsAttr::get(tensorType, flatCoeffs);
+}
+
 template <typename Op, typename Func>
 OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
                                   Func fn) {
+  // Mixed-type ops (ext ± base or base ± ext) fold via FieldOperation directly.
+  if (op->getLhs().getType() != op->getRhs().getType())
+    return foldMixedBinaryOp(op, adaptor, fn);
+
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
@@ -1422,6 +1496,10 @@ OpFoldResult foldAdditiveBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
 template <typename Op, typename Func>
 OpFoldResult
 foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
+  // Mixed-type ops (ext * base or base * ext) fold via FieldOperation directly.
+  if (op->getLhs().getType() != op->getRhs().getType())
+    return foldMixedBinaryOp(op, adaptor, fn);
+
   Type type = op->getType();
   Type elemType = getElementTypeOrSelf(type);
 
@@ -1446,6 +1524,191 @@ foldMultiplicativeBinaryOp(Op *op, typename Op::FoldAdaptor adaptor, Func fn) {
 }
 
 } // namespace
+
+//===----------------------------------------------------------------------===//
+// Binary op inferReturnTypes / verify / print / parse
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// Shared inferReturnTypes for AddOp, SubOp, MulOp.
+LogicalResult
+inferBinaryOpReturnTypes(MLIRContext *context, std::optional<Location> location,
+                         ValueRange operands, DictionaryAttr attributes,
+                         OpaqueProperties properties, RegionRange regions,
+                         SmallVectorImpl<Type> &inferredReturnTypes) {
+  Type lhsType = operands[0].getType();
+  Type rhsType = operands[1].getType();
+
+  if (lhsType == rhsType) {
+    inferredReturnTypes.push_back(lhsType);
+    return success();
+  }
+
+  // Mixed type: result is the extension field type (preserving tensor shape).
+  if (auto resultType = getMixedResultType(lhsType, rhsType)) {
+    inferredReturnTypes.push_back(resultType);
+    return success();
+  }
+
+  if (location) {
+    return emitError(*location)
+           << "incompatible operand types for field binary op: " << lhsType
+           << " and " << rhsType;
+  }
+  return failure();
+}
+
+// Shared verifier for AddOp, SubOp, MulOp.
+LogicalResult verifyBinaryOp(Operation *op) {
+  Type lhsType = op->getOperand(0).getType();
+  Type rhsType = op->getOperand(1).getType();
+  Type resultType = op->getResult(0).getType();
+
+  if (lhsType == rhsType) {
+    // Same-type: result must match operands.
+    if (resultType != lhsType) {
+      return op->emitOpError() << "result type " << resultType
+                               << " must match operand type " << lhsType;
+    }
+    return success();
+  }
+
+  // Mixed-type: one operand must be an extension field and the other its base.
+  // Tensor shapes must match when both are shaped types.
+  if (isa<ShapedType>(lhsType) && isa<ShapedType>(rhsType)) {
+    auto lhsShape = cast<ShapedType>(lhsType).getShape();
+    auto rhsShape = cast<ShapedType>(rhsType).getShape();
+    if (lhsShape != rhsShape) {
+      return op->emitOpError()
+             << "tensor shapes must match for mixed-type ops, got " << lhsType
+             << " and " << rhsType;
+    }
+  }
+
+  auto expectedResultType = getMixedResultType(lhsType, rhsType);
+  if (!expectedResultType) {
+    return op->emitOpError()
+           << "incompatible operand types: " << lhsType << " and " << rhsType
+           << "; for mixed-type ops, one operand must be an extension field "
+              "and the other must be its base field";
+  }
+
+  if (resultType != expectedResultType) {
+    return op->emitOpError()
+           << "result type " << resultType
+           << " must be the extension field type " << expectedResultType;
+  }
+
+  return success();
+}
+
+// Shared print for binary ops.
+// Same-type: `field.add %a, %b : !pf`
+// Mixed-type: `field.add %a, %b : !ef, !pf`
+void printBinaryOp(Operation *op, OpAsmPrinter &p) {
+  p << " " << op->getOperands();
+  p.printOptionalAttrDict(op->getAttrs());
+  p << " : ";
+  Type lhsType = op->getOperand(0).getType();
+  Type rhsType = op->getOperand(1).getType();
+  if (lhsType == rhsType) {
+    p.printType(lhsType);
+  } else {
+    p.printType(lhsType);
+    p << ", ";
+    p.printType(rhsType);
+  }
+}
+
+// Shared parse for binary ops.
+// Parses `%a, %b : <type>[, <type>]`
+ParseResult parseBinaryOp(OpAsmParser &parser, OperationState &result) {
+  OpAsmParser::UnresolvedOperand lhs, rhs;
+  Type type1, type2;
+
+  if (parser.parseOperand(lhs) || parser.parseComma() ||
+      parser.parseOperand(rhs) ||
+      parser.parseOptionalAttrDict(result.attributes) || parser.parseColon() ||
+      parser.parseType(type1))
+    return failure();
+
+  if (succeeded(parser.parseOptionalComma())) {
+    // Mixed-type: two types
+    if (parser.parseType(type2))
+      return failure();
+  } else {
+    // Same-type: lhs == rhs
+    type2 = type1;
+  }
+
+  if (parser.resolveOperand(lhs, type1, result.operands) ||
+      parser.resolveOperand(rhs, type2, result.operands))
+    return failure();
+
+  // Infer result type.
+  if (type1 == type2) {
+    result.addTypes({type1});
+  } else {
+    auto resultType = getMixedResultType(type1, type2);
+    if (!resultType) {
+      return parser.emitError(parser.getCurrentLocation())
+             << "incompatible operand types: " << type1 << " and " << type2;
+    }
+    result.addTypes({resultType});
+  }
+
+  return success();
+}
+
+} // namespace
+
+LogicalResult
+AddOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
+                        ValueRange operands, DictionaryAttr attributes,
+                        OpaqueProperties properties, RegionRange regions,
+                        SmallVectorImpl<Type> &inferredReturnTypes) {
+  return inferBinaryOpReturnTypes(context, location, operands, attributes,
+                                  properties, regions, inferredReturnTypes);
+}
+
+LogicalResult
+SubOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
+                        ValueRange operands, DictionaryAttr attributes,
+                        OpaqueProperties properties, RegionRange regions,
+                        SmallVectorImpl<Type> &inferredReturnTypes) {
+  return inferBinaryOpReturnTypes(context, location, operands, attributes,
+                                  properties, regions, inferredReturnTypes);
+}
+
+LogicalResult
+MulOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
+                        ValueRange operands, DictionaryAttr attributes,
+                        OpaqueProperties properties, RegionRange regions,
+                        SmallVectorImpl<Type> &inferredReturnTypes) {
+  return inferBinaryOpReturnTypes(context, location, operands, attributes,
+                                  properties, regions, inferredReturnTypes);
+}
+
+LogicalResult AddOp::verify() { return verifyBinaryOp(getOperation()); }
+LogicalResult SubOp::verify() { return verifyBinaryOp(getOperation()); }
+LogicalResult MulOp::verify() { return verifyBinaryOp(getOperation()); }
+
+void AddOp::print(OpAsmPrinter &p) { printBinaryOp(getOperation(), p); }
+void SubOp::print(OpAsmPrinter &p) { printBinaryOp(getOperation(), p); }
+void MulOp::print(OpAsmPrinter &p) { printBinaryOp(getOperation(), p); }
+
+ParseResult AddOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseBinaryOp(parser, result);
+}
+ParseResult SubOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseBinaryOp(parser, result);
+}
+ParseResult MulOp::parse(OpAsmParser &parser, OperationState &result) {
+  return parseBinaryOp(parser, result);
+}
+
+//===----------------------------------------------------------------------===//
 
 OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
   return foldUnaryOp(this, adaptor,
@@ -1562,11 +1825,111 @@ namespace {
 
 #include "prime_ir/Utils/CanonicalizationPatterns.inc"
 
+namespace {
+
+//===----------------------------------------------------------------------===//
+// Mixed-type expansion patterns
+//===----------------------------------------------------------------------===//
+
+// Expand mixed-type add/sub to ext_to_coeffs + same-type op + ext_from_coeffs.
+// field.add %ext, %base → coeffs = ext_to_coeffs(%ext);
+//                          coeffs[0] = field.add coeffs[0], %base;
+//                          ext_from_coeffs(coeffs)
+template <typename BinaryOp>
+struct ExpandMixedAdditiveOp : public OpRewritePattern<BinaryOp> {
+  using OpRewritePattern<BinaryOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(BinaryOp op,
+                                PatternRewriter &rewriter) const override {
+    Type lhsType = op.getLhs().getType();
+    Type rhsType = op.getRhs().getType();
+    if (lhsType == rhsType)
+      return failure();
+
+    // Only expand scalar ops. Tensor ops are lowered to scalars first.
+    if (isa<ShapedType>(lhsType) || isa<ShapedType>(rhsType))
+      return failure();
+
+    auto efType = getMixedExtFieldType(lhsType, rhsType);
+    if (!efType)
+      return failure();
+
+    Value extVal = isa<ExtensionFieldType>(lhsType) ? op.getLhs() : op.getRhs();
+    Value baseVal =
+        isa<ExtensionFieldType>(lhsType) ? op.getRhs() : op.getLhs();
+    bool baseIsLhs = !isa<ExtensionFieldType>(lhsType);
+
+    SmallVector<Type> coeffTypes(efType.getDegree(), efType.getBaseField());
+    auto coeffsOp =
+        rewriter.create<ExtToCoeffsOp>(op.getLoc(), coeffTypes, extVal);
+    SmallVector<Value> newCoeffs(coeffsOp->getResults());
+
+    // Apply the operation only on coeff[0].
+    if (baseIsLhs && std::is_same_v<BinaryOp, SubOp>) {
+      // base - ext: coeff[0] = base - coeff[0], negate others
+      newCoeffs[0] =
+          rewriter.create<BinaryOp>(op.getLoc(), baseVal, newCoeffs[0]);
+      for (size_t i = 1; i < newCoeffs.size(); ++i) {
+        newCoeffs[i] = rewriter.create<NegateOp>(op.getLoc(), newCoeffs[i]);
+      }
+    } else {
+      // ext + base, ext - base, base + ext: only modify coeff[0]
+      newCoeffs[0] =
+          rewriter.create<BinaryOp>(op.getLoc(), newCoeffs[0], baseVal);
+    }
+
+    rewriter.replaceOpWithNewOp<ExtFromCoeffsOp>(op, efType, newCoeffs);
+    return success();
+  }
+};
+
+// Expand mixed-type mul to ext_to_coeffs + scalar mul + ext_from_coeffs.
+// field.mul %ext, %base → coeffs = ext_to_coeffs(%ext);
+//                          for each i: coeffs[i] = field.mul coeffs[i], %base;
+//                          ext_from_coeffs(coeffs)
+struct ExpandMixedMulOp : public OpRewritePattern<MulOp> {
+  using OpRewritePattern<MulOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MulOp op,
+                                PatternRewriter &rewriter) const override {
+    Type lhsType = op.getLhs().getType();
+    Type rhsType = op.getRhs().getType();
+    if (lhsType == rhsType)
+      return failure();
+
+    // Only expand scalar ops. Tensor ops are lowered to scalars first.
+    if (isa<ShapedType>(lhsType) || isa<ShapedType>(rhsType))
+      return failure();
+
+    auto efType = getMixedExtFieldType(lhsType, rhsType);
+    if (!efType)
+      return failure();
+
+    Value extVal = isa<ExtensionFieldType>(lhsType) ? op.getLhs() : op.getRhs();
+    Value baseVal =
+        isa<ExtensionFieldType>(lhsType) ? op.getRhs() : op.getLhs();
+
+    SmallVector<Type> coeffTypes(efType.getDegree(), efType.getBaseField());
+    auto coeffsOp =
+        rewriter.create<ExtToCoeffsOp>(op.getLoc(), coeffTypes, extVal);
+    SmallVector<Value> newCoeffs;
+    for (Value coeff : coeffsOp->getResults()) {
+      newCoeffs.push_back(rewriter.create<MulOp>(op.getLoc(), coeff, baseVal));
+    }
+
+    rewriter.replaceOpWithNewOp<ExtFromCoeffsOp>(op, efType, newCoeffs);
+    return success();
+  }
+};
+
+} // namespace
+
 void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
                                         MLIRContext *context) {
 #define PRIME_IR_ADD_PATTERN(Name) patterns.add<Field##Name>(context);
   PRIME_IR_FIELD_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
 #undef PRIME_IR_ADD_PATTERN
+  patterns.add<ExpandMixedAdditiveOp<AddOp>>(context);
 }
 
 void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
@@ -1574,6 +1937,7 @@ void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 #define PRIME_IR_SUB_PATTERN(Name) patterns.add<Field##Name>(context);
   PRIME_IR_FIELD_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
 #undef PRIME_IR_SUB_PATTERN
+  patterns.add<ExpandMixedAdditiveOp<SubOp>>(context);
 }
 
 void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
@@ -1581,6 +1945,7 @@ void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 #define PRIME_IR_MUL_PATTERN(Name) patterns.add<Field##Name>(context);
   PRIME_IR_FIELD_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
 #undef PRIME_IR_MUL_PATTERN
+  patterns.add<ExpandMixedMulOp>(context);
 }
 
 namespace {

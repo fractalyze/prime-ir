@@ -314,20 +314,21 @@ struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ScopedBuilderContext scopedBuilderContext(&b);
-    Type fieldType = getElementTypeOrSelf(op.getOutput());
 
-    if (generator &&
-        IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
-      auto efType = cast<ExtensionFieldType>(fieldType);
-      rewriter.replaceOp(op,
-                         static_cast<const Derived *>(this)->emitIntrinsicCall(
-                             rewriter, op.getLoc(), efType, adaptor));
-      return success();
+    if (generator) {
+      Type fieldType = getElementTypeOrSelf(op.getOutput());
+      if (IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
+        auto efType = cast<ExtensionFieldType>(fieldType);
+        rewriter.replaceOp(
+            op, static_cast<const Derived *>(this)->emitIntrinsicCall(
+                    rewriter, op.getLoc(), efType, adaptor));
+        return success();
+      }
     }
 
     rewriter.replaceOp(
-        op, {static_cast<const Derived *>(this)->emitInlineCodeGen(fieldType,
-                                                                   adaptor)});
+        op,
+        {static_cast<const Derived *>(this)->emitInlineCodeGen(op, adaptor)});
     return success();
   }
 
@@ -343,7 +344,8 @@ struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
     return generator->emitQuarticInverseCall(b, loc, efType,
                                              adaptor.getInput());
   }
-  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+  Value emitInlineCodeGen(InverseOp op, OpAdaptor adaptor) const {
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
     return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
         .inverse();
   }
@@ -355,7 +357,8 @@ struct ConvertNegate : ConvertFieldOpBase<NegateOp, ConvertNegate> {
                           OpAdaptor adaptor) const {
     return generator->emitNegateCall(b, loc, efType, adaptor.getInput());
   }
-  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+  Value emitInlineCodeGen(NegateOp op, OpAdaptor adaptor) const {
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
     return -FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter);
   }
 };
@@ -367,9 +370,11 @@ struct ConvertAdd : ConvertFieldOpBase<AddOp, ConvertAdd> {
     return generator->emitAddCall(b, loc, efType, adaptor.getLhs(),
                                   adaptor.getRhs());
   }
-  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
-    FieldCodeGen lhs(fieldType, adaptor.getLhs(), this->typeConverter);
-    FieldCodeGen rhs(fieldType, adaptor.getRhs(), this->typeConverter);
+  Value emitInlineCodeGen(AddOp op, OpAdaptor adaptor) const {
+    Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
+    Type rhsType = getElementTypeOrSelf(op.getRhs().getType());
+    FieldCodeGen lhs(lhsType, adaptor.getLhs(), this->typeConverter);
+    FieldCodeGen rhs(rhsType, adaptor.getRhs(), this->typeConverter);
     return lhs + rhs;
   }
 };
@@ -380,7 +385,8 @@ struct ConvertDouble : ConvertFieldOpBase<DoubleOp, ConvertDouble> {
                           OpAdaptor adaptor) const {
     return generator->emitDoubleCall(b, loc, efType, adaptor.getInput());
   }
-  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+  Value emitInlineCodeGen(DoubleOp op, OpAdaptor adaptor) const {
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
     return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
         .dbl();
   }
@@ -393,9 +399,11 @@ struct ConvertSub : ConvertFieldOpBase<SubOp, ConvertSub> {
     return generator->emitSubCall(b, loc, efType, adaptor.getLhs(),
                                   adaptor.getRhs());
   }
-  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
-    FieldCodeGen lhs(fieldType, adaptor.getLhs(), this->typeConverter);
-    FieldCodeGen rhs(fieldType, adaptor.getRhs(), this->typeConverter);
+  Value emitInlineCodeGen(SubOp op, OpAdaptor adaptor) const {
+    Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
+    Type rhsType = getElementTypeOrSelf(op.getRhs().getType());
+    FieldCodeGen lhs(lhsType, adaptor.getLhs(), this->typeConverter);
+    FieldCodeGen rhs(rhsType, adaptor.getRhs(), this->typeConverter);
     return lhs - rhs;
   }
 };
@@ -407,9 +415,11 @@ struct ConvertMul : ConvertFieldOpBase<MulOp, ConvertMul> {
     return generator->emitQuarticMulCall(b, loc, efType, adaptor.getLhs(),
                                          adaptor.getRhs());
   }
-  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
-    FieldCodeGen lhs(fieldType, adaptor.getLhs(), this->typeConverter);
-    FieldCodeGen rhs(fieldType, adaptor.getRhs(), this->typeConverter);
+  Value emitInlineCodeGen(MulOp op, OpAdaptor adaptor) const {
+    Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
+    Type rhsType = getElementTypeOrSelf(op.getRhs().getType());
+    FieldCodeGen lhs(lhsType, adaptor.getLhs(), this->typeConverter);
+    FieldCodeGen rhs(rhsType, adaptor.getRhs(), this->typeConverter);
     return lhs * rhs;
   }
 };
@@ -420,7 +430,8 @@ struct ConvertSquare : ConvertFieldOpBase<SquareOp, ConvertSquare> {
                           OpAdaptor adaptor) const {
     return generator->emitQuarticSquareCall(b, loc, efType, adaptor.getInput());
   }
-  Value emitInlineCodeGen(Type fieldType, OpAdaptor adaptor) const {
+  Value emitInlineCodeGen(SquareOp op, OpAdaptor adaptor) const {
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
     return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
         .square();
   }
