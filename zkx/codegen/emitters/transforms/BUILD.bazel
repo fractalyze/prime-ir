@@ -170,6 +170,7 @@ zkx_cc_library(
         ":passes_inc_gen",
         "//zkx/backends/gpu/codegen/emitters/ir:zkx_gpu",
         "//zkx/codegen/emitters:elemental_hlo_to_mlir",
+        "//zkx/mlir:mlir_utils",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:DataLayoutInterfaces",

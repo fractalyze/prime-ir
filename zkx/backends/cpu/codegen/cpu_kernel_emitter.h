@@ -17,6 +17,9 @@ limitations under the License.
 #ifndef ZKX_BACKENDS_CPU_CODEGEN_CPU_KERNEL_EMITTER_H_
 #define ZKX_BACKENDS_CPU_CODEGEN_CPU_KERNEL_EMITTER_H_
 
+#include <cstdint>
+#include <optional>
+
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "llvm/ADT/SmallVector.h"
@@ -48,11 +51,19 @@ class CpuKernelEmitter final : public KernelEmitter {
     bool enable_scf_to_cf = false;
     bool enable_expand_strided_metadata = false;
     bool enable_finalize_memref_to_llvm = false;
-#ifdef ZKX_HAS_OPENMP
-    bool enable_omp = true;
-#else
-    bool enable_omp = false;
-#endif
+  };
+
+  // Multi-dimensional partitioning info from backend_config.
+  // When the outermost dimension alone cannot satisfy the target parallelism,
+  // additional dimensions are partitioned (e.g., shape [4,64,1024] with
+  // partitions=[4,4] → dim0×dim1 = 16-way parallelism).
+  struct ParallelPartition {
+    int64_t total_partitions;  // Product of all per-dim partition counts.
+    // Per-dimension info, outer-to-inner order:
+    llvm::SmallVector<int64_t> dim_indices;     // Logical dim indices.
+    llvm::SmallVector<int64_t> dim_partitions;  // Per-dim partition counts.
+    llvm::SmallVector<int64_t> dim_full_sizes;  // Original dim sizes.
+    llvm::SmallVector<int64_t> dim_min_sizes;   // Min sizes across operands.
   };
 
   CpuKernelEmitter(mlir::MLIRContext* context, const HloInstruction* instr,
@@ -68,6 +79,9 @@ class CpuKernelEmitter final : public KernelEmitter {
       const HloComputation* comparator);
 
  private:
+  absl::StatusOr<KernelDefinition> EmitKernelDefinitionImpl(
+      std::string_view kernel_name);
+
   absl::StatusOr<llvm::SmallVector<mlir::Type>> MakeFuncArguments() const;
   absl::StatusOr<llvm::SmallVector<mlir::Type>> MakeFuncReturnTypes() const;
 
@@ -211,10 +225,27 @@ class CpuKernelEmitter final : public KernelEmitter {
                                                 mlir::Value lhs,
                                                 mlir::Value rhs);
 
+  // Enables lowering passes for ZK types (field, EC point) in pass_flag_.
+  void EnableZkTypePasses(PrimitiveType element_type);
+
+  // Returns a shape with all partitioned dimensions reduced to chunk size
+  // when parallel partitioning is active, or the original shape otherwise.
+  Shape GetChunkShape(const Shape& shape) const;
+
+  // Get the scaled shape for a fusion body instruction.
+  // All partitioned dimensions with size >= min_dim_size are scaled down by
+  // their respective partition counts. Smaller shapes (broadcast sources)
+  // are returned unchanged.
+  Shape GetScaledFusionShape(const Shape& original_shape) const;
+
   mlir::MLIRContext* const mlir_context_;
   const HloInstruction* const instr_;
 
   const BufferAssignment* const buffer_assignment_;
+
+  // Set when the instruction has parallel partitioning info from
+  // ParallelTaskAssigner and the kernel can be parallelized.
+  std::optional<ParallelPartition> partition_;
 
   mutable PassFlag pass_flag_;
 };

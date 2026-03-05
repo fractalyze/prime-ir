@@ -48,6 +48,7 @@ limitations under the License.
 #include "zkx/codegen/emitters/elemental_hlo_to_mlir.h"
 #include "zkx/codegen/emitters/ir/zkx_ops.h"
 #include "zkx/hlo/analysis/indexing_map.h"
+#include "zkx/mlir/mlir_utils.h"
 #include "zkx/util.h"
 
 namespace zkx::emitters {
@@ -176,12 +177,9 @@ struct RewriteShuffleReduce : mlir::OpRewritePattern<gpu::ShuffleReduceOp> {
               mlir::DataLayout::closest(b.getInsertionBlock()->getParentOp())
                   .getTypeSizeInBits(orig_ty);
           auto int_ty = b.getIntegerType(bits);
-          // NOTE(jeong0982): Replace with a TypeInterface-based approach once
-          // an IntegerBitcastable TypeInterface is added to prime-ir, so that
-          // EC and other future types can provide their own bitcast logic.
-          value = b.create<mlir::prime_ir::field::BitcastOp>(int_ty, value);
+          value = mlir_utils::BuildBitcastToInt(b, value, int_ty);
           value = shuffle_int(value);
-          value = b.create<mlir::prime_ir::field::BitcastOp>(orig_ty, value);
+          value = mlir_utils::BuildBitcastFromInt(b, value, orig_ty);
           return value;
         }
         if (value.getType().isUnsignedInteger()) {

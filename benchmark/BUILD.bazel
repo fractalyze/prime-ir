@@ -72,10 +72,10 @@ zkx_cc_binary(
     srcs = ["scalar_generator.cc"],
     deps = [
         ":field_flag",
+        "//xla/tsl/platform:cpu_info",
         "//xla/tsl/platform:env",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:statusor",
-        "//zkx/base:openmp_util",
         "//zkx/base:random",
         "//zkx/base/buffer:vector_buffer",
         "//zkx/base/flag:flag_parser",

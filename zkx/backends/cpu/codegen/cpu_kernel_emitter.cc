@@ -48,6 +48,7 @@ limitations under the License.
 #include "mlir/Dialect/MemRef/Transforms/Passes.h"
 #include "mlir/Dialect/SCF/Transforms/BufferDeallocationOpInterfaceImpl.h"
 #include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/IR/TensorInferTypeOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -58,21 +59,16 @@ limitations under the License.
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/Passes.h"
 
-#include "zk_dtypes/include/field/root_of_unity.h"
-
-#ifdef ZKX_HAS_OPENMP
-#include "mlir/Conversion/SCFToOpenMP/SCFToOpenMP.h"
-#include "mlir/Target/LLVMIR/Dialect/OpenMP/OpenMPToLLVMIRTranslation.h"
-#endif
-
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
+#include "prime_ir/Dialect/EllipticCurve/Transforms/BufferizableOpInterfaceImpl.h"
 #include "prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
+#include "prime_ir/Dialect/Field/Transforms/BufferizableOpInterfaceImpl.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
@@ -84,6 +80,7 @@ limitations under the License.
 #include "xla/tsl/platform/cpu_info.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zk_dtypes/include/all_types.h"
+#include "zk_dtypes/include/field/root_of_unity.h"
 #include "zkx/backends/cpu/codegen/kernel_api_ir_builder.h"
 #include "zkx/base/bits.h"
 #include "zkx/base/logging.h"
@@ -96,6 +93,7 @@ limitations under the License.
 #include "zkx/mlir/mlir_utils.h"
 #include "zkx/mlir_hlo/mhlo/transforms/map_mhlo_to_scalar_op.h"
 #include "zkx/primitive_util.h"
+#include "zkx/service/cpu/backend_config.pb.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
 #include "zkx/shape_util.h"
 
@@ -279,18 +277,6 @@ void AddPasses(mlir::PassManager& pm, CpuKernelEmitter::PassFlag& flag) {
     pm.addPass(mlir::createLowerAffinePass());
   }
 
-  if (flag.enable_omp) {
-#ifdef ZKX_HAS_OPENMP
-    VLOG(2) << "add pass: -convert-scf-to-openmp";
-    // NOTE(batzor): This pass introduces memref.alloca ops that have to be
-    // lowered before the -convert-scf-to-cf pass.
-    flag.enable_finalize_memref_to_llvm = true;
-    pm.addPass(mlir::createConvertSCFToOpenMPPass());
-#else
-    VLOG(2) << "ZKX is not built with OpenMP. Skipping OpenMP pass...";
-#endif
-  }
-
   if (flag.enable_expand_strided_metadata) {
     VLOG(2) << "add pass: -expand-strided-metadata";
     pm.addNestedPass<mlir::func::FuncOp>(
@@ -338,9 +324,6 @@ std::unique_ptr<llvm::Module> CreateLLVMModule(
   mlir::DialectRegistry registry;
   mlir::registerBuiltinDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);
-#ifdef ZKX_HAS_OPENMP
-  mlir::registerOpenMPDialectTranslation(registry);
-#endif
   mlir::registerAllExtensions(registry);
   mlir::memref::registerAllocationOpInterfaceExternalModels(registry);
   mlir::LLVM::registerInlinerInterface(registry);
@@ -356,6 +339,10 @@ std::unique_ptr<llvm::Module> CreateLLVMModule(
     mlir::scf::registerBufferDeallocationOpInterfaceExternalModels(registry);
     mlir::scf::registerBufferizableOpInterfaceExternalModels(registry);
     mlir::tensor::registerBufferizableOpInterfaceExternalModels(registry);
+    mlir::prime_ir::field::registerBufferizableOpInterfaceExternalModels(
+        registry);
+    mlir::prime_ir::elliptic_curve::
+        registerBufferizableOpInterfaceExternalModels(registry);
   }
   if (pass_flag.enable_elliptic_curve_to_llvm) {
     mlir::prime_ir::elliptic_curve::registerConvertEllipticCurveToLLVMInterface(
@@ -379,10 +366,36 @@ std::unique_ptr<llvm::Module> CreateLLVMModule(
   return TranslateMLIRToLLVM(module, llvm_context);
 }
 
+// Offset a memref descriptor's data pointers (allocated + aligned) by a given
+// byte offset. The memref struct layout is: {ptr allocated, ptr aligned,
+// i64 offset, [rank x i64] sizes, [rank x i64] strides}.
+void OffsetMemrefPointer(llvm::IRBuilder<>& b, llvm::Value* memref,
+                         llvm::StructType* memref_ty,
+                         llvm::Value* byte_offset) {
+  llvm::Value* aligned_gep =
+      b.CreateStructGEP(memref_ty, memref, 1, "aligned_gep");
+  llvm::Value* aligned_ptr =
+      b.CreateLoad(b.getPtrTy(), aligned_gep, "aligned_ptr");
+  llvm::Value* new_ptr = b.CreateInBoundsGEP(b.getInt8Ty(), aligned_ptr,
+                                             byte_offset, "offset_ptr");
+  b.CreateStore(new_ptr, b.CreateStructGEP(memref_ty, memref, 0, "alloc_gep"));
+  b.CreateStore(new_ptr, aligned_gep);
+}
+
+// Compute the byte stride for one chunk partition. For multi-dimensional
+// partitioning, this is total_elements / total_partitions * element_bytes,
+// which is equivalent to the single-dim formula when only one dim is split.
+int64_t ComputeChunkByteStride(const Shape& shape, int64_t total_partitions) {
+  return ShapeUtil::ElementsIn(shape) / total_partitions *
+         ShapeUtil::ByteSizeOfPrimitiveType(shape.element_type());
+}
+
 void Postprocess(std::unique_ptr<llvm::Module> llvm_module,
                  llvm::Module* new_llvm_module,
                  KernelApiIrBuilder::KernelPrototype& kernel_prototype,
-                 std::string_view name) {
+                 const HloInstruction* hlo_instr, std::string_view name,
+                 const std::optional<CpuKernelEmitter::ParallelPartition>&
+                     partition = std::nullopt) {
   llvm::Linker linker(*new_llvm_module);
   bool failed = linker.linkInModule(std::move(llvm_module));
   CHECK(!failed) << "Linking failed";
@@ -394,6 +407,45 @@ void Postprocess(std::unique_ptr<llvm::Module> llvm_module,
   llvm::Instruction* instr =
       kernel_prototype.function->getEntryBlock().getTerminator();
   llvm::IRBuilder<> b(instr);
+
+  // If parallel partitioning is active, offset each buffer's data pointer
+  // by thread_id.x * chunk_byte_stride so each thread processes a different
+  // contiguous slice of the data along the outermost dimension.
+  if (partition) {
+    llvm::Value* tid_x = kernel_prototype.thread_id.x;
+
+    auto offset_memref = [&](llvm::Value* memref, int64_t chunk_byte_stride) {
+      llvm::Value* byte_offset = b.CreateMul(
+          tid_x, llvm::ConstantInt::get(b.getInt64Ty(), chunk_byte_stride),
+          "chunk_byte_offset");
+      auto* alloca = llvm::cast<llvm::AllocaInst>(memref);
+      auto* memref_ty =
+          llvm::cast<llvm::StructType>(alloca->getAllocatedType());
+      OffsetMemrefPointer(b, memref, memref_ty, byte_offset);
+    };
+
+    // Offset argument (operand) buffers — skip broadcast sources that have
+    // fewer total elements than the output.
+    const Shape& result_shape = hlo_instr->shape();
+    int64_t result_elements = ShapeUtil::ElementsIn(result_shape);
+    for (int64_t i = 0;
+         i < static_cast<int64_t>(kernel_prototype.arguments.size()); ++i) {
+      const Shape& shape = hlo_instr->operand(i)->shape();
+      // Skip broadcast source operands: they have fewer total elements than
+      // the result and are shared across all threads unchanged.
+      if (shape.rank() == 0 || ShapeUtil::ElementsIn(shape) < result_elements) {
+        continue;
+      }
+      offset_memref(kernel_prototype.arguments[i],
+                    ComputeChunkByteStride(shape, partition->total_partitions));
+    }
+
+    // Offset result buffer.
+    offset_memref(
+        kernel_prototype.results[0],
+        ComputeChunkByteStride(result_shape, partition->total_partitions));
+  }
+
   llvm::SmallVector<llvm::Value*> args;
   for (const auto& ir_array : kernel_prototype.arguments) {
     args.push_back(ir_array);
@@ -411,13 +463,55 @@ CpuKernelEmitter::CpuKernelEmitter(mlir::MLIRContext* context,
       instr_(instr),
       buffer_assignment_(buffer_assignment) {}
 
+Shape CpuKernelEmitter::GetChunkShape(const Shape& shape) const {
+  if (!partition_ || !shape.IsArray() || shape.rank() == 0) {
+    return shape;
+  }
+  // Skip broadcast sources with fewer total elements.
+  if (ShapeUtil::ElementsIn(shape) < ShapeUtil::ElementsIn(instr_->shape())) {
+    return shape;
+  }
+  Shape chunk = shape;
+  for (int i = 0; i < static_cast<int>(partition_->dim_indices.size()); ++i) {
+    int64_t dim_idx = partition_->dim_indices[i];
+    if (dim_idx >= shape.rank()) continue;
+    int64_t orig = shape.dimensions(dim_idx);
+    if (orig < partition_->dim_min_sizes[i]) continue;
+    chunk.set_dimensions(dim_idx, orig / partition_->dim_partitions[i]);
+  }
+  return chunk;
+}
+
+Shape CpuKernelEmitter::GetScaledFusionShape(
+    const Shape& original_shape) const {
+  if (!partition_.has_value() || !original_shape.IsArray() ||
+      original_shape.rank() == 0) {
+    return original_shape;
+  }
+  if (original_shape.rank() < instr_->shape().rank() &&
+      ShapeUtil::ElementsIn(original_shape) <
+          ShapeUtil::ElementsIn(instr_->shape())) {
+    return original_shape;
+  }
+  Shape scaled = original_shape;
+  for (int i = 0; i < static_cast<int>(partition_->dim_indices.size()); ++i) {
+    int64_t dim_idx = partition_->dim_indices[i];
+    if (dim_idx >= original_shape.rank()) continue;
+    int64_t orig = original_shape.dimensions(dim_idx);
+    if (orig < partition_->dim_min_sizes[i]) continue;
+    scaled.set_dimensions(dim_idx, orig / partition_->dim_partitions[i]);
+  }
+  return scaled;
+}
+
 absl::StatusOr<llvm::SmallVector<mlir::Type>>
 CpuKernelEmitter::MakeFuncArguments() const {
   llvm::SmallVector<mlir::Type> args;
   args.reserve(instr_->operand_count() + 1);
   for (int64_t i = 0; i < instr_->operand_count(); ++i) {
     const HloInstruction* operand = instr_->operand(i);
-    const Shape& shape = operand->shape();
+    const Shape& original_shape = operand->shape();
+    const Shape shape = GetChunkShape(original_shape);
     if (primitive_util::IsSubByteNonPredType(shape.element_type())) {
       args.push_back(mlir_utils::ShapeToMlirMemRefType(
           ShapeUtil::ChangeElementType(shape, U8), mlir_context_));
@@ -430,13 +524,14 @@ CpuKernelEmitter::MakeFuncArguments() const {
 
 absl::StatusOr<llvm::SmallVector<mlir::Type>>
 CpuKernelEmitter::MakeFuncReturnTypes() const {
+  const Shape& original_shape = instr_->shape();
+  const Shape shape = GetChunkShape(original_shape);
   llvm::SmallVector<mlir::Type> ret;
-  if (primitive_util::IsSubByteNonPredType(instr_->shape().element_type())) {
+  if (primitive_util::IsSubByteNonPredType(shape.element_type())) {
     ret.push_back(mlir_utils::ShapeToMlirMemRefType(
-        ShapeUtil::ChangeElementType(instr_->shape(), U8), mlir_context_));
+        ShapeUtil::ChangeElementType(shape, U8), mlir_context_));
   } else {
-    ret.push_back(
-        mlir_utils::ShapeToMlirMemRefType(instr_->shape(), mlir_context_));
+    ret.push_back(mlir_utils::ShapeToMlirMemRefType(shape, mlir_context_));
   }
   return std::move(ret);
 }
@@ -447,7 +542,8 @@ CpuKernelEmitter::EmitOperands(EmitterLocOpBuilder& b,
   absl::flat_hash_map<const HloInstruction*, mlir::Value> values;
   for (int64_t i = 0; i < instr_->operand_count(); ++i) {
     const HloInstruction* operand = instr_->operand(i);
-    const Shape& shape = operand->shape();
+    const Shape& original_shape = operand->shape();
+    const Shape shape = GetChunkShape(original_shape);
     if (primitive_util::IsSubByteNonPredType(shape.element_type())) {
       auto load =
           b.create<mlir::memref::LoadOp>(entry_block->getArgument(i), {});
@@ -471,15 +567,15 @@ CpuKernelEmitter::EmitOperands(EmitterLocOpBuilder& b,
             "tensor input with sub byte non pred type is not supported: %s",
             operand->ToString()));
       }
+    } else {
+      pass_flag_.enable_one_shot_bufferize = true;
+
+      values[operand] = b.create<mlir::bufferization::ToTensorOp>(
+          MakeMlirTensorTypeWithoutLayout(shape, mlir_context_),
+          entry_block->getArgument(i),
+          /*restrict=*/true,
+          /*writable=*/false);
     }
-
-    pass_flag_.enable_one_shot_bufferize = true;
-
-    values[operand] = b.create<mlir::bufferization::ToTensorOp>(
-        MakeMlirTensorTypeWithoutLayout(shape, mlir_context_),
-        entry_block->getArgument(i),
-        /*restrict=*/true,
-        /*writable=*/false);
   }
   return std::move(values);
 }
@@ -518,9 +614,106 @@ absl::Status CpuKernelEmitter::EmitEpilog(EmitterLocOpBuilder& b,
   return absl::OkStatus();
 }
 
+namespace {
+
+// Returns the largest factor of n that is <= max_val, or 1 if none.
+int64_t LargestFactorAtMost(int64_t n, int64_t max_val) {
+  for (int64_t f = max_val; f >= 2; --f) {
+    if (n % f == 0) return f;
+  }
+  return 1;
+}
+
+}  // namespace
+
 absl::StatusOr<KernelDefinition> CpuKernelEmitter::EmitKernelDefinition() {
   VLOG(2) << "Emit host kernel: " << instr_->name();
 
+  const HloModule* hlo_module = instr_->GetModule();
+  if (hlo_module == nullptr) {
+    return absl::InternalError("HloModule is null");
+  }
+
+  // Read parallel partitioning info from backend_config (set by
+  // ParallelTaskAssigner). Supports multi-dimensional partitioning: when the
+  // outermost dimension alone cannot saturate all cores, additional dimensions
+  // are partitioned (e.g., shape (4,256,1024) with partitions=[4,4] → 16-way).
+  bool eligible = false;
+  if (instr_->IsElementwise() && instr_->shape().IsArray() &&
+      instr_->shape().rank() > 0) {
+    eligible = true;
+  } else if (instr_->opcode() == HloOpcode::kFusion &&
+             instr_->fusion_kind() == HloInstruction::FusionKind::kLoop &&
+             instr_->shape().IsArray() && instr_->shape().rank() > 0) {
+    eligible = true;
+  }
+
+  if (eligible) {
+    auto backend_config = instr_->backend_config<BackendConfig>();
+    if (backend_config.ok()) {
+      const auto& partitions = backend_config->outer_dimension_partitions();
+      if (!partitions.empty()) {
+        const Shape& shape = instr_->shape();
+        int64_t result_elements = ShapeUtil::ElementsIn(shape);
+
+        ParallelPartition pp;
+        pp.total_partitions = 1;
+
+        for (int i = 0; i < partitions.size(); ++i) {
+          if (partitions[i] <= 1) continue;
+          int64_t logical_dim =
+              shape.layout().minor_to_major(shape.rank() - 1 - i);
+          int64_t dim_size = shape.dimensions(logical_dim);
+
+          // Find minimum dim size across output and all data-parallel
+          // operands to ensure proportional scaling without truncation.
+          int64_t min_dim = dim_size;
+          for (int64_t j = 0; j < instr_->operand_count(); ++j) {
+            const Shape& op_shape = instr_->operand(j)->shape();
+            if (!op_shape.IsArray() || op_shape.rank() == 0) continue;
+            if (ShapeUtil::ElementsIn(op_shape) < result_elements) continue;
+            if (logical_dim < op_shape.rank()) {
+              min_dim = std::min(min_dim, op_shape.dimensions(logical_dim));
+            }
+          }
+
+          // For fusions, also scan internal instruction shapes.
+          if (instr_->opcode() == HloOpcode::kFusion) {
+            for (const HloInstruction* inner : instr_->fused_instructions()) {
+              const Shape& s = inner->shape();
+              if (!s.IsArray() || s.rank() == 0) continue;
+              if (ShapeUtil::ElementsIn(s) != result_elements) continue;
+              if (logical_dim < s.rank()) {
+                min_dim = std::min(min_dim, s.dimensions(logical_dim));
+              }
+            }
+          }
+
+          int64_t actual = LargestFactorAtMost(min_dim, partitions[i]);
+          if (actual > 1) {
+            pp.dim_indices.push_back(logical_dim);
+            pp.dim_partitions.push_back(actual);
+            pp.dim_full_sizes.push_back(dim_size);
+            pp.dim_min_sizes.push_back(min_dim);
+            pp.total_partitions *= actual;
+          }
+        }
+
+        if (pp.total_partitions > 1) {
+          partition_ = std::move(pp);
+          VLOG(2) << "Parallel kernel: " << instr_->name()
+                  << " total_partitions=" << partition_->total_partitions
+                  << " dims=" << partition_->dim_indices.size();
+        }
+      }
+    }
+  }
+
+  return EmitKernelDefinitionImpl(instr_->name());
+}
+
+absl::StatusOr<KernelDefinition> CpuKernelEmitter::EmitKernelDefinitionImpl(
+    std::string_view kernel_name) {
   auto llvm_context = std::make_unique<llvm::LLVMContext>();
 
   const HloModule* hlo_module = instr_->GetModule();
@@ -531,7 +724,7 @@ absl::StatusOr<KernelDefinition> CpuKernelEmitter::EmitKernelDefinition() {
   LoadMlirDialects(mlir_context_);
 
   auto loc =
-      mlir::NameLoc::get(mlir::StringAttr::get(mlir_context_, instr_->name()));
+      mlir::NameLoc::get(mlir::StringAttr::get(mlir_context_, kernel_name));
   EmitterLocOpBuilder b(loc, mlir_context_);
 
   mlir::OwningOpRef<mlir::ModuleOp> mlir_module =
@@ -544,7 +737,7 @@ absl::StatusOr<KernelDefinition> CpuKernelEmitter::EmitKernelDefinition() {
   mlir::func::FuncOp fn;
   TF_ASSIGN_OR_RETURN(fn_ret_types, MakeFuncReturnTypes());
   fn = b.create<mlir::func::FuncOp>(
-      instr_->name(), b.getFunctionType(fn_arg_types, fn_ret_types));
+      kernel_name, b.getFunctionType(fn_arg_types, fn_ret_types));
   for (int64_t i = 0; i < fn_arg_types.size(); ++i) {
     fn.setArgAttr(i,
                   mlir::bufferization::BufferizationDialect::kWritableAttrName,
@@ -573,20 +766,27 @@ absl::StatusOr<KernelDefinition> CpuKernelEmitter::EmitKernelDefinition() {
 
   std::unique_ptr<llvm::Module> new_llvm_module =
       KernelApiIrBuilder::CreateModule(
-          absl::StrCat(instr_->name(), "_kernel_module"), *llvm_context);
+          absl::StrCat(kernel_name, "_kernel_module"), *llvm_context);
 
-  TF_ASSIGN_OR_RETURN(
-      KernelApiIrBuilder::KernelPrototype kernel_prototype,
-      kernel_api_ir_builder.EmitKernelPrototype(*new_llvm_module, instr_,
-                                                buffer_assignment_, "_kernel"));
+  TF_ASSIGN_OR_RETURN(KernelApiIrBuilder::KernelPrototype kernel_prototype,
+                      kernel_api_ir_builder.EmitKernelPrototype(
+                          *new_llvm_module, instr_, buffer_assignment_,
+                          std::string(kernel_name), "_kernel"));
 
   Postprocess(std::move(llvm_module), new_llvm_module.get(), kernel_prototype,
-              instr_->name());
+              instr_, kernel_name, partition_);
 
   auto source = std::make_unique<LlvmIrKernelSource>(
       std::move(llvm_context), std::move(new_llvm_module));
 
-  KernelSpec spec(kernel_prototype.function->getName(), se::ThreadDim(),
+  se::ThreadDim thread_dim;
+  if (partition_) {
+    thread_dim = se::ThreadDim(partition_->total_partitions, 1, 1);
+    VLOG(2) << "Kernel " << instr_->name()
+            << " thread_dim=" << thread_dim.ToString();
+  }
+
+  KernelSpec spec(kernel_prototype.function->getName(), thread_dim,
                   std::move(kernel_prototype.buffer_uses));
 
   return KernelDefinition(std::move(spec), std::move(source));
@@ -954,7 +1154,8 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitBroadcastOp(
     absl::Span<const int64_t> source_dimensions) {
   pass_flag_.enable_linalg_to_parallel_loops = true;
 
-  int64_t rank = instr->shape().rank();
+  Shape scaled_shape = GetScaledFusionShape(instr->shape());
+  int64_t rank = scaled_shape.rank();
   auto target_dimensions = [source_dimensions, rank]() {
     std::unordered_set<int64_t> source_set(source_dimensions.begin(),
                                            source_dimensions.end());
@@ -988,7 +1189,7 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitBroadcastOp(
   };
 
   auto init = b.create<mlir::tensor::EmptyOp>(
-      MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext()),
+      MakeMlirTensorTypeWithoutLayout(scaled_shape, b.getContext()),
       mlir::ValueRange{});
 
   auto broadcast =
@@ -1707,10 +1908,11 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitReduceWindowOp(
 
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitReshapeOp(
     const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value input) {
+  Shape scaled_shape = GetScaledFusionShape(instr->shape());
   auto output_type =
-      MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
+      MakeMlirTensorTypeWithoutLayout(scaled_shape, b.getContext());
   mlir::Value shape = b.create<mlir::arith::ConstantOp>(
-      b.getIndexTensorAttr(instr->shape().dimensions()));
+      b.getIndexTensorAttr(scaled_shape.dimensions()));
   return b.create<mlir::tensor::ReshapeOp>(output_type, input, shape);
 }
 
@@ -1792,9 +1994,7 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitSliceOp(
     const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value value) {
   pass_flag_.enable_expand_strided_metadata = true;
 
-  const Shape& shape = instr->shape();
-
-  auto result_type = MakeMlirTensorTypeWithoutLayout(shape, b.getContext());
+  const Shape& original_shape = instr->shape();
 
   llvm::SmallVector<mlir::OpFoldResult> offsets;
   llvm::SmallVector<mlir::OpFoldResult> sizes;
@@ -1804,12 +2004,44 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitSliceOp(
   absl::Span<const int64_t> slices_limits = instr->slice_limits();
   absl::Span<const int64_t> slices_strides = instr->slice_strides();
 
-  for (int64_t i = 0; i < shape.rank(); ++i) {
-    offsets.push_back(b.getIndexAttr(slices_starts[i]));
-    sizes.push_back(b.getIndexAttr(slices_limits[i] - slices_starts[i]));
-    strides.push_back(b.getIndexAttr(slices_strides[i]));
+  // Check if the slice INPUT was scaled (the input may be data-parallel even
+  // when the slice output has fewer elements and GetScaledFusionShape would
+  // skip it).  Use the input's scaling ratio to adjust slice limits.
+  const Shape& input_original_shape = instr->operand(0)->shape();
+  Shape input_scaled_shape = GetScaledFusionShape(input_original_shape);
+
+  // Build scaled output shape from actual slice dimensions.
+  Shape result_shape = original_shape;
+
+  for (int64_t i = 0; i < original_shape.rank(); ++i) {
+    int64_t start = slices_starts[i];
+    int64_t limit = slices_limits[i];
+    int64_t stride = slices_strides[i];
+
+    // Scale partitioned dimensions' start/limit when the slice input was
+    // scaled along those dimensions.
+    if (partition_.has_value()) {
+      for (int p = 0; p < static_cast<int>(partition_->dim_indices.size());
+           ++p) {
+        if (i == partition_->dim_indices[p] &&
+            input_scaled_shape.dimensions(i) !=
+                input_original_shape.dimensions(i)) {
+          start = start / partition_->dim_partitions[p];
+          limit = limit / partition_->dim_partitions[p];
+          break;
+        }
+      }
+    }
+
+    int64_t size = (limit - start + stride - 1) / stride;
+    result_shape.set_dimensions(i, size);
+    offsets.push_back(b.getIndexAttr(start));
+    sizes.push_back(b.getIndexAttr(size));
+    strides.push_back(b.getIndexAttr(stride));
   }
 
+  auto result_type =
+      MakeMlirTensorTypeWithoutLayout(result_shape, b.getContext());
   return b.create<mlir::tensor::ExtractSliceOp>(result_type, value, offsets,
                                                 sizes, strides);
 }
@@ -1831,32 +2063,32 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitTransposeOp(
       ->getResult(0);
 }
 
+void CpuKernelEmitter::EnableZkTypePasses(PrimitiveType element_type) {
+  if (primitive_util::IsFieldType(element_type)) {
+    pass_flag_.enable_field_to_arith = true;
+    if (primitive_util::IsExtensionFieldType(element_type)) {
+      pass_flag_.enable_ext_field_to_llvm = true;
+    }
+  } else if (primitive_util::IsEcPointType(element_type)) {
+    pass_flag_.enable_elliptic_curve_to_field = true;
+    pass_flag_.enable_elliptic_curve_to_llvm = true;
+    pass_flag_.enable_field_to_arith = true;
+    switch (element_type) {
+#define ZK_DTYPES_CASE(unused, unused2, enum, unused3) case enum:
+      ZK_DTYPES_PUBLIC_R2_EC_POINT_TYPE_LIST(ZK_DTYPES_CASE)
+#undef ZK_DTYPES_CASE
+      pass_flag_.enable_ext_field_to_llvm = true;
+      break;
+      default:
+        break;
+    }
+  }
+}
+
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
     const HloInstruction* instr, EmitterLocOpBuilder& b,
     absl::flat_hash_map<const HloInstruction*, mlir::Value>& values) {
-  auto enable_flag = [this](PrimitiveType element_type) {
-    if (primitive_util::IsFieldType(element_type)) {
-      pass_flag_.enable_field_to_arith = true;
-      if (primitive_util::IsExtensionFieldType(element_type)) {
-        pass_flag_.enable_ext_field_to_llvm = true;
-      }
-      return;
-    } else if (primitive_util::IsEcPointType(element_type)) {
-      pass_flag_.enable_elliptic_curve_to_field = true;
-      pass_flag_.enable_elliptic_curve_to_llvm = true;
-      switch (element_type) {
-#define ZK_DTYPES_CASE(unused, unused2, enum, unused3) case enum:
-        ZK_DTYPES_PUBLIC_R2_EC_POINT_TYPE_LIST(ZK_DTYPES_CASE)
-#undef ZK_DTYPES_CASE
-        pass_flag_.enable_ext_field_to_llvm = true;
-        break;
-        default:
-          break;
-      }
-    }
-  };
-
-  enable_flag(instr->shape().element_type());
+  EnableZkTypePasses(instr->shape().element_type());
   if (instr->IsElementwise() && instr->shape().IsArray()) {
     pass_flag_.enable_elementwise_to_linalg = true;
   }
@@ -1925,8 +2157,8 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
       return EmitMapOp(instr, b, inputs);
     }
     case HloOpcode::kMsm: {
-      enable_flag(instr->operand(0)->shape().element_type());
-      enable_flag(instr->operand(1)->shape().element_type());
+      EnableZkTypePasses(instr->operand(0)->shape().element_type());
+      EnableZkTypePasses(instr->operand(1)->shape().element_type());
       return EmitMsmOp(instr, b, values[instr->operand(0)],
                        values[instr->operand(1)]);
     }
@@ -1976,15 +2208,15 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
   llvm::SmallVector<mlir::Value> args;
   args.reserve(instr->operands().size());
   for (auto* operand : instr->operands()) {
-    enable_flag(operand->shape().element_type());
+    EnableZkTypePasses(operand->shape().element_type());
     arg_types.push_back(mlir_utils::PrimitiveTypeToMlirTypeWithSign(
         operand->shape().element_type(), b.getContext()));
     args.push_back(values[operand]);
   }
 
   PrimitiveType element_type = instr->operand(0)->shape().element_type();
-  mlir::Type result_type =
-      MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
+  mlir::Type result_type = MakeMlirTensorTypeWithoutLayout(
+      GetChunkShape(instr->shape()), b.getContext());
 
   using namespace mlir::mhlo;
 
@@ -1998,9 +2230,56 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
       return MapElementwiseOp<AddOp>(arg_types, args, b);
     case HloOpcode::kAnd:
       return MapElementwiseOp<AndOp>(arg_types, args, b);
-    case HloOpcode::kBitcastConvert:
-      return MapHloOp<BitcastConvertOp>(result_type, arg_types, args,
-                                        /*attributes=*/std::nullopt, b);
+    case HloOpcode::kBitcastConvert: {
+      PrimitiveType src_type = instr->operand(0)->shape().element_type();
+      PrimitiveType dst_type = instr->shape().element_type();
+      if (!primitive_util::IsZkDtypesType(src_type) &&
+          !primitive_util::IsZkDtypesType(dst_type)) {
+        return MapHloOp<BitcastConvertOp>(result_type, arg_types, args,
+                                          /*attributes=*/std::nullopt, b);
+      }
+      EnableZkTypePasses(src_type);
+      auto output_type =
+          MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
+      int64_t src_bytes = ShapeUtil::ByteSizeOfPrimitiveType(src_type);
+      int64_t dst_bytes = ShapeUtil::ByteSizeOfPrimitiveType(dst_type);
+      bool rank_changed =
+          instr->shape().rank() != instr->operand(0)->shape().rank() ||
+          instr->shape().dimensions() !=
+              instr->operand(0)->shape().dimensions();
+      if (rank_changed && src_bytes != dst_bytes) {
+        // Element sizes differ, so bitcast-convert adds/removes a minor
+        // dimension. ExtFieldToLLVM cannot lower rank-changing
+        // field::BitcastOp on memrefs, so we keep field::BitcastOp at the
+        // same rank by flattening the higher-rank side:
+        //   src smaller (e.g., F[2,4] → EF[2]): flatten input, then bitcast
+        //   src larger  (e.g., EF[2] → F[2,4]): bitcast to flat, then reshape
+        int64_t total_bytes = ShapeUtil::ByteSizeOf(instr->operand(0)->shape());
+        mlir::Value src = args[0];
+        if (src_bytes < dst_bytes) {
+          int64_t flat_src_count = total_bytes / src_bytes;
+          Shape flat_src = ShapeUtil::MakeShape(src_type, {flat_src_count});
+          auto flat_src_type =
+              MakeMlirTensorTypeWithoutLayout(flat_src, b.getContext());
+          mlir::Value cst = b.create<mlir::arith::ConstantOp>(
+              b.getIndexTensorAttr(flat_src.dimensions()));
+          src = b.create<mlir::tensor::ReshapeOp>(flat_src_type, args[0], cst);
+        }
+        int64_t flat_dst_count = total_bytes / dst_bytes;
+        Shape flat_dst = ShapeUtil::MakeShape(dst_type, {flat_dst_count});
+        auto flat_dst_type =
+            MakeMlirTensorTypeWithoutLayout(flat_dst, b.getContext());
+        mlir::Value result =
+            mlir_utils::BuildZkTensorBitcast(b, src, flat_dst_type);
+        if (src_bytes > dst_bytes) {
+          mlir::Value cst = b.create<mlir::arith::ConstantOp>(
+              b.getIndexTensorAttr(instr->shape().dimensions()));
+          result = b.create<mlir::tensor::ReshapeOp>(output_type, result, cst);
+        }
+        return result;
+      }
+      return mlir_utils::BuildZkTensorBitcast(b, args[0], output_type);
+    }
     case HloOpcode::kClamp:
       return MapElementwiseOp<ClampOp>(arg_types, args, b);
     case HloOpcode::kClz:
@@ -2116,6 +2395,17 @@ void CpuKernelEmitter::EmitOpInToApply(
     absl::flat_hash_map<const HloInstruction*, mlir::Value>& values,
     const HloInstruction* instr) {
   if (instr->opcode() == HloOpcode::kParameter) return;
+
+  // kBitcast is a zero-copy layout reinterpretation inserted after layout
+  // assignment. It only changes shape/rank, never element type.
+  // When shapes match (layout-only change), EmitReshapeOp is a no-op reshape.
+  if (instr->opcode() == HloOpcode::kBitcast) {
+    mlir::Value input = values[instr->operand(0)];
+    auto result = EmitReshapeOp(instr, b, input);
+    CHECK(result.ok()) << result.status();
+    values[instr] = result.value();
+    return;
+  }
 
   absl::StatusOr<mlir::Value> result;
   if (instr->opcode() == HloOpcode::kConstant) {

@@ -178,4 +178,11 @@ TYPED_TEST(FieldTest, VectorVectorMultiplication) {
   this->RunAndVerify();
 }
 
+TYPED_TEST_SUITE(FieldBitcastConvertTest, FieldTypes);
+
+TYPED_TEST(FieldBitcastConvertTest, FieldToIntRoundTrip) {
+  this->SetUpFieldToIntRoundTrip();
+  this->RunAndVerify();
+}
+
 }  // namespace zkx::cpu

@@ -24,14 +24,15 @@ limitations under the License.
 // clang-format off
 #include "benchmark/field_flag.h"
 // clang-format on
+#include "xla/tsl/platform/cpu_info.h"
 #include "xla/tsl/platform/env.h"
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
+#include "xla/tsl/platform/thread_pool.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zkx/base/buffer/vector_buffer.h"
 #include "zkx/base/flag/flag_parser.h"
 #include "zkx/base/flag/numeric_flags.h"
-#include "zkx/base/openmp_util.h"
 #include "zkx/base/random.h"
 #include "zkx/math/field/prime_field_serde.h"
 
@@ -44,23 +45,31 @@ absl::StatusOr<base::Uint8VectorBuffer> GenerateScalars(int32_t degree,
 
   std::vector<F> scalars;
   scalars.resize(num_scalars);
+  tsl::thread::ThreadPool pool(tsl::Env::Default(), "scalar_gen",
+                               tsl::port::MaxParallelism());
   if (condensed) {
     int64_t a = num_scalars / 3;
     int64_t b = 2 * a;
-    OMP_PARALLEL_FOR(int64_t i = 0; i < num_scalars; ++i) {
-      if (i < a) {
-        scalars[i] = F::Zero();
-      } else if (i < b) {
-        scalars[i] = F::One();
-      } else {
-        scalars[i] = F::Random();
-      }
-    }
+    pool.ParallelFor(num_scalars, /*cost_per_unit=*/100,
+                     [&](int64_t start, int64_t limit) {
+                       for (int64_t i = start; i < limit; ++i) {
+                         if (i < a) {
+                           scalars[i] = F::Zero();
+                         } else if (i < b) {
+                           scalars[i] = F::One();
+                         } else {
+                           scalars[i] = F::Random();
+                         }
+                       }
+                     });
     base::Shuffle(scalars);
   } else {
-    OMP_PARALLEL_FOR(int64_t i = 0; i < num_scalars; ++i) {
-      scalars[i] = F::Random();
-    }
+    pool.ParallelFor(num_scalars, /*cost_per_unit=*/100,
+                     [&](int64_t start, int64_t limit) {
+                       for (int64_t i = start; i < limit; ++i) {
+                         scalars[i] = F::Random();
+                       }
+                     });
   }
 
   base::Uint8VectorBuffer write_buf;

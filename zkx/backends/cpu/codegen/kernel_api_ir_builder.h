@@ -108,6 +108,14 @@ class KernelApiIrBuilder {
       llvm::Module& module, const HloInstruction* instr,
       const BufferAssignment* buffer_assignment, std::string_view suffix = "");
 
+  // Emits a kernel prototype with a custom kernel name prefix.
+  // This is useful for partitioned kernels where each partition needs a unique
+  // function name.
+  absl::StatusOr<KernelPrototype> EmitKernelPrototype(
+      llvm::Module& module, const HloInstruction* instr,
+      const BufferAssignment* buffer_assignment, std::string_view name_prefix,
+      std::string_view suffix);
+
   absl::StatusOr<KernelPrototype> EmitKernelPrototype(
       llvm::Module& module, std::string_view name,
       absl::Span<const KernelParameter> arguments,

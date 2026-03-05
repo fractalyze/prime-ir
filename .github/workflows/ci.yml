@@ -29,12 +29,6 @@ jobs:
             --config=ci \
             //...
 
-      - name: Run cpu with openmp `bazel test`
-        run: |
-          bazel --bazelrc=.bazelrc.ci test --//:has_openmp \
-            --config=ci \
-            //...
-
       - name: Run gpu `bazel test`
         run: |
           bazel --bazelrc=.bazelrc.ci test \

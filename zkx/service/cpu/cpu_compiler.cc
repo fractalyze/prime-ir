@@ -42,19 +42,33 @@ limitations under the License.
 #include "zkx/backends/cpu/codegen/jit_compiler.h"
 #include "zkx/backends/cpu/codegen/object_loader.h"
 #include "zkx/backends/cpu/runtime/thunk_proto_serdes.h"
+#include "zkx/hlo/pass/hlo_pass_fix.h"
 #include "zkx/hlo/pass/hlo_pass_pipeline.h"
+#include "zkx/hlo/transforms/expanders/reshape_decomposer.h"
+#include "zkx/hlo/transforms/simplifiers/broadcast_canonicalizer.h"
+#include "zkx/hlo/transforms/simplifiers/conditional_canonicalizer.h"
+#include "zkx/hlo/transforms/simplifiers/flatten_call_graph.h"
+#include "zkx/hlo/transforms/simplifiers/hlo_constant_folding.h"
+#include "zkx/hlo/transforms/simplifiers/hlo_cse.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_dce.h"
 #include "zkx/hlo/transforms/simplifiers/hlo_memory_scheduler.h"
+#include "zkx/hlo/transforms/simplifiers/optimize_input_output_buffer_alias.h"
+#include "zkx/hlo/transforms/simplifiers/sub_byte_normalization.h"
+#include "zkx/hlo/transforms/simplifiers/tuple_simplifier.h"
+#include "zkx/hlo/transforms/simplifiers/zero_sized_hlo_elimination.h"
 #include "zkx/service/buffer_value.h"
+#include "zkx/service/call_inliner.h"
 #include "zkx/service/copy_insertion.h"
 #include "zkx/service/cpu/cpu_instruction_fusion.h"
 #include "zkx/service/cpu/cpu_options.h"
 #include "zkx/service/cpu/executable.pb.h"
+#include "zkx/service/cpu/parallel_task_assignment.h"
 #include "zkx/service/cpu/runtime_symbol_generator.h"
 #include "zkx/service/cpu/thunk_emitter.h"
 #include "zkx/service/dump.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/scatter_expander.h"
+#include "zkx/service/while_loop_constant_sinking.h"
 #include "zkx/shape_util.h"
 #include "zkx/stream_executor/host/host_platform_id.h"
 #include "zkx/util.h"
@@ -495,7 +509,46 @@ absl::Status CpuCompiler::RunHloPassesThroughLayoutAssn(
     HloModule* module, bool is_aot_compile,
     TargetMachineFeatures* target_machine_features) {
   HloPassPipeline pipeline("HLO passes through layout assignment");
+
+  // Remove zero-sized HLO from the input so that other passes don't have to
+  // handle it.
+  pipeline.AddPass<ZeroSizedHloElimination>();
+
+  // Inline computations with a single call site.
+  pipeline.AddPass<CallInliner>(/*single_call_site=*/true);
+
+  pipeline.AddPass<ConditionalCanonicalizer>();
+
   pipeline.AddPass<ScatterExpander>(ScatterExpander::kEliminateAllScatters);
+
+  // Run the following passes to a fixed point.
+  [&pipeline =
+       pipeline.AddPass<HloPassFix<HloPassPipeline>>("simplification")] {
+    // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
+    // AddHloVerifier(&pipeline, HloVerifierOpts{},
+    //                /*debug_only=*/true);
+
+    pipeline.AddPass<HloDCE>();
+
+    pipeline.AddPass<TupleSimplifier>();
+    pipeline.AddPass<WhileLoopConstantSinking>();
+
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloConstantFolding>();
+  }();
+
+  pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/false);
+
+  pipeline.AddPass<TupleSimplifier>();
+
+  // Layout assignment uses alias analysis, which requires the call graph to be
+  // flattened.
+  pipeline.AddPass<FlattenCallGraph>();
+
+  // Run SubByteNormalization because CpuLayoutAssignment may modify a
+  // Layout's element_size_in_bits field.
+  pipeline.AddPass<SubByteNormalization>(
+      SubByteNormalization::SET_ELEMENT_SIZE);
 
   return pipeline.Run(module).status();
 }
@@ -506,8 +559,52 @@ absl::Status CpuCompiler::RunHloPassesAfterLayoutAssn(
     const CompileOptions& compile_options) {
   HloPassPipeline pipeline("HLO passes after layout assignment");
 
+  {
+    HloPassPipeline normalization_pipeline("hlo normalization");
+    normalization_pipeline.AddPass<ReshapeDecomposer>();
+    // TODO(chokobole): Uncomment this. Dependency: ReduceDecomposer
+    // normalization_pipeline.AddPass<ReduceDecomposer>();
+    normalization_pipeline.AddPass<BroadcastCanonicalizer>();
+    TF_RETURN_IF_ERROR(normalization_pipeline.Run(module).status());
+  }
+
+  // After layout assignment, use a layout-sensitive verifier.
+  pipeline.AddPass<HloPassPipeline>("after layout assignment");
+  // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
+  // AddHloVerifier(&pipeline, HloVerifierOpts{}.MakeLayoutSensitive(),
+  //                /*debug_only=*/true);
+
+  pipeline.AddPass<ReshapeDecomposer>();
+
   // Add a fusion pass now that layout assignment is done.
   pipeline.AddPass<CpuInstructionFusion>();
+
+  const int max_parallelism =
+      module->config().intra_op_parallelism_threads() > 0
+          ? module->config().intra_op_parallelism_threads()
+          : tsl::port::NumSchedulableCPUs();
+
+  [&pipeline = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+       "simplification after layout assignment")] {
+    // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
+    // AddHloVerifier(
+    //     &pipeline,
+    //     HloVerifierOpts{}.MakeLayoutSensitive().WithInstructionCanChangeLayout(
+    //         LayoutAssignment::InstructionCanChangeLayout),
+    //     /*debug_only=*/true);
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
+  }();
+
+  // Outline ops in the entry computation into calls to subcomputations.
+  if (!is_aot_compile) {
+    // Run parallel task assigner after fusion to assign outer-dimension
+    // partitions. Each parallelized instruction is outlined into a kCall
+    // computation with partition counts in BackendConfig.
+    pipeline.AddPass<ParallelTaskAssigner>(
+        max_parallelism,
+        /*shape_size=*/ShapeSizeBytesFunction());
+  }
 
   // Copy insertion should be performed immediately before IR emission to
   // avoid inserting unnecessary copies (later pass adds an instruction which
@@ -516,8 +613,7 @@ absl::Status CpuCompiler::RunHloPassesAfterLayoutAssn(
   // before (and sometime after) copy insertion, to avoid dead code from
   // interfering with the rewrites.
   pipeline.AddPass<HloDCE>();
-  // TODO(chokobole): Uncomment this. Dependency: OptimizeInputOutputBufferAlias
-  // pipeline.AddPass<OptimizeInputOutputBufferAlias>(true);
+  pipeline.AddPass<OptimizeInputOutputBufferAlias>(true);
 
   // If enabled we'll use more precise region based analysis for copy removal.
   if (module->config()

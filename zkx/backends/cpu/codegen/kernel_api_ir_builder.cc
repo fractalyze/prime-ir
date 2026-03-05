@@ -246,6 +246,19 @@ auto KernelApiIrBuilder::EmitKernelPrototype(
 }
 
 auto KernelApiIrBuilder::EmitKernelPrototype(
+    llvm::Module& module, const HloInstruction* instr,
+    const BufferAssignment* buffer_assignment, std::string_view name_prefix,
+    std::string_view suffix) -> absl::StatusOr<KernelPrototype> {
+  TF_ASSIGN_OR_RETURN(std::vector<KernelParameter> arguments,
+                      GetKernelArgumentsParameters(instr, buffer_assignment));
+  TF_ASSIGN_OR_RETURN(std::vector<KernelParameter> results,
+                      GetKernelResultsParameters(instr, buffer_assignment));
+
+  return EmitKernelPrototype(module, absl::StrCat(name_prefix, suffix),
+                             arguments, results);
+}
+
+auto KernelApiIrBuilder::EmitKernelPrototype(
     llvm::Module& module, std::string_view name,
     absl::Span<const KernelParameter> arguments,
     absl::Span<const KernelParameter> results)

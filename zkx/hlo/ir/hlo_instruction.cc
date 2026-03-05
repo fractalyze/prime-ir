@@ -2315,10 +2315,10 @@ std::unique_ptr<HloInstruction> HloInstruction::CloneWithNewOperands(
     case HloOpcode::kSetDimensionSize:
     case HloOpcode::kSlice:
     case HloOpcode::kSort:
+    case HloOpcode::kReduceWindow:
     case HloOpcode::kTranspose:
       clone = CloneWithNewOperandsImpl(shape, new_operands, context);
       break;
-    case HloOpcode::kReduceWindow:
     // Unary ops.
     case HloOpcode::kAbs:
     case HloOpcode::kAllGatherDone:

@@ -20,6 +20,7 @@ limitations under the License.
 #include "llvm/ADT/ArrayRef.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM/EllipticCurveToLLVM.h"
 #include "prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM/ExtFieldToLLVM.h"
@@ -53,6 +54,82 @@ void PopulateTypeConverterWithPrimeIR(mlir::LLVMTypeConverter& converter) {
   mlir::prime_ir::field::populateExtFieldToLLVMTypeConversion(converter);
   mlir::prime_ir::elliptic_curve::populateEllipticCurveToLLVMTypeConversion(
       converter);
+}
+
+mlir::Value BuildZkTensorBitcast(mlir::ImplicitLocOpBuilder& b,
+                                 mlir::Value input,
+                                 mlir::RankedTensorType output_type) {
+  using PointTypeInterface = mlir::prime_ir::elliptic_curve::PointTypeInterface;
+  using FieldTypeInterface = mlir::prime_ir::field::FieldTypeInterface;
+
+  auto src_elem_ty =
+      mlir::cast<mlir::RankedTensorType>(input.getType()).getElementType();
+  mlir::Type dst_elem_ty = output_type.getElementType();
+
+  if (auto src_pt = mlir::dyn_cast<PointTypeInterface>(src_elem_ty)) {
+    // EC src → field or int: ec::BitcastOp to intermediate field tensor, then
+    // optionally field::BitcastOp.
+    auto field_tensor_ty = mlir::RankedTensorType::get(
+        output_type.getShape(), src_pt.getBaseFieldType());
+    mlir::Value as_field = b.create<mlir::prime_ir::elliptic_curve::BitcastOp>(
+        field_tensor_ty, input);
+    if (dst_elem_ty == src_pt.getBaseFieldType()) {
+      return as_field;
+    }
+    return b.create<mlir::prime_ir::field::BitcastOp>(output_type, as_field);
+  }
+
+  if (auto dst_pt = mlir::dyn_cast<PointTypeInterface>(dst_elem_ty)) {
+    // int or field → EC dst: field::BitcastOp to intermediate field tensor
+    // (if needed), then ec::BitcastOp.
+    auto src_shape =
+        mlir::cast<mlir::RankedTensorType>(input.getType()).getShape();
+    mlir::Type base_field_ty = dst_pt.getBaseFieldType();
+    mlir::Value as_field = input;
+    if (src_elem_ty != base_field_ty) {
+      auto field_tensor_ty =
+          mlir::RankedTensorType::get(src_shape, base_field_ty);
+      as_field =
+          b.create<mlir::prime_ir::field::BitcastOp>(field_tensor_ty, input);
+    }
+    return b.create<mlir::prime_ir::elliptic_curve::BitcastOp>(output_type,
+                                                               as_field);
+  }
+
+  if (mlir::isa<FieldTypeInterface>(src_elem_ty) ||
+      mlir::isa<FieldTypeInterface>(dst_elem_ty)) {
+    return b.create<mlir::prime_ir::field::BitcastOp>(output_type, input);
+  }
+
+  return b.create<mlir::tensor::BitcastOp>(output_type, input);
+}
+
+mlir::Value BuildBitcastToInt(mlir::ImplicitLocOpBuilder& b, mlir::Value value,
+                              mlir::IntegerType int_ty) {
+  mlir::Type ty = value.getType();
+  if (auto pt_iface =
+          mlir::dyn_cast<mlir::prime_ir::elliptic_curve::PointTypeInterface>(
+              ty)) {
+    mlir::Type field_ty = pt_iface.getBaseFieldType();
+    mlir::Value field_val =
+        b.create<mlir::prime_ir::elliptic_curve::BitcastOp>(field_ty, value);
+    return b.create<mlir::prime_ir::field::BitcastOp>(int_ty, field_val);
+  }
+  return b.create<mlir::prime_ir::field::BitcastOp>(int_ty, value);
+}
+
+mlir::Value BuildBitcastFromInt(mlir::ImplicitLocOpBuilder& b,
+                                mlir::Value value, mlir::Type target_ty) {
+  if (auto pt_iface =
+          mlir::dyn_cast<mlir::prime_ir::elliptic_curve::PointTypeInterface>(
+              target_ty)) {
+    mlir::Type field_ty = pt_iface.getBaseFieldType();
+    mlir::Value field_val =
+        b.create<mlir::prime_ir::field::BitcastOp>(field_ty, value);
+    return b.create<mlir::prime_ir::elliptic_curve::BitcastOp>(target_ty,
+                                                               field_val);
+  }
+  return b.create<mlir::prime_ir::field::BitcastOp>(target_ty, value);
 }
 
 mlir::Type PrimitiveTypeToMlirType(PrimitiveType element_type,

@@ -146,21 +146,6 @@ bool RegisterKnownJITSymbols() {
   registry->Register("__chkstk", reinterpret_cast<void*>(__chkstk), "Host");
 #endif
 
-#ifdef ZKX_HAS_OPENMP
-  const char* openmp_symbols[] = {
-      "__kmpc_barrier",
-      "__kmpc_for_static_fini",
-      "__kmpc_for_static_init_8u",
-      "__kmpc_fork_call",
-      "__kmpc_global_thread_num",
-  };
-  for (const char* symbol : openmp_symbols) {
-    registry->Register(
-        symbol, reinterpret_cast<void*>(GetSymbolFromCurrentProcess(symbol)),
-        "Host");
-  }
-#endif
-
   return true;
 }
 

@@ -13,7 +13,7 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//bazel:zkx.bzl", "if_aarch64", "if_has_openmp", "if_x86_32", "if_x86_64")
+load("//bazel:zkx.bzl", "if_aarch64", "if_x86_32", "if_x86_64")
 load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
@@ -67,7 +67,6 @@ zkx_cc_library(
     hdrs = ["cpu_kernel_emitter.h"],
     deps = [
         ":kernel_api_ir_builder",
-        "//bazel:openmp_flags",
         "//xla/tsl/platform:statusor",
         "//zkx:permutation_util",
         "//zkx:primitive_util",
@@ -82,6 +81,7 @@ zkx_cc_library(
         "//zkx/mlir:mlir_utils",
         "//zkx/mlir_hlo/mhlo/transforms:map_mhlo_to_scalar_op",
         "//zkx/service:buffer_assignment",
+        "//zkx/service/cpu:backend_config_cc_proto",
         "//zkx/service/llvm_ir:llvm_util",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/functional:bind_front",
@@ -117,9 +117,11 @@ zkx_cc_library(
         "@prime_ir//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField",
         "@prime_ir//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM",
         "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "@prime_ir//prime_ir/Dialect/EllipticCurve/Transforms:BufferizableOpInterfaceImpl",
         "@prime_ir//prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM",
         "@prime_ir//prime_ir/Dialect/Field/Conversions/FieldToModArith",
         "@prime_ir//prime_ir/Dialect/Field/IR:Field",
+        "@prime_ir//prime_ir/Dialect/Field/Transforms:BufferizableOpInterfaceImpl",
         "@prime_ir//prime_ir/Dialect/ModArith/Conversions/ModArithToArith",
         "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArith",
         "@prime_ir//prime_ir/Dialect/Poly/Conversions/PolyToField",
@@ -127,10 +129,7 @@ zkx_cc_library(
         "@prime_ir//prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor",
         "@zk_dtypes//zk_dtypes:all_types",
         "@zk_dtypes//zk_dtypes:root_of_unity",
-    ] + if_has_openmp([
-        "@llvm-project//mlir:OpenMPToLLVMIRTranslation",
-        "@llvm-project//mlir:SCFToOpenMP",
-    ]),
+    ],
 )
 
 zkx_cc_library(
@@ -176,6 +175,7 @@ zkx_cc_library(
         "//zkx/math/field:prime_field_serde",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
+        "@zk_dtypes//zk_dtypes:babybearx4",
         "@zk_dtypes//zk_dtypes:batch_inverse",
         "@zk_dtypes//zk_dtypes:root_of_unity",
     ],
@@ -432,6 +432,37 @@ zkx_cc_unittest(
     name = "cpu_kernel_emitter_int_unittest",
     srcs = ["cpu_kernel_emitter_int_unittest.cc"],
     deps = [":int_test"],
+)
+
+# fractal-build-lint: disable=build-test-name
+zkx_cc_unittest(
+    name = "cpu_kernel_emitter_unittest",
+    srcs = ["cpu_kernel_emitter_unittest.cc"],
+    deps = [
+        ":cpu_kernel_emitter",
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx/hlo/analysis:hlo_ordering",
+        "//zkx/hlo/testlib:hlo_hardware_independent_test_base",
+        "//zkx/service:buffer_assignment",
+        "//zkx/service:buffer_value",
+        "//zkx/service/cpu:backend_config_cc_proto",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
+# fractal-build-lint: disable=build-test-name
+zkx_cc_unittest(
+    name = "cpu_kernel_emitter_parallel_unittest",
+    srcs = ["cpu_kernel_emitter_parallel_unittest.cc"],
+    deps = [
+        ":cpu_kernel_emitter_test",
+        "//zkx:array2d",
+        "//zkx:literal_util",
+        "//zkx/base:random",
+        "//zkx/base/containers:container_util",
+        "@com_google_absl//absl/base",
+    ],
 )
 
 # fractal-build-lint: disable=build-test-name

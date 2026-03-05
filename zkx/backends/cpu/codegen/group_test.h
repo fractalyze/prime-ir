@@ -331,6 +331,51 @@ class GroupR2TensorBinaryTest : public CpuKernelEmitterTest {
   std::vector<std::vector<JacobianPoint>> expected_;
 };
 
+// ---------------------------------------------------------------------------
+// Bitcast-convert tests: EC ↔ integer round-trip.
+// Uses unsigned integer type (not base field) as intermediate since
+// BaseField (e.g., bn254::FqMont) may not be in the public type list.
+// ---------------------------------------------------------------------------
+
+template <typename AffinePoint>
+class GroupBitcastConvertTest : public CpuKernelEmitterTest {
+ public:
+  using BaseField = typename AffinePoint::BaseField;
+  constexpr static int64_t N = 4;
+  constexpr static int64_t D = sizeof(AffinePoint) / sizeof(BaseField);
+
+  void SetUp() override {
+    CpuKernelEmitterTest::SetUp();
+    point_typename_ = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<AffinePoint>());
+    auto int_type =
+        primitive_util::UnsignedIntegralTypeForBitWidth(sizeof(BaseField) * 8);
+    int_typename_ = primitive_util::LowercasePrimitiveTypeName(int_type);
+    x_ = base::CreateVector(N, []() { return AffinePoint::Random(); });
+    literals_.push_back(LiteralUtil::CreateR1<AffinePoint>(x_));
+  }
+
+ protected:
+  // AffinePoint[N] → uXXX[N,D] bitcast-convert → AffinePoint[N]
+  // bitcast-convert: round-trip.
+  void SetUpEcToIntRoundTrip() {
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %p = $0[$2] parameter(0)
+        %bc1 = $1[$2,$3] bitcast-convert(%p)
+        ROOT %ret = $0[$2] bitcast-convert(%bc1)
+      }
+    )",
+                                 point_typename_, int_typename_, N, D);
+    expected_literal_ = LiteralUtil::CreateR1<AffinePoint>(x_);
+  }
+
+ private:
+  std::string_view point_typename_;
+  std::string_view int_typename_;
+  std::vector<AffinePoint> x_;
+};
+
 }  // namespace zkx::cpu
 
 #endif  // ZKX_BACKENDS_CPU_CODEGEN_GROUP_TEST_H_

@@ -15,7 +15,6 @@
 
 load("@rules_cc//cc:defs.bzl", "cc_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
-load("//bazel:zkx.bzl", "if_has_openmp_on_macos")
 load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 
 package(default_visibility = ["//visibility:public"])
@@ -54,6 +53,7 @@ zkx_cc_library(
         ":cpu_instruction_fusion",
         ":cpu_options",
         ":executable_cc_proto",
+        ":parallel_task_assignment",
         ":runtime_symbol_generator",
         ":thunk_emitter",
         "//xla/tsl/platform:cpu_info",
@@ -69,16 +69,29 @@ zkx_cc_library(
         "//zkx/backends/cpu/codegen:target_machine_features",
         "//zkx/backends/cpu/runtime:thunk_proto_serdes",
         "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_fix",
         "//zkx/hlo/pass:hlo_pass_pipeline",
+        "//zkx/hlo/transforms/expanders:reshape_decomposer",
+        "//zkx/hlo/transforms/simplifiers:broadcast_canonicalizer",
+        "//zkx/hlo/transforms/simplifiers:conditional_canonicalizer",
+        "//zkx/hlo/transforms/simplifiers:flatten_call_graph",
+        "//zkx/hlo/transforms/simplifiers:hlo_constant_folding",
+        "//zkx/hlo/transforms/simplifiers:hlo_cse",
         "//zkx/hlo/transforms/simplifiers:hlo_dce",
         "//zkx/hlo/transforms/simplifiers:hlo_memory_scheduler",
+        "//zkx/hlo/transforms/simplifiers:optimize_input_output_buffer_alias",
+        "//zkx/hlo/transforms/simplifiers:sub_byte_normalization",
+        "//zkx/hlo/transforms/simplifiers:tuple_simplifier",
+        "//zkx/hlo/transforms/simplifiers:zero_sized_hlo_elimination",
         "//zkx/service:buffer_assignment",
         "//zkx/service:buffer_value",
+        "//zkx/service:call_inliner",
         "//zkx/service:copy_insertion",
         "//zkx/service:dump",
         "//zkx/service:hlo_profile_printer_data_cc_proto",
         "//zkx/service:llvm_compiler",
         "//zkx/service:scatter_expander",
+        "//zkx/service:while_loop_constant_sinking",
         "//zkx/service/llvm_ir:llvm_command_line_options",
         "//zkx/stream_executor/host:host_platform_id",
         "@com_google_absl//absl/debugging:leak_check",
@@ -248,6 +261,16 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "dynamic_update_slice_util",
+    srcs = ["dynamic_update_slice_util.cc"],
+    hdrs = ["dynamic_update_slice_util.h"],
+    deps = [
+        ":backend_config_cc_proto",
+        "//zkx/hlo/ir:hlo",
+    ],
+)
+
+zkx_cc_library(
     name = "orc_jit_memory_mapper",
     srcs = ["orc_jit_memory_mapper.cc"],
     hdrs = ["orc_jit_memory_mapper.h"],
@@ -255,6 +278,29 @@ zkx_cc_library(
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/synchronization",
         "@llvm-project//llvm:ExecutionEngine",
+    ],
+)
+
+zkx_cc_library(
+    name = "parallel_task_assignment",
+    srcs = ["parallel_task_assignment.cc"],
+    hdrs = ["parallel_task_assignment.h"],
+    deps = [
+        ":backend_config_cc_proto",
+        ":dynamic_update_slice_util",
+        ":shape_partition",
+        "//xla/tsl/platform:cpu_info",
+        "//zkx/base:logging",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service:hlo_cost_analysis",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )
 
@@ -293,12 +339,11 @@ zkx_cc_library(
         ":cpu_runtime",
         ":runtime_custom_call_status",
         ":runtime_fork_join",
-        "//bazel:openmp_flags",
         "//zkx/service:custom_call_target_registry",
         "@llvm-project//llvm:Core",
         "@llvm-project//llvm:OrcJIT",
         "@llvm-project//mlir:_mlir_c_runner_utils",
-    ] + if_has_openmp_on_macos(["@local_config_omp//:omp"]),
+    ],
 )
 
 zkx_cc_library(
@@ -366,18 +411,28 @@ zkx_cc_unittest(
     name = "cpu_unittests",
     srcs = [
         "cpu_runtime_unittest.cc",
+        "parallel_task_assignment_unittest.cc",
         "shape_partition_unittest.cc",
         "xfeed_manager_unittest.cc",
     ],
     deps = [
+        ":backend_config_cc_proto",
+        ":cpu_executable",
         ":cpu_runtime",
+        ":parallel_task_assignment",
         ":runtime_custom_call_status",
         ":shape_partition",
         ":xfeed_manager",
         "//xla/tsl/platform:env",
         "//xla/tsl/platform:status",
+        "//xla/tsl/platform:statusor",
         "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/testlib:hlo_hardware_independent_test_base",
         "//zkx/service:custom_call_status",
+        "//zkx/service:hlo_cost_analysis",
         "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status:statusor",
     ],
 )

@@ -26,16 +26,6 @@ bool_flag(
     build_setting_default = False,
 )
 
-bool_flag(
-    name = "has_intel_openmp",
-    build_setting_default = False,
-)
-
-bool_flag(
-    name = "has_openmp",
-    build_setting_default = False,
-)
-
 # Platform specific configurations
 config_setting(
     name = "linux_aarch64",
@@ -81,29 +71,6 @@ config_setting(
 config_setting(
     name = "zkx_has_exception",
     flag_values = {":has_exception": "true"},
-)
-
-config_setting(
-    name = "zkx_has_intel_openmp",
-    flag_values = {
-        ":has_openmp": "true",
-        ":has_intel_openmp": "true",
-    },
-)
-
-config_setting(
-    name = "zkx_has_openmp",
-    flag_values = {":has_openmp": "true"},
-)
-
-config_setting(
-    name = "zkx_has_openmp_on_macos",
-    constraint_values = [
-        "@platforms//os:macos",
-    ],
-    flag_values = {
-        ":has_openmp": "true",
-    },
 )
 
 version_header(

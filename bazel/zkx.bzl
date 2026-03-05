@@ -83,15 +83,3 @@ def if_has_exception(a, b = []):
         "@zkx//:zkx_has_exception": a,
         "//conditions:default": b,
     })
-
-def if_has_openmp(a, b = []):
-    return select({
-        "@zkx//:zkx_has_openmp": a,
-        "//conditions:default": b,
-    })
-
-def if_has_openmp_on_macos(a, b = []):
-    return select({
-        "@zkx//:zkx_has_openmp_on_macos": a,
-        "//conditions:default": b,
-    })

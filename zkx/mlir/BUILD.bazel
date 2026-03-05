@@ -51,6 +51,7 @@ zkx_cc_library(
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:LLVMCommonConversion",
         "@llvm-project//mlir:SparseTensorDialect",
+        "@llvm-project//mlir:TensorDialect",
         "@prime_ir//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToLLVM",
         "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "@prime_ir//prime_ir/Dialect/Field/Conversions/ExtFieldToLLVM",

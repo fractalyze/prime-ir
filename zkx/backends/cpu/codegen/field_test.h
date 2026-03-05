@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "xla/tsl/platform/status.h"
 #include "zk_dtypes/include/batch_inverse.h"
+#include "zk_dtypes/include/field/babybear/babybearx4.h"
 #include "zk_dtypes/include/field/root_of_unity.h"
 #include "zkx/array2d.h"
 #include "zkx/backends/cpu/codegen/cpu_kernel_emitter_test.h"
@@ -796,6 +797,82 @@ class FieldTest : public CpuKernelEmitterTest {
     }
     return result;
   }
+};
+
+// ---------------------------------------------------------------------------
+// Bitcast-convert tests: element type reinterpretation via round-trip.
+// ---------------------------------------------------------------------------
+
+template <typename F>
+class FieldBitcastConvertTest : public CpuKernelEmitterTest {
+ public:
+  constexpr static int64_t N = 4;
+
+  void SetUp() override {
+    CpuKernelEmitterTest::SetUp();
+    x_typename_ = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<F>());
+    auto int_type = primitive_util::UnsignedIntegralTypeForBitWidth(
+        primitive_util::BitWidth(primitive_util::NativeToPrimitiveType<F>()));
+    int_typename_ = primitive_util::LowercasePrimitiveTypeName(int_type);
+    x_ = base::CreateVector(N, []() { return F::Random(); });
+    literals_.push_back(LiteralUtil::CreateR1<F>(x_));
+  }
+
+ protected:
+  // F[N] → uXXX[N] → F[N]: round-trip through unsigned integer type.
+  void SetUpFieldToIntRoundTrip() {
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %p = $0[$2] parameter(0)
+        %bc = $1[$2] bitcast-convert(%p)
+        ROOT %ret = $0[$2] bitcast-convert(%bc)
+      }
+    )",
+                                 x_typename_, int_typename_, N);
+    expected_literal_ = LiteralUtil::CreateR1<F>(x_);
+  }
+
+ private:
+  std::string_view int_typename_;
+  std::vector<F> x_;
+};
+
+template <typename EF>
+class ExtFieldBitcastConvertTest : public CpuKernelEmitterTest {
+ public:
+  using F = typename EF::Config::BaseField;
+  constexpr static int64_t N = 2;
+  constexpr static int64_t D = sizeof(EF) / sizeof(F);
+
+  void SetUp() override {
+    CpuKernelEmitterTest::SetUp();
+    ef_typename_ = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<EF>());
+    f_typename_ = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<F>());
+    x_ = base::CreateVector(N, []() { return EF::Random(); });
+    literals_.push_back(LiteralUtil::CreateR1<EF>(x_));
+  }
+
+ protected:
+  // EF[N] → F[N,D] bitcast-convert → EF[N] bitcast-convert: round-trip.
+  void SetUpExtFieldToFieldRoundTrip() {
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %p = $0[$2] parameter(0)
+        %bc1 = $1[$2,$3] bitcast-convert(%p)
+        ROOT %ret = $0[$2] bitcast-convert(%bc1)
+      }
+    )",
+                                 ef_typename_, f_typename_, N, D);
+    expected_literal_ = LiteralUtil::CreateR1<EF>(x_);
+  }
+
+ private:
+  std::string_view ef_typename_;
+  std::string_view f_typename_;
+  std::vector<EF> x_;
 };
 
 }  // namespace zkx::cpu

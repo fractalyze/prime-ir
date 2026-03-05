@@ -39,6 +39,44 @@ namespace zkx::mlir_utils {
 mlir::Value GetConstantOrSplat(mlir::ImplicitLocOpBuilder& b, mlir::Type t,
                                mlir::Attribute v);
 
+// Emits a tensor-level bitcast from 'input' to 'output_type', dispatching
+// to the appropriate prime_ir op based on element types:
+//
+// - EC src → field dst : ec::BitcastOp
+// - EC src → int dst   : ec::BitcastOp to field, then field::BitcastOp
+// - int/field → EC dst : field::BitcastOp to field (if needed), then
+//                        ec::BitcastOp
+// - field src or dst   : field::BitcastOp
+// - standard           : tensor::BitcastOp
+//
+// The caller is responsible for any reshape needed before calling this when
+// rank changes are not driven by EC coordinate expansion.
+mlir::Value BuildZkTensorBitcast(mlir::ImplicitLocOpBuilder& b,
+                                 mlir::Value input,
+                                 mlir::RankedTensorType output_type);
+
+// Bitcasts a scalar ZK value to an integer type.
+//
+// Dispatch:
+// - Field type    → field::BitcastOp(int_ty, value)
+// - EC point type → elliptic_curve::BitcastOp(field_ty, value),
+//                   then field::BitcastOp(int_ty, field_val)
+//
+// The EC chain uses ec::BitcastOp to reinterpret the EC point as its base
+// field type, followed by field::BitcastOp to obtain the integer.  Both
+// ops accept AnyType and perform pure bit-level reinterpretation.
+mlir::Value BuildBitcastToInt(mlir::ImplicitLocOpBuilder& b, mlir::Value value,
+                              mlir::IntegerType int_ty);
+
+// Bitcasts an integer scalar back to a ZK type (field or EC).
+//
+// Dispatch:
+// - Field target  → field::BitcastOp(target_ty, value)
+// - EC target     → field::BitcastOp(field_ty, value),
+//                   then elliptic_curve::BitcastOp(target_ty, field_val)
+mlir::Value BuildBitcastFromInt(mlir::ImplicitLocOpBuilder& b,
+                                mlir::Value value, mlir::Type target_ty);
+
 void PopulateTypeConverterWithPrimeIR(mlir::LLVMTypeConverter& converter);
 
 template <size_t N>

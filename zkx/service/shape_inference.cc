@@ -350,10 +350,12 @@ absl::StatusOr<Shape> ShapeInference::InferUnaryOpShape(HloOpcode opcode,
       }
       return shape;
     case HloOpcode::kNegate:
-      if (!ShapeUtil::ElementIsIntegral(shape)) {
+      if (!ShapeUtil::ElementIsIntegral(shape) &&
+          !ShapeUtil::ElementIsField(shape) &&
+          !ShapeUtil::ElementIsEcPoint(shape)) {
         return absl::InvalidArgumentError(
-            absl::StrFormat("Expected element type in shape to be integral for "
-                            "negate operation; got %s.",
+            absl::StrFormat("Expected element type in shape to be integral, "
+                            "field or ec point for negate operation; got %s.",
                             PrimitiveType_Name(shape.element_type())));
       }
       return shape;
