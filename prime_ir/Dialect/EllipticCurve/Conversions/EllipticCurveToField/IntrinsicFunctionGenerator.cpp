@@ -94,15 +94,36 @@ std::string IntrinsicFunctionGenerator::mangleFunctionName(StringRef baseName,
 func::FuncOp
 IntrinsicFunctionGenerator::getOrCreateScalarMulFunction(Type pointType,
                                                          Type scalarType) {
+  auto pti = cast<PointTypeInterface>(pointType);
+  unsigned numCoords = pti.getNumCoords();
+  Type coordType = pti.getBaseFieldType();
+
+  // Signature uses field coordinates, not EC types
+  SmallVector<Type> inputTypes(numCoords, coordType);
+  inputTypes.push_back(scalarType);
+  SmallVector<Type> outputTypes(numCoords, coordType);
+
   return getOrCreateFunction(
-      mangleFunctionName("scalar_mul", pointType, scalarType),
-      {pointType, scalarType}, {pointType}, [&](func::FuncOp func) {
+      mangleFunctionName("scalar_mul", pointType, scalarType), inputTypes,
+      outputTypes, [&](func::FuncOp func) {
         OpBuilder builder(func.getContext());
         auto args = setupFunctionBody(func, builder);
-        // args[0] = point, args[1] = scalar
-        Value result = builder.create<ScalarMulOp>(func.getLoc(), pointType,
-                                                   args[1], args[0]);
-        emitReturn(builder, func.getLoc(), result);
+        Location loc = func.getLoc();
+
+        // Reconstruct EC point from coordinate arguments
+        SmallVector<Value> coordArgs(args.begin(), args.begin() + numCoords);
+        Value point = builder.create<FromCoordsOp>(loc, pointType, coordArgs);
+        Value scalar = args[numCoords];
+
+        // Scalar multiplication (lowered inline by ConvertScalarMul
+        // since isInsideIntrinsicFunction returns true)
+        Value result =
+            builder.create<ScalarMulOp>(loc, pointType, scalar, point);
+
+        // Decompose result back to field coordinates
+        auto resultCoords =
+            builder.create<ToCoordsOp>(loc, outputTypes, result);
+        builder.create<func::ReturnOp>(loc, resultCoords.getResults());
       });
 }
 
@@ -114,12 +135,24 @@ Value IntrinsicFunctionGenerator::emitScalarMulCall(OpBuilder &builder,
   func::FuncOp func =
       getOrCreateScalarMulFunction(outputType, scalar.getType());
 
-  // Convert point to output type if needed
+  // Convert point type if needed (e.g., affine → jacobian)
   Value convertedPoint = point;
   if (point.getType() != outputType)
     convertedPoint = builder.create<ConvertPointTypeOp>(loc, outputType, point);
 
-  return emitCall(builder, loc, func, {convertedPoint, scalar});
+  // Decompose point to field coordinates (derive types from function signature)
+  auto coordTypes = func.getFunctionType().getInputs().drop_back();
+  auto coords = builder.create<ToCoordsOp>(loc, coordTypes, convertedPoint);
+
+  // Build call args: [coords..., scalar]
+  SmallVector<Value> args(coords.getResults());
+  args.push_back(scalar);
+
+  // Call intrinsic (multiple results)
+  auto callOp = builder.create<func::CallOp>(loc, func, args);
+
+  // Reconstruct EC point from result coordinates
+  return builder.create<FromCoordsOp>(loc, outputType, callOp.getResults());
 }
 
 } // namespace mlir::prime_ir::elliptic_curve

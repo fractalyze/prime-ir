@@ -787,6 +787,19 @@ void EllipticCurveToField::runOnOperation() {
   std::unique_ptr<IntrinsicFunctionGenerator> intrinsicGenerator;
   if (mode != LoweringMode::Inline) {
     intrinsicGenerator = std::make_unique<IntrinsicFunctionGenerator>(module);
+
+    // Pre-create intrinsic functions before conversion so their body ops are
+    // part of the module when applyPartialConversion builds its worklist.
+    // Without this, getOrCreateScalarMulFunction creates functions during
+    // pattern matching via a plain OpBuilder, so the ScalarMulOp inside the
+    // intrinsic body is never added to the worklist and remains unconverted.
+    module.walk([&](ScalarMulOp op) {
+      Type pointType = op.getPoint().getType();
+      if (IntrinsicFunctionGenerator::shouldUseIntrinsic(op, pointType, mode)) {
+        intrinsicGenerator->getOrCreateScalarMulFunction(
+            op.getType(), op.getScalar().getType());
+      }
+    });
   }
 
   ConversionTarget target(*context);
