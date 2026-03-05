@@ -498,19 +498,23 @@ APInt clampToWidth(const APInt &val, unsigned w) {
   return val.trunc(w);
 }
 
-// Set range to canonical [0, p) for ops that always produce a reduced result.
+// Set range to canonical [0, p - 1] for ops that always produce a reduced
+// result.
 void setCanonicalRange(Value result, SetIntRangeFn setResultRange) {
   setResultRange(result, getCanonicalRange(result.getType()));
 }
 
-// Set range to [0, 2p) for ops using lazy REDC (mont_mul, mont_square, etc.).
+// Set range to [0, 2p - 1] for ops using lazy REDC (mont_mul, mont_square,
+// etc.). Requires 2p - 1 to fit in w bits.
 void setLazyRedcRange(Value result, SetIntRangeFn setResultRange) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(result.getType()));
   unsigned w = modType.getStorageBitWidth();
-  APInt p = modType.getModulus().getValue().zextOrTrunc(w);
-  APInt twoP = clampToWidth(p.zext(w + 1) * APInt(w + 1, 2) - 1, w);
-  setResultRange(result,
-                 ConstantIntRanges::fromUnsigned(APInt::getZero(w), twoP));
+  APInt p = modType.getModulus().getValue().zext(w);
+  APInt twoPMinusOne = p.zext(w + 1) * APInt(w + 1, 2) - 1;
+  assert(twoPMinusOne.getActiveBits() <= w &&
+         "2p - 1 does not fit in storage width; lazy REDC is not valid");
+  setResultRange(result, ConstantIntRanges::fromUnsigned(
+                             APInt::getZero(w), twoPMinusOne.trunc(w)));
 }
 
 } // namespace
@@ -518,7 +522,7 @@ void setLazyRedcRange(Value result, SetIntRangeFn setResultRange) {
 ConstantIntRanges getCanonicalRange(Type type) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(type));
   unsigned w = modType.getStorageBitWidth();
-  APInt p = modType.getModulus().getValue().zextOrTrunc(w);
+  APInt p = modType.getModulus().getValue().zext(w);
   return ConstantIntRanges::fromUnsigned(APInt::getZero(w), p - 1);
 }
 
@@ -528,7 +532,7 @@ void ConstantOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
   unsigned w = modType.getStorageBitWidth();
   auto attr = dyn_cast<IntegerAttr>(getValue());
   if (attr) {
-    APInt val = attr.getValue().zextOrTrunc(w);
+    APInt val = attr.getValue().zext(w);
     setResultRange(getResult(), ConstantIntRanges::fromUnsigned(val, val));
   } else {
     // Dense attr: conservative range [0, p - 1].
@@ -550,9 +554,9 @@ void BitcastOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
     // Mod -> mod bitcast: pass through.
     setResultRange(getResult(), argRanges[0]);
   } else {
-    // Int -> mod bitcast: conservative.
-    unsigned w = outModType.getStorageBitWidth();
-    setResultRange(getResult(), ConstantIntRanges::maxRange(w));
+    // Int -> mod bitcast: assume input is in [0, p - 1]. Using an
+    // out-of-range value with mod_arith ops after bitcast is UB.
+    setCanonicalRange(getResult(), setResultRange);
   }
 }
 
@@ -586,7 +590,10 @@ void DoubleOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                  SetIntRangeFn setResultRange) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
   unsigned w = modType.getStorageBitWidth();
-  // double(x) = 2x, so umax = 2 * input.umax, clamped to w bits.
+  // double(x) = 2x, so umax = 2 * input.umax. May exceed w bits for lazy
+  // inputs (e.g., BabyBear with 32-bit storage and input in [0, 2p)).
+  // Clamping to maxValue(w) is conservative; the lowering's pre-reduce guard
+  // ensures the actual doubling won't overflow storage.
   APInt doubleMax = argRanges[0].umax().zext(w + 1) * APInt(w + 1, 2);
   APInt umax = clampToWidth(doubleMax, w);
   setResultRange(getResult(),
@@ -629,12 +636,13 @@ void SubOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                               SetIntRangeFn setResultRange) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
   unsigned w = modType.getStorageBitWidth();
-  APInt p = modType.getModulus().getValue().zextOrTrunc(w);
-  // lhs + correction - rhs where correction = ceil(rhs.umax / p) * p.
+  APInt p = modType.getModulus().getValue().zext(w);
+  // lhs + correction - rhs where correction = rhsBound * p,
+  // rhsBound = ceil((rhs.umax + 1) / p). Must match ConvertSub lowering.
   APInt rhsMax = argRanges[1].umax().zext(w + 1);
   APInt pExt = p.zext(w + 1);
-  // correction = ceil(rhsMax / p) * p = ((rhsMax + p - 1) / p) * p
-  APInt correction = ((rhsMax + pExt - 1).udiv(pExt)) * pExt;
+  APInt rhsBound = (rhsMax + 1 + pExt - 1).udiv(pExt);
+  APInt correction = rhsBound * pExt;
   APInt resultMax = argRanges[0].umax().zext(w + 1) + correction;
   APInt umax = clampToWidth(resultMax, w);
   setResultRange(getResult(),

@@ -54,7 +54,7 @@ inline IntegerType getOperandIntegerType(OpType op) {
 Type getStandardFormType(Type type);
 Type getMontgomeryFormType(Type type);
 
-// Returns the canonical range [0, p) for a ModArithType.
+// Returns the canonical range [0, p - 1] for a ModArithType.
 ConstantIntRanges getCanonicalRange(Type type);
 
 } // namespace mlir::prime_ir::mod_arith

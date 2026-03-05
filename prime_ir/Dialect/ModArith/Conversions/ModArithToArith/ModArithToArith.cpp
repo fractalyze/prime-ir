@@ -125,7 +125,7 @@ unsigned getModArithStorageBitwidth(Type type) {
   return ConstantIntRanges::getStorageBitwidth(type);
 }
 
-// IRA subclass that initializes ModArithType function args to [0, p).
+// IRA subclass that initializes ModArithType function args to [0, p - 1].
 class ModArithRangeAnalysis : public dataflow::IntegerRangeAnalysis {
 public:
   using IntegerRangeAnalysis::IntegerRangeAnalysis;
