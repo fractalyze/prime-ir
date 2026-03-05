@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "absl/log/log.h"
 #include "absl/log/vlog_is_on.h"
+#include "llvm/Support/raw_ostream.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Shape/IR/Shape.h"
@@ -26,6 +27,7 @@ limitations under the License.
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 
+#include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "stablehlo/dialect/Register.h"
 #include "stablehlo/dialect/Version.h"
 #include "stablehlo/transforms/Passes.h"
@@ -100,6 +102,7 @@ absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> ParseMlirModuleString(
   // TODO(chokobole): Uncomment this. Dependency: sdy
   // mlir::sdy::registerAllDialects(registry);
   mlir::stablehlo::registerAllDialects(registry);
+  registry.insert<mlir::prime_ir::field::FieldDialect>();
   context.appendDialectRegistry(registry);
 
   mlir::BaseScopedDiagnosticHandler diagnostic_handler(&context);
@@ -128,6 +131,30 @@ absl::Status UpgradeVersionedStablehlo(mlir::ModuleOp mlir_module) {
   if (!mlir::succeeded(pm.run(mlir_module)))
     return absl::InvalidArgumentError("Failed to upgrade versioned StableHLO.");
   return absl::OkStatus();
+}
+
+std::string GetDefaultStablehloVersion() {
+  return mlir::vhlo::Version::fromCompatibilityRequirement(
+             mlir::vhlo::Version::CompatibilityRequirement::WEEK_12)
+      .toString();
+}
+
+absl::StatusOr<std::string> Serialize(mlir::ModuleOp module,
+                                      std::string_view target, bool inplace) {
+  // Clone module if not modifying in-place.
+  mlir::OwningOpRef<mlir::ModuleOp> cloned;
+  if (!inplace) {
+    cloned = module.clone();
+    module = *cloned;
+  }
+
+  // Serialize as text MLIR. For same-source-tree builds, text serialization is
+  // sufficient. Full portable artifact serialization via VHLO can be added when
+  // cross-version compatibility is needed.
+  std::string buffer;
+  llvm::raw_string_ostream os(buffer);
+  module->print(os);
+  return buffer;
 }
 
 }  // namespace zkx

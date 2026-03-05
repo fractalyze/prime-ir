@@ -17,10 +17,12 @@ limitations under the License.
 #ifndef ZKX_PJRT_MLIR_TO_HLO_H_
 #define ZKX_PJRT_MLIR_TO_HLO_H_
 
+#include <string>
 #include <string_view>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/IR/OwningOpRef.h"
@@ -48,6 +50,16 @@ absl::Status MlirToZkxComputation(mlir::ModuleOp module,
 // `ParseMlirModuleString` uses this method, and should be preferred to directly
 // calling `UpgradeVersionedStablehlo` where possible.
 absl::Status UpgradeVersionedStablehlo(mlir::ModuleOp mlir_module);
+
+// Returns a default StableHLO version string for serialization, based on the
+// 12-week compatibility requirement.
+std::string GetDefaultStablehloVersion();
+
+// Serializes an MLIR module to a string. If `inplace` is true, the module may
+// be modified during serialization.
+absl::StatusOr<std::string> Serialize(mlir::ModuleOp module,
+                                      std::string_view target,
+                                      bool inplace = false);
 
 }  // namespace zkx
 

@@ -434,6 +434,7 @@ zkx_cc_binary(
     deps = [
         ":pjrt_c_api_gpu",
         ":pjrt_c_api_gpu_version_script.lds",
+        "//zkx/service:gpu_plugin",
     ],
 )
 

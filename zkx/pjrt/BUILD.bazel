@@ -169,6 +169,8 @@ zkx_cc_library(
         "@com_google_absl//absl/log:vlog_is_on",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AllExtensions",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:FuncDialect",
@@ -177,9 +179,26 @@ zkx_cc_library(
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:ShapeDialect",
         "@llvm-project//mlir:Transforms",
+        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
         "@stablehlo//stablehlo/dialect:register",
         "@stablehlo//stablehlo/dialect:version",
         "@stablehlo//stablehlo/transforms:passes",
+    ],
+)
+
+zkx_cc_library(
+    name = "pjrt_api",
+    srcs = ["pjrt_api.cc"],
+    hdrs = ["pjrt_api.h"],
+    deps = [
+        "//xla/tsl/platform:errors",
+        "//zkx/pjrt/c:pjrt_c_api",
+        "//zkx/pjrt/c:pjrt_c_api_helpers",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
     ],
 )
 
