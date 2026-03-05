@@ -81,30 +81,93 @@ R applyBinaryOp(const FieldOperation::OperationType &a,
       a, b);
 }
 
+// Type trait to detect ExtensionFieldOperation and extract its BaseFieldT.
+template <typename T>
+struct IsExtensionFieldOp : std::false_type {};
+
+template <size_t N, typename B>
+struct IsExtensionFieldOp<ExtensionFieldOperation<N, B>> : std::true_type {
+  using BaseFieldT = B;
+};
+
+// Mixed-type dispatch: one operand is an extension field, the other is its
+// base field. ExtBaseOp handles (ext, base); BaseExtOp handles (base, ext)
+// with arguments reordered as (ext, base) for convenience.
+template <typename ExtBaseOp, typename BaseExtOp>
+FieldOperation applyMixedBinaryOp(const FieldOperation::OperationType &a,
+                                  const FieldOperation::OperationType &b,
+                                  ExtBaseOp extBaseOp, BaseExtOp baseExtOp) {
+  return std::visit(
+      [&](const auto &lhs, const auto &rhs) -> FieldOperation {
+        using LHS = std::decay_t<decltype(lhs)>;
+        using RHS = std::decay_t<decltype(rhs)>;
+        if constexpr (IsExtensionFieldOp<LHS>::value) {
+          if constexpr (std::is_same_v<
+                            typename IsExtensionFieldOp<LHS>::BaseFieldT,
+                            RHS>) {
+            return extBaseOp(lhs, rhs);
+          }
+        }
+        if constexpr (IsExtensionFieldOp<RHS>::value) {
+          if constexpr (std::is_same_v<
+                            typename IsExtensionFieldOp<RHS>::BaseFieldT,
+                            LHS>) {
+            return baseExtOp(rhs, lhs);
+          }
+        }
+        llvm_unreachable("Unsupported mixed-type field operation");
+      },
+      a, b);
+}
+
 } // namespace
 
 FieldOperation FieldOperation::operator+(const FieldOperation &other) const {
-  return applyBinaryOp<FieldOperation>(
+  if (operation.index() == other.operation.index()) {
+    return applyBinaryOp<FieldOperation>(
+        operation, other.operation,
+        [](const auto &a, const auto &b) { return a + b; });
+  }
+  return applyMixedBinaryOp(
       operation, other.operation,
-      [](const auto &a, const auto &b) { return a + b; });
+      [](const auto &ext, const auto &base) { return ext + base; },
+      [](const auto &ext, const auto &base) { return ext + base; });
 }
 
 FieldOperation FieldOperation::operator-(const FieldOperation &other) const {
-  return applyBinaryOp<FieldOperation>(
+  if (operation.index() == other.operation.index()) {
+    return applyBinaryOp<FieldOperation>(
+        operation, other.operation,
+        [](const auto &a, const auto &b) { return a - b; });
+  }
+  return applyMixedBinaryOp(
       operation, other.operation,
-      [](const auto &a, const auto &b) { return a - b; });
+      [](const auto &ext, const auto &base) { return ext - base; },
+      [](const auto &ext, const auto &base) { return -(ext - base); });
 }
 
 FieldOperation FieldOperation::operator*(const FieldOperation &other) const {
-  return applyBinaryOp<FieldOperation>(
+  if (operation.index() == other.operation.index()) {
+    return applyBinaryOp<FieldOperation>(
+        operation, other.operation,
+        [](const auto &a, const auto &b) { return a * b; });
+  }
+  return applyMixedBinaryOp(
       operation, other.operation,
-      [](const auto &a, const auto &b) { return a * b; });
+      [](const auto &ext, const auto &base) { return ext * base; },
+      [](const auto &ext, const auto &base) { return ext * base; });
 }
 
 FieldOperation FieldOperation::operator/(const FieldOperation &other) const {
-  return applyBinaryOp<FieldOperation>(
+  if (operation.index() == other.operation.index()) {
+    return applyBinaryOp<FieldOperation>(
+        operation, other.operation,
+        [](const auto &a, const auto &b) { return a / b; });
+  }
+  return applyMixedBinaryOp(
       operation, other.operation,
-      [](const auto &a, const auto &b) { return a / b; });
+      [](const auto &ext, const auto &base) { return ext / base; },
+      [](const auto &ext, const auto &base) { return ext.inverse() * base; });
 }
 
 FieldOperation FieldOperation::operator-() const {
