@@ -317,6 +317,10 @@ absl::StatusOr<nb::str> TypeDescriptorForPrimitiveType(PrimitiveType type) {
       return nb::str(ENDIAN_PREFIX "i4");
     case S64:
       return nb::str(ENDIAN_PREFIX "i8");
+    case S128:
+      return nb::str(ENDIAN_PREFIX "i16");
+    case S256:
+      return nb::str(ENDIAN_PREFIX "i32");
     case U8:
       return nb::str("|u1");
     case U16:
@@ -325,6 +329,10 @@ absl::StatusOr<nb::str> TypeDescriptorForPrimitiveType(PrimitiveType type) {
       return nb::str(ENDIAN_PREFIX "u4");
     case U64:
       return nb::str(ENDIAN_PREFIX "u8");
+    case U128:
+      return nb::str(ENDIAN_PREFIX "u16");
+    case U256:
+      return nb::str(ENDIAN_PREFIX "u32");
     default:
       return absl::UnimplementedError(absl::StrFormat(
           "Unimplemented primitive type %s", PrimitiveType_Name(type)));

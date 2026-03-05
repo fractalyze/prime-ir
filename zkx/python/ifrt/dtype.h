@@ -56,6 +56,8 @@ class DType {
     kS16 = 6,
     kS32 = 7,
     kS64 = 8,
+    kS128 = 59,
+    kS256 = 60,
 
     // Unsigned integral values of fixed width.
     kU2 = 10,
@@ -64,6 +66,8 @@ class DType {
     kU16 = 13,
     kU32 = 14,
     kU64 = 15,
+    kU128 = 57,
+    kU256 = 58,
 
     // Opaque objects.
     kOpaque = 17,

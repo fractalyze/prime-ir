@@ -55,6 +55,10 @@ bool CollectiveThunk::IsDataTypeSupportedByCollectiveReduce(
     case U32:
     case S64:
     case U64:
+    case S128:
+    case S256:
+    case U128:
+    case U256:
 #define ZK_DTYPES_CASE(unused, unused2, enum, unused3) case enum:
       ZK_DTYPES_PUBLIC_TYPE_LIST(ZK_DTYPES_CASE)
 #undef ZK_DTYPES_CASE

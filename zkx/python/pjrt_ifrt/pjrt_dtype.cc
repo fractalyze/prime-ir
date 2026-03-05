@@ -36,12 +36,16 @@ absl::StatusOr<PrimitiveType> ToPrimitiveType(DType dtype) {
     CASE(DType::kS16, PrimitiveType::S16);
     CASE(DType::kS32, PrimitiveType::S32);
     CASE(DType::kS64, PrimitiveType::S64);
+    CASE(DType::kS128, PrimitiveType::S128);
+    CASE(DType::kS256, PrimitiveType::S256);
     CASE(DType::kU2, PrimitiveType::U2);
     CASE(DType::kU4, PrimitiveType::U4);
     CASE(DType::kU8, PrimitiveType::U8);
     CASE(DType::kU16, PrimitiveType::U16);
     CASE(DType::kU32, PrimitiveType::U32);
     CASE(DType::kU64, PrimitiveType::U64);
+    CASE(DType::kU128, PrimitiveType::U128);
+    CASE(DType::kU256, PrimitiveType::U256);
     CASE(DType::kToken, PrimitiveType::TOKEN);
     CASE(DType::kOpaque, PrimitiveType::OPAQUE_TYPE);
 #define ZK_DTYPES_CASE(unused, dtype_enum, enum, unused3) \
@@ -74,6 +78,10 @@ absl::StatusOr<DType> ToDType(PrimitiveType primitive_type) {
     case PrimitiveType::U16:
     case PrimitiveType::U32:
     case PrimitiveType::U64:
+    case PrimitiveType::U128:
+    case PrimitiveType::U256:
+    case PrimitiveType::S128:
+    case PrimitiveType::S256:
     case PrimitiveType::TOKEN:
     case PrimitiveType::OPAQUE_TYPE:
 #define ZK_DTYPES_CASE(unused, unused2, enum, unused3) case enum:

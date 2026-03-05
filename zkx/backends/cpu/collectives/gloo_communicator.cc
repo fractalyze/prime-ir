@@ -221,6 +221,22 @@ absl::Status GlooCommunicator::AllReduce(se::DeviceMemoryBase send_buffer,
       TF_RETURN_IF_ERROR(SetAllReduceOptions<uint64_t>(
           reduction_kind, send_buffer, recv_buffer, count, options));
       break;
+    case S128:
+      TF_RETURN_IF_ERROR(SetAllReduceOptions<s128>(
+          reduction_kind, send_buffer, recv_buffer, count, options));
+      break;
+    case S256:
+      TF_RETURN_IF_ERROR(SetAllReduceOptions<s256>(
+          reduction_kind, send_buffer, recv_buffer, count, options));
+      break;
+    case U128:
+      TF_RETURN_IF_ERROR(SetAllReduceOptions<u128>(
+          reduction_kind, send_buffer, recv_buffer, count, options));
+      break;
+    case U256:
+      TF_RETURN_IF_ERROR(SetAllReduceOptions<u256>(
+          reduction_kind, send_buffer, recv_buffer, count, options));
+      break;
 #define ZK_DTYPES_CASE(cpp_type, unused, enum, unused2)             \
   case enum:                                                        \
     TF_RETURN_IF_ERROR(SetAllReduceOptions<cpp_type>(               \
@@ -416,6 +432,22 @@ absl::Status GlooCommunicator::ReduceScatter(se::DeviceMemoryBase send_buffer,
     case U64:
       TF_RETURN_IF_ERROR(ReduceScatterHelper<uint64_t>(context_, reduction_kind,
                                                        temp.get(), count));
+      break;
+    case S128:
+      TF_RETURN_IF_ERROR(ReduceScatterHelper<s128>(context_, reduction_kind,
+                                                   temp.get(), count));
+      break;
+    case S256:
+      TF_RETURN_IF_ERROR(ReduceScatterHelper<s256>(context_, reduction_kind,
+                                                   temp.get(), count));
+      break;
+    case U128:
+      TF_RETURN_IF_ERROR(ReduceScatterHelper<u128>(context_, reduction_kind,
+                                                   temp.get(), count));
+      break;
+    case U256:
+      TF_RETURN_IF_ERROR(ReduceScatterHelper<u256>(context_, reduction_kind,
+                                                   temp.get(), count));
       break;
 #define ZK_DTYPES_CASE(cpp_type, unused, enum, unused2)                        \
   case enum:                                                                   \
