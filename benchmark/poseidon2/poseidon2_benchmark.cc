@@ -41,7 +41,8 @@ void fillVectorWithZero(Vector16xI32 &data,
 
 template <bool kIsPacked>
 void BM_permute_10000_benchmark(::benchmark::State &state) {
-  const char *bench_name = kIsPacked ? "permute_packed_10000" : "permute_10000";
+  const char *bench_name =
+      kIsPacked ? "poseidon2_permute_packed_10000" : "poseidon2_permute_10000";
 
   if constexpr (kIsPacked) {
     OwningMemRef<Vector16xI32, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
@@ -82,10 +83,10 @@ void BM_permute_10000_benchmark(::benchmark::State &state) {
 
 BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/false)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("permute_10000");
+    ->Name("poseidon2_permute_10000");
 BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/true)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("permute_packed_10000");
+    ->Name("poseidon2_permute_packed_10000");
 
 } // namespace
 } // namespace mlir::prime_ir::benchmark

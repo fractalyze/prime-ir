@@ -104,10 +104,10 @@ void BM_bf64_mul_baseline(::benchmark::State &state) {
 
   uint64_t out = result.value();
   std::string output_hash = zkbench::ComputeArrayHash(&out, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_baseline", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf64_mul_baseline", input_hash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
-      "BM_bf64_mul_baseline", {{"field", "BF64"}, {"arch", "baseline"}});
+      "bf64_mul_baseline", {{"field", "BF64"}, {"arch", "baseline"}});
 }
 
 #if defined(PRIME_IR_X86)
@@ -128,9 +128,9 @@ void BM_bf64_mul_x86(::benchmark::State &state) {
 
   uint64_t out = result.value();
   std::string output_hash = zkbench::ComputeArrayHash(&out, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_x86", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf64_mul_x86", input_hash,
                                             output_hash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_bf64_mul_x86",
+  zkbench::BenchmarkContext::SetMetadata("bf64_mul_x86",
                                          {{"field", "BF64"}, {"arch", "x86"}});
 }
 #endif
@@ -153,9 +153,9 @@ void BM_bf64_mul_arm(::benchmark::State &state) {
 
   uint64_t out = result.value();
   std::string output_hash = zkbench::ComputeArrayHash(&out, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf64_mul_arm", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf64_mul_arm", input_hash,
                                             output_hash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_bf64_mul_arm",
+  zkbench::BenchmarkContext::SetMetadata("bf64_mul_arm",
                                          {{"field", "BF64"}, {"arch", "arm"}});
 }
 #endif
@@ -179,10 +179,10 @@ void BM_bf128_mul_baseline(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations());
 
   std::string output_hash = zkbench::ComputeArrayHash(&result, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_baseline", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf128_mul_baseline", input_hash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
-      "BM_bf128_mul_baseline", {{"field", "BF128"}, {"arch", "baseline"}});
+      "bf128_mul_baseline", {{"field", "BF128"}, {"arch", "baseline"}});
 }
 
 #if defined(PRIME_IR_X86)
@@ -201,9 +201,9 @@ void BM_bf128_mul_x86(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations());
 
   std::string output_hash = zkbench::ComputeArrayHash(&result, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_x86", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf128_mul_x86", input_hash,
                                             output_hash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_bf128_mul_x86",
+  zkbench::BenchmarkContext::SetMetadata("bf128_mul_x86",
                                          {{"field", "BF128"}, {"arch", "x86"}});
 }
 #endif
@@ -224,9 +224,9 @@ void BM_bf128_mul_arm(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations());
 
   std::string output_hash = zkbench::ComputeArrayHash(&result, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf128_mul_arm", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf128_mul_arm", input_hash,
                                             output_hash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_bf128_mul_arm",
+  zkbench::BenchmarkContext::SetMetadata("bf128_mul_arm",
                                          {{"field", "BF128"}, {"arch", "arm"}});
 }
 
@@ -287,10 +287,10 @@ void BM_bf8_mul_baseline(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations());
 
   std::string output_hash = zkbench::ComputeArrayHash(&last_result, 1);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf8_mul_baseline", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf8_mul_baseline", input_hash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
-      "BM_bf8_mul_baseline", {{"field", "BF8"}, {"arch", "baseline"}});
+      "bf8_mul_baseline", {{"field", "BF8"}, {"arch", "baseline"}});
 }
 
 #if defined(PRIME_IR_X86)
@@ -321,10 +321,10 @@ void BM_bf8x16_mul_gfni(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations() * 16);
 
   std::string output_hash = zkbench::ComputeArrayHash(c_data, 16);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf8x16_mul_gfni", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf8x16_mul_gfni", input_hash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
-      "BM_bf8x16_mul_gfni",
+      "bf8x16_mul_gfni",
       {{"field", "BF8"}, {"arch", "x86_gfni"}, {"packed", 16}});
 }
 #endif
@@ -357,10 +357,10 @@ void BM_bf8x16_mul_pmull(::benchmark::State &state) {
   state.SetItemsProcessed(state.iterations() * 16);
 
   std::string output_hash = zkbench::ComputeArrayHash(c_data, 16);
-  zkbench::BenchmarkContext::SetTestVectors("BM_bf8x16_mul_pmull", input_hash,
+  zkbench::BenchmarkContext::SetTestVectors("bf8x16_mul_pmull", input_hash,
                                             output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
-      "BM_bf8x16_mul_pmull",
+      "bf8x16_mul_pmull",
       {{"field", "BF8"}, {"arch", "arm_pmull"}, {"packed", 16}});
 }
 #endif
@@ -388,34 +388,34 @@ void BM_bf8_inverse_baseline(::benchmark::State &state) {
 // =============================================================================
 // Register benchmarks
 // =============================================================================
-BENCHMARK(BM_bf64_mul_baseline);
+BENCHMARK(BM_bf64_mul_baseline)->Name("bf64_mul_baseline");
 #if defined(PRIME_IR_X86)
-BENCHMARK(BM_bf64_mul_x86);
+BENCHMARK(BM_bf64_mul_x86)->Name("bf64_mul_x86");
 #endif
 #if defined(PRIME_IR_ARM)
-BENCHMARK(BM_bf64_mul_arm);
+BENCHMARK(BM_bf64_mul_arm)->Name("bf64_mul_arm");
 #endif
 
-BENCHMARK(BM_bf128_mul_baseline);
+BENCHMARK(BM_bf128_mul_baseline)->Name("bf128_mul_baseline");
 #if defined(PRIME_IR_X86)
-BENCHMARK(BM_bf128_mul_x86);
+BENCHMARK(BM_bf128_mul_x86)->Name("bf128_mul_x86");
 #endif
 #if defined(PRIME_IR_ARM)
-BENCHMARK(BM_bf128_mul_arm);
-BENCHMARK(BM_bf128_mul_arm_polyval);
-BENCHMARK(BM_bf64_square_arm);
-BENCHMARK(BM_bf128_square_arm);
+BENCHMARK(BM_bf128_mul_arm)->Name("bf128_mul_arm");
+BENCHMARK(BM_bf128_mul_arm_polyval)->Name("bf128_mul_arm_polyval");
+BENCHMARK(BM_bf64_square_arm)->Name("bf64_square_arm");
+BENCHMARK(BM_bf128_square_arm)->Name("bf128_square_arm");
 #endif
 
-BENCHMARK(BM_bf8_mul_baseline);
+BENCHMARK(BM_bf8_mul_baseline)->Name("bf8_mul_baseline");
 #if defined(PRIME_IR_X86)
-BENCHMARK(BM_bf8x16_mul_gfni);
+BENCHMARK(BM_bf8x16_mul_gfni)->Name("bf8x16_mul_gfni");
 #endif
 #if defined(PRIME_IR_ARM)
-BENCHMARK(BM_bf8x16_mul_pmull);
+BENCHMARK(BM_bf8x16_mul_pmull)->Name("bf8x16_mul_pmull");
 #endif
 
-BENCHMARK(BM_bf8_inverse_baseline);
+BENCHMARK(BM_bf8_inverse_baseline)->Name("bf8_inverse_baseline");
 
 } // namespace
 } // namespace mlir::prime_ir::benchmark
