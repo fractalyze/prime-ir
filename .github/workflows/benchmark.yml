@@ -5,6 +5,12 @@ permissions: read-all
 on:
   push:
     branches: ["main"]
+    paths-ignore:
+      - "*.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/**"
+      - ".gemini/**"
   workflow_dispatch:
 
 concurrency:
