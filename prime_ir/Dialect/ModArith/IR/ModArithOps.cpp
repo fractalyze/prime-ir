@@ -491,13 +491,6 @@ OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
 
 namespace {
 
-// Clamp a (potentially wider) APInt to w bits, saturating at maxValue(w).
-APInt clampToWidth(const APInt &val, unsigned w) {
-  if (val.getActiveBits() > w)
-    return APInt::getMaxValue(w);
-  return val.trunc(w);
-}
-
 // Set range to canonical [0, p - 1] for ops that always produce a reduced
 // result.
 void setCanonicalRange(Value result, SetIntRangeFn setResultRange) {
@@ -595,7 +588,7 @@ void DoubleOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   // Clamping to maxValue(w) is conservative; the lowering's pre-reduce guard
   // ensures the actual doubling won't overflow storage.
   APInt doubleMax = argRanges[0].umax().zext(w + 1) * APInt(w + 1, 2);
-  APInt umax = clampToWidth(doubleMax, w);
+  APInt umax = doubleMax.truncUSat(w);
   setResultRange(getResult(),
                  ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
 }
@@ -627,7 +620,7 @@ void AddOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   // Sum of two unsigned ranges, clamped to w bits.
   APInt sumMax =
       argRanges[0].umax().zext(w + 1) + argRanges[1].umax().zext(w + 1);
-  APInt umax = clampToWidth(sumMax, w);
+  APInt umax = sumMax.truncUSat(w);
   setResultRange(getResult(),
                  ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
 }
@@ -644,7 +637,7 @@ void SubOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
   APInt rhsBound = (rhsMax + 1 + pExt - 1).udiv(pExt);
   APInt correction = rhsBound * pExt;
   APInt resultMax = argRanges[0].umax().zext(w + 1) + correction;
-  APInt umax = clampToWidth(resultMax, w);
+  APInt umax = resultMax.truncUSat(w);
   setResultRange(getResult(),
                  ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
 }
