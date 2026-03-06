@@ -70,9 +70,9 @@ void BM_square_scalar(::benchmark::State &state) {
 
   std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_square_scalar", inputHash,
+  zkbench::BenchmarkContext::SetTestVectors("square_scalar", inputHash,
                                             outputHash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_square_scalar",
+  zkbench::BenchmarkContext::SetMetadata("square_scalar",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
                                           {"operation", "square"},
@@ -91,9 +91,9 @@ void BM_square_vectorized(::benchmark::State &state) {
 
   std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_square_vectorized", inputHash,
+  zkbench::BenchmarkContext::SetTestVectors("square_vectorized", inputHash,
                                             outputHash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_square_vectorized",
+  zkbench::BenchmarkContext::SetMetadata("square_vectorized",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
                                           {"operation", "square"},
@@ -114,9 +114,9 @@ void BM_add_scalar(::benchmark::State &state) {
 
   std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_add_scalar", inputHash,
-                                            outputHash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_add_scalar",
+  zkbench::BenchmarkContext::SetTestVectors("add_scalar", inputHash, outputHash,
+                                            /*verified=*/true);
+  zkbench::BenchmarkContext::SetMetadata("add_scalar",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
                                           {"operation", "add"},
@@ -136,9 +136,9 @@ void BM_add_vectorized(::benchmark::State &state) {
 
   std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_add_vectorized", inputHash,
+  zkbench::BenchmarkContext::SetTestVectors("add_vectorized", inputHash,
                                             outputHash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_add_vectorized",
+  zkbench::BenchmarkContext::SetMetadata("add_vectorized",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
                                           {"operation", "add"},
@@ -160,9 +160,9 @@ void BM_mul_add_scalar(::benchmark::State &state) {
 
   std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_mul_add_scalar", inputHash,
+  zkbench::BenchmarkContext::SetTestVectors("mul_add_scalar", inputHash,
                                             outputHash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_mul_add_scalar",
+  zkbench::BenchmarkContext::SetMetadata("mul_add_scalar",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
                                           {"operation", "mul_add"},
@@ -183,21 +183,31 @@ void BM_mul_add_vectorized(::benchmark::State &state) {
 
   std::string outputHash =
       zkbench::ComputeArrayHash((*result).data, kBufferSize);
-  zkbench::BenchmarkContext::SetTestVectors("BM_mul_add_vectorized", inputHash,
+  zkbench::BenchmarkContext::SetTestVectors("mul_add_vectorized", inputHash,
                                             outputHash, /*verified=*/true);
-  zkbench::BenchmarkContext::SetMetadata("BM_mul_add_vectorized",
+  zkbench::BenchmarkContext::SetMetadata("mul_add_vectorized",
                                          {{"field", "M31"},
                                           {"buffer_size", kBufferSize},
                                           {"operation", "mul_add"},
                                           {"vectorized", true}});
 }
 
-BENCHMARK(BM_square_scalar)->Unit(::benchmark::kMillisecond);
-BENCHMARK(BM_square_vectorized)->Unit(::benchmark::kMillisecond);
-BENCHMARK(BM_add_scalar)->Unit(::benchmark::kMillisecond);
-BENCHMARK(BM_add_vectorized)->Unit(::benchmark::kMillisecond);
-BENCHMARK(BM_mul_add_scalar)->Unit(::benchmark::kMillisecond);
-BENCHMARK(BM_mul_add_vectorized)->Unit(::benchmark::kMillisecond);
+BENCHMARK(BM_square_scalar)
+    ->Unit(::benchmark::kMillisecond)
+    ->Name("square_scalar");
+BENCHMARK(BM_square_vectorized)
+    ->Unit(::benchmark::kMillisecond)
+    ->Name("square_vectorized");
+BENCHMARK(BM_add_scalar)->Unit(::benchmark::kMillisecond)->Name("add_scalar");
+BENCHMARK(BM_add_vectorized)
+    ->Unit(::benchmark::kMillisecond)
+    ->Name("add_vectorized");
+BENCHMARK(BM_mul_add_scalar)
+    ->Unit(::benchmark::kMillisecond)
+    ->Name("mul_add_scalar");
+BENCHMARK(BM_mul_add_vectorized)
+    ->Unit(::benchmark::kMillisecond)
+    ->Name("mul_add_vectorized");
 
 } // namespace
 } // namespace mlir::prime_ir::benchmark

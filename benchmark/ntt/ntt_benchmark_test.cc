@@ -80,7 +80,7 @@ void BM_ntt_benchmark(::benchmark::State &state) {
                            ::benchmark::Counter::kIsRate);
 
   // Set zkbench test vectors and metadata
-  const char *benchName = kIsMont ? "ntt_mont" : "ntt";
+  const char *benchName = kIsMont ? "ntt_forward_mont" : "ntt_forward";
   zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
                                             verified);
   zkbench::BenchmarkContext::SetMetadata(benchName, {{"field", "BN254"},
@@ -132,7 +132,7 @@ void BM_intt_benchmark(::benchmark::State &state) {
                            ::benchmark::Counter::kIsRate);
 
   // Set zkbench test vectors and metadata
-  const char *benchName = kIsMont ? "intt_mont" : "intt";
+  const char *benchName = kIsMont ? "ntt_inverse_mont" : "ntt_inverse";
   zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
                                             verified);
   zkbench::BenchmarkContext::SetMetadata(benchName, {{"field", "BN254"},
@@ -142,16 +142,16 @@ void BM_intt_benchmark(::benchmark::State &state) {
 
 BENCHMARK_TEMPLATE(BM_ntt_benchmark, /*kIsMont=*/false)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("ntt");
+    ->Name("ntt_forward");
 BENCHMARK_TEMPLATE(BM_intt_benchmark, /*kIsMont=*/false)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("intt");
+    ->Name("ntt_inverse");
 BENCHMARK_TEMPLATE(BM_ntt_benchmark, /*kIsMont=*/true)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("ntt_mont");
+    ->Name("ntt_forward_mont");
 BENCHMARK_TEMPLATE(BM_intt_benchmark, /*kIsMont=*/true)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("intt_mont");
+    ->Name("ntt_inverse_mont");
 
 } // namespace
 } // namespace mlir::prime_ir::benchmark
