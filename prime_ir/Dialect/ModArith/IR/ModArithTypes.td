@@ -97,9 +97,9 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
     uint64_t getMaxBound() const {
       APInt mod = getModulus().getValue();
       unsigned w = getStorageBitWidth();
-      APInt maxVal = APInt::getMaxValue(w).zext(w + 1);
-      APInt modExt = mod.zext(w + 1);
-      return maxVal.udiv(modExt).getZExtValue();
+      APInt maxVal = APInt::getMaxValue(w);
+      APInt modW = mod.zext(w);
+      return maxVal.udiv(modW).getZExtValue();
     }
 
   }];

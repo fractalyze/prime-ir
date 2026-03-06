@@ -199,7 +199,7 @@ uint64_t computeBound(Value v, DataFlowSolver &solver) {
 
   APInt umax = lattice->getValue().getValue().umax();
   unsigned w = modType.getStorageBitWidth();
-  APInt p = modType.getModulus().getValue().zextOrTrunc(w);
+  APInt p = modType.getModulus().getValue().zext(w);
   if (p.isZero())
     return 1;
 

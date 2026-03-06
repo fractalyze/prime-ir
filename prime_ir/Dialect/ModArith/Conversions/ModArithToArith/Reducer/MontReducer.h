@@ -66,10 +66,15 @@ private:
   // Handles splatting for vector types automatically.
   Value createModulusConst(Type inputType);
 
-  // Core REDC implementation shared by reduce() and reduceLazy().
+  // Single-limb REDC: modulus fits in one machine word.
   // When lazy is true, skips the final conditional subtraction and returns
   // a value in [0, 2p); when false, returns a value in [0, p).
-  Value reduceImpl(Value tLow, Value tHigh, bool lazy);
+  Value reduceSingleLimb(Value tLow, Value tHigh, bool lazy);
+
+  // Multi-limb REDC: modulus requires multiple machine words.
+  // When lazy is true, skips the final conditional subtraction and returns
+  // a value in [0, 2p); when false, returns a value in [0, p).
+  Value reduceMultiLimb(Value tLow, Value tHigh, bool lazy);
 
   // Checks if the input is from a signed multiplication.
   bool isFromSignedMul(Value input);

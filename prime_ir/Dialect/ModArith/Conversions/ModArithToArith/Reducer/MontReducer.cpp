@@ -106,7 +106,40 @@ bool MontReducer::isFromSignedMul(Value input) {
   return signedOp && signedOp.getLhs() != signedOp.getRhs();
 }
 
-Value MontReducer::reduceImpl(Value tLow, Value tHigh, bool lazy) {
+Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh, bool lazy) {
+  TypedAttr nInvAttr = montAttr.getNInv();
+  Type limbType = nInvAttr.getType();
+  if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
+    limbType = shapedType.cloneWith(std::nullopt, limbType);
+    nInvAttr = SplatElementsAttr::get(cast<ShapedType>(limbType), nInvAttr);
+  }
+  auto nInvConst = b.create<arith::ConstantOp>(nInvAttr);
+  auto modConst = createModulusConst(tLow.getType());
+
+  // Compute m = tLow * nInv (mod base).
+  auto m = b.create<arith::MulIOp>(tLow, nInvConst);
+  // Compute m * n.
+  Value mNHigh;
+  if (isFromSignedMul(tLow)) {
+    auto mN = b.create<arith::MulSIExtendedOp>(m, modConst);
+    mNHigh = mN.getHigh();
+  } else {
+    auto mN = b.create<arith::MulUIExtendedOp>(m, modConst);
+    mNHigh = mN.getHigh();
+  }
+
+  // The low part of T - mN is always zero (divisible by base), so the
+  // result is just tHigh - mNHigh mod n.
+  if (lazy) {
+    // tHigh - mNHigh can underflow, so unconditionally add p.
+    // Result is in [0, 2p).
+    auto sub = b.create<arith::SubIOp>(tHigh, mNHigh);
+    return b.create<arith::AddIOp>(sub, modConst).getResult();
+  }
+  return getCanonicalDiff(tHigh, mNHigh);
+}
+
+Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   TypedAttr nPrimeAttr = montAttr.getNPrime();
 
   // Retrieve the modulus bitwidth.
@@ -117,42 +150,6 @@ Value MontReducer::reduceImpl(Value tLow, Value tHigh, bool lazy) {
   const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
   const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
 
-  // If the number of limbs is 1, the 2ʷ is larger than the modulus, so we
-  // can use `nInv` instead of `nPrime` and avoid carry check.
-  if (numLimbs == 1) {
-    TypedAttr nInvAttr = montAttr.getNInv();
-    Type limbType = nInvAttr.getType();
-    if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
-      limbType = shapedType.cloneWith(std::nullopt, limbType);
-      nInvAttr = SplatElementsAttr::get(cast<ShapedType>(limbType), nInvAttr);
-    }
-    auto nInvConst = b.create<arith::ConstantOp>(nInvAttr);
-    auto modConst = createModulusConst(tLow.getType());
-
-    // Compute m = tLow * nInv (mod base).
-    auto m = b.create<arith::MulIOp>(tLow, nInvConst);
-    // Compute m * n.
-    Value mNHigh;
-    if (isFromSignedMul(tLow)) {
-      auto mN = b.create<arith::MulSIExtendedOp>(m, modConst);
-      mNHigh = mN.getHigh();
-    } else {
-      auto mN = b.create<arith::MulUIExtendedOp>(m, modConst);
-      mNHigh = mN.getHigh();
-    }
-
-    // The low part of T - mN is always zero (divisible by base), so the
-    // result is just tHigh - mNHigh mod n.
-    if (lazy) {
-      // tHigh - mNHigh can underflow, so unconditionally add p.
-      // Result is in [0, 2p).
-      auto sub = b.create<arith::SubIOp>(tHigh, mNHigh);
-      return b.create<arith::AddIOp>(sub, modConst).getResult();
-    }
-    return getCanonicalDiff(tHigh, mNHigh);
-  }
-
-  // Multi-limb path: modulus requires multiple limbs.
   TypedAttr bInvAttr = montAttr.getBInv();
   Type limbType = nPrimeAttr.getType();
   TypedAttr limbWidthAttr =
@@ -240,11 +237,23 @@ Value MontReducer::reduceImpl(Value tLow, Value tHigh, bool lazy) {
 }
 
 Value MontReducer::reduce(Value tLow, Value tHigh) {
-  return reduceImpl(tLow, tHigh, /*lazy=*/false);
+  TypedAttr nPrimeAttr = montAttr.getNPrime();
+  const unsigned modBitWidth =
+      cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
+  const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
+  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+  return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, /*lazy=*/false)
+                       : reduceMultiLimb(tLow, tHigh, /*lazy=*/false);
 }
 
 Value MontReducer::reduceLazy(Value tLow, Value tHigh) {
-  return reduceImpl(tLow, tHigh, /*lazy=*/true);
+  TypedAttr nPrimeAttr = montAttr.getNPrime();
+  const unsigned modBitWidth =
+      cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
+  const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
+  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+  return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, /*lazy=*/true)
+                       : reduceMultiLimb(tLow, tHigh, /*lazy=*/true);
 }
 
 } // namespace mlir::prime_ir::mod_arith
