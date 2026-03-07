@@ -38,25 +38,29 @@ class Field_Op_Base<string mnemonic, list<Trait> traits = []> :
 class Field_Op<string mnemonic, list<Trait> traits = []> :
   Field_Op_Base<mnemonic, traits # ElementwiseMappable.traits>;
 
-// Base class for field arithmetic ops. All ops have one result,
-// and the result type is the same as the operand type.
+// Base class for field arithmetic ops. All ops have one result.
 class Field_ArithOp<string mnemonic, list<Trait> traits = []> :
-  Field_Op<mnemonic, traits # [SameOperandsAndResultType]>;
+  Field_Op<mnemonic, traits>;
 
-// Base class for unary field arithmetic.
+// Base class for unary field arithmetic. Operand and result have the same type.
 class Field_UnaryOp<string mnemonic, list<Trait> traits = []> :
-  Field_ArithOp<mnemonic, traits>,
+  Field_ArithOp<mnemonic, traits # [SameOperandsAndResultType]>,
   Arguments<(ins FieldLike:$input)>,
   Results<(outs FieldLike:$output)> {
   let assemblyFormat = "operands attr-dict `:` type($output)";
 }
 
-// Base class for binary field arithmetic.
+// Base class for binary field arithmetic. Supports both same-type operands
+// (e.g., pf + pf) and mixed-type operands (e.g., ef + pf) where one operand
+// is an extension field and the other is its base field. The result type is
+// inferred via InferTypeOpInterface.
 class Field_BinaryOp<string mnemonic, list<Trait> traits = []> :
-  Field_ArithOp<mnemonic, traits>,
+  Field_ArithOp<mnemonic,
+    traits # [DeclareOpInterfaceMethods<InferTypeOpInterface>]>,
   Arguments<(ins FieldLike:$lhs, FieldLike:$rhs)>,
   Results<(outs FieldLike:$output)> {
-  let assemblyFormat = "operands attr-dict `:` type($output)";
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
 }
 
 def Field_ConstantOp : Field_Op_Base<"constant", [ConstantLike]> {
@@ -293,11 +297,13 @@ def Field_NegateOp : Field_UnaryOp<"negate", [Involution]> {
 def Field_AddOp : Field_BinaryOp<"add", [Commutative]> {
   let summary = "Field addition";
   let description = [{
-    Computes the sum of two field elements.
+    Computes the sum of two field elements. Supports mixed-type operands
+    where one operand is an extension field and the other is its base field.
 
     Example:
     ```
     %r = field.add %a, %b : !field.pf<primeModulus>
+    %r2 = field.add %ext, %base : !field.ef<2x!field.pf<7>, 6>, !field.pf<7>
     ```
   }];
   let hasFolder = 1;
@@ -308,11 +314,14 @@ def Field_AddOp : Field_BinaryOp<"add", [Commutative]> {
 def Field_SubOp : Field_BinaryOp<"sub"> {
   let summary = "Field subtraction";
   let description = [{
-    Computes the difference between two field elements.
+    Computes the difference between two field elements. Supports mixed-type
+    operands where one operand is an extension field and the other is its
+    base field.
 
     Example:
     ```
     %r = field.sub %a, %b : !field.pf<primeModulus>
+    %r2 = field.sub %ext, %base : !field.ef<2x!field.pf<7>, 6>, !field.pf<7>
     ```
   }];
   let hasFolder = 1;
@@ -323,11 +332,14 @@ def Field_SubOp : Field_BinaryOp<"sub"> {
 def Field_MulOp : Field_BinaryOp<"mul", [Commutative]> {
   let summary = "Field multiplication";
   let description = [{
-    Computes the product of two field elements.
+    Computes the product of two field elements. Supports mixed-type operands
+    where one operand is an extension field and the other is its base field
+    (scalar multiplication).
 
     Example:
     ```
     %r = field.mul %a, %b : !field.pf<primeModulus>
+    %r2 = field.mul %ext, %base : !field.ef<2x!field.pf<7>, 6>, !field.pf<7>
     ```
   }];
   let hasFolder = 1;

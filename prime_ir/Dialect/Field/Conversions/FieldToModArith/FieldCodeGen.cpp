@@ -66,21 +66,78 @@ FieldCodeGen applyBinaryOp(const FieldCodeGen::CodeGenType &a,
       a, b);
 }
 
+// Type trait to detect ExtensionFieldCodeGen and extract its BaseFieldT.
+template <typename T>
+struct IsExtensionFieldCodeGen : std::false_type {};
+
+template <size_t N, typename B>
+struct IsExtensionFieldCodeGen<ExtensionFieldCodeGen<N, B>> : std::true_type {
+  using BaseFieldT = B;
+};
+
+// Mixed-type dispatch: one operand is an extension field, the other is its
+// base field. ExtBaseOp handles (ext, base); BaseExtOp handles (base, ext)
+// with arguments reordered as (ext, base) for convenience.
+template <typename ExtBaseOp, typename BaseExtOp>
+FieldCodeGen applyMixedBinaryOp(const FieldCodeGen::CodeGenType &a,
+                                const FieldCodeGen::CodeGenType &b,
+                                ExtBaseOp extBaseOp, BaseExtOp baseExtOp) {
+  return std::visit(
+      [&](const auto &lhs, const auto &rhs) -> FieldCodeGen {
+        using LHS = std::decay_t<decltype(lhs)>;
+        using RHS = std::decay_t<decltype(rhs)>;
+        if constexpr (IsExtensionFieldCodeGen<LHS>::value) {
+          if constexpr (std::is_same_v<
+                            typename IsExtensionFieldCodeGen<LHS>::BaseFieldT,
+                            RHS>) {
+            return extBaseOp(lhs, rhs);
+          }
+        }
+        if constexpr (IsExtensionFieldCodeGen<RHS>::value) {
+          if constexpr (std::is_same_v<
+                            typename IsExtensionFieldCodeGen<RHS>::BaseFieldT,
+                            LHS>) {
+            return baseExtOp(rhs, lhs);
+          }
+        }
+        llvm_unreachable("Unsupported mixed-type field operation");
+      },
+      a, b);
+}
+
 } // namespace
 
 FieldCodeGen FieldCodeGen::operator+(const FieldCodeGen &other) const {
-  return applyBinaryOp(codeGen, other.codeGen,
-                       [](const auto &a, const auto &b) { return a + b; });
+  if (codeGen.index() == other.codeGen.index()) {
+    return applyBinaryOp(codeGen, other.codeGen,
+                         [](const auto &a, const auto &b) { return a + b; });
+  }
+  return applyMixedBinaryOp(
+      codeGen, other.codeGen,
+      [](const auto &ext, const auto &base) { return ext + base; },
+      [](const auto &ext, const auto &base) { return ext + base; });
 }
 
 FieldCodeGen FieldCodeGen::operator-(const FieldCodeGen &other) const {
-  return applyBinaryOp(codeGen, other.codeGen,
-                       [](const auto &a, const auto &b) { return a - b; });
+  if (codeGen.index() == other.codeGen.index()) {
+    return applyBinaryOp(codeGen, other.codeGen,
+                         [](const auto &a, const auto &b) { return a - b; });
+  }
+  return applyMixedBinaryOp(
+      codeGen, other.codeGen,
+      [](const auto &ext, const auto &base) { return ext - base; },
+      [](const auto &ext, const auto &base) { return -(ext - base); });
 }
 
 FieldCodeGen FieldCodeGen::operator*(const FieldCodeGen &other) const {
-  return applyBinaryOp(codeGen, other.codeGen,
-                       [](const auto &a, const auto &b) { return a * b; });
+  if (codeGen.index() == other.codeGen.index()) {
+    return applyBinaryOp(codeGen, other.codeGen,
+                         [](const auto &a, const auto &b) { return a * b; });
+  }
+  return applyMixedBinaryOp(
+      codeGen, other.codeGen,
+      [](const auto &ext, const auto &base) { return ext * base; },
+      [](const auto &ext, const auto &base) { return ext * base; });
 }
 
 FieldCodeGen FieldCodeGen::operator-() const {
