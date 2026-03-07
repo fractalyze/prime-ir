@@ -291,12 +291,11 @@ func.func @test_lazy_double(%a : !Zp, %b : !Zp) -> !Zp {
 // LAZY:           arith.subi
 // LAZY-NOT:       arith.cmpi
 // LAZY:           arith.addi
-//   Third mont_mul: both inputs are lazy (bound=2), so pre-reduction inserts
-//   cmpi ult + select BEFORE the widening multiply.
+//   Third mont_mul: both inputs are lazy (bound=2), but reducing only one
+//   suffices since (p - 1) * (2p - 1) < p * 2^w for BabyBear.
 // LAZY:           arith.cmpi ult
 // LAZY:           arith.select
-// LAZY:           arith.cmpi ult
-// LAZY:           arith.select
+// LAZY-NOT:       arith.cmpi ult
 // LAZY:           arith.mului_extended
 
 // EAGER-LABEL:    @test_redc_precondition_guard
@@ -464,5 +463,68 @@ func.func @test_mont_square_pre_reduce(%a : !Zp, %b : !Zp) -> !Zp {
 // EAGER:          return
 func.func @test_non_mont_add(%a : !Zp, %b : !Zp) -> !Zp {
   %r = mod_arith.add %a, %b : !Zp
+  return %r : !Zp
+}
+
+// -----
+
+// BabyBear: p = 2013265921, i32, Montgomery. maxBound = 2.
+// add(a, 1) has kp = 2, but exact umax = (p - 1) + (R mod p) = 2281701374.
+// mont_mul(add(a,1), add(b,1)): kp product 2 * 2 = 4 > maxBound(2), but
+// umax product 2281701374² < p * 2³², so REDC is safe without pre-reduction.
+
+!Zp = !mod_arith.int<2013265921 : i32, true>
+
+// LAZY-LABEL:     @test_add_const_then_mont_mul
+// LAZY:           arith.addi
+// LAZY:           arith.addi
+// LAZY-NOT:       arith.cmpi ult
+// LAZY-NOT:       arith.select
+// LAZY:           arith.mului_extended
+
+// EAGER-LABEL:    @test_add_const_then_mont_mul
+// EAGER:          arith.addi
+// EAGER:          arith.cmpi ult
+// EAGER:          arith.select
+// EAGER:          arith.addi
+// EAGER:          arith.cmpi ult
+// EAGER:          arith.select
+// EAGER:          arith.mului_extended
+func.func @test_add_const_then_mont_mul(%a : !Zp, %b : !Zp) -> !Zp {
+  %one = mod_arith.constant 1 : !Zp
+  %a_plus_1 = mod_arith.add %a, %one : !Zp
+  %b_plus_1 = mod_arith.add %b, %one : !Zp
+  %r = mod_arith.mont_mul %a_plus_1, %b_plus_1 : !Zp
+  return %r : !Zp
+}
+
+// -----
+
+// BabyBear: (a + b) * (c + d). umax of each add is 2p - 2 = 4026531840.
+// Product (2p - 2)² > p * 2³², so pre-reduction IS needed.
+
+!Zp = !mod_arith.int<2013265921 : i32, true>
+
+// LAZY-LABEL:     @test_add_then_mont_mul_needs_reduce
+// LAZY:           arith.addi
+// LAZY:           arith.addi
+//   Only one operand needs pre-reduction since (p - 1) * (2p - 2) < p * 2^w.
+// LAZY:           arith.cmpi ult
+// LAZY:           arith.select
+// LAZY-NOT:       arith.cmpi ult
+// LAZY:           arith.mului_extended
+
+// EAGER-LABEL:    @test_add_then_mont_mul_needs_reduce
+// EAGER:          arith.addi
+// EAGER:          arith.cmpi ult
+// EAGER:          arith.select
+// EAGER:          arith.addi
+// EAGER:          arith.cmpi ult
+// EAGER:          arith.select
+// EAGER:          arith.mului_extended
+func.func @test_add_then_mont_mul_needs_reduce(%a : !Zp, %b : !Zp, %c : !Zp, %d : !Zp) -> !Zp {
+  %ab = mod_arith.add %a, %b : !Zp
+  %cd = mod_arith.add %c, %d : !Zp
+  %r = mod_arith.mont_mul %ab, %cd : !Zp
   return %r : !Zp
 }

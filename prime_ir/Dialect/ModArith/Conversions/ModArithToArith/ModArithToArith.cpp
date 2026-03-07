@@ -96,7 +96,11 @@ private:
 
 namespace {
 
-using BoundMap = DenseMap<Value, uint64_t>;
+struct BoundInfo {
+  uint64_t kp; // value in [0, kp * p)
+  APInt umax;  // exact upper bound (2w bits)
+};
+using BoundMap = DenseMap<Value, BoundInfo>;
 
 // Base class for conversion patterns that carry a BoundMap for lazy reduction.
 template <typename SourceOp>
@@ -107,12 +111,19 @@ struct BoundMapPattern : public OpConversionPattern<SourceOp> {
         boundMap(boundMap) {}
 
 protected:
-  // Lookup bound for a value. Returns 1 (canonical) if no map or not found.
-  uint64_t lookupBound(Value v) const {
-    if (!boundMap)
-      return 1;
-    auto it = boundMap->find(v);
-    return it != boundMap->end() ? it->second : 1;
+  // Lookup bound info for a value. Returns {1, p - 1} if not found.
+  BoundInfo lookupBoundInfo(Value v) const {
+    if (boundMap) {
+      auto it = boundMap->find(v);
+      if (it != boundMap->end())
+        return it->second;
+    }
+    auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(v.getType()));
+    if (!modType)
+      return {1, APInt(64, 0)};
+    unsigned w = modType.getStorageBitWidth();
+    APInt p = modType.getModulus().getValue().zext(2 * w);
+    return {1, p - 1};
   }
 
   const BoundMap *boundMap;
@@ -160,10 +171,27 @@ public:
       if (!result)
         return;
 
+      // Widen single-value ranges for ModArithType to prevent
+      // IntegerValueRangeLattice::onUpdate from creating IntegerAttr with
+      // non-integer type (ModArithType).
+      IntegerValueRange widenedAttrs = attrs;
+      if (!attrs.isUninitialized() &&
+          isa<ModArithType>(getElementTypeOrSelf(v.getType()))) {
+        auto range = attrs.getValue();
+        if (range.getConstantValue()) {
+          unsigned w = range.umax().getBitWidth();
+          APInt umax = range.umax();
+          if (umax.isZero())
+            umax = APInt(w, 1);
+          widenedAttrs = IntegerValueRange{
+              ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax)};
+        }
+      }
+
       dataflow::IntegerValueRangeLattice *lattice =
           results[result.getResultNumber()];
       IntegerValueRange oldRange = lattice->getValue();
-      ChangeResult changed = lattice->join(attrs);
+      ChangeResult changed = lattice->join(widenedAttrs);
 
       // Loop-variant detection: widen to max range to prevent infinite
       // iteration.
@@ -211,7 +239,7 @@ uint64_t computeBound(Value v, DataFlowSolver &solver) {
   return std::max(uint64_t{1}, boundVal);
 }
 
-// Build the boundMap for a function by running IRA.
+// Build the boundMap for a function by running IRA + algebraic umax.
 void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
   DataFlowSolver solver;
   solver.load<dataflow::DeadCodeAnalysis>();
@@ -220,13 +248,72 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
     return; // Conservative: no bounds recorded.
   }
 
+  // Phase 1: IRA kp computation.
+  DenseMap<Value, uint64_t> kpMap;
   funcOp.walk([&](Operation *op) {
     for (auto result : op->getResults()) {
       if (!isa<ModArithType>(getElementTypeOrSelf(result.getType())))
         continue;
       uint64_t bound = computeBound(result, solver);
-      if (bound > 1)
-        boundMap[result] = bound;
+      kpMap[result] = bound;
+    }
+  });
+
+  // Phase 2: Algebraic umax computation (2w bits, no truncation).
+  // Walk ops in forward order so operand umaxes are available.
+  funcOp.walk([&](Operation *op) {
+    for (auto result : op->getResults()) {
+      auto modType =
+          dyn_cast<ModArithType>(getElementTypeOrSelf(result.getType()));
+      if (!modType)
+        continue;
+
+      unsigned w = modType.getStorageBitWidth();
+      unsigned dw = 2 * w;
+      APInt p = modType.getModulus().getValue().zext(dw);
+      APInt defaultUmax = p - 1;
+
+      uint64_t kp = kpMap.count(result) ? kpMap[result] : 1;
+
+      // Get operand umax from boundMap (already computed) or IRA fallback.
+      auto getOpUmax = [&](Value v) -> APInt {
+        auto it = boundMap.find(v);
+        if (it != boundMap.end())
+          return it->second.umax;
+        auto *lattice =
+            solver.lookupState<dataflow::IntegerValueRangeLattice>(v);
+        if (lattice && !lattice->getValue().isUninitialized())
+          return lattice->getValue().getValue().umax().zext(dw);
+        return defaultUmax;
+      };
+
+      auto getOpKp = [&](Value v) -> uint64_t {
+        auto it = kpMap.find(v);
+        if (it != kpMap.end())
+          return it->second;
+        return 1;
+      };
+
+      APInt umax = defaultUmax;
+      if (auto addOp = dyn_cast<AddOp>(op)) {
+        umax = getOpUmax(addOp.getLhs()) + getOpUmax(addOp.getRhs());
+      } else if (auto subOp = dyn_cast<SubOp>(op)) {
+        uint64_t rhsKp = getOpKp(subOp.getRhs());
+        umax = getOpUmax(subOp.getLhs()) + p * APInt(dw, rhsKp);
+      } else if (isa<DoubleOp>(op)) {
+        auto doubleOp = cast<DoubleOp>(op);
+        umax = getOpUmax(doubleOp.getInput()) * APInt(dw, 2);
+      } else if (isa<MontMulOp, MontSquareOp, MontReduceOp>(op)) {
+        umax = p * APInt(dw, 2) - 1;
+      } else if (isa<ConstantOp>(op)) {
+        auto *lattice =
+            solver.lookupState<dataflow::IntegerValueRangeLattice>(result);
+        if (lattice && !lattice->getValue().isUninitialized())
+          umax = lattice->getValue().getValue().umax().zext(dw);
+      }
+
+      if (kp > 1 || umax != defaultUmax)
+        boundMap[result] = BoundInfo{kp, umax};
     }
   });
 }
@@ -369,7 +456,7 @@ struct ConvertNegate : public BoundMapPattern<NegateOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Value input = adaptor.getInput();
-    uint64_t inputBound = lookupBound(op.getInput());
+    uint64_t inputBound = lookupBoundInfo(op.getInput()).kp;
     if (inputBound > 1) {
       MontReducer reducer(b, getResultModArithType(op));
       input = reducer.getCanonicalFromExtended(input, inputBound);
@@ -408,7 +495,7 @@ struct ConvertMontReduce : public BoundMapPattern<MontReduceOp> {
 
     // Perform Montgomery reduction using MontReducer helper class.
     MontReducer reducer(b, getResultModArithType(op));
-    uint64_t resBound = lookupBound(op.getResult());
+    uint64_t resBound = lookupBoundInfo(op.getResult()).kp;
     Value result = reducer.reduce(tLow, tHigh, /*lazy=*/resBound >= 2);
     rewriter.replaceOp(op, result);
     return success();
@@ -481,7 +568,7 @@ struct ConvertInverse : public BoundMapPattern<InverseOp> {
 
     // Reduce lazy input before inverting.
     Value input = adaptor.getInput();
-    uint64_t inputBound = lookupBound(op.getInput());
+    uint64_t inputBound = lookupBoundInfo(op.getInput()).kp;
     if (inputBound > 1) {
       MontReducer reducer(b, modType);
       input = reducer.getCanonicalFromExtended(input, inputBound);
@@ -547,7 +634,7 @@ struct ConvertMontInverse : public BoundMapPattern<MontInverseOp> {
 
     // Reduce lazy input before inverting.
     Value input = adaptor.getInput();
-    uint64_t inputBound = lookupBound(op.getInput());
+    uint64_t inputBound = lookupBoundInfo(op.getInput()).kp;
     if (inputBound > 1) {
       MontReducer reducer(b, modType);
       input = reducer.getCanonicalFromExtended(input, inputBound);
@@ -604,22 +691,32 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     APInt modulus = modArithType.getModulus().getValue();
     unsigned storageWidth = modArithType.getStorageBitWidth();
     unsigned modWidth = modulus.getActiveBits();
-    uint64_t resBound = lookupBound(op.getResult());
+    uint64_t resBound = lookupBoundInfo(op.getResult()).kp;
 
-    // nuw is valid iff lhsBound + rhsBound <= getMaxBound(), i.e., the sum
-    // fits in storageWidth bits without overflow. Pre-reduce any lazy inputs
-    // that would violate this before emitting the addition.
-    uint64_t lhsBound = lookupBound(op.getLhs());
-    uint64_t rhsBound = lookupBound(op.getRhs());
-    uint64_t maxBound = modArithType.getMaxBound();
+    // Pre-reduce lazy inputs whose umax sum would overflow w bits.
+    BoundInfo lhsInfo = lookupBoundInfo(op.getLhs());
+    BoundInfo rhsInfo = lookupBoundInfo(op.getRhs());
     MontReducer montReducer(b, modArithType);
     Value lhs = adaptor.getLhs();
     Value rhs = adaptor.getRhs();
-    if (lhsBound + rhsBound > maxBound) {
-      if (lhsBound > 1)
-        lhs = montReducer.getCanonicalFromExtended(lhs, lhsBound);
-      if (rhsBound > 1)
-        rhs = montReducer.getCanonicalFromExtended(rhs, rhsBound);
+    unsigned dw = 2 * storageWidth;
+    APInt wMax = APInt::getMaxValue(storageWidth).zext(dw);
+    APInt sumMax = lhsInfo.umax + rhsInfo.umax;
+    if (sumMax.ugt(wMax)) {
+      // Try reducing only one operand when that alone avoids overflow.
+      APInt pMinus1 = modArithType.getModulus().getValue().zext(dw) - 1;
+      APInt lhsOnly = pMinus1 + rhsInfo.umax;
+      APInt rhsOnly = lhsInfo.umax + pMinus1;
+      if (lhsInfo.kp > 1 && lhsOnly.ule(wMax)) {
+        lhs = montReducer.getCanonicalFromExtended(lhs, lhsInfo.kp);
+      } else if (rhsInfo.kp > 1 && rhsOnly.ule(wMax)) {
+        rhs = montReducer.getCanonicalFromExtended(rhs, rhsInfo.kp);
+      } else {
+        if (lhsInfo.kp > 1)
+          lhs = montReducer.getCanonicalFromExtended(lhs, lhsInfo.kp);
+        if (rhsInfo.kp > 1)
+          rhs = montReducer.getCanonicalFromExtended(rhs, rhsInfo.kp);
+      }
     }
 
     Value result;
@@ -666,17 +763,19 @@ struct ConvertDouble : public BoundMapPattern<DoubleOp> {
     APInt modulus = modArithType.getModulus().getValue();
     unsigned storageWidth = modArithType.getStorageBitWidth();
     unsigned modWidth = modulus.getActiveBits();
-    uint64_t resBound = lookupBound(op.getResult());
+    uint64_t resBound = lookupBoundInfo(op.getResult()).kp;
 
-    // double(x) = 2x. nuw requires 2 * inputBound <= maxBound.
-    // Pre-reduce lazy input that would overflow storage.
-    uint64_t inputBound = lookupBound(op.getInput());
-    uint64_t maxBound = modArithType.getMaxBound();
+    // double(x) = 2x. Pre-reduce lazy input whose doubled umax overflows w
+    // bits.
+    BoundInfo inputInfo = lookupBoundInfo(op.getInput());
     MontReducer montReducer(b, modArithType);
     Value input = adaptor.getInput();
-    if (2 * inputBound > maxBound) {
-      if (inputBound > 1)
-        input = montReducer.getCanonicalFromExtended(input, inputBound);
+    unsigned dw = 2 * storageWidth;
+    APInt wMax = APInt::getMaxValue(storageWidth).zext(dw);
+    APInt doubleMax = inputInfo.umax * APInt(dw, 2);
+    if (doubleMax.ugt(wMax)) {
+      if (inputInfo.kp > 1)
+        input = montReducer.getCanonicalFromExtended(input, inputInfo.kp);
     }
 
     Value result;
@@ -714,31 +813,45 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ModArithType modType = getResultModArithType(op);
-    uint64_t resBound = lookupBound(op.getResult());
+    uint64_t resBound = lookupBoundInfo(op.getResult()).kp;
 
-    // Lazy sub computes lhs + correction - rhs where correction = rhsBound * p.
-    // Result max = (lhsBound + rhsBound) * p - 1, must fit in w bits.
-    // Pre-reduce lazy inputs if lhsBound + rhsBound > maxBound.
-    uint64_t lhsBound = lookupBound(op.getLhs());
-    uint64_t rhsBound = lookupBound(op.getRhs());
-    uint64_t maxBound = modType.getMaxBound();
+    // Lazy sub computes lhs + correction - rhs where correction = rhsKp * p.
+    // Result max = lhsUmax + rhsKp * p, must fit in w bits.
+    BoundInfo lhsInfo = lookupBoundInfo(op.getLhs());
+    BoundInfo rhsInfo = lookupBoundInfo(op.getRhs());
+    uint64_t rhsKp = rhsInfo.kp;
     MontReducer montReducer(b, modType);
     Value lhs = adaptor.getLhs();
     Value rhs = adaptor.getRhs();
-    if (lhsBound + rhsBound > maxBound) {
-      if (lhsBound > 1)
-        lhs = montReducer.getCanonicalFromExtended(lhs, lhsBound);
-      if (rhsBound > 1)
-        rhs = montReducer.getCanonicalFromExtended(rhs, rhsBound);
-      lhsBound = 1;
-      rhsBound = 1;
+    unsigned w = modType.getStorageBitWidth();
+    unsigned dw = 2 * w;
+    APInt wMax = APInt::getMaxValue(w).zext(dw);
+    APInt p = modType.getModulus().getValue().zext(dw);
+    APInt resultMax = lhsInfo.umax + p * APInt(dw, rhsKp);
+    if (resultMax.ugt(wMax)) {
+      // Try reducing only one operand when that alone avoids overflow.
+      APInt pMinus1 = p - 1;
+      APInt lhsOnly = pMinus1 + p * APInt(dw, rhsKp);
+      APInt rhsOnly = lhsInfo.umax + p;
+      if (lhsInfo.kp > 1 && lhsOnly.ule(wMax)) {
+        lhs = montReducer.getCanonicalFromExtended(lhs, lhsInfo.kp);
+      } else if (rhsInfo.kp > 1 && rhsOnly.ule(wMax)) {
+        rhs = montReducer.getCanonicalFromExtended(rhs, rhsInfo.kp);
+        rhsKp = 1;
+      } else {
+        if (lhsInfo.kp > 1)
+          lhs = montReducer.getCanonicalFromExtended(lhs, lhsInfo.kp);
+        if (rhsInfo.kp > 1)
+          rhs = montReducer.getCanonicalFromExtended(rhs, rhsInfo.kp);
+        rhsKp = 1;
+      }
     }
 
     if (resBound > 1) {
       // Lazy sub: (lhs - rhs + correction) without final conditional sub.
-      // correction = rhsBound * p ensures lhs + correction - rhs >= 0.
+      // correction = rhsKp * p ensures lhs + correction - rhs >= 0.
       APInt modulus = modType.getModulus().getValue();
-      APInt correction = modulus * APInt(modulus.getBitWidth(), rhsBound);
+      APInt correction = modulus * APInt(modulus.getBitWidth(), rhsKp);
       Value corrConst =
           createScalarOrSplatConstant(b, b.getLoc(), lhs.getType(), correction);
       auto lhsPlusCorrected = b.create<arith::AddIOp>(lhs, corrConst);
@@ -944,22 +1057,36 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
           "MontMulOp with non-Montgomery type is not supported in "
           "ModArithToArith conversion");
     }
-    uint64_t resBound = lookupBound(op.getResult());
+    uint64_t resBound = lookupBoundInfo(op.getResult()).kp;
 
-    // REDC precondition: T < p * 2ʷ. With lazy inputs of bounds k_a, k_b,
-    // T < k_a * k_b * p², so we need k_a * k_b * p < 2ʷ, i.e.,
-    // k_a * k_b <= getMaxBound(). Pre-reduce inputs that violate this.
+    // REDC precondition: T < p * 2ʷ. With exact umax bounds, the widening
+    // product is at most umax_a * umax_b. Pre-reduce inputs if
+    // umax_a * umax_b >= p * 2ʷ.
     Value lhs = adaptor.getLhs();
     Value rhs = adaptor.getRhs();
-    uint64_t lhsBound = lookupBound(op.getLhs());
-    uint64_t rhsBound = lookupBound(op.getRhs());
-    uint64_t maxBound = modType.getMaxBound();
+    BoundInfo lhsInfo = lookupBoundInfo(op.getLhs());
+    BoundInfo rhsInfo = lookupBoundInfo(op.getRhs());
     MontReducer reducer(b, modType);
-    if (lhsBound * rhsBound > maxBound) {
-      if (lhsBound > 1)
-        lhs = reducer.getCanonicalFromExtended(lhs, lhsBound);
-      if (rhsBound > 1)
-        rhs = reducer.getCanonicalFromExtended(rhs, rhsBound);
+    unsigned w = modType.getStorageBitWidth();
+    unsigned qw = 4 * w;
+    APInt p = modType.getModulus().getValue().zext(qw);
+    APInt redcLimit = p.shl(w);
+    APInt productMax = lhsInfo.umax.zext(qw) * rhsInfo.umax.zext(qw);
+    if (productMax.uge(redcLimit)) {
+      // Try reducing only one operand when that alone satisfies REDC.
+      APInt pMinus1 = p - 1;
+      APInt lhsOnly = pMinus1 * rhsInfo.umax.zext(qw);
+      APInt rhsOnly = lhsInfo.umax.zext(qw) * pMinus1;
+      if (lhsInfo.kp > 1 && lhsOnly.ult(redcLimit)) {
+        lhs = reducer.getCanonicalFromExtended(lhs, lhsInfo.kp);
+      } else if (rhsInfo.kp > 1 && rhsOnly.ult(redcLimit)) {
+        rhs = reducer.getCanonicalFromExtended(rhs, rhsInfo.kp);
+      } else {
+        if (lhsInfo.kp > 1)
+          lhs = reducer.getCanonicalFromExtended(lhs, lhsInfo.kp);
+        if (rhsInfo.kp > 1)
+          rhs = reducer.getCanonicalFromExtended(rhs, rhsInfo.kp);
+      }
     }
 
     Value signedLhs = getSignedFormFromCanonical(lhs, modAttr);
@@ -1180,20 +1307,23 @@ struct ConvertMontSquare : public BoundMapPattern<MontSquareOp> {
           "MontSquareOp with non-Montgomery type is not supported in "
           "ModArithToArith conversion");
     }
-    // REDC precondition: T < p * 2^w. With lazy input of bound k,
-    // T < k² * p², so we need k² * p < 2^w, i.e., k² <= getMaxBound().
-    // Pre-reduce input if this is violated.
+    // REDC precondition: T < p * 2ʷ. With exact umax, the squaring product
+    // is at most umax². Pre-reduce if umax² >= p * 2ʷ.
     Value input = adaptor.getInput();
-    uint64_t inputBound = lookupBound(op.getInput());
-    uint64_t maxBound = modType.getMaxBound();
+    BoundInfo inputInfo = lookupBoundInfo(op.getInput());
     MontReducer reducer(b, modType);
-    if (inputBound * inputBound > maxBound) {
-      if (inputBound > 1)
-        input = reducer.getCanonicalFromExtended(input, inputBound);
+    unsigned w = modType.getStorageBitWidth();
+    unsigned qw = 4 * w;
+    APInt p = modType.getModulus().getValue().zext(qw);
+    APInt redcLimit = p.shl(w);
+    APInt squareMax = inputInfo.umax.zext(qw) * inputInfo.umax.zext(qw);
+    if (squareMax.uge(redcLimit)) {
+      if (inputInfo.kp > 1)
+        input = reducer.getCanonicalFromExtended(input, inputInfo.kp);
     }
 
     auto sqResult = squareExtended(b, op, input);
-    uint64_t resBound = lookupBound(op.getResult());
+    uint64_t resBound = lookupBoundInfo(op.getResult()).kp;
 
     Value result = reducer.reduce(sqResult.lo, sqResult.hi,
                                   /*lazy=*/resBound >= 2);
@@ -1218,10 +1348,10 @@ struct ConvertCmp : public BoundMapPattern<CmpOp> {
     Value lhs = adaptor.getLhs();
     Value rhs = adaptor.getRhs();
     MontReducer reducer(b, modArithType);
-    uint64_t lhsBound = lookupBound(op.getLhs());
+    uint64_t lhsBound = lookupBoundInfo(op.getLhs()).kp;
     if (lhsBound > 1)
       lhs = reducer.getCanonicalFromExtended(lhs, lhsBound);
-    uint64_t rhsBound = lookupBound(op.getRhs());
+    uint64_t rhsBound = lookupBoundInfo(op.getRhs()).kp;
     if (rhsBound > 1)
       rhs = reducer.getCanonicalFromExtended(rhs, rhsBound);
 
@@ -1258,7 +1388,7 @@ struct ConvertReturnWithReduction : public BoundMapPattern<func::ReturnOp> {
       Value convertedOperand = adaptor.getOperands()[i];
       auto modType =
           dyn_cast<ModArithType>(getElementTypeOrSelf(origOperand.getType()));
-      uint64_t bound = lookupBound(origOperand);
+      uint64_t bound = lookupBoundInfo(origOperand).kp;
       if (modType && bound > 1) {
         MontReducer reducer(b, modType);
         newOperands.push_back(
@@ -1290,7 +1420,7 @@ struct ConvertStoreWithReduction : public BoundMapPattern<memref::StoreOp> {
     Value storedValue = op.getValue();
     auto modType =
         dyn_cast<ModArithType>(getElementTypeOrSelf(storedValue.getType()));
-    uint64_t bound = lookupBound(storedValue);
+    uint64_t bound = lookupBoundInfo(storedValue).kp;
     if (!modType || bound <= 1)
       return failure();
 
@@ -1323,7 +1453,7 @@ struct ConvertYieldWithReduction : public BoundMapPattern<scf::YieldOp> {
       Value convertedOperand = adaptor.getOperands()[i];
       auto modType =
           dyn_cast<ModArithType>(getElementTypeOrSelf(origOperand.getType()));
-      uint64_t bound = lookupBound(origOperand);
+      uint64_t bound = lookupBoundInfo(origOperand).kp;
       if (modType && bound > 1) {
         MontReducer reducer(b, modType);
         newOperands.push_back(
@@ -1357,7 +1487,7 @@ struct ConvertMaterializeWithReduction
     Value source = op.getSource();
     auto modType =
         dyn_cast<ModArithType>(getElementTypeOrSelf(source.getType()));
-    uint64_t bound = lookupBound(source);
+    uint64_t bound = lookupBoundInfo(source).kp;
     if (!modType || bound <= 1)
       return failure();
 
