@@ -234,6 +234,63 @@ public:
 // Build the boundMap for a function by running IRA + algebraic umax.
 // kp is derived from umax to keep them consistent (avoids truncUSat precision
 // loss in IRA for primes close to 2ʷ).
+// Check if a consumer op can use a lazy (non-canonical) value without
+// triggering a pre-reduction guard. Returns true only for consumers that
+// benefit from laziness (i.e., can avoid a conditional subtraction).
+bool canAcceptLazy(Operation *user, Value val, const APInt &valUmax,
+                   const BoundMap &boundMap, const APInt &p, unsigned w) {
+  unsigned dw = 2 * w;
+  APInt wMax = APInt::getMaxValue(w).zext(dw);
+
+  auto getUmax = [&](Value v) -> APInt {
+    auto it = boundMap.find(v);
+    return it != boundMap.end() ? it->second : p - 1;
+  };
+
+  if (auto addOp = dyn_cast<AddOp>(user)) {
+    Value other = (addOp.getLhs() == val) ? addOp.getRhs() : addOp.getLhs();
+    return (valUmax + getUmax(other)).ule(wMax);
+  }
+  if (auto subOp = dyn_cast<SubOp>(user)) {
+    if (subOp.getLhs() == val) {
+      // lhs lazy in sub: result = lhs - rhs + kp_rhs * p
+      uint64_t rhsKp = kpFromUmax(getUmax(subOp.getRhs()), p);
+      return (valUmax + p * APInt(dw, rhsKp)).ule(wMax);
+    }
+    // rhs lazy in sub: result = lhs + kp_val * p - rhs
+    uint64_t valKp = kpFromUmax(valUmax, p);
+    return (getUmax(subOp.getLhs()) + p * APInt(dw, valKp)).ule(wMax);
+  }
+  if (isa<DoubleOp>(user))
+    return (valUmax * APInt(dw, 2)).ule(wMax);
+  // MontMulOp / MontSquareOp: lazy is beneficial only when the REDC
+  // precondition (T < p * 2ʷ) is satisfied with lazy bounds. If not,
+  // the mul will pre-reduce the input anyway, so laziness gives no benefit.
+  if (auto montMulOp = dyn_cast<MontMulOp>(user)) {
+    Value other =
+        (montMulOp.getLhs() == val) ? montMulOp.getRhs() : montMulOp.getLhs();
+    unsigned qw = 4 * w;
+    APInt pExt = p.zext(qw);
+    APInt redcLimit = pExt.shl(w);
+    APInt vUmax = valUmax.zext(qw);
+    APInt otherUmax = getUmax(other).zext(qw);
+    // REDC satisfied with both lazy: no pre-reduction needed.
+    if ((vUmax * otherUmax).ult(redcLimit))
+      return true;
+    // If reducing only the other operand satisfies REDC, val can stay lazy
+    // (the mul conversion will reduce the other operand instead).
+    return (vUmax * (pExt - 1)).ult(redcLimit);
+  }
+  if (isa<MontSquareOp>(user)) {
+    unsigned qw = 4 * w;
+    APInt redcLimit = p.zext(qw).shl(w);
+    return (valUmax.zext(qw) * valUmax.zext(qw)).ult(redcLimit);
+  }
+  // All other ops (NegateOp, CmpOp, InverseOp, func.return, etc.):
+  // always need canonical input.
+  return false;
+}
+
 void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
   DataFlowSolver solver;
   solver.load<dataflow::DeadCodeAnalysis>();
@@ -289,6 +346,36 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
         boundMap[result] = umax;
     }
   });
+
+  // Phase 2: Consumer-aware clamping. Erase lazy entries that no consumer
+  // can benefit from, to preserve canonical patterns for downstream ops.
+  // Only applies to add/sub/double results — REDC lazy output from
+  // MontMulOp/MontSquareOp/MontReduceOp is an orthogonal optimization.
+  SmallVector<Value> toErase;
+  for (auto &[val, umax] : boundMap) {
+    Operation *defOp = val.getDefiningOp();
+    if (!defOp || isa<MontMulOp, MontSquareOp, MontReduceOp>(defOp))
+      continue;
+    auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(val.getType()));
+    if (!modType)
+      continue;
+    unsigned w = modType.getStorageBitWidth();
+    unsigned dw = 2 * w;
+    APInt p = modType.getModulus().getValue().zext(dw);
+    if (kpFromUmax(umax, p) <= 1)
+      continue;
+    bool anyBenefit = false;
+    for (Operation *user : val.getUsers()) {
+      if (canAcceptLazy(user, val, umax, boundMap, p, w)) {
+        anyBenefit = true;
+        break;
+      }
+    }
+    if (!anyBenefit)
+      toErase.push_back(val);
+  }
+  for (Value v : toErase)
+    boundMap.erase(v);
 }
 
 } // namespace
@@ -719,7 +806,11 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
       if (resBound > 1) {
         result = add.getResult();
       } else {
-        result = montReducer.getCanonicalFromExtended(add);
+        // When consumer-aware clamping forces canonical output but inputs
+        // are lazy, compute actual bound from input umax (default bound=2
+        // is insufficient for lazy inputs with sum > 2p).
+        uint64_t actualKp = sumMax.ugt(wMax) ? 2 : kpFromUmax(sumMax, p);
+        result = montReducer.getCanonicalFromExtended(add, actualKp);
       }
     }
     rewriter.replaceOp(op, result);
@@ -774,7 +865,13 @@ struct ConvertDouble : public BoundMapPattern<DoubleOp> {
       if (resBound > 1) {
         result = shifted.getResult();
       } else {
-        result = montReducer.getCanonicalFromExtended(shifted);
+        unsigned dw = 2 * storageWidth;
+        APInt p = modulus.zext(dw);
+        uint64_t actualKp =
+            doubleMax.ugt(APInt::getMaxValue(storageWidth).zext(dw))
+                ? 2
+                : kpFromUmax(doubleMax, p);
+        result = montReducer.getCanonicalFromExtended(shifted, actualKp);
       }
     }
     rewriter.replaceOp(op, result);
@@ -836,6 +933,12 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
       auto result = b.create<arith::SubIOp>(lhsPlusCorrected, rhs);
       rewriter.replaceOp(op, result);
     } else {
+      // getCanonicalDiff requires both inputs in [0, p). When consumer-aware
+      // clamping forces canonical output but inputs are lazy, pre-reduce them.
+      if (lhsKp > 1)
+        lhs = montReducer.getCanonicalFromExtended(lhs, lhsKp);
+      if (rhsKp > 1)
+        rhs = montReducer.getCanonicalFromExtended(rhs, rhsKp);
       auto result = montReducer.getCanonicalDiff(lhs, rhs);
       rewriter.replaceOp(op, result);
     }

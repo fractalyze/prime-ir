@@ -78,7 +78,7 @@ struct FieldToLLVMOptions : public PassPipelineOptions<FieldToLLVMOptions> {
       *this, "lazy-reduction",
       llvm::cl::desc("Enable lazy reduction optimization via integer range "
                      "analysis in mod_arith to arith lowering"),
-      llvm::cl::init(false)};
+      llvm::cl::init(true)};
 
   // Projects out the options for `OneShotBufferizePass`.
   bufferization::OneShotBufferizePassOptions bufferizationOptions() const {
@@ -137,7 +137,7 @@ struct FieldToGPUOptions : public PassPipelineOptions<FieldToGPUOptions> {
       *this, "lazy-reduction",
       llvm::cl::desc("Enable lazy reduction optimization via integer range "
                      "analysis in mod_arith to arith lowering"),
-      llvm::cl::init(false)};
+      llvm::cl::init(true)};
 
   PassOptions::Option<unsigned> nvvmIndexBitwidth{
       *this, "nvvm-index-bitwidth", llvm::cl::desc("NVVM index bitwidth"),

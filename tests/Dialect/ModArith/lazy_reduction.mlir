@@ -51,14 +51,13 @@ func.func @test_lazy_add(%lhs : !Zp, %rhs : !Zp) -> !Zp {
 
 !Zp = !mod_arith.int<65537 : i32>
 
-// Lazy sub: (lhs + correction) - rhs without conditional reduction.
-// Eager sub: subi then cmpi for underflow then conditional addi.
+// Sub with return as only consumer: consumer-aware clamping forces canonical.
+// Both lazy and eager produce getCanonicalDiff (subi, cmpi, addi, select).
 
 // LAZY-LABEL:     @test_lazy_sub
-// LAZY:           arith.addi
 // LAZY:           arith.subi
-// LAZY-NOT:       arith.select
 // LAZY:           arith.cmpi ult
+// LAZY:           arith.addi
 // LAZY:           arith.select
 // LAZY:           return
 
@@ -343,23 +342,20 @@ func.func @test_add_pre_reduce(%a : !Zp, %b : !Zp, %c : !Zp) -> !Zp {
 
 // -----
 
-// BabyBear sub pre-reduce: add(%a, %b) has bound=2, then sub(bound=2, %c)
-// has lhsBound + rhsBound = 3 > maxBound(2). Pre-reduce inserts cmpi + select
-// on the lazy lhs before the lazy sub computation.
+// BabyBear sub pre-reduce: add(%a, %b) has bound=2, sub(bound=2, %c)
+// has result umax that overflows w bits (3p - 2 > 2³² - 1). Consumer-aware
+// clamping forces both add and sub to canonical. Same output as eager:
+// canonical add + getCanonicalDiff.
 
 !Zp = !mod_arith.int<2013265921 : i32>
 
 // LAZY-LABEL:     @test_sub_pre_reduce
-//   First add: lazy (no inline reduction).
 // LAZY:           arith.addi {{.*}} overflow<nuw>
-//   Pre-reduce the lazy add result before sub.
 // LAZY:           arith.cmpi ult
 // LAZY:           arith.select
-//   Lazy sub: addi(lhs, correction) then subi.
-// LAZY:           arith.addi
 // LAZY:           arith.subi
-//   Boundary reduction at return.
 // LAZY:           arith.cmpi ult
+// LAZY:           arith.addi
 // LAZY:           arith.select
 // LAZY:           return
 
@@ -526,5 +522,32 @@ func.func @test_add_then_mont_mul_needs_reduce(%a : !Zp, %b : !Zp, %c : !Zp, %d 
   %ab = mod_arith.add %a, %b : !Zp
   %cd = mod_arith.add %c, %d : !Zp
   %r = mod_arith.mont_mul %ab, %cd : !Zp
+  return %r : !Zp
+}
+
+// -----
+
+// Consumer-aware clamping: add → mont_square (BabyBear). The add's umax is
+// 2p - 2 = 4026531840. Square: (2p - 2)² ≈ 1.62e19 > p * 2³² ≈ 8.65e18,
+// so REDC precondition is NOT satisfied. canAcceptLazy returns false → add
+// clamped to canonical. Same output as eager: inline reduction then square.
+
+!Zp = !mod_arith.int<2013265921 : i32, true>
+
+// LAZY-LABEL:     @test_consumer_aware_add_mont_square
+//   Clamped add: canonical reduction (cmpi + select) before square.
+// LAZY:           arith.addi
+// LAZY:           arith.cmpi ult
+// LAZY:           arith.select
+// LAZY:           arith.mului_extended
+
+// EAGER-LABEL:    @test_consumer_aware_add_mont_square
+// EAGER:          arith.addi
+// EAGER:          arith.cmpi ult
+// EAGER:          arith.select
+// EAGER:          arith.mului_extended
+func.func @test_consumer_aware_add_mont_square(%a : !Zp, %b : !Zp) -> !Zp {
+  %sum = mod_arith.add %a, %b : !Zp
+  %r = mod_arith.mont_square %sum : !Zp
   return %r : !Zp
 }
