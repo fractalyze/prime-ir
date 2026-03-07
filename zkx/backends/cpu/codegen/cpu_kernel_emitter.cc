@@ -2183,8 +2183,8 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
                        values[instr->operand(1)]);
     }
     case HloOpcode::kPairingCheck: {
-      enable_flag(instr->operand(0)->shape().element_type());
-      enable_flag(instr->operand(1)->shape().element_type());
+      EnableZkTypePasses(instr->operand(0)->shape().element_type());
+      EnableZkTypePasses(instr->operand(1)->shape().element_type());
       return EmitPairingCheckOp(instr, b, values[instr->operand(0)],
                                 values[instr->operand(1)]);
     }
