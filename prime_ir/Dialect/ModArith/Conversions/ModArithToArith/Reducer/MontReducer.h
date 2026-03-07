@@ -39,10 +39,15 @@ public:
   // Performs Montgomery reduction on the given input values.
   // Given T = tLow + tHigh * 2ʷ (where w is the modulus bit width),
   // computes T * R⁻¹ mod n, where R is the Montgomery radix.
-  Value reduce(Value tLow, Value tHigh);
+  // When lazy is false, returns a value in [0, p).
+  // When lazy is true, skips final conditional subtraction and returns [0, 2p).
+  Value reduce(Value tLow, Value tHigh, bool lazy = false);
 
-  // Gets the canonical form from an input value in [0, 2n).
-  Value getCanonicalFromExtended(Value input);
+  // Reduces a value in [0, bound * p) to canonical form [0, p).
+  // For bound <= 1 returns the input as-is; for bound == 2 uses a single
+  // conditional subtraction; for bound > 2 uses binary conditional subtraction
+  // in ceil(log₂(bound)) steps.
+  Value getCanonicalFromExtended(Value input, uint64_t bound = 2);
 
   // Gets the canonical form from an input value in [0, 2n) and an overflow
   // flag.
@@ -58,13 +63,15 @@ private:
   // Handles splatting for vector types automatically.
   Value createModulusConst(Type inputType);
 
-  // Performs single-limb Montgomery reduction.
-  // Used when the modulus fits in a single limb (2ʷ > modulus).
-  Value reduceSingleLimb(Value tLow, Value tHigh);
+  // Single-limb REDC: modulus fits in one machine word.
+  // When lazy is true, skips the final conditional subtraction and returns
+  // a value in [0, 2p); when false, returns a value in [0, p).
+  Value reduceSingleLimb(Value tLow, Value tHigh, bool lazy);
 
-  // Performs multi-limb Montgomery reduction.
-  // Used when the modulus requires multiple limbs (2ʷ <= modulus).
-  Value reduceMultiLimb(Value tLow, Value tHigh);
+  // Multi-limb REDC: modulus requires multiple machine words.
+  // When lazy is true, skips the final conditional subtraction and returns
+  // a value in [0, 2p); when false, returns a value in [0, p).
+  Value reduceMultiLimb(Value tLow, Value tHigh, bool lazy);
 
   // Checks if the input is from a signed multiplication.
   bool isFromSignedMul(Value input);

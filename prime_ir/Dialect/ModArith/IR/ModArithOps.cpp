@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "mlir/Interfaces/InferIntRangeInterface.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
@@ -482,6 +483,173 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 OpFoldResult MontMulOp::fold(FoldAdaptor adaptor) {
   return foldMultiplicativeBinaryOp(this, adaptor,
                                     [](auto a, auto b) { return a * b; });
+}
+
+//===----------------------------------------------------------------------===//
+// InferIntRangeInterface implementations
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+// Set range to canonical [0, p - 1] for ops that always produce a reduced
+// result.
+void setCanonicalRange(Value result, SetIntRangeFn setResultRange) {
+  setResultRange(result, getCanonicalRange(result.getType()));
+}
+
+// Set range to [0, 2p - 1] for ops using lazy REDC (mont_mul, mont_square,
+// etc.). Requires 2p - 1 to fit in w bits.
+void setLazyRedcRange(Value result, SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(result.getType()));
+  unsigned w = modType.getStorageBitWidth();
+  APInt p = modType.getModulus().getValue().zext(w);
+  APInt twoPMinusOne = p.zext(w + 1) * APInt(w + 1, 2) - 1;
+  assert(twoPMinusOne.getActiveBits() <= w &&
+         "2p - 1 does not fit in storage width; lazy REDC is not valid");
+  setResultRange(result, ConstantIntRanges::fromUnsigned(
+                             APInt::getZero(w), twoPMinusOne.trunc(w)));
+}
+
+} // namespace
+
+ConstantIntRanges getCanonicalRange(Type type) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(type));
+  unsigned w = modType.getStorageBitWidth();
+  APInt p = modType.getModulus().getValue().zext(w);
+  return ConstantIntRanges::fromUnsigned(APInt::getZero(w), p - 1);
+}
+
+void ConstantOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                   SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  unsigned w = modType.getStorageBitWidth();
+  auto attr = dyn_cast<IntegerAttr>(getValue());
+  if (attr) {
+    APInt val = attr.getValue().zext(w);
+    setResultRange(getResult(), ConstantIntRanges::fromUnsigned(val, val));
+  } else {
+    // Dense attr: conservative range [0, p - 1].
+    setCanonicalRange(getResult(), setResultRange);
+  }
+}
+
+void BitcastOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
+                                  SetIntRangeFn setResultRange) {
+  auto outModType = dyn_cast<ModArithType>(getElementTypeOrSelf(getType()));
+  if (!outModType) {
+    // Mod -> int bitcast: pass through.
+    setResultRange(getResult(), argRanges[0]);
+    return;
+  }
+  auto inModType =
+      dyn_cast<ModArithType>(getElementTypeOrSelf(getInput().getType()));
+  if (inModType) {
+    // Mod -> mod bitcast: pass through.
+    setResultRange(getResult(), argRanges[0]);
+  } else {
+    // Int -> mod bitcast: assume input is in [0, p - 1]. Using an
+    // out-of-range value with mod_arith ops after bitcast is UB.
+    setCanonicalRange(getResult(), setResultRange);
+  }
+}
+
+void MontReduceOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                     SetIntRangeFn setResultRange) {
+  setLazyRedcRange(getResult(), setResultRange);
+}
+
+void ToMontOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                 SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void FromMontOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                   SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void CmpOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                              SetIntRangeFn setResultRange) {
+  setResultRange(getResult(), ConstantIntRanges::fromUnsigned(APInt::getZero(1),
+                                                              APInt(1, 1)));
+}
+
+void NegateOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                 SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void DoubleOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
+                                 SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  unsigned w = modType.getStorageBitWidth();
+  // double(x) = 2x, so umax = 2 * input.umax. May exceed w bits for lazy
+  // inputs (e.g., BabyBear with 32-bit storage and input in [0, 2p)).
+  // Clamping to maxValue(w) is conservative; the lowering's pre-reduce guard
+  // ensures the actual doubling won't overflow storage.
+  APInt doubleMax = argRanges[0].umax().zext(w + 1) * APInt(w + 1, 2);
+  APInt umax = doubleMax.truncUSat(w);
+  setResultRange(getResult(),
+                 ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
+}
+
+void SquareOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                 SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void MontSquareOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                     SetIntRangeFn setResultRange) {
+  setLazyRedcRange(getResult(), setResultRange);
+}
+
+void InverseOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                  SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void MontInverseOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                      SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void AddOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
+                              SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  unsigned w = modType.getStorageBitWidth();
+  // Sum of two unsigned ranges, clamped to w bits.
+  APInt sumMax =
+      argRanges[0].umax().zext(w + 1) + argRanges[1].umax().zext(w + 1);
+  APInt umax = sumMax.truncUSat(w);
+  setResultRange(getResult(),
+                 ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
+}
+
+void SubOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
+                              SetIntRangeFn setResultRange) {
+  auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
+  unsigned w = modType.getStorageBitWidth();
+  APInt p = modType.getModulus().getValue().zext(w);
+  // lhs + correction - rhs where correction = rhsBound * p,
+  // rhsBound = ceil((rhs.umax + 1) / p). Must match ConvertSub lowering.
+  APInt rhsMax = argRanges[1].umax().zext(w + 1);
+  APInt pExt = p.zext(w + 1);
+  APInt rhsBound = (rhsMax + 1 + pExt - 1).udiv(pExt);
+  APInt correction = rhsBound * pExt;
+  APInt resultMax = argRanges[0].umax().zext(w + 1) + correction;
+  APInt umax = resultMax.truncUSat(w);
+  setResultRange(getResult(),
+                 ConstantIntRanges::fromUnsigned(APInt::getZero(w), umax));
+}
+
+void MulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                              SetIntRangeFn setResultRange) {
+  setCanonicalRange(getResult(), setResultRange);
+}
+
+void MontMulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                  SetIntRangeFn setResultRange) {
+  setLazyRedcRange(getResult(), setResultRange);
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {

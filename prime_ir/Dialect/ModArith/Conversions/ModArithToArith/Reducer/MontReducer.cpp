@@ -37,18 +37,38 @@ Value MontReducer::createModulusConst(Type inputType) {
   return b.create<arith::ConstantOp>(modAttr);
 }
 
-Value MontReducer::getCanonicalFromExtended(Value input) {
-  auto cmod = createModulusConst(input.getType());
-  if (isa<VectorType>(input.getType())) {
-    auto sub = b.create<arith::SubIOp>(input, cmod);
-    auto min = b.create<arith::MinUIOp>(sub, input);
-    return min.getResult();
-  } else {
-    auto iflt = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, input, cmod);
-    auto sub = b.create<arith::SubIOp>(input, cmod);
-    auto select = b.create<arith::SelectOp>(iflt, input, sub);
-    return select.getResult();
+Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
+  if (bound <= 1)
+    return input;
+
+  // Binary reduction: ceil(log₂(bound)) conditional subtractions.
+  // For [0, k * p), iterate from i = ceil(log₂(k)) - 1 down to 0:
+  //   if (v >= 2ⁱ * p) v -= 2ⁱ * p
+  // Each step halves the worst-case range. For bound == 2 this is a single
+  // conditional subtraction of p (equivalent to the old special case).
+  APInt mod = cast<IntegerAttr>(modAttr).getValue();
+  unsigned w = mod.getBitWidth();
+  unsigned m = 0;
+  for (uint64_t k = bound - 1; k > 0; k >>= 1)
+    ++m;
+  for (int i = m - 1; i >= 0; --i) {
+    APInt multiple = mod.zext(w) * APInt(w, uint64_t{1} << i);
+    TypedAttr multipleAttr = IntegerAttr::get(modAttr.getType(), multiple);
+    if (auto shapedType = dyn_cast<ShapedType>(input.getType()))
+      multipleAttr = SplatElementsAttr::get(shapedType, multipleAttr);
+    auto threshConst = b.create<arith::ConstantOp>(multipleAttr);
+
+    if (isa<VectorType>(input.getType())) {
+      auto sub = b.create<arith::SubIOp>(input, threshConst);
+      input = b.create<arith::MinUIOp>(sub, input).getResult();
+    } else {
+      auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, input,
+                                         threshConst);
+      auto sub = b.create<arith::SubIOp>(input, threshConst);
+      input = b.create<arith::SelectOp>(cmp, input, sub).getResult();
+    }
   }
+  return input;
 }
 
 Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
@@ -86,8 +106,7 @@ bool MontReducer::isFromSignedMul(Value input) {
   return signedOp && signedOp.getLhs() != signedOp.getRhs();
 }
 
-Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh) {
-  // Prepare nInv constant.
+Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh, bool lazy) {
   TypedAttr nInvAttr = montAttr.getNInv();
   Type limbType = nInvAttr.getType();
   if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
@@ -95,13 +114,11 @@ Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh) {
     nInvAttr = SplatElementsAttr::get(cast<ShapedType>(limbType), nInvAttr);
   }
   auto nInvConst = b.create<arith::ConstantOp>(nInvAttr);
-
-  // Prepare modulus constant.
   auto modConst = createModulusConst(tLow.getType());
 
-  // Compute `m` = `tLow` * `nInv` (mod `base`)
+  // Compute m = tLow * nInv (mod base).
   auto m = b.create<arith::MulIOp>(tLow, nInvConst);
-  // Compute `m` * `n`
+  // Compute m * n.
   Value mNHigh;
   if (isFromSignedMul(tLow)) {
     auto mN = b.create<arith::MulSIExtendedOp>(m, modConst);
@@ -111,20 +128,19 @@ Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh) {
     mNHigh = mN.getHigh();
   }
 
-  // Calculate `T` - `mN`, which should result in zeroed low limb since it
-  // should be divisible by `base`. The low part subtraction cannot
-  // underflow since if `tLow` < `mN.getLow()`, then `tLow` -
-  // `mN.getLow()` cannot result in zero low limb. This means, `tLow` is
-  // always equal to `mN.getLow()` so we can skip the low subtractions.
-  // The reduction result will be just `tHigh` - `mN.getHigh()` mod n.
-  auto sub = getCanonicalDiff(tHigh, mNHigh);
-  return sub;
+  // The low part of T - mN is always zero (divisible by base), so the
+  // result is just tHigh - mNHigh mod n.
+  if (lazy) {
+    // tHigh - mNHigh can underflow, so unconditionally add p.
+    // Result is in [0, 2p).
+    auto sub = b.create<arith::SubIOp>(tHigh, mNHigh);
+    return b.create<arith::AddIOp>(sub, modConst).getResult();
+  }
+  return getCanonicalDiff(tHigh, mNHigh);
 }
 
-Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh) {
-  // Extract Montgomery constants.
+Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   TypedAttr nPrimeAttr = montAttr.getNPrime();
-  TypedAttr bInvAttr = montAttr.getBInv();
 
   // Retrieve the modulus bitwidth.
   const unsigned modBitWidth =
@@ -134,7 +150,7 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh) {
   const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
   const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
 
-  // Prepare constants for limb operations.
+  TypedAttr bInvAttr = montAttr.getBInv();
   Type limbType = nPrimeAttr.getType();
   TypedAttr limbWidthAttr =
       b.getIntegerAttr(getElementTypeOrSelf(tLow), limbWidth);
@@ -213,27 +229,21 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh) {
   tHigh = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
   tLow = b.create<arith::OrIOp>(tLow, tHigh);
 
+  if (lazy)
+    return tLow;
   // Final conditional subtraction: if (`tLow` >= `modulus`) then subtract
   // `modulus`.
-  auto result = getCanonicalFromExtended(tLow);
-  return result;
+  return getCanonicalFromExtended(tLow);
 }
 
-Value MontReducer::reduce(Value tLow, Value tHigh) {
-  // Determine the number of limbs to choose the appropriate reduction strategy.
+Value MontReducer::reduce(Value tLow, Value tHigh, bool lazy) {
   TypedAttr nPrimeAttr = montAttr.getNPrime();
   const unsigned modBitWidth =
       cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
   const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
   const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
-
-  // If the number of limbs is 1, the 2ʷ is larger than the modulus, so we
-  // can use `nInv` instead of `nPrime` and avoid carry check.
-  if (numLimbs == 1) {
-    return reduceSingleLimb(tLow, tHigh);
-  }
-
-  return reduceMultiLimb(tLow, tHigh);
+  return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, lazy)
+                       : reduceMultiLimb(tLow, tHigh, lazy);
 }
 
 } // namespace mlir::prime_ir::mod_arith
