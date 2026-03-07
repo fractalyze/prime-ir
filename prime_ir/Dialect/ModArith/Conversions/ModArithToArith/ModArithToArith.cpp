@@ -409,8 +409,7 @@ struct ConvertMontReduce : public BoundMapPattern<MontReduceOp> {
     // Perform Montgomery reduction using MontReducer helper class.
     MontReducer reducer(b, getResultModArithType(op));
     uint64_t resBound = lookupBound(op.getResult());
-    Value result = (resBound >= 2) ? reducer.reduceLazy(tLow, tHigh)
-                                   : reducer.reduce(tLow, tHigh);
+    Value result = reducer.reduce(tLow, tHigh, /*lazy=*/resBound >= 2);
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -977,8 +976,7 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
       hi = mul.getHigh();
     }
 
-    Value result =
-        (resBound >= 2) ? reducer.reduceLazy(lo, hi) : reducer.reduce(lo, hi);
+    Value result = reducer.reduce(lo, hi, /*lazy=*/resBound >= 2);
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -1197,9 +1195,8 @@ struct ConvertMontSquare : public BoundMapPattern<MontSquareOp> {
     auto sqResult = squareExtended(b, op, input);
     uint64_t resBound = lookupBound(op.getResult());
 
-    Value result = (resBound >= 2)
-                       ? reducer.reduceLazy(sqResult.lo, sqResult.hi)
-                       : reducer.reduce(sqResult.lo, sqResult.hi);
+    Value result = reducer.reduce(sqResult.lo, sqResult.hi,
+                                  /*lazy=*/resBound >= 2);
     rewriter.replaceOp(op, result);
     return success();
   }

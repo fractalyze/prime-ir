@@ -39,12 +39,9 @@ public:
   // Performs Montgomery reduction on the given input values.
   // Given T = tLow + tHigh * 2ʷ (where w is the modulus bit width),
   // computes T * R⁻¹ mod n, where R is the Montgomery radix.
-  // Returns a value in [0, p).
-  Value reduce(Value tLow, Value tHigh);
-
-  // Performs lazy Montgomery reduction (skips final conditional subtraction).
-  // Returns a value in [0, 2p) instead of [0, p).
-  Value reduceLazy(Value tLow, Value tHigh);
+  // When lazy is false, returns a value in [0, p).
+  // When lazy is true, skips final conditional subtraction and returns [0, 2p).
+  Value reduce(Value tLow, Value tHigh, bool lazy = false);
 
   // Reduces a value in [0, bound * p) to canonical form [0, p).
   // For bound <= 1 returns the input as-is; for bound == 2 uses a single

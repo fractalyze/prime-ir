@@ -236,24 +236,14 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   return getCanonicalFromExtended(tLow);
 }
 
-Value MontReducer::reduce(Value tLow, Value tHigh) {
+Value MontReducer::reduce(Value tLow, Value tHigh, bool lazy) {
   TypedAttr nPrimeAttr = montAttr.getNPrime();
   const unsigned modBitWidth =
       cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
   const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
   const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
-  return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, /*lazy=*/false)
-                       : reduceMultiLimb(tLow, tHigh, /*lazy=*/false);
-}
-
-Value MontReducer::reduceLazy(Value tLow, Value tHigh) {
-  TypedAttr nPrimeAttr = montAttr.getNPrime();
-  const unsigned modBitWidth =
-      cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
-  const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
-  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
-  return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, /*lazy=*/true)
-                       : reduceMultiLimb(tLow, tHigh, /*lazy=*/true);
+  return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, lazy)
+                       : reduceMultiLimb(tLow, tHigh, lazy);
 }
 
 } // namespace mlir::prime_ir::mod_arith
