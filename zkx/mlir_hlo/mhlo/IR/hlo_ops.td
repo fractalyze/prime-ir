@@ -1850,4 +1850,31 @@ def MHLO_ReduceWindowOp: MHLO_Op<"reduce_window", [
   let hasCustomHLOConverter = 1;
 }
 
+def MHLO_PairingCheckOp: MHLO_Op<"pairing_check", [Pure]> {
+  let summary = "PairingCheck operation";
+  let description = [{
+    Multi-pairing check: verifies that the product of pairings equals the
+    identity in GT:
+      e(P₁, Q₁) * e(P₂, Q₂) * ... * e(Pₙ, Qₙ) = 1
+
+    Both inputs must be 1-D tensors of affine points on compatible
+    pairing-friendly curves (e.g., BN254 G1 and G2). Both tensors must
+    have matching first dimension.
+
+    Returns a scalar PRED tensor.
+  }];
+  let arguments = (ins
+    MHLO_ECTensor:$g1_points,
+    MHLO_ECTensor:$g2_points
+  );
+
+  let results = (outs MHLO_ScalarTensor:$result);
+
+  let hasCustomHLOConverter = 1;
+
+  let assemblyFormat = [{
+    operands attr-dict `:` functional-type(operands, results)
+  }];
+}
+
 #endif // ZKX_MLIR_HLO_MHLO_IR_HLO_OPS_TD

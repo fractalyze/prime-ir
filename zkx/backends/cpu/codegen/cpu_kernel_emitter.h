@@ -115,6 +115,11 @@ class CpuKernelEmitter final : public KernelEmitter {
                                         EmitterLocOpBuilder& b,
                                         mlir::Value scalars, mlir::Value bases);
 
+  absl::StatusOr<mlir::Value> EmitPairingCheckOp(const HloInstruction* instr,
+                                                 EmitterLocOpBuilder& b,
+                                                 mlir::Value g1_points,
+                                                 mlir::Value g2_points);
+
   absl::StatusOr<mlir::Value> EmitBroadcastOp(
       const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value input,
       absl::Span<const int64_t> source_dimensions);

@@ -123,6 +123,7 @@ auto& kUnsupportedOps = *absl::IgnoreLeak(new llvm::DenseSet<HloOpcode>{
     HloOpcode::kInfeed,
     HloOpcode::kOptimizationBarrier,
     HloOpcode::kOutfeed,
+    HloOpcode::kPairingCheck,
     HloOpcode::kPartitionId,
     HloOpcode::kRecv,
     HloOpcode::kRecvDone,

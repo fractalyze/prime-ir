@@ -77,6 +77,7 @@ limitations under the License.
 #include "prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtDialect.h"
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
+#include "prime_ir/Utils/LoweringMode.h"
 #include "xla/tsl/platform/cpu_info.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zk_dtypes/include/all_types.h"
@@ -101,6 +102,7 @@ namespace zkx::cpu {
 
 namespace {
 
+using mlir::prime_ir::LoweringMode;
 using zkx::emitters::MapElementwiseOp;
 using zkx::emitters::MapHloOp;
 
@@ -214,7 +216,11 @@ void AddPasses(mlir::PassManager& pm, CpuKernelEmitter::PassFlag& flag) {
   if (flag.enable_elliptic_curve_to_field) {
     VLOG(2) << "add pass: -elliptic-curve-to-field";
     flag.enable_field_to_arith = true;
-    pm.addPass(mlir::prime_ir::elliptic_curve::createEllipticCurveToField());
+    mlir::prime_ir::elliptic_curve::EllipticCurveToFieldOptions ec_opts;
+    ec_opts.loweringMode =
+        mlir::prime_ir::loweringModeToString(LoweringMode::Auto).str();
+    pm.addPass(
+        mlir::prime_ir::elliptic_curve::createEllipticCurveToField(ec_opts));
     pm.addPass(mlir::createCanonicalizerPass());
     pm.addPass(mlir::createCSEPass());
   }
@@ -233,7 +239,10 @@ void AddPasses(mlir::PassManager& pm, CpuKernelEmitter::PassFlag& flag) {
     // batched inverse on N-D tensors. After bufferization these become
     // memref.collapse_shape / expand_shape which need expand-strided-metadata.
     flag.enable_expand_strided_metadata = true;
-    pm.addPass(mlir::prime_ir::field::createFieldToModArith());
+    mlir::prime_ir::field::FieldToModArithOptions field_opts;
+    field_opts.loweringMode =
+        mlir::prime_ir::loweringModeToString(LoweringMode::Auto).str();
+    pm.addPass(mlir::prime_ir::field::createFieldToModArith(field_opts));
     pm.addPass(mlir::createCanonicalizerPass());
     pm.addPass(mlir::createCSEPass());
     pm.addPass(mlir::prime_ir::mod_arith::createModArithToArith());
@@ -1147,6 +1156,17 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitMsmOp(
   } else {
     return absl::InvalidArgumentError("bases is not a tensor");
   }
+}
+
+absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitPairingCheckOp(
+    const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value g1_points,
+    mlir::Value g2_points) {
+  pass_flag_.enable_elementwise_to_linalg = true;
+  auto scalar = b.create<mlir::prime_ir::elliptic_curve::PairingCheckOp>(
+      b.getI1Type(), g1_points, g2_points);
+  // Wrap scalar i1 result in a tensor for EmitEpilog's ToBufferOp.
+  return b.create<mlir::tensor::FromElementsOp>(
+      mlir::RankedTensorType::get({}, b.getI1Type()), mlir::ValueRange{scalar});
 }
 
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitBroadcastOp(
@@ -2161,6 +2181,12 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
       EnableZkTypePasses(instr->operand(1)->shape().element_type());
       return EmitMsmOp(instr, b, values[instr->operand(0)],
                        values[instr->operand(1)]);
+    }
+    case HloOpcode::kPairingCheck: {
+      enable_flag(instr->operand(0)->shape().element_type());
+      enable_flag(instr->operand(1)->shape().element_type());
+      return EmitPairingCheckOp(instr, b, values[instr->operand(0)],
+                                values[instr->operand(1)]);
     }
     case HloOpcode::kPad:
       return EmitPadOp(instr, b, values[instr->operand(0)],

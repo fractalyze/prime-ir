@@ -151,6 +151,7 @@ bool InstructionFusion::IsExpensive(const HloInstruction& instruction) {
     case HloOpcode::kInverse:
     case HloOpcode::kMap:
     case HloOpcode::kMsm:
+    case HloOpcode::kPairingCheck:
     case HloOpcode::kParameter:
     case HloOpcode::kPower:
     case HloOpcode::kRaggedAllToAll:

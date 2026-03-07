@@ -2935,6 +2935,12 @@ ZkxOp Xor(const ZkxOp lhs, const ZkxOp rhs,
                                  broadcast_dimensions);
 }
 
+ZkxOp PairingCheck(const ZkxOp g1_points, const ZkxOp g2_points) {
+  return g1_points.builder()->BinaryOpNoBroadcast(
+      HloOpcode::kPairingCheck, ShapeUtil::MakeScalarShape(PRED), g1_points,
+      g2_points);
+}
+
 ZkxOp Not(const ZkxOp operand) {
   return operand.builder()->UnaryOp(HloOpcode::kNot, operand);
 }

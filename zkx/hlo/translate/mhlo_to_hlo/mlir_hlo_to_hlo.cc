@@ -759,6 +759,19 @@ LogicalResult ExportZkxOp(RealDynamicSliceOp op, OpLoweringContext ctx) {
   return failure();
 }
 
+LogicalResult ExportZkxOp(PairingCheckOp op, OpLoweringContext ctx) {
+  auto& value_map = *ctx.values;
+  zkx::ZkxOp g1_points;
+  if (failed(GetZkxOp(op.getG1Points(), value_map, &g1_points, op)))
+    return failure();
+  zkx::ZkxOp g2_points;
+  if (failed(GetZkxOp(op.getG2Points(), value_map, &g2_points, op)))
+    return failure();
+
+  value_map[op] = zkx::PairingCheck(g1_points, g2_points);
+  return success();
+}
+
 LogicalResult ExportZkxOp(BitcastConvertOp op, OpLoweringContext ctx) {
   auto& value_map = *ctx.values;
   zkx::ZkxOp operand;

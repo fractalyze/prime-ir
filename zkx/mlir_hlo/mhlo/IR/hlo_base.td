@@ -31,6 +31,7 @@ defvar MHLO_SInt = HLO_SInt;
 defvar MHLO_UInt = HLO_UInt;
 defvar MHLO_Int = HLO_Int;
 defvar MHLO_Field = HLO_Field;
+defvar MHLO_EC = HLO_EC;
 
 // The broadcasting dimensions correspond to a tuple that describes how a
 // smaller rank shape is broadcast into a larger rank shape. For example,
@@ -53,7 +54,13 @@ defvar MHLO_FieldTensor = RankedTensorOf<[HLO_Field]>;
 
 defvar MHLO_PredTensor = HLO_PredTensor;
 
+defvar MHLO_ECTensor = HLO_ECTensor;
+
 defvar MHLO_Tensor = HLO_Tensor;
+
+defvar MHLO_ScalarTensor = HLO_ScalarTensor;
+
+defvar MHLO_ScalarPredTensor = HLO_ScalarPredTensor;
 
 defvar MHLO_AnyTensor = HLO_AnyTensor;
 

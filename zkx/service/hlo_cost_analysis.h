@@ -463,6 +463,7 @@ class HloCostAnalysis : public ConstDfsHloVisitor {
   absl::Status HandleBitReverse(const HloInstruction* hlo) override;
   absl::Status HandleFft(const HloInstruction* fft) override;
   absl::Status HandleMsm(const HloInstruction* msm) override;
+  absl::Status HandlePairingCheck(const HloInstruction* pairing_check) override;
   absl::Status HandleOptimizationBarrier(const HloInstruction* hlo) override;
   absl::Status HandleAllGather(const HloInstruction* hlo) override;
   absl::Status HandleAllGatherStart(const HloInstruction* hlo) override;

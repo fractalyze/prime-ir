@@ -1184,6 +1184,7 @@ ColorScheme HloDotDumper::GetInstructionColor(const HloInstruction* instr) {
     case HloOpcode::kRaggedDot:
     case HloOpcode::kFft:
     case HloOpcode::kMsm:
+    case HloOpcode::kPairingCheck:
       return kDarkBlue;
     case HloOpcode::kParameter:
       return parameter_color;

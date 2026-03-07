@@ -127,6 +127,7 @@ zkx_cc_library(
         "@prime_ir//prime_ir/Dialect/Poly/Conversions/PolyToField",
         "@prime_ir//prime_ir/Dialect/Poly/IR:Poly",
         "@prime_ir//prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor",
+        "@prime_ir//prime_ir/Utils:LoweringMode",
         "@zk_dtypes//zk_dtypes:all_types",
         "@zk_dtypes//zk_dtypes:root_of_unity",
     ],
@@ -326,6 +327,18 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "pairing_test",
+    testonly = True,
+    hdrs = ["pairing_test.h"],
+    deps = [
+        ":cpu_kernel_emitter_test",
+        "//zkx:literal_util",
+        "//zkx:primitive_util",
+        "@com_google_absl//absl/strings",
+    ],
+)
+
+zkx_cc_library(
     name = "pred_test",
     testonly = True,
     hdrs = ["pred_test.h"],
@@ -425,6 +438,14 @@ zkx_cc_unittest(
     timeout = "long",
     srcs = ["cpu_kernel_emitter_g2_msm_unittest.cc"],
     deps = [":msm_test"],
+)
+
+# fractal-build-lint: disable=build-test-name
+zkx_cc_unittest(
+    name = "cpu_kernel_emitter_pairing_unittest",
+    timeout = "long",
+    srcs = ["cpu_kernel_emitter_pairing_unittest.cc"],
+    deps = [":pairing_test"],
 )
 
 # fractal-build-lint: disable=build-test-name

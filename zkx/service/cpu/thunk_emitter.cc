@@ -204,6 +204,7 @@ absl::StatusOr<ThunkSequence> ThunkEmitter::EmitHloInstruction(
     case HloOpcode::kMinimum:
     case HloOpcode::kMsm:
     case HloOpcode::kMultiply:
+    case HloOpcode::kPairingCheck:
     case HloOpcode::kNegate:
     case HloOpcode::kNot:
     case HloOpcode::kOr:

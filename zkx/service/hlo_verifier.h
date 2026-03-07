@@ -169,6 +169,7 @@ class ShapeVerifier : public DfsHloVisitor {
   absl::Status HandleDot(HloInstruction* dot) override;
   absl::Status HandleFft(HloInstruction* fft) override;
   absl::Status HandleMsm(HloInstruction* fft) override;
+  absl::Status HandlePairingCheck(HloInstruction* pairing_check) override;
   absl::Status HandleAllGather(HloInstruction* hlo) override;
   absl::Status HandleAllGatherStart(HloInstruction* hlo) override;
   absl::Status HandleAllGatherDone(HloInstruction* hlo) override;
