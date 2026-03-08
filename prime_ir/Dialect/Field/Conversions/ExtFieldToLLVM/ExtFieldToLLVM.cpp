@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/Conversion/ConvertToLLVM/ToLLVMInterface.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
+#include "mlir/Conversion/LLVMCommon/MemRefBuilder.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
@@ -102,17 +103,26 @@ struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
     Type inputType = op.getInput().getType();
     Type outputType = op.getType();
 
-    // Only handle tensor reinterpret bitcasts (extension field <-> prime
+    // Handle tensor reinterpret bitcasts (extension field <-> prime
     // field). Scalar bitcasts are handled in FieldToModArith.
     if (!isTensorReinterpretBitcast(inputType, outputType))
       return failure();
 
-    // After type conversion, both types should have the same underlying storage
-    // representation.
     Type convertedOutputType = typeConverter->convertType(op.getType());
     if (!convertedOutputType) {
       return op.emitOpError("failed to convert output type");
     }
+
+    // Memref bitcasts (produced by bufferization) require rebuilding the
+    // descriptor with correct sizes/strides/offset for the output element type.
+    // A plain unrealized_conversion_cast would preserve the input descriptor
+    // as-is, leaving sizes in input-element units — causing memref.copy to
+    // compute the wrong byte count (heap corruption).
+    // NOTE: This must come before the same-type check below because memref
+    // descriptors of the same rank share the same LLVM struct type regardless
+    // of element type or shape — the early return would skip the rebuild.
+    if (isa<MemRefType>(inputType))
+      return convertMemRefBitcast(op, adaptor, rewriter, convertedOutputType);
 
     // If the converted types are the same, we can directly replace with the
     // input.
@@ -120,12 +130,73 @@ struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
       rewriter.replaceOp(op, adaptor.getInput());
       return success();
     }
+    return failure();
+  }
 
-    // For memref types, use unrealized_conversion_cast which will be cleaned up
-    // by reconcile-unrealized-casts pass. The underlying memory is the same,
-    // just viewed differently.
-    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
-        op, convertedOutputType, adaptor.getInput());
+private:
+  // Returns the degree-over-prime for a field element type.
+  // PrimeFieldType / ModArithType / IntegerType → 1.
+  // ExtensionFieldType → total degree over its base prime field.
+  static unsigned getDegreeOverPrime(Type elementType) {
+    if (auto ef = dyn_cast<ExtensionFieldType>(elementType))
+      return ef.getDegreeOverPrime();
+    return 1;
+  }
+
+  LogicalResult convertMemRefBitcast(BitcastOp op, OpAdaptor adaptor,
+                                     ConversionPatternRewriter &rewriter,
+                                     Type convertedOutputType) const {
+    Location loc = op.getLoc();
+    auto inputMemRef = cast<MemRefType>(op.getInput().getType());
+    auto outputMemRef = cast<MemRefType>(op.getType());
+
+    auto llvmDescTy = dyn_cast<LLVM::LLVMStructType>(convertedOutputType);
+    if (!llvmDescTy)
+      return failure();
+
+    // Extract input descriptor fields.
+    MemRefDescriptor inputDesc(adaptor.getInput());
+
+    // Build output descriptor with correct metadata.
+    auto outputDesc = MemRefDescriptor::poison(rewriter, loc, llvmDescTy);
+
+    // Same underlying memory — pointers are shared.
+    outputDesc.setAllocatedPtr(rewriter, loc,
+                               inputDesc.allocatedPtr(rewriter, loc));
+    outputDesc.setAlignedPtr(rewriter, loc,
+                             inputDesc.alignedPtr(rewriter, loc));
+
+    // Adjust offset: offset_out = offset_in × degIn / degOut, where deg is
+    // the degree-over-prime of the respective element type.
+    unsigned degIn = getDegreeOverPrime(inputMemRef.getElementType());
+    unsigned degOut = getDegreeOverPrime(outputMemRef.getElementType());
+
+    Value offset = inputDesc.offset(rewriter, loc);
+    if (degIn != degOut) {
+      Type idxTy = getTypeConverter()->getIndexType();
+      if (degOut > degIn) {
+        // PF → EF: divide offset.
+        Value ratio =
+            createIndexAttrConstant(rewriter, loc, idxTy, degOut / degIn);
+        offset = rewriter.create<LLVM::SDivOp>(loc, offset, ratio);
+      } else {
+        // EF → PF: multiply offset.
+        Value ratio =
+            createIndexAttrConstant(rewriter, loc, idxTy, degIn / degOut);
+        offset = rewriter.create<LLVM::MulOp>(loc, offset, ratio);
+      }
+    }
+    outputDesc.setOffset(rewriter, loc, offset);
+
+    // Sizes: from the static output shape.
+    for (int64_t i = 0, e = outputMemRef.getRank(); i < e; ++i)
+      outputDesc.setConstantSize(rewriter, loc, i, outputMemRef.getDimSize(i));
+
+    // Strides: output has identity layout (contiguous), stride = 1.
+    for (int64_t i = 0, e = outputMemRef.getRank(); i < e; ++i)
+      outputDesc.setConstantStride(rewriter, loc, i, 1);
+
+    rewriter.replaceOp(op, Value(outputDesc));
     return success();
   }
 };
@@ -139,8 +210,12 @@ void populateExtFieldToLLVMTypeConversion(LLVMTypeConverter &typeConverter) {
       [](ExtensionFieldType type) { return convertExtFieldType(type); });
 
   // Tensor types with extension field element type.
-  // Note: MemRef and Vector types cannot have !llvm.struct as element type,
-  // so they are handled by subsequent lowering passes.
+  // Note: MemRef and Vector types cannot use !llvm.struct as element type, so
+  // no shaped-type conversions are registered for them.  For MemRef, the
+  // LLVMTypeConverter's built-in memref conversion handles memref<Nx!EF>
+  // correctly: it converts the element type via the scalar conversion above
+  // and builds the LLVM descriptor struct directly (bypassing MemRefType::get).
+  // ConvertBitcast rebuilds the descriptor with correct sizes/strides/offset.
   typeConverter.addConversion(
       [](RankedTensorType tensorType) -> std::optional<Type> {
         auto efType = dyn_cast<ExtensionFieldType>(tensorType.getElementType());
