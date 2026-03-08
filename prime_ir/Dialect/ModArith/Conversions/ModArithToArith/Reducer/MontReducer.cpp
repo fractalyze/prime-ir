@@ -58,15 +58,8 @@ Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
       multipleAttr = SplatElementsAttr::get(shapedType, multipleAttr);
     auto threshConst = b.create<arith::ConstantOp>(multipleAttr);
 
-    if (isa<VectorType>(input.getType())) {
-      auto sub = b.create<arith::SubIOp>(input, threshConst);
-      input = b.create<arith::MinUIOp>(sub, input).getResult();
-    } else {
-      auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, input,
-                                         threshConst);
-      auto sub = b.create<arith::SubIOp>(input, threshConst);
-      input = b.create<arith::SelectOp>(cmp, input, sub).getResult();
-    }
+    auto sub = b.create<arith::SubIOp>(input, threshConst);
+    input = b.create<arith::MinUIOp>(sub, input).getResult();
   }
   return input;
 }
@@ -88,17 +81,8 @@ Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
 Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
   auto cmod = createModulusConst(lhs.getType());
   auto sub = b.create<arith::SubIOp>(lhs, rhs);
-  if (isa<VectorType>(lhs.getType())) {
-    auto add = b.create<arith::AddIOp>(sub, cmod);
-    auto min = b.create<arith::MinUIOp>(sub, add);
-    return min.getResult();
-  } else {
-    auto underflowed =
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, lhs, rhs);
-    auto add = b.create<arith::AddIOp>(sub, cmod);
-    auto select = b.create<arith::SelectOp>(underflowed, add, sub);
-    return select.getResult();
-  }
+  auto add = b.create<arith::AddIOp>(sub, cmod);
+  return b.create<arith::MinUIOp>(sub, add).getResult();
 }
 
 bool MontReducer::isFromSignedMul(Value input) {
