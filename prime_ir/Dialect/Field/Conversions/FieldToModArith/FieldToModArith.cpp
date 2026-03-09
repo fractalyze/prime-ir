@@ -130,8 +130,13 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
 
       // Create a flattened prime field tensor constant
       // tensor<K x !EF> with degree N becomes tensor<K*N x !ModArith>
+      // tensor<!EF> (rank-0) becomes tensor<N x !ModArith>
       SmallVector<int64_t> flatShape(shapedType.getShape());
-      flatShape.back() *= degree;
+      if (flatShape.empty()) {
+        flatShape.push_back(degree);
+      } else {
+        flatShape.back() *= degree;
+      }
 
       auto flatTensorType = RankedTensorType::get(flatShape, modType);
       SmallVector<APInt> flatCoeffs(allValues.begin(), allValues.end());
