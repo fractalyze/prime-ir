@@ -282,34 +282,77 @@ Value ConvertField(ImplicitLocOpBuilder& b, ArrayRef<Type> result_types,
     if (auto pf_element_type =
             dyn_cast<prime_ir::field::PrimeFieldType>(target_element_type)) {
       unsigned src_width = integer_type.getWidth();
-      unsigned dst_width = pf_element_type.getStorageType().getWidth();
-      Value current_val = args[0];
+      unsigned dst_width = pf_element_type.getStorageBitWidth();
 
       if (dst_width < src_width) {
         b.emitError("Cannot convert integer to prime field with smaller width");
         return nullptr;
       }
 
-      if (dst_width > src_width) {
-        Type target_storage_type = pf_element_type.getStorageType();
-
-        if (auto shaped_type = dyn_cast<ShapedType>(current_val.getType())) {
-          target_storage_type = shaped_type.clone(target_storage_type);
-        }
-        current_val =
-            b.create<arith::ExtUIOp>(target_storage_type, current_val);
+      Value current_val = args[0];
+      Type storage_type = pf_element_type.getStorageType();
+      if (auto shaped_type = dyn_cast<ShapedType>(current_val.getType())) {
+        storage_type = shaped_type.clone(storage_type);
       }
 
+      if (dst_width > src_width) {
+        current_val = b.create<arith::ExtUIOp>(storage_type, current_val);
+      }
+
+      // Bitcast storage integer → standard field type, then convert to
+      // Montgomery form if needed.
       Type result_type = result_types.front();
       if (pf_element_type.isMontgomery()) {
-        Type std_source_type =
-            prime_ir::field::getStandardFormType(result_type);
+        Type std_field_type = prime_ir::field::getStandardFormType(result_type);
         auto bitcast =
-            b.create<prime_ir::field::BitcastOp>(std_source_type, current_val);
+            b.create<prime_ir::field::BitcastOp>(std_field_type, current_val);
         return b.create<prime_ir::field::ToMontOp>(result_type, bitcast);
       }
 
       return b.create<prime_ir::field::BitcastOp>(result_type, current_val);
+    }
+  }
+
+  // PrimeField → Integer: bitcast to storage integer type, then extend if
+  // needed. Only same-width or wider integer targets are allowed (no
+  // truncation).
+  if (auto pf_element_type =
+          dyn_cast<prime_ir::field::PrimeFieldType>(source_element_type)) {
+    if (auto integer_type = dyn_cast<IntegerType>(target_element_type)) {
+      unsigned src_width = pf_element_type.getStorageBitWidth();
+      unsigned dst_width = integer_type.getWidth();
+
+      if (dst_width < src_width) {
+        b.emitError("Cannot convert prime field to int with smaller width");
+        return nullptr;
+      }
+
+      Value current_val = args[0];
+      Type storage_type = pf_element_type.getStorageType();
+      if (auto shaped_type = dyn_cast<ShapedType>(current_val.getType())) {
+        storage_type = shaped_type.clone(storage_type);
+      }
+
+      // Convert from Montgomery form first if needed, then bitcast field →
+      // storage integer type.
+      if (pf_element_type.isMontgomery()) {
+        Type std_type =
+            prime_ir::field::getStandardFormType(current_val.getType());
+        current_val =
+            b.create<prime_ir::field::FromMontOp>(std_type, current_val);
+      }
+      current_val =
+          b.create<prime_ir::field::BitcastOp>(storage_type, current_val);
+
+      if (dst_width > src_width) {
+        Type target_int_type = integer_type;
+        if (auto shaped_type = dyn_cast<ShapedType>(current_val.getType())) {
+          target_int_type = shaped_type.clone(target_int_type);
+        }
+        current_val = b.create<arith::ExtUIOp>(target_int_type, current_val);
+      }
+
+      return current_val;
     }
   }
 

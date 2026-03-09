@@ -62,9 +62,19 @@ RuntimeSymbolGenerator::ResolveRuntimeSymbol(llvm::StringRef name) {
     // registered name may not.
     std::string stripped_name(name.begin() + 1, name.end());
     fn_addr = CustomCallTargetRegistry::Global()->Lookup(stripped_name, "Host");
+    // Fallback: resolve from the current process (compiler-rt builtins like
+    // __umodti3, __udivti3, etc.).
+    if (!fn_addr) {
+      fn_addr = dlsym(RTLD_DEFAULT, stripped_name.c_str());
+    }
   } else {
     fn_addr = CustomCallTargetRegistry::Global()->Lookup(name.str(), "Host");
+    if (!fn_addr) {
+      fn_addr = dlsym(RTLD_DEFAULT, name.str().c_str());
+    }
   }
+
+  if (!fn_addr) return std::nullopt;
 
   return llvm::orc::ExecutorSymbolDef{
       llvm::orc::ExecutorAddr(reinterpret_cast<uint64_t>(fn_addr)),
