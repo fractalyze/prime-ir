@@ -15,8 +15,7 @@
 
 // RUN: prime-ir-opt -field-to-mod-arith %s | FileCheck %s
 
-// Modulus must be > 120 because Toom-Cook uses Vandermonde matrix coefficients.
-// TODO(junbeomlee): Select multiplication algorithm based on modulus value.
+// 32-bit prime field (single limb) → uses Karatsuba mul + kCustom square.
 !PF = !field.pf<127:i32>
 !PFm = !field.pf<127:i32, true>
 !QF = !field.ef<4x!PF, 2:i32>
@@ -42,12 +41,10 @@ func.func @test_lower_sub(%arg0: !QF, %arg1: !QF) -> !QF {
 
 // CHECK-LABEL: @test_lower_mul
 func.func @test_lower_mul(%arg0: !QF, %arg1: !QF) -> !QF {
-    // Toom-Cook multiplication algorithm with 7 evaluation points (0, 1, -1, 2, -2, 3, ∞)
-    // v0 = x₀*y₀, v1 = (x₀+x₁+x₂+x₃)(y₀+y₁+y₂+y₃), v2 = (x₀-x₁+x₂-x₃)(y₀-y₁+y₂-y₃),
-    // v3 = (x₀+2x₁+4x₂+8x₃)(y₀+2y₁+4y₂+8y₃), v4 = (x₀-2x₁+4x₂-8x₃)(y₀-2y₁+4y₂-8y₃),
-    // v5 = (x₀+3x₁+9x₂+27x₃)(y₀+3y₁+9y₂+27y₃), v6 = x₃*y₃
+    // Karatsuba multiplication (single-limb field):
+    // 4 diagonal (xᵢyᵢ) + 6 cross ((xᵢ+xⱼ)(yᵢ+yⱼ) - xᵢyᵢ - xⱼyⱼ) + 3 reduction (ξ * cᵢ₊₄)
     // CHECK-COUNT-2: field.ext_to_coeffs
-    // CHECK-COUNT-7: mod_arith.mul
+    // CHECK-COUNT-13: mod_arith.mul
     // CHECK: field.ext_from_coeffs
     %0 = field.mul %arg0, %arg1 : !QF
     return %0 : !QF
@@ -55,12 +52,11 @@ func.func @test_lower_mul(%arg0: !QF, %arg1: !QF) -> !QF {
 
 // CHECK-LABEL: @test_lower_square
 func.func @test_lower_square(%arg0: !QF) -> !QF {
-    // Toom-Cook squaring algorithm with 7 evaluation points (0, 1, -1, 2, -2, 3, ∞)
-    // v0 = x₀², v1 = (x₀+x₁+x₂+x₃)², v2 = (x₀-x₁+x₂-x₃)²,
-    // v3 = (x₀+2x₁+4x₂+8x₃)², v4 = (x₀-2x₁+4x₂-8x₃)²,
-    // v5 = (x₀+3x₁+9x₂+27x₃)², v6 = x₃²
+    // Custom squaring (single-limb field):
+    // 5 squares (x₀², x₁², x₂², x₃², (x₀+x₂)²) + 4 cross muls + 3 non-residue muls
     // CHECK: field.ext_to_coeffs
-    // CHECK-COUNT-7: mod_arith.square
+    // CHECK-COUNT-5: mod_arith.square
+    // CHECK-COUNT-7: mod_arith.mul
     // CHECK: field.ext_from_coeffs
     %0 = field.square %arg0 : !QF
     return %0 : !QF
