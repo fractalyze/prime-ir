@@ -313,6 +313,85 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "reduction_degenerate_dim_remover",
+    srcs = ["reduction_degenerate_dim_remover.cc"],
+    hdrs = ["reduction_degenerate_dim_remover.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:dfs_hlo_visitor_with_default",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "reduction_dimension_grouper",
+    srcs = ["reduction_dimension_grouper.cc"],
+    hdrs = ["reduction_dimension_grouper.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:dfs_hlo_visitor_with_default",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "reduction_layout_normalizer",
+    srcs = ["reduction_layout_normalizer.cc"],
+    hdrs = ["reduction_layout_normalizer.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx:status_macros",
+        "//zkx/hlo/ir:dfs_hlo_visitor_with_default",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/container:inlined_vector",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "reduction_splitter",
+    srcs = ["reduction_splitter.cc"],
+    hdrs = ["reduction_splitter.h"],
+    deps = [
+        "//xla/tsl/platform:statusor",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:dfs_hlo_visitor_with_default",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "//zkx/service/gpu:reduction_utils",
+        "//zkx/stream_executor:device_description",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "schedule_postprocessing",
     srcs = ["schedule_postprocessing.cc"],
     hdrs = ["schedule_postprocessing.h"],
@@ -403,6 +482,10 @@ zkx_cc_unittest(
         "multi_output_fusion_unittest.cc",
         "pgle_accuracy_checker_unittest.cc",
         "priority_fusion_unittest.cc",
+        "reduction_degenerate_dim_remover_unittest.cc",
+        "reduction_dimension_grouper_unittest.cc",
+        "reduction_layout_normalizer_unittest.cc",
+        "reduction_splitter_unittest.cc",
         "schedule_postprocessing_unittest.cc",
         "scheduling_instruction_annotator_unittest.cc",
         "tree_reduction_rewriter_unittest.cc",
@@ -419,6 +502,10 @@ zkx_cc_unittest(
         ":multi_output_fusion",
         ":pgle_accuracy_checker",
         ":priority_fusion",
+        ":reduction_degenerate_dim_remover",
+        ":reduction_dimension_grouper",
+        ":reduction_layout_normalizer",
+        ":reduction_splitter",
         ":schedule_postprocessing",
         ":scheduling_instruction_annotator",
         ":tree_reduction_rewriter",

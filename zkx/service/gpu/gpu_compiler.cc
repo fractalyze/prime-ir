@@ -99,6 +99,10 @@ limitations under the License.
 #include "zkx/service/gpu/transforms/dynamic_slice_fusion_rewriter.h"
 #include "zkx/service/gpu/transforms/fusion_wrapper.h"
 #include "zkx/service/gpu/transforms/layout_assignment.h"
+#include "zkx/service/gpu/transforms/reduction_degenerate_dim_remover.h"
+#include "zkx/service/gpu/transforms/reduction_dimension_grouper.h"
+#include "zkx/service/gpu/transforms/reduction_layout_normalizer.h"
+#include "zkx/service/gpu/transforms/reduction_splitter.h"
 #include "zkx/service/gpu/transforms/tree_reduction_rewriter.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
@@ -689,10 +693,12 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
     pipeline.AddPass<BroadcastCanonicalizer>();
 
     // TODO(batzor): Add TransposeDimensionGrouper
-    // TODO(batzor): Add ReductionDegenerateDimRemover
-    // TODO(batzor): Add ReductionLayoutNormalizer
-    // TODO(batzor): Add ReductionDimensionGrouper
-    // TODO(batzor): Add ReductionSplitter
+    pipeline.AddPass<ReductionDegenerateDimRemover>();
+    pipeline.AddPass<ReductionLayoutNormalizer>();
+    pipeline.AddPass<ReductionDimensionGrouper>();
+    pipeline.AddPass<HloPassFix<ReductionSplitter>>(
+        gpu_target_config.device_description,
+        /*ignore_small_reduce_dims=*/false);
     pipeline.AddPass<HloPassFix<TreeReductionRewriter>>(
         gpu_target_config.device_description);
 
