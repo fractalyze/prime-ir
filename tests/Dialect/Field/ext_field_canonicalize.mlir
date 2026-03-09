@@ -313,6 +313,45 @@ func.func @test_tensor_ext_field_fold_mul() -> tensor<2x!QF> {
 }
 
 //===----------------------------------------------------------------------===//
+// Tensor splat constant folding (reshape, gather, extract_slice)
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_ext_reshape_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_reshape_splat_constant_fold() -> tensor<2x2x!QF> {
+  %0 = field.constant dense<5> : tensor<4x!QF>
+  %shape = arith.constant dense<[2, 2]> : tensor<2xi32>
+  %1 = tensor.reshape %0(%shape) : (tensor<4x!QF>, tensor<2xi32>) -> tensor<2x2x!QF>
+  // CHECK: %[[C:.*]] = field.constant dense<5> : [[T]]
+  // CHECK-NOT: tensor.reshape
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x2x!QF>
+}
+
+// CHECK-LABEL: @test_ext_extract_slice_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_extract_slice_splat_constant_fold() -> tensor<2x!QF> {
+  %0 = field.constant dense<3> : tensor<4x!QF>
+  %1 = tensor.extract_slice %0[1] [2] [1] : tensor<4x!QF> to tensor<2x!QF>
+  // CHECK: %[[C:.*]] = field.constant dense<3> : [[T]]
+  // CHECK-NOT: tensor.extract_slice
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_ext_gather_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_gather_splat_constant_fold() -> tensor<2x1x!QF> {
+  %0 = field.constant dense<3> : tensor<4x!QF>
+  %indices = arith.constant dense<[[0], [2]]> : tensor<2x1xindex>
+  %1 = tensor.gather %0[%indices] gather_dims([0]) : (tensor<4x!QF>, tensor<2x1xindex>) -> tensor<2x1x!QF>
+  // CHECK: %[[C:.*]] = field.constant dense<3> : [[T]]
+  // CHECK-NOT: tensor.gather
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x1x!QF>
+}
+
+//===----------------------------------------------------------------------===//
 // Identity operation folding
 //===----------------------------------------------------------------------===//
 
@@ -570,4 +609,43 @@ func.func @test_tensor_tower_fold_mul() -> tensor<2x!Fp6> {
   // CHECK-NOT: field.mul
   // CHECK: return %{{.*}} : [[T]]
   return %2 : tensor<2x!Fp6>
+}
+
+//===----------------------------------------------------------------------===//
+// Tensor of Tower Extension Field splat constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tower_reshape_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_reshape_splat_constant_fold() -> tensor<2x2x!Fp6> {
+  %0 = field.constant dense<1> : tensor<4x!Fp6>
+  %shape = arith.constant dense<[2, 2]> : tensor<2xi32>
+  %1 = tensor.reshape %0(%shape) : (tensor<4x!Fp6>, tensor<2xi32>) -> tensor<2x2x!Fp6>
+  // CHECK: %[[C:.*]] = field.constant dense<1> : [[T]]
+  // CHECK-NOT: tensor.reshape
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x2x!Fp6>
+}
+
+// CHECK-LABEL: @test_tower_extract_slice_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_extract_slice_splat_constant_fold() -> tensor<2x!Fp6> {
+  %0 = field.constant dense<2> : tensor<4x!Fp6>
+  %1 = tensor.extract_slice %0[1] [2] [1] : tensor<4x!Fp6> to tensor<2x!Fp6>
+  // CHECK: %[[C:.*]] = field.constant dense<2> : [[T]]
+  // CHECK-NOT: tensor.extract_slice
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x!Fp6>
+}
+
+// CHECK-LABEL: @test_tower_gather_splat_constant_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_gather_splat_constant_fold() -> tensor<2x1x!Fp6> {
+  %0 = field.constant dense<3> : tensor<4x!Fp6>
+  %indices = arith.constant dense<[[0], [2]]> : tensor<2x1xindex>
+  %1 = tensor.gather %0[%indices] gather_dims([0]) : (tensor<4x!Fp6>, tensor<2x1xindex>) -> tensor<2x1x!Fp6>
+  // CHECK: %[[C:.*]] = field.constant dense<3> : [[T]]
+  // CHECK-NOT: tensor.gather
+  // CHECK: return %[[C]] : [[T]]
+  return %1 : tensor<2x1x!Fp6>
 }
