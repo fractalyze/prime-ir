@@ -139,3 +139,15 @@ func.func @test_lower_tensor_ext_field_constant() -> tensor<2x!QF> {
     // CHECK: return %[[RESULT]] : tensor<2x[[T]]>
     return %0 : tensor<2x!QF>
 }
+
+// CHECK-LABEL: @test_lower_rank0_tensor_ext_field_constant
+// CHECK-SAME: () -> tensor<[[T:.*]]> {
+func.func @test_lower_rank0_tensor_ext_field_constant() -> tensor<!QF> {
+    // Rank-0 tensor of extension field constant: [5, 6]
+    // tensor<!EF> (rank-0) becomes tensor<N x !ModArith> then bitcast back
+    // CHECK: %[[FLAT:.*]] = mod_arith.constant dense<[5, 6]> : tensor<2x!z7_i32>
+    // CHECK: %[[RESULT:.*]] = field.bitcast %[[FLAT]] : tensor<2x!z7_i32> -> tensor<[[T]]>
+    %0 = field.constant dense<[5, 6]> : tensor<!QF>
+    // CHECK: return %[[RESULT]] : tensor<[[T]]>
+    return %0 : tensor<!QF>
+}

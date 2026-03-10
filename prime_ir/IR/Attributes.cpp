@@ -21,12 +21,21 @@ limitations under the License.
 namespace mlir::prime_ir {
 
 ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type) {
-  if (auto modArithType =
-          dyn_cast<mod_arith::ModArithType>(type.getElementType())) {
+  auto elementType = type.getElementType();
+  if (auto modArithType = dyn_cast<mod_arith::ModArithType>(elementType)) {
     return type.clone(modArithType.getStorageType());
+  } else if (auto bfType = dyn_cast<field::BinaryFieldType>(elementType)) {
+    return type.clone(bfType.getStorageType());
   } else if (auto fieldType =
-                 dyn_cast<field::PrimeFieldType>(type.getElementType())) {
-    return type.clone(fieldType.getStorageType());
+                 dyn_cast<field::FieldTypeInterface>(elementType)) {
+    // For prime fields, towerDims is empty so attrShape == type.getShape().
+    // For extension fields, towerDims appends coefficient dimensions
+    // (e.g., tensor<4x!EF{2}> stores as tensor<4x2xi32>).
+    auto pfType = field::getBasePrimeField(elementType);
+    auto towerDims = fieldType.getAttrShape();
+    SmallVector<int64_t> attrShape(type.getShape());
+    attrShape.append(towerDims.begin(), towerDims.end());
+    return type.clone(attrShape, pfType.getStorageType());
   }
   return type;
 }
