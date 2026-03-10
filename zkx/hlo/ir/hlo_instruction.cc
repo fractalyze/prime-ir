@@ -286,7 +286,9 @@ absl::StatusOr<std::unique_ptr<HloInstruction>> HloInstruction::CreateFromProto(
     }
     case HloOpcode::kMsm: {
       instruction =
-          CreateMsm(shape, operands(0), operands(1), proto.window_bits());
+          CreateMsm(shape, operands(0), operands(1), proto.window_bits(),
+                    proto.precompute_factor(), proto.bitsize(),
+                    proto.batch_size(), proto.are_points_shared());
       break;
     }
     case HloOpcode::kPairingCheck: {
@@ -1334,9 +1336,11 @@ std::unique_ptr<HloInstruction> HloInstruction::CreateFft(
 // static
 std::unique_ptr<HloInstruction> HloInstruction::CreateMsm(
     const Shape& shape, HloInstruction* scalars, HloInstruction* bases,
-    uint32_t window_bits) {
-  return std::make_unique<HloMsmInstruction>(shape, scalars, bases,
-                                             window_bits);
+    uint32_t window_bits, int32_t precompute_factor, int32_t bitsize,
+    int32_t batch_size, bool are_points_shared) {
+  return std::make_unique<HloMsmInstruction>(shape, scalars, bases, window_bits,
+                                             precompute_factor, bitsize,
+                                             batch_size, are_points_shared);
 }
 
 // static

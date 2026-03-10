@@ -208,6 +208,18 @@ message HloInstructionProto {
   // MSM window bits.
   int32 window_bits = 10001;
 
+  // MSM precompute factor (trades memory for fewer bucket modules).
+  int32 precompute_factor = 10002;
+
+  // MSM bitsize (skip empty high-bit bucket modules when scalars < 254 bits).
+  int32 bitsize = 10003;
+
+  // MSM batch size (number of MSMs fused together).
+  int32 batch_size = 10004;
+
+  // Whether batched MSM shares the same base points across all MSMs.
+  bool are_points_shared = 10005;
+
   // Comparison direction only used for kCompare.
   string comparison_direction = 63;
 

@@ -211,6 +211,19 @@ public:
   }
 };
 
+// PairingCheckOp exists in StableHLO but has no MHLO counterpart yet.
+// Provide a no-op converter so the GET_OP_LIST expansion compiles.
+template <>
+class StablehloToHloOpConverter<PairingCheckOp>
+    : public OpConversionPattern<PairingCheckOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult matchAndRewrite(PairingCheckOp, OpAdaptor,
+                                ConversionPatternRewriter &) const override {
+    return failure();
+  }
+};
+
 template <typename... StablehloOpTypes>
 void populateStablehloToHloPatterns(RewritePatternSet *patterns,
                                     TypeConverter *converter,

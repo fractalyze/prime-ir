@@ -604,6 +604,11 @@ class ZkxBuilder {
             absl::Span<const int64_t> dimensions,
             absl::Span<const ZkxOp> static_operands = {});
 
+  ZkxOp Msm(ZkxOp scalars, ZkxOp bases, const Shape& shape,
+            int32_t window_bits = 0, int32_t precompute_factor = 0,
+            int32_t bitsize = 0, int32_t batch_size = 0,
+            bool are_points_shared = false);
+
   ZkxOp While(const ZkxComputation& condition, const ZkxComputation& body,
               ZkxOp init);
   virtual absl::StatusOr<ZkxOp> WhileInternal(const Shape& shape,
@@ -1012,6 +1017,10 @@ class ZkxBuilder {
       ZkxOp branch_index,
       absl::Span<const ZkxComputation* const> branch_computations,
       absl::Span<const ZkxOp> branch_operands);
+  friend ZkxOp Msm(ZkxBuilder* builder, ZkxOp scalars, ZkxOp bases,
+                   const Shape& shape, int32_t window_bits,
+                   int32_t precompute_factor, int32_t bitsize,
+                   int32_t batch_size, bool are_points_shared);
   friend ZkxOp DotGeneral(ZkxOp lhs, ZkxOp rhs,
                           const DotDimensionNumbers& dimension_numbers);
   friend ZkxOp Gather(ZkxOp input, ZkxOp start_indices,
@@ -1695,6 +1704,12 @@ ZkxOp Map(ZkxBuilder* builder, absl::Span<const ZkxOp> operands,
           const ZkxComputation& computation,
           absl::Span<const int64_t> dimensions,
           absl::Span<const ZkxOp> static_operands = {});
+
+// Enqueues an MSM (multi-scalar multiplication) node onto the computation.
+ZkxOp Msm(ZkxBuilder* builder, ZkxOp scalars, ZkxOp bases, const Shape& shape,
+          int32_t window_bits = 0, int32_t precompute_factor = 0,
+          int32_t bitsize = 0, int32_t batch_size = 0,
+          bool are_points_shared = false);
 
 // Enqueues a while node onto the computation.
 ZkxOp While(const ZkxComputation& condition, const ZkxComputation& body,

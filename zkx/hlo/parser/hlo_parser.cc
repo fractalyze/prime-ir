@@ -2538,7 +2538,17 @@ HloInstruction* HloParserImpl::CreateInstruction(
     }
     case HloOpcode::kMsm: {
       std::optional<int32_t> window_bits;
+      std::optional<int32_t> precompute_factor;
+      std::optional<int32_t> bitsize;
+      std::optional<int32_t> batch_size;
+      std::optional<bool> are_points_shared;
       attrs["window_bits"] = {/*required=*/false, AttrTy::kInt32, &window_bits};
+      attrs["precompute_factor"] = {/*required=*/false, AttrTy::kInt32,
+                                    &precompute_factor};
+      attrs["bitsize"] = {/*required=*/false, AttrTy::kInt32, &bitsize};
+      attrs["batch_size"] = {/*required=*/false, AttrTy::kInt32, &batch_size};
+      attrs["are_points_shared"] = {/*required=*/false, AttrTy::kBool,
+                                    &are_points_shared};
 
       if ((!preset_operands &&
            !ParseOperands(&operands, builder, /*expected_size=*/2)) ||
@@ -2546,12 +2556,16 @@ HloInstruction* HloParserImpl::CreateInstruction(
         return nullptr;
       }
       if (!maybe_infer_shape([&] {
-            return ShapeInference::InferMsmShape(operands[1]->shape());
+            return ShapeInference::InferMsmShape(operands[1]->shape(),
+                                                 batch_size ? *batch_size : 0);
           })) {
         return nullptr;
       }
       return builder->AddInstruction(HloInstruction::CreateMsm(
-          *shape, operands[0], operands[1], window_bits ? *window_bits : 0));
+          *shape, operands[0], operands[1], window_bits ? *window_bits : 0,
+          precompute_factor ? *precompute_factor : 0, bitsize ? *bitsize : 0,
+          batch_size ? *batch_size : 0,
+          are_points_shared ? *are_points_shared : false));
     }
     case HloOpcode::kPairingCheck: {
       if ((!preset_operands &&

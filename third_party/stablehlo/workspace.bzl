@@ -18,8 +18,8 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def repo():
-    STABLEHLO_COMMIT = "dd9b3fe759a5e98dc3ee1426408ec45ed24398c6"
-    STABLEHLO_SHA256 = "b886a17a9f9cb2cd1f5dd551a11b99934a50316d9598cd249628c56a147f4677"
+    STABLEHLO_COMMIT = "db02fb59375e463faefe5edab4fa36c98cb8036c"
+    STABLEHLO_SHA256 = "d8699da61c616200f76e219a2645743a58478763f3e6ed1116119cdf9d496cc7"
     http_archive(
         name = "stablehlo",
         sha256 = STABLEHLO_SHA256,

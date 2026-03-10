@@ -67,6 +67,4 @@ TYPED_TEST(GroupR2TensorBinaryTest, Add) {
   this->RunAndVerify();
 }
 
-// TODO(chokobole): Add MSM test
-
 }  // namespace zkx::gpu

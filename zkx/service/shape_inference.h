@@ -96,7 +96,10 @@ class ShapeInference {
   static absl::StatusOr<Shape> InferFftShape(const Shape& in, FftType fft_type);
 
   // Infers the shape produced by the given MSM type on the given operand.
-  static absl::StatusOr<Shape> InferMsmShape(const Shape& bases);
+  // For batched MSMs (batch_size > 1), the result is a 1-D array of size
+  // batch_size; otherwise it is a scalar.
+  static absl::StatusOr<Shape> InferMsmShape(const Shape& bases,
+                                             int32_t batch_size = 0);
 
   // Infers the shape produced by a pairing check (returns scalar PRED).
   static absl::StatusOr<Shape> InferPairingCheckShape();

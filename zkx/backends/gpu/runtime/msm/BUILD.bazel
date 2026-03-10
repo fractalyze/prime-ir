@@ -1,0 +1,76 @@
+# Copyright 2026 The ZKX Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@local_config_cuda//cuda:build_defs.bzl", "if_cuda_is_configured")
+load("@rules_cc//cc:defs.bzl", "cc_test")
+load("//bazel:zkx_cc.bzl", "zkx_cc_library")
+load("//zkx/service/gpu:build_defs.bzl", "gpu_kernel_library")
+
+package(default_visibility = ["//visibility:public"])
+
+gpu_kernel_library(
+    name = "msm_runner_correctness_test_gpu",
+    srcs = ["msm_runner_correctness_test.cu.cc"],
+    local_defines = ["CURVE_ID=BN254"],
+    deps = [
+        ":msm_runner_gpu",
+        "//third_party/icicle:icicle_cuda_msm",
+    ],
+)
+
+gpu_kernel_library(
+    name = "msm_runner_gpu",
+    srcs = ["msm_runner.cu.cc"],
+    hdrs = ["msm_runner.h"],
+    local_defines = ["CURVE_ID=BN254"],
+    deps = ["//third_party/icicle:icicle_cuda_msm"],
+)
+
+zkx_cc_library(
+    name = "msm_runner",
+    hdrs = ["msm_runner.h"],
+    tags = ["cuda_only"],
+    deps = [":msm_runner_gpu"],
+)
+
+zkx_cc_library(
+    name = "msm_thunk",
+    srcs = ["msm_thunk.cc"],
+    hdrs = ["msm_thunk.h"],
+    local_defines = if_cuda_is_configured(["GOOGLE_CUDA=1"]),
+    deps = [
+        "//zkx:primitive_util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/backends/gpu/runtime:thunk",
+        "//zkx/service:buffer_assignment",
+        "//zkx/stream_executor:device_memory",
+        "//zkx/stream_executor/gpu:gpu_stream",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings:str_format",
+    ] + if_cuda_is_configured([
+        ":msm_runner",
+    ]),
+)
+
+# fractal-build-lint: disable=build-test-name
+cc_test(
+    name = "msm_runner_correctness_test",
+    tags = ["cuda_only"],
+    deps = [
+        ":msm_runner_correctness_test_gpu",
+        "@local_config_cuda//cuda:cudart",
+    ],
+)

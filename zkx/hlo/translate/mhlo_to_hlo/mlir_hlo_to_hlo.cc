@@ -1018,6 +1018,19 @@ LogicalResult ExportZkxOp(MapOp op, OpLoweringContext ctx) {
   return success();
 }
 
+LogicalResult ExportZkxOp(MsmOp op, OpLoweringContext ctx) {
+  auto& value_map = *ctx.values;
+  zkx::ZkxOp scalars, bases;
+  if (failed(GetZkxOp(op.getScalars(), value_map, &scalars, op)))
+    return failure();
+  if (failed(GetZkxOp(op.getBases(), value_map, &bases, op))) return failure();
+  value_map[op] =
+      zkx::Msm(ctx.builder, scalars, bases, zkx::TypeToShape(op.getType()),
+               op.getWindowBits(), op.getPrecomputeFactor(), op.getBitsize(),
+               op.getBatchSize(), op.getArePointsShared());
+  return success();
+}
+
 LogicalResult ExportZkxOp(PadOp op, OpLoweringContext ctx) {
   auto& value_map = *ctx.values;
   zkx::PaddingConfig padding_config;

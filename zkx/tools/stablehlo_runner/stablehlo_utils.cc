@@ -15,6 +15,9 @@ limitations under the License.
 
 #include "zkx/tools/stablehlo_runner/stablehlo_utils.h"
 
+#include <cstdint>
+#include <cstring>
+#include <random>
 #include <utility>
 
 #include "mlir/IR/DialectRegistry.h"
@@ -28,6 +31,7 @@ limitations under the License.
 #include "zkx/debug_options_flags.h"
 #include "zkx/mlir/utils/error_util.h"
 #include "zkx/pjrt/mlir_to_hlo.h"
+#include "zkx/primitive_util.h"
 
 namespace zkx {
 
@@ -63,6 +67,50 @@ absl::StatusOr<std::unique_ptr<HloModule>> ConvertStablehloToHloModule(
                       HloModule::CreateModuleConfigFromProto(
                           computation.proto(), GetDebugOptionsFromFlags()));
   return HloModule::CreateFromProto(computation.proto(), config);
+}
+
+void FillLiteralWithRandom(Literal& literal, bool use_random_points) {
+  PrimitiveType type = literal.shape().element_type();
+  primitive_util::PrimitiveTypeSwitch<void>(
+      [&](auto primitive_type_constant) {
+        if constexpr (primitive_util::IsArrayType(primitive_type_constant)) {
+          using NativeT = primitive_util::NativeTypeOf<primitive_type_constant>;
+          if constexpr (primitive_util::IsFieldType(primitive_type_constant) ||
+                        primitive_util::IsBigIntType(primitive_type_constant)) {
+            for (NativeT& value : literal.data<NativeT>()) {
+              value = NativeT::Random();
+            }
+            // NOLINTNEXTLINE(readability/braces)
+          } else if constexpr (primitive_util::IsEcPointType(
+                                   primitive_type_constant)) {
+            if (use_random_points) {
+              for (NativeT& value : literal.data<NativeT>()) {
+                value = NativeT::Random();
+              }
+            } else {
+              NativeT generator = NativeT::Generator();
+              for (NativeT& value : literal.data<NativeT>()) {
+                value = generator;
+              }
+            }
+          } else {
+            // Non-ZK types: fill raw bytes with seeded PRNG.
+            auto* data = static_cast<uint8_t*>(literal.untyped_data());
+            int64_t size = literal.size_bytes();
+            std::mt19937_64 rng(42);
+            int64_t i = 0;
+            for (; i + 8 <= size; i += 8) {
+              uint64_t val = rng();
+              std::memcpy(data + i, &val, 8);
+            }
+            if (i < size) {
+              uint64_t val = rng();
+              std::memcpy(data + i, &val, size - i);
+            }
+          }
+        }
+      },
+      type);
 }
 
 }  // namespace zkx

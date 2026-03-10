@@ -275,6 +275,7 @@ std::string_view Thunk::KindToString(Thunk::Kind kind) {
     CASE(kKernel);
     CASE(kMemset32BitValue);
     CASE(kMemzero);
+    CASE(kMsm);
     CASE(kNorm);
     CASE(kOutfeed);
     CASE(kSend);

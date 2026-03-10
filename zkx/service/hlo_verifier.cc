@@ -260,8 +260,10 @@ absl::Status ShapeVerifier::HandleFft(HloInstruction* fft) {
 }
 
 absl::Status ShapeVerifier::HandleMsm(HloInstruction* msm) {
+  auto* msm_instr = Cast<HloMsmInstruction>(msm);
   TF_ASSIGN_OR_RETURN(const Shape expected,
-                      ShapeInference::InferMsmShape(msm->operand(1)->shape()));
+                      ShapeInference::InferMsmShape(msm->operand(1)->shape(),
+                                                    msm_instr->batch_size()));
   return CheckShape(msm, expected);
 }
 

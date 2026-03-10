@@ -99,6 +99,8 @@ limitations under the License.
 #include "zkx/service/gpu/transforms/dynamic_slice_fusion_rewriter.h"
 #include "zkx/service/gpu/transforms/fusion_wrapper.h"
 #include "zkx/service/gpu/transforms/layout_assignment.h"
+#include "zkx/service/gpu/transforms/msm_batch_fusion.h"
+#include "zkx/service/gpu/transforms/msm_chunk_split.h"
 #include "zkx/service/gpu/transforms/reduction_degenerate_dim_remover.h"
 #include "zkx/service/gpu/transforms/reduction_dimension_grouper.h"
 #include "zkx/service/gpu/transforms/reduction_layout_normalizer.h"
@@ -489,6 +491,15 @@ absl::Status RunFusionPasses(HloModule* hlo_module,
 
   TF_RETURN_IF_ERROR(
       HorizontalFusionPipeline(gpu_device_info).Run(hlo_module).status());
+
+  // Fuse independent MSMs sharing the same bases into batched MSMs, then
+  // split large MSMs into GPU-memory-sized chunks.
+  {
+    HloPassPipeline msm_pipeline("msm-optimization");
+    msm_pipeline.AddPass<MsmBatchFusion>();
+    msm_pipeline.AddPass<MsmChunkSplit>(gpu_device_info.device_memory_size());
+    TF_RETURN_IF_ERROR(msm_pipeline.Run(hlo_module).status());
+  }
 
   if (VLOG_IS_ON(2)) {
     HloFusionStatsVisitor stats;

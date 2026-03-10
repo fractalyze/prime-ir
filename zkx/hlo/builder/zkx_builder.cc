@@ -1909,6 +1909,22 @@ ZkxOp ZkxBuilder::Map(absl::Span<const ZkxOp> operands,
   });
 }
 
+ZkxOp ZkxBuilder::Msm(ZkxOp scalars, ZkxOp bases, const Shape& shape,
+                      int32_t window_bits, int32_t precompute_factor,
+                      int32_t bitsize, int32_t batch_size,
+                      bool are_points_shared) {
+  return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
+    HloInstructionProto instr;
+    *instr.mutable_shape() = shape.ToProto();
+    instr.set_window_bits(window_bits);
+    instr.set_precompute_factor(precompute_factor);
+    instr.set_bitsize(bitsize);
+    instr.set_batch_size(batch_size);
+    instr.set_are_points_shared(are_points_shared);
+    return AddInstruction(std::move(instr), HloOpcode::kMsm, {scalars, bases});
+  });
+}
+
 ZkxOp ZkxBuilder::While(const ZkxComputation& condition,
                         const ZkxComputation& body, ZkxOp init) {
   return ReportErrorOrReturn([&]() -> absl::StatusOr<ZkxOp> {
@@ -3078,6 +3094,13 @@ ZkxOp Conditional(const ZkxOp branch_index,
                   absl::Span<const ZkxOp> branch_operands) {
   return branch_index.builder()->Conditional(branch_index, branch_computations,
                                              branch_operands);
+}
+
+ZkxOp Msm(ZkxBuilder* builder, ZkxOp scalars, ZkxOp bases, const Shape& shape,
+          int32_t window_bits, int32_t precompute_factor, int32_t bitsize,
+          int32_t batch_size, bool are_points_shared) {
+  return builder->Msm(scalars, bases, shape, window_bits, precompute_factor,
+                      bitsize, batch_size, are_points_shared);
 }
 
 ZkxOp DotGeneral(const ZkxOp lhs, const ZkxOp rhs,

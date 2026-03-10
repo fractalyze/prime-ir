@@ -25,6 +25,7 @@ limitations under the License.
 #include "mlir/IR/OwningOpRef.h"
 
 #include "zkx/hlo/ir/hlo_module.h"
+#include "zkx/literal.h"
 
 namespace zkx {
 
@@ -36,6 +37,15 @@ absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> ParseStablehloModule(
 // Converts a parsed StableHLO module to an HloModule via MlirToZkxComputation.
 absl::StatusOr<std::unique_ptr<HloModule>> ConvertStablehloToHloModule(
     mlir::ModuleOp module);
+
+// Fills a literal with valid random data using type-aware generation.
+//
+// For field types: NativeT::Random() generates valid field elements.
+// For EC affine points: NativeT::Generator() (all same base point, fast).
+//   Set use_random_points=true to use NativeT::Random() (scalar mul, slow).
+// For BigInt types: NativeT::Random().
+// For other types: fills raw bytes with seeded mt19937_64.
+void FillLiteralWithRandom(Literal& literal, bool use_random_points = false);
 
 }  // namespace zkx
 

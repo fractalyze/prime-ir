@@ -1850,6 +1850,7 @@ def MHLO_ReduceWindowOp: MHLO_Op<"reduce_window", [
   let hasCustomHLOConverter = 1;
 }
 
+
 def MHLO_PairingCheckOp: MHLO_Op<"pairing_check", [Pure]> {
   let summary = "PairingCheck operation";
   let description = [{
@@ -1875,6 +1876,28 @@ def MHLO_PairingCheckOp: MHLO_Op<"pairing_check", [Pure]> {
   let assemblyFormat = [{
     operands attr-dict `:` functional-type(operands, results)
   }];
+}
+
+def MHLO_MsmOp : MHLO_Op<"msm", [Pure]> {
+  let summary = "Multi-scalar multiplication operation";
+  let description = [{
+    Computes the multi-scalar multiplication (MSM) of scalars and elliptic curve
+    points: result = Σᵢ scalarsᵢ * basesᵢ.
+  }];
+  let arguments = (ins
+    MHLO_Tensor:$scalars,
+    MHLO_Tensor:$bases,
+    DefaultValuedOptionalAttr<I32Attr, "0">:$window_bits,
+    DefaultValuedOptionalAttr<I32Attr, "0">:$precompute_factor,
+    DefaultValuedOptionalAttr<I32Attr, "0">:$bitsize,
+    DefaultValuedOptionalAttr<I32Attr, "0">:$batch_size,
+    DefaultValuedOptionalAttr<BoolAttr, "false">:$are_points_shared
+  );
+  let results = (outs MHLO_Tensor:$result);
+  let assemblyFormat = [{
+    operands attr-dict `:` functional-type(operands, results)
+  }];
+  let hasCustomHLOConverter = 1;
 }
 
 #endif // ZKX_MLIR_HLO_MHLO_IR_HLO_OPS_TD

@@ -38,10 +38,8 @@ limitations under the License.
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/hlo/ir/hlo_module.h"
 #include "zkx/literal.h"
-#include "zkx/literal_util.h"
 #include "zkx/service/hlo_runner.h"
 #include "zkx/service/platform_util.h"
-#include "zkx/shape_util.h"
 #include "zkx/tools/stablehlo_runner/stablehlo_utils.h"
 
 namespace {
@@ -71,13 +69,13 @@ absl::Status SetupBenchmark(const char* mlir_path,
                       zkx::PlatformUtil::GetPlatform(platform_name));
   g_state.runner = std::make_unique<zkx::HloRunner>(platform);
 
-  // Create zero-filled input literals.
+  // Create valid random input literals.
   const zkx::HloComputation* entry = hlo_module->entry_computation();
   g_state.inputs.reserve(entry->num_parameters());
   for (int64_t i = 0; i < entry->num_parameters(); ++i) {
     const zkx::Shape& shape = entry->parameter_instruction(i)->shape();
-    TF_ASSIGN_OR_RETURN(zkx::Literal literal,
-                        zkx::MakeFakeLiteral(shape, /*use_random=*/false));
+    zkx::Literal literal = zkx::Literal::CreateFromShape(shape);
+    zkx::FillLiteralWithRandom(literal);
     g_state.inputs.push_back(std::move(literal));
   }
   g_state.input_ptrs.reserve(g_state.inputs.size());

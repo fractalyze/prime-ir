@@ -229,6 +229,37 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "msm_batch_fusion",
+    srcs = ["msm_batch_fusion.cc"],
+    hdrs = ["msm_batch_fusion.h"],
+    deps = [
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
+    name = "msm_chunk_split",
+    srcs = ["msm_chunk_split.cc"],
+    hdrs = ["msm_chunk_split.h"],
+    deps = [
+        "//zkx:primitive_util",
+        "//zkx:shape_util",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/status:statusor",
+    ],
+)
+
+zkx_cc_library(
     name = "multi_output_fusion",
     srcs = ["multi_output_fusion.cc"],
     hdrs = ["multi_output_fusion.h"],
@@ -479,6 +510,8 @@ zkx_cc_unittest(
         "fusion_wrapper_unittest.cc",
         "horizontal_loop_fusion_unittest.cc",
         "layout_assignment_unittest.cc",
+        "msm_batch_fusion_unittest.cc",
+        "msm_chunk_split_unittest.cc",
         "multi_output_fusion_unittest.cc",
         "pgle_accuracy_checker_unittest.cc",
         "priority_fusion_unittest.cc",
@@ -499,6 +532,8 @@ zkx_cc_unittest(
         ":fusion_wrapper",
         ":horizontal_loop_fusion",
         ":layout_assignment",
+        ":msm_batch_fusion",
+        ":msm_chunk_split",
         ":multi_output_fusion",
         ":pgle_accuracy_checker",
         ":priority_fusion",

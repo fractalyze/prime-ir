@@ -367,10 +367,10 @@ class HloInstruction {
       FftType fft_type, int64_t fft_length, bool fft_do_bit_reverse);
 
   // Creates a MSM op
-  static std::unique_ptr<HloInstruction> CreateMsm(const Shape& shape,
-                                                   HloInstruction* scalars,
-                                                   HloInstruction* bases,
-                                                   uint32_t window_bits);
+  static std::unique_ptr<HloInstruction> CreateMsm(
+      const Shape& shape, HloInstruction* scalars, HloInstruction* bases,
+      uint32_t window_bits, int32_t precompute_factor = 0, int32_t bitsize = 0,
+      int32_t batch_size = 0, bool are_points_shared = false);
 
   // Creates an asynchronous start, update, and done op.
   static std::unique_ptr<HloInstruction> CreateAsyncStart(

@@ -156,6 +156,22 @@ zkx_cc_library(
     ],
 )
 
+zkx_cc_library(
+    name = "msm_test",
+    testonly = True,
+    hdrs = ["msm_test.h"],
+    tags = [
+        "cuda_only",
+        "gpu",
+    ],
+    deps = [
+        ":cuda_kernel_emitter_test",
+        "//zkx:literal_util",
+        "//zkx:primitive_util",
+        "//zkx/base/containers:container_util",
+    ],
+)
+
 # fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
     name = "cuda_kernel_emitter_ext_field_unittest",
@@ -192,6 +208,18 @@ zkx_cc_unittest(
 
 # fractal-build-lint: disable=build-test-name
 zkx_cc_unittest(
+    name = "cuda_kernel_emitter_g1_msm_unittest",
+    timeout = "moderate",
+    srcs = ["cuda_kernel_emitter_g1_msm_unittest.cc"],
+    tags = [
+        "cuda_only",
+        "gpu",
+    ],
+    deps = [":msm_test"],
+)
+
+# fractal-build-lint: disable=build-test-name
+zkx_cc_unittest(
     name = "cuda_kernel_emitter_g2_unittest",
     timeout = "moderate",
     srcs = ["cuda_kernel_emitter_g2_unittest.cc"],
@@ -200,6 +228,18 @@ zkx_cc_unittest(
         "gpu",
     ],
     deps = [":group_test"],
+)
+
+# fractal-build-lint: disable=build-test-name
+zkx_cc_unittest(
+    name = "cuda_kernel_emitter_g2_msm_unittest",
+    timeout = "moderate",
+    srcs = ["cuda_kernel_emitter_g2_msm_unittest.cc"],
+    tags = [
+        "cuda_only",
+        "gpu",
+    ],
+    deps = [":msm_test"],
 )
 
 # fractal-build-lint: disable=build-test-name

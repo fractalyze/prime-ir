@@ -25,6 +25,7 @@ limitations under the License.
 #include "zkx/backends/gpu/runtime/command_buffer_cmd.h"
 #include "zkx/backends/gpu/runtime/command_buffer_cmd_emitter.h"
 #include "zkx/backends/gpu/runtime/command_buffer_thunk.h"
+#include "zkx/backends/gpu/runtime/msm/msm_thunk.h"
 #include "zkx/backends/gpu/runtime/wait_for_streams_thunk.h"
 #include "zkx/backends/gpu/runtime/while_thunk.h"
 #include "zkx/hlo/ir/hlo_casting_utils.h"
@@ -271,6 +272,28 @@ absl::Status IrEmitterUnnested::EmitCopy(const HloInstruction* instr) {
       /*source_buffer=*/src_buffer,
       /*destination_buffer=*/dst_buffer,
       /*mem_size=*/src_buffer.size()));
+  return absl::OkStatus();
+}
+
+absl::Status IrEmitterUnnested::EmitMsm(const HloMsmInstruction* instr) {
+  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice scalars_slice,
+                      GetAllocationSliceForHlo(instr->operand(0)));
+  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice bases_slice,
+                      GetAllocationSliceForHlo(instr->operand(1)));
+  TF_ASSIGN_OR_RETURN(BufferAllocation::Slice result_slice,
+                      GetAllocationSliceForHlo(instr, {}));
+
+  // MSM size = number of scalar elements.
+  const Shape& scalar_shape = instr->operand(0)->shape();
+  int32_t msm_size = scalar_shape.dimensions(0);
+
+  PrimitiveType scalars_et = instr->operand(0)->shape().element_type();
+  PrimitiveType bases_et = instr->operand(1)->shape().element_type();
+  PrimitiveType result_et = instr->shape().element_type();
+  AddThunkToThunkSequence(std::make_unique<MsmThunk>(
+      Thunk::ThunkInfo::WithProfileAnnotation(instr), scalars_slice,
+      bases_slice, result_slice, msm_size, instr->window_bits(), scalars_et,
+      bases_et, result_et));
   return absl::OkStatus();
 }
 
@@ -757,6 +780,8 @@ absl::Status IrEmitterUnnested::EmitHloInstruction(
     }
     case HloOpcode::kFusion:
       return EmitFusion(Cast<HloFusionInstruction>(instr));
+    case HloOpcode::kMsm:
+      return EmitMsm(Cast<HloMsmInstruction>(instr));
     case HloOpcode::kCopy:
       return EmitCopy(instr);
     case HloOpcode::kInfeed:

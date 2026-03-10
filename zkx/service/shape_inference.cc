@@ -1400,7 +1400,11 @@ absl::StatusOr<Shape> ShapeInference::InferFftShape(const Shape& in,
 }
 
 // static
-absl::StatusOr<Shape> ShapeInference::InferMsmShape(const Shape& bases) {
+absl::StatusOr<Shape> ShapeInference::InferMsmShape(const Shape& bases,
+                                                    int32_t batch_size) {
+  if (batch_size > 1) {
+    return ShapeUtil::MakeShape(bases.element_type(), {batch_size});
+  }
   return ShapeUtil::MakeScalarShape(bases.element_type());
 }
 

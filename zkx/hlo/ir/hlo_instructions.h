@@ -141,8 +141,15 @@ class HloFftInstruction : public HloInstruction {
 class HloMsmInstruction : public HloInstruction {
  public:
   explicit HloMsmInstruction(const Shape& shape, HloInstruction* scalars,
-                             HloInstruction* bases, int32_t window_bits);
+                             HloInstruction* bases, int32_t window_bits,
+                             int32_t precompute_factor = 0, int32_t bitsize = 0,
+                             int32_t batch_size = 0,
+                             bool are_points_shared = false);
   int32_t window_bits() const { return window_bits_; }
+  int32_t precompute_factor() const { return precompute_factor_; }
+  int32_t bitsize() const { return bitsize_; }
+  int32_t batch_size() const { return batch_size_; }
+  bool are_points_shared() const { return are_points_shared_; }
 
   // Returns a serialized representation of this instruction.
   HloInstructionProto ToProto() const override;
@@ -166,6 +173,10 @@ class HloMsmInstruction : public HloInstruction {
 
   // Describes window bits for an MSM instruction.
   int32_t window_bits_;
+  int32_t precompute_factor_;
+  int32_t bitsize_;
+  int32_t batch_size_;
+  bool are_points_shared_;
 };
 
 class HloAsyncInstruction : public HloInstruction {

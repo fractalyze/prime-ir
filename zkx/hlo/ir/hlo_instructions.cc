@@ -175,8 +175,15 @@ std::unique_ptr<HloInstruction> HloFftInstruction::CloneWithNewOperandsImpl(
 
 HloMsmInstruction::HloMsmInstruction(const Shape& shape,
                                      HloInstruction* scalars,
-                                     HloInstruction* bases, int32_t window_bits)
-    : HloInstruction(HloOpcode::kMsm, shape), window_bits_(window_bits) {
+                                     HloInstruction* bases, int32_t window_bits,
+                                     int32_t precompute_factor, int32_t bitsize,
+                                     int32_t batch_size, bool are_points_shared)
+    : HloInstruction(HloOpcode::kMsm, shape),
+      window_bits_(window_bits),
+      precompute_factor_(precompute_factor),
+      bitsize_(bitsize),
+      batch_size_(batch_size),
+      are_points_shared_(are_points_shared) {
   AppendOperand(scalars);
   AppendOperand(bases);
 }
@@ -184,6 +191,10 @@ HloMsmInstruction::HloMsmInstruction(const Shape& shape,
 HloInstructionProto HloMsmInstruction::ToProto() const {
   HloInstructionProto proto = HloInstruction::ToProto();
   proto.set_window_bits(window_bits_);
+  proto.set_precompute_factor(precompute_factor_);
+  proto.set_bitsize(bitsize_);
+  proto.set_batch_size(batch_size_);
+  proto.set_are_points_shared(are_points_shared_);
   return proto;
 }
 
@@ -194,6 +205,27 @@ void HloMsmInstruction::PrintExtraAttributesImpl(
       AppendCat(printer, "window_bits=", window_bits());
     });
   }
+  if (precompute_factor() != 0) {
+    printer.Next([this](Printer* printer) {
+      AppendCat(printer, "precompute_factor=", precompute_factor());
+    });
+  }
+  if (bitsize() != 0) {
+    printer.Next([this](Printer* printer) {
+      AppendCat(printer, "bitsize=", bitsize());
+    });
+  }
+  if (batch_size() != 0) {
+    printer.Next([this](Printer* printer) {
+      AppendCat(printer, "batch_size=", batch_size());
+    });
+  }
+  if (are_points_shared()) {
+    printer.Next([this](Printer* printer) {
+      AppendCat(printer,
+                "are_points_shared=", are_points_shared() ? "true" : "false");
+    });
+  }
 }
 
 bool HloMsmInstruction::IdenticalSlowPath(
@@ -201,14 +233,19 @@ bool HloMsmInstruction::IdenticalSlowPath(
     absl::FunctionRef<bool(const HloComputation*, const HloComputation*)>
         eq_computations) const {
   const auto& casted_other = static_cast<const HloMsmInstruction&>(other);
-  return window_bits() == casted_other.window_bits();
+  return window_bits() == casted_other.window_bits() &&
+         precompute_factor() == casted_other.precompute_factor() &&
+         bitsize() == casted_other.bitsize() &&
+         batch_size() == casted_other.batch_size() &&
+         are_points_shared() == casted_other.are_points_shared();
 }
 
 std::unique_ptr<HloInstruction> HloMsmInstruction::CloneWithNewOperandsImpl(
     const Shape& shape, absl::Span<HloInstruction* const> new_operands,
     HloCloneContext* context) const {
-  return std::make_unique<HloMsmInstruction>(shape, new_operands[0],
-                                             new_operands[1], window_bits_);
+  return std::make_unique<HloMsmInstruction>(
+      shape, new_operands[0], new_operands[1], window_bits_, precompute_factor_,
+      bitsize_, batch_size_, are_points_shared_);
 }
 
 HloAsyncInstruction::HloAsyncInstruction(
