@@ -278,3 +278,23 @@ func.func @test_double_wide_headroom(%input : !Zp30) -> !Zp30 {
   %res = mod_arith.double %input : !Zp30
   return %res : !Zp30
 }
+
+// -----
+
+// Goldilocks: p = 2⁶⁴ - 2³² + 1, p > 2⁶³ so getCanonicalDiff must use
+// cmpi + select instead of minui (diff + p overflows i64).
+!Gp = !mod_arith.int<18446744069414584321 : i64>
+
+// CHECK-LABEL: @test_lower_sub_goldilocks
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_lower_sub_goldilocks(%lhs : !Gp, %rhs : !Gp) -> !Gp {
+  // CHECK-NOT: mod_arith.sub
+  // CHECK: %[[CMOD:.*]] = arith.constant -4294967295 : [[T]]
+  // CHECK: %[[SUB:.*]] = arith.subi %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[ADD:.*]] = arith.addi %[[SUB]], %[[CMOD]] : [[T]]
+  // CHECK: %[[CMP:.*]] = arith.cmpi ult, %[[LHS]], %[[RHS]] : [[T]]
+  // CHECK: %[[SEL:.*]] = arith.select %[[CMP]], %[[ADD]], %[[SUB]] : [[T]]
+  // CHECK: return %[[SEL]] : [[T]]
+  %res = mod_arith.sub %lhs, %rhs : !Gp
+  return %res : !Gp
+}
