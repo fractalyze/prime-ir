@@ -41,7 +41,8 @@ void fillVectorWithZero(Vector16xI32 &data,
 
 template <bool kIsPacked>
 void BM_permute_10000_benchmark(::benchmark::State &state) {
-  const char *benchName = kIsPacked ? "permute_packed_10000" : "permute_10000";
+  const char *benchName = kIsPacked ? "poseidon2_permute_babybear_packed"
+                                    : "poseidon2_permute_babybear";
 
   if constexpr (kIsPacked) {
     OwningMemRef<Vector16xI32, 1> input(/*shape=*/{16}, /*shapeAlloc=*/{},
@@ -77,15 +78,15 @@ void BM_permute_10000_benchmark(::benchmark::State &state) {
 
   zkbench::BenchmarkContext::SetMetadata(
       benchName,
-      {{"field", "M31"}, {"iterations", 10000}, {"packed", kIsPacked}});
+      {{"field", "BabyBear"}, {"iterations", 10000}, {"packed", kIsPacked}});
 }
 
 BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/false)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("permute_10000");
+    ->Name("poseidon2_permute_babybear");
 BENCHMARK_TEMPLATE(BM_permute_10000_benchmark, /*kIsPacked=*/true)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("permute_packed_10000");
+    ->Name("poseidon2_permute_babybear_packed");
 
 } // namespace
 } // namespace mlir::prime_ir::benchmark

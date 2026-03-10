@@ -56,7 +56,7 @@ void BM_mul_benchmark(::benchmark::State &state) {
 
   std::string outputHash = zkbench::ComputeArrayHash((*output).data, 1);
 
-  const char *benchName = kIsMont ? "mont_mul" : "mul";
+  const char *benchName = kIsMont ? "mul_mont" : "mul";
   zkbench::BenchmarkContext::SetTestVectors(benchName, inputHash, outputHash,
                                             /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
@@ -68,7 +68,7 @@ BENCHMARK_TEMPLATE(BM_mul_benchmark, /*kIsMont=*/false)
     ->Name("mul");
 BENCHMARK_TEMPLATE(BM_mul_benchmark, /*kIsMont=*/true)
     ->Unit(::benchmark::kMillisecond)
-    ->Name("mont_mul");
+    ->Name("mul_mont");
 
 } // namespace
 } // namespace mlir::prime_ir::benchmark
