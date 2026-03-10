@@ -385,6 +385,47 @@ func.func @test_mul_tensor_by_one_is_self(%arg0: tensor<2x!QF>) -> tensor<2x!QF>
 }
 
 //===----------------------------------------------------------------------===//
+// Strength reduction (mul by small constant -> double/neg)
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_mul_by_two_is_double
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_two_is_double(%arg0: !QF) -> !QF {
+  // x * 2 -> double(x) where 2 = [2, 0] in EF
+  %c2 = field.constant [2, 0] : !QF
+  %0 = field.mul %arg0, %c2 : !QF
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: return %[[D]] : [[T]]
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mul_by_three
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_by_three(%arg0: !QF) -> !QF {
+  // x * 3 -> x + double(x)
+  %c3 = field.constant [3, 0] : !QF
+  %0 = field.mul %arg0, %c3 : !QF
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[R:.*]] = field.add %[[ARG0]], %[[D]] : [[T]]
+  // CHECK: return %[[R]] : [[T]]
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_tensor_mul_by_two_is_double
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_tensor_mul_by_two_is_double(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+  // Tensor: x * 2 -> double(x) where all EF elements are [2, 0]
+  %c2 = field.constant dense<[[2, 0], [2, 0]]> : tensor<2x!QF>
+  %0 = field.mul %arg0, %c2 : tensor<2x!QF>
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: return %[[D]] : [[T]]
+  return %0 : tensor<2x!QF>
+}
+
+//===----------------------------------------------------------------------===//
 // BitcastOp folding
 //===----------------------------------------------------------------------===//
 

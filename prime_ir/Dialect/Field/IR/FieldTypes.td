@@ -47,6 +47,12 @@ def FieldTypeInterface : TypeInterface<"FieldTypeInterface"> {
       "For simple extensions like ef<2x PF>, returns {2}. "
       "For tower extensions like ef<3x ef<2x PF>>, returns {3, 2}.",
       "SmallVector<int64_t>", "getAttrShape">,
+    InterfaceMethod<
+      "Returns the total degree over the base prime field. "
+      "For prime fields, returns 1. "
+      "For ef<2x PF>, returns 2. "
+      "For ef<3x ef<2x PF>>, returns 6.",
+      "unsigned", "getDegreeOverPrime">,
   ];
 }
 
@@ -188,12 +194,6 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     "Attribute": $nonResidue  // IntegerAttr for simple, DenseIntElementsAttr for tower
   );
   let extraClassDeclaration = [{
-    // Returns the total degree over the underlying prime field.
-    // For Fp2 over Fp: returns 2
-    // For Fp6 = (Fp2)^3: returns 6
-    // For Fp12 = (Fp6)^2 = ((Fp2)^3)^2: returns 12
-    unsigned getDegreeOverPrime() const;
-
     // Returns the underlying prime field at the base of the tower.
     PrimeFieldType getBasePrimeField() const;
 
