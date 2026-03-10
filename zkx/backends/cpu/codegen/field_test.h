@@ -18,6 +18,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <optional>
+#include <type_traits>
 #include <vector>
 
 #include "absl/log/check.h"
@@ -635,6 +636,37 @@ class FieldTest : public CpuKernelEmitterTest {
   }
 
  protected:
+  // Regression test: bit_reverse output consumed by broadcast+multiply fusion.
+  // Without the linalg.generic broadcast fix, CSE merges tensor.empty ops
+  // after field-to-mod-arith expansion, causing the broadcast to overwrite the
+  // bit-reverse output before the multiply reads it.
+  // See https://github.com/fractalyze/zkx/pull/338.
+  void SetUpBitReverseMultiplyFusion() {
+    constexpr static int64_t N = 8;
+
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %x = $0[$1] parameter(0)
+        %s = $0[] parameter(1)
+
+        %br = $0[$1] bit-reverse(%x), dimensions={0}
+        %bs = $0[$1] broadcast(%s)
+        ROOT %ret = $0[$1] multiply(%br, %bs)
+      }
+    )",
+                                 x_typename_, N);
+
+    std::vector<F> x = base::CreateVector(N, []() { return F::Random(); });
+    F s = F::Random();
+    literals_.push_back(LiteralUtil::CreateR1<F>(x));
+    literals_.push_back(LiteralUtil::CreateR0<F>(s));
+
+    Literal br = LiteralUtil::CreateR1<F>(x).BitReverse({0});
+    std::vector<F> expected = base::CreateVector(
+        N, [&](size_t i) { return br.Get<F>({static_cast<int64_t>(i)}) * s; });
+    expected_literal_ = LiteralUtil::CreateR1<F>(expected);
+  }
+
   void SetUpDynamicUpdateSliceBug() {
     hlo_text_ = absl::Substitute(R"(
       ENTRY %main {

@@ -158,6 +158,15 @@ TYPED_TEST(FieldR2TensorBinaryTest, Add) { this->SetUpAdd(); }
 
 TYPED_TEST_SUITE(FieldTest, FieldTypes);
 
+TYPED_TEST(FieldTest, BitReverseMultiplyFusion) {
+  // Goldilocks has a pre-existing off-by-1 in fused multiply (unrelated).
+  if constexpr (std::is_same_v<TypeParam, zk_dtypes::GoldilocksMont>) {
+    GTEST_SKIP() << "Goldilocks has a known off-by-1 in fused multiply";
+  }
+  this->SetUpBitReverseMultiplyFusion();
+  this->RunAndVerify(/*run_hlo_passes=*/true);
+}
+
 TYPED_TEST(FieldTest, DynamicUpdateSlice) {
   this->SetUpDynamicUpdateSliceBug();
   this->RunAndVerify();

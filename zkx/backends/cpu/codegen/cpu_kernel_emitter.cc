@@ -228,7 +228,7 @@ void AddPasses(mlir::PassManager& pm, CpuKernelEmitter::PassFlag& flag) {
   if (flag.enable_linalg_generalize_named_ops) {
     VLOG(2) << "add pass: -linalg-generalize-named-ops";
     flag.enable_linalg_to_parallel_loops = true;
-    pm.addPass(mlir::createLinalgNamedOpConversionPass());
+    pm.addPass(mlir::createLinalgGeneralizeNamedOpsPass());
   }
 
   maybe_add_elementwise_to_linalg(pm, flag);
@@ -1172,7 +1172,7 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitPairingCheckOp(
 absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitBroadcastOp(
     const HloInstruction* instr, EmitterLocOpBuilder& b, mlir::Value input,
     absl::Span<const int64_t> source_dimensions) {
-  pass_flag_.enable_linalg_to_parallel_loops = true;
+  pass_flag_.enable_linalg_generalize_named_ops = true;
 
   Shape scaled_shape = GetScaledFusionShape(instr->shape());
   int64_t rank = scaled_shape.rank();
