@@ -118,13 +118,13 @@ absl::Status SetupBenchmark(const char* mlir_path,
                              output.size_bytes());
   }
 
-  zkbench::BenchmarkContext::SetTestVectors("BM_Ntt", input_hash, output_hash,
-                                            verified);
+  zkbench::BenchmarkContext::SetTestVectors("ntt_forward", input_hash,
+                                            output_hash, verified);
   zkbench::BenchmarkContext::SetMetadata(
-      "BM_Ntt", {{"field", "BabyBearMont"},
-                 {"log_size", 20},
-                 {"size", 1048576},
-                 {"platform", std::string(platform_name)}});
+      "ntt_forward", {{"field", "BabyBearMont"},
+                      {"log_size", 20},
+                      {"size", 1048576},
+                      {"platform", std::string(platform_name)}});
 
   return absl::OkStatus();
 }
@@ -142,7 +142,7 @@ void BM_Ntt(benchmark::State& state) {
   state.counters["items_per_second"] = benchmark::Counter(
       static_cast<double>(state.iterations()), benchmark::Counter::kIsRate);
 }
-BENCHMARK(BM_Ntt);
+BENCHMARK(BM_Ntt)->Name("ntt_forward");
 
 // Extracts --platform=<name> and the positional MLIR path from argv,
 // removing them so Google Benchmark doesn't see unknown flags.

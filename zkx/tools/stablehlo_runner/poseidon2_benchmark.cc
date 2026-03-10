@@ -108,12 +108,12 @@ absl::Status SetupBenchmark(const char* mlir_path,
   std::string output_hash = zkbench::ComputeHash(
       static_cast<const uint8_t*>(output.untyped_data()), output.size_bytes());
 
-  zkbench::BenchmarkContext::SetTestVectors(
-      "BM_Poseidon2Permutation", input_hash, output_hash, /*verified=*/true);
+  zkbench::BenchmarkContext::SetTestVectors("poseidon2_permute", input_hash,
+                                            output_hash, /*verified=*/true);
   zkbench::BenchmarkContext::SetMetadata(
-      "BM_Poseidon2Permutation", {{"field", "BabyBearMont"},
-                                  {"width", 16},
-                                  {"platform", std::string(platform_name)}});
+      "poseidon2_permute", {{"field", "BabyBearMont"},
+                            {"width", 16},
+                            {"platform", std::string(platform_name)}});
 
   return absl::OkStatus();
 }
@@ -131,7 +131,7 @@ void BM_Poseidon2Permutation(benchmark::State& state) {
   state.counters["items_per_second"] = benchmark::Counter(
       static_cast<double>(state.iterations()), benchmark::Counter::kIsRate);
 }
-BENCHMARK(BM_Poseidon2Permutation);
+BENCHMARK(BM_Poseidon2Permutation)->Name("poseidon2_permute");
 
 // Extracts --platform=<name> and the positional MLIR path from argv,
 // removing them so Google Benchmark doesn't see unknown flags.

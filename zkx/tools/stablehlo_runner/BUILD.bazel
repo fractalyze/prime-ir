@@ -191,6 +191,12 @@ zkx_cc_unittest(
 zkx_cc_binary(
     name = "icicle_sumcheck_benchmark",
     srcs = ["icicle_sumcheck_benchmark.cc"],
+    data = [
+        "icicle_sumcheck_fs_20.stablehlo.mlir",
+        "icicle_sumcheck_fs_22.stablehlo.mlir",
+        "icicle_sumcheck_fs_24.stablehlo.mlir",
+        "icicle_sumcheck_fs_26.stablehlo.mlir",
+    ],
     deps = [
         ":stablehlo_utils",
         ":sumcheck_testlib",

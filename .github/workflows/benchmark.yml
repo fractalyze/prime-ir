@@ -3,9 +3,15 @@ name: Benchmark
 permissions: read-all
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
+    paths-ignore:
+      - "*.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/**"
+      - ".gemini/**"
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -27,7 +33,8 @@ jobs:
             -c opt \
             //zkx/tools/stablehlo_runner:poseidon2_benchmark
 
-      - uses: fractalyze/benchmark-action@main
+      - name: Run poseidon2_permute (CPU)
+        uses: fractalyze/benchmark-action@v2
         with:
           benchmark_cmd: |
             ./bazel-bin/zkx/tools/stablehlo_runner/poseidon2_benchmark \
@@ -36,19 +43,20 @@ jobs:
               --benchmark_repetitions=10 \
               --benchmark_min_time=0.5s \
               --zkbench_out=benchmark_results.json
-          implementation: zkx-poseidon2-cpu
+          repo: zkx
+          device: cpu
+          results_file: benchmark_results.json
           regression_threshold: "0.10"
           rolling_window: "5"
-          results_dir: benchmark_data/cpu
-          baseline_path: benchmark_data/cpu/baseline.json
+          store_results: ${{ github.ref == 'refs/heads/main' }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
           slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
-          store_results: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: benchmark-zkx-poseidon2-cpu
+          name: benchmark-poseidon2-cpu
           path: benchmark_results.json
           retention-days: 90
 
@@ -68,7 +76,8 @@ jobs:
             -c opt \
             //zkx/tools/stablehlo_runner:ntt_benchmark
 
-      - uses: fractalyze/benchmark-action@main
+      - name: Run ntt_forward (CPU)
+        uses: fractalyze/benchmark-action@v2
         with:
           benchmark_cmd: |
             ./bazel-bin/zkx/tools/stablehlo_runner/ntt_benchmark \
@@ -77,19 +86,20 @@ jobs:
               --benchmark_repetitions=10 \
               --benchmark_min_time=0.5s \
               --zkbench_out=benchmark_results.json
-          implementation: zkx-ntt-cpu
+          repo: zkx
+          device: cpu
+          results_file: benchmark_results.json
           regression_threshold: "0.10"
           rolling_window: "5"
-          results_dir: benchmark_data/cpu
-          baseline_path: benchmark_data/cpu/baseline.json
+          store_results: ${{ github.ref == 'refs/heads/main' }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
           slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
-          store_results: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: benchmark-zkx-ntt-cpu
+          name: benchmark-ntt-cpu
           path: benchmark_results.json
           retention-days: 90
 
@@ -110,7 +120,8 @@ jobs:
             -c opt \
             //zkx/tools/stablehlo_runner:poseidon2_benchmark
 
-      - uses: fractalyze/benchmark-action@main
+      - name: Run poseidon2_permute (GPU)
+        uses: fractalyze/benchmark-action@v2
         with:
           benchmark_cmd: |
             ./bazel-bin/zkx/tools/stablehlo_runner/poseidon2_benchmark \
@@ -119,20 +130,20 @@ jobs:
               --benchmark_repetitions=10 \
               --benchmark_min_time=0.5s \
               --zkbench_out=benchmark_results.json
-          implementation: zkx-poseidon2-gpu
-          tags: "gpu"
+          repo: zkx
+          device: gpu
+          results_file: benchmark_results.json
           regression_threshold: "0.10"
           rolling_window: "5"
-          results_dir: benchmark_data/gpu
-          baseline_path: benchmark_data/gpu/baseline.json
+          store_results: ${{ github.ref == 'refs/heads/main' }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
           slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
-          store_results: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: benchmark-zkx-poseidon2-gpu
+          name: benchmark-poseidon2-gpu
           path: benchmark_results.json
           retention-days: 90
 
@@ -153,7 +164,8 @@ jobs:
             -c opt \
             //zkx/tools/stablehlo_runner:ntt_benchmark
 
-      - uses: fractalyze/benchmark-action@main
+      - name: Run ntt_forward (GPU)
+        uses: fractalyze/benchmark-action@v2
         with:
           benchmark_cmd: |
             ./bazel-bin/zkx/tools/stablehlo_runner/ntt_benchmark \
@@ -162,31 +174,26 @@ jobs:
               --benchmark_repetitions=10 \
               --benchmark_min_time=0.5s \
               --zkbench_out=benchmark_results.json
-          implementation: zkx-ntt-gpu
-          tags: "gpu"
+          repo: zkx
+          device: gpu
+          results_file: benchmark_results.json
           regression_threshold: "0.10"
           rolling_window: "5"
-          results_dir: benchmark_data/gpu
-          baseline_path: benchmark_data/gpu/baseline.json
+          store_results: ${{ github.ref == 'refs/heads/main' }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
           slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
-          store_results: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: benchmark-zkx-ntt-gpu
+          name: benchmark-ntt-gpu
           path: benchmark_results.json
           retention-days: 90
 
   benchmark-sumcheck-gpu:
     runs-on: [self-hosted, zkx]
     needs: benchmark-ntt-gpu
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        log_size: [20, 22, 24, 26]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -201,28 +208,28 @@ jobs:
             -c opt \
             //zkx/tools/stablehlo_runner:icicle_sumcheck_benchmark
 
-      - uses: fractalyze/benchmark-action@main
+      - name: Run sumcheck_icicle (GPU)
+        uses: fractalyze/benchmark-action@v2
         with:
           benchmark_cmd: |
             ./bazel-bin/zkx/tools/stablehlo_runner/icicle_sumcheck_benchmark \
-              zkx/tools/stablehlo_runner/icicle_sumcheck_fs_${{ matrix.log_size }}.stablehlo.mlir \
               --platform=gpu \
               --benchmark_repetitions=10 \
               --benchmark_min_time=0.5s \
               --zkbench_out=benchmark_results.json
-          implementation: zkx-icicle-sumcheck-l${{ matrix.log_size }}-gpu
-          tags: "gpu"
+          repo: zkx
+          device: gpu
+          results_file: benchmark_results.json
           regression_threshold: "0.10"
           rolling_window: "5"
-          results_dir: benchmark_data/gpu
-          baseline_path: benchmark_data/gpu/baseline.json
+          store_results: ${{ github.ref == 'refs/heads/main' }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           dashboard_token: ${{ secrets.DASHBOARD_TOKEN }}
           slack_webhook: ${{ secrets.SLACK_BENCHMARK_WEBHOOK }}
-          store_results: ${{ github.ref == 'refs/heads/main' }}
 
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: benchmark-zkx-icicle-sumcheck-l${{ matrix.log_size }}-gpu
+          name: benchmark-sumcheck-gpu
           path: benchmark_results.json
           retention-days: 90
