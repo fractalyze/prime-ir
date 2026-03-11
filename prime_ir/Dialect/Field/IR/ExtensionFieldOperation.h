@@ -642,9 +642,12 @@ private:
       }
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     } else if constexpr (N == 4) {
-      // ToomCook enabled for non-tower quartic extensions
-      // (caching conflict resolved via GetVandermondeInverseMatrix override)
-      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+      auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      // kCustom saves 1 mul, 1 add, 2 doubles vs Karatsuba for quartic square.
+      // ToomCook only for multi-limb fields.
+      return (limbNums > 1) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
+                            : zk_dtypes::ExtensionFieldMulAlgorithm::kCustom;
     } else {
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     }
@@ -654,7 +657,10 @@ private:
     if constexpr (kIsTower) {
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     } else if constexpr (N == 4) {
-      return zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook;
+      auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
+      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      return (limbNums > 1) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
+                            : zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     } else {
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     }

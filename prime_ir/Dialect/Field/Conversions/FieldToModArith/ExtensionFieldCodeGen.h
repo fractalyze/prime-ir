@@ -181,19 +181,32 @@ public:
 
   BaseFieldT NonResidue() const { return createBaseFieldCodeGen(nonResidue); }
 
-  // Use ToomCook for quartic extensions (more efficient), Karatsuba otherwise.
-  // TODO(junbeomlee): Consider using kCustom algorithm based on limb count
-  // and non-residue value, which can be obtained from the type.
-  static constexpr zk_dtypes::ExtensionFieldMulAlgorithm kDefaultAlgorithm =
-      (N == 4) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
-               : zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
-
+  // Limb-aware algorithm selection for quartic extensions.
+  // ToomCook's naive Vandermonde 7×7 matrix multiply generates ~30+ non-trivial
+  // interpolation muls, which only pays off for multi-limb fields where each
+  // base mul is O(L²). For single-limb fields (Babybear, Koalabear,
+  // Mersenne31), Karatsuba's ~13 muls beats ToomCook's ~59 total ops.
   zk_dtypes::ExtensionFieldMulAlgorithm GetMulAlgorithm() const {
-    return kDefaultAlgorithm;
+    if constexpr (N == 4) {
+      auto efType = cast<ExtensionFieldType>(value.getType());
+      auto pfType = efType.getBasePrimeField();
+      unsigned limbNums = (pfType.getStorageBitWidth() + 63) / 64;
+      return (limbNums > 1) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
+                            : zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
+    }
+    return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
   }
 
   zk_dtypes::ExtensionFieldMulAlgorithm GetSquareAlgorithm() const {
-    return kDefaultAlgorithm;
+    if constexpr (N == 4) {
+      auto efType = cast<ExtensionFieldType>(value.getType());
+      auto pfType = efType.getBasePrimeField();
+      unsigned limbNums = (pfType.getStorageBitWidth() + 63) / 64;
+      // kCustom saves 1 mul, 1 add, 2 doubles vs Karatsuba for quartic square.
+      return (limbNums > 1) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
+                            : zk_dtypes::ExtensionFieldMulAlgorithm::kCustom;
+    }
+    return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
   }
 
   // Create an integer constant in the base field.
