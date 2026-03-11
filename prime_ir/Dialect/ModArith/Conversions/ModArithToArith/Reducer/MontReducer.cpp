@@ -82,6 +82,14 @@ Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
   auto cmod = createModulusConst(lhs.getType());
   auto sub = b.create<arith::SubIOp>(lhs, rhs);
   auto add = b.create<arith::AddIOp>(sub, cmod);
+  APInt mod = cast<IntegerAttr>(modAttr).getValue();
+  if (mod.isSignBitSet()) {
+    // When p > 2^(w-1), diff + p can overflow, so minui gives wrong results.
+    // Fall back to cmpi + select.
+    auto underflowed =
+        b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, lhs, rhs);
+    return b.create<arith::SelectOp>(underflowed, add, sub).getResult();
+  }
   return b.create<arith::MinUIOp>(sub, add).getResult();
 }
 
