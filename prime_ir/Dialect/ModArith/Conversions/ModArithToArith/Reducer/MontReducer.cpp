@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/MontReducer.h"
 
+#include "llvm/Support/MathExtras.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -218,6 +219,39 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   // Final conditional subtraction: if (`tLow` >= `modulus`) then subtract
   // `modulus`.
   return getCanonicalFromExtended(tLow);
+}
+
+Value MontReducer::reduceFromWiderType(Value accumulated, unsigned numLeaves) {
+  APInt modulus = cast<IntegerAttr>(modAttr).getValue();
+  unsigned storageWidth = modulus.getBitWidth();
+  Type widerType = accumulated.getType();
+  unsigned widerWidth =
+      cast<IntegerType>(getElementTypeOrSelf(widerType)).getWidth();
+
+  // Create modulus constant in wider type.
+  APInt wideModulus = modulus.zext(widerWidth);
+
+  // Binary conditional subtraction: ceil(log₂(numLeaves)) steps.
+  // After numLeaves adds of values in [0, p), the sum is in [0, numLeaves * p).
+  // Each step subtracts p * 2ⁱ if the result >= p * 2ⁱ.
+  unsigned numSteps = llvm::Log2_64_Ceil(numLeaves);
+  Value result = accumulated;
+  for (int i = static_cast<int>(numSteps) - 1; i >= 0; --i) {
+    APInt threshold = wideModulus.shl(i);
+    TypedAttr thresholdAttr =
+        b.getIntegerAttr(getElementTypeOrSelf(widerType), threshold);
+    if (auto shapedType = dyn_cast<ShapedType>(widerType))
+      thresholdAttr = SplatElementsAttr::get(shapedType, thresholdAttr);
+    Value thresholdConst = b.create<arith::ConstantOp>(thresholdAttr);
+    auto sub = b.create<arith::SubIOp>(result, thresholdConst);
+    result = b.create<arith::MinUIOp>(sub, result).getResult();
+  }
+
+  // Truncate back to storage type.
+  Type storageType = IntegerType::get(b.getContext(), storageWidth);
+  if (auto shapedType = dyn_cast<ShapedType>(widerType))
+    storageType = shapedType.cloneWith(shapedType.getShape(), storageType);
+  return b.create<arith::TruncIOp>(storageType, result);
 }
 
 Value MontReducer::reduce(Value tLow, Value tHigh, bool lazy) {

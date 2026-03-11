@@ -44,6 +44,9 @@ def ModArithToArith : Pass<"mod-arith-to-arith", "ModuleOp"> {
   let options = [
     Option<"lazyReduction", "lazy-reduction", "bool", "false",
       "Enable lazy reduction optimization via integer range analysis">,
+    Option<"minChainLengthForWidening", "min-chain-for-widen", "unsigned",
+           /*default=*/"0",
+           "Minimum add chain length to trigger widening optimization (0=disabled)">,
   ];
 }
 
