@@ -446,28 +446,32 @@ public:
     return *this = *this / other;
   }
 
-  // BaseField compound assignment operators.
-  template <typename B = BaseFieldT,
-            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
-  ExtensionFieldOperation &operator+=(const B &other) {
-    return *this = *this + other;
-  }
-  template <typename B = BaseFieldT,
-            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
-  ExtensionFieldOperation &operator-=(const B &other) {
-    return *this = *this - other;
-  }
-
-  // Bring base class operators into scope. Without this, the specialized
-  // class's operator*(const Derived&) hides the grandparent's operators,
-  // and our member operator/ hides the inherited operator/(Derived).
+  // Bring CRTP base same-type operators into scope. Member BaseField operators
+  // below would otherwise hide the inherited Ext ⊕ Ext overloads.
+  using CRTPBase::operator+;
+  using CRTPBase::operator-;
   using CRTPBase::operator*;
   using CRTPBase::operator/;
 
-  // BaseField scalar multiplication — explicit definition because the
-  // specialized CRTP class's operator*(Derived) hides the grandparent's
-  // operator*(BaseField) and the using declaration above only recovers the
-  // immediate parent's overloads, not the grandparent's.
+  // BaseField scalar addition — only affects the constant coefficient.
+  template <typename B = BaseFieldT,
+            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
+  ExtensionFieldOperation operator+(const B &scalar) const {
+    std::array<BaseFieldT, N> result = coeffs;
+    result[0] = result[0] + scalar;
+    return fromUnchecked(result, efType);
+  }
+
+  // BaseField scalar subtraction — only affects the constant coefficient.
+  template <typename B = BaseFieldT,
+            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
+  ExtensionFieldOperation operator-(const B &scalar) const {
+    std::array<BaseFieldT, N> result = coeffs;
+    result[0] = result[0] - scalar;
+    return fromUnchecked(result, efType);
+  }
+
+  // BaseField scalar multiplication — multiplies every coefficient.
   template <typename B = BaseFieldT,
             std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
   ExtensionFieldOperation operator*(const B &scalar) const {
@@ -483,6 +487,18 @@ public:
             std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
   ExtensionFieldOperation operator/(const B &scalar) const {
     return *this * scalar.inverse();
+  }
+
+  // BaseField compound assignment operators.
+  template <typename B = BaseFieldT,
+            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
+  ExtensionFieldOperation &operator+=(const B &other) {
+    return *this = *this + other;
+  }
+  template <typename B = BaseFieldT,
+            std::enable_if_t<std::is_same_v<B, BaseFieldT>> * = nullptr>
+  ExtensionFieldOperation &operator-=(const B &other) {
+    return *this = *this - other;
   }
 
   ExtensionFieldOperation dbl() const { return this->Double(); }
