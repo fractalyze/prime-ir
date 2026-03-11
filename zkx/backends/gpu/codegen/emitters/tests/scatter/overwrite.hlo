@@ -1,6 +1,6 @@
 // RUN: fusion_to_mlir %s | emitters_opt -zkx-gpu-test-optimize |\
 // RUN:   FileCheck %s
-// TODO(batzor): Enable gpu_test_correctness. The emitter calls scatter_indices
+// TODO(batzor): Enable test_correctness. The emitter calls scatter_indices
 // unconditionally for all threads before the bounds check, causing OOB reads.
 // XLA has the same pattern but doesn't crash. Needs investigation.
 // DISABLED: gpu_test_correctness %s

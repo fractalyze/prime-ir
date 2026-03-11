@@ -508,42 +508,51 @@ void EmitNaiveImplementation(ImplicitLocOpBuilder& b,
       emitters::ApplyIndexing(thread_id_to_update_id_map, thread_and_block_ids,
                               {}, b)
           .front();
+  // NOTE(jeong0982): This outer bounds guard was not in the reference commit
+  // but is present in current XLA. Without it, ExtractOffsets is called with
+  // out-of-bounds thread IDs when the grid size exceeds num_slices.
+  Value index_id_in_bounds = b.createOrFold<arith::CmpIOp>(
+      arith::CmpIPredicate::ult, thread_id_to_index_id_value,
+      b.create<arith::ConstantIndexOp>(description.num_slices));
+  auto result = EmitUpdateIf(
+      b, index_id_in_bounds, {output_tensor},
+      [&](ImplicitLocOpBuilder& outer_nested_b) -> SmallVector<Value> {
+        SmallVector<Value, 4> update_offsets =
+            helper.ExtractOffsets(outer_nested_b, thread_id_to_index_id_value);
 
-  SmallVector<Value, 4> update_offsets =
-      helper.ExtractOffsets(b, thread_id_to_index_id_value);
+        Value in_bounds =
+            EmitBoundsCheck(outer_nested_b, description.slice_shape,
+                            description.output_shape, update_offsets);
 
-  Value in_bounds = EmitBoundsCheck(b, description.slice_shape,
-                                    description.output_shape, update_offsets);
-
-  Value predicated_update =
-      EmitUpdateIf(
-          b, in_bounds, {output_tensor},
-          [&](ImplicitLocOpBuilder& nested_b) -> SmallVector<Value> {
-            return EmitZkxLoopOp(
-                nested_b, thread_and_block_ids, {output_tensor}, updates_map,
-                [&](ImplicitLocOpBuilder& update_loop_b,
-                    ValueRange symbol_values, ValueRange map_results,
-                    ValueRange output_tensors) -> SmallVector<Value> {
-                  // Extract update element.
-                  auto update_elem =
-                      helper.GetUpdateElement(update_loop_b, map_results);
-                  auto output_indices = std::move(update_offsets);
-                  int64_t output_rank = description.output_shape.size();
-                  output_indices =
-                      PadWithZeros(output_indices, output_rank, update_loop_b);
-                  for (int i = 0; i < output_indices.size(); ++i) {
-                    output_indices[i] = update_loop_b.create<arith::AddIOp>(
-                        map_results[i + 1], output_indices[i]);
-                  }
-                  Value output_tensor = output_tensors.front();
-                  Value updated_output = helper.EmitScatterComputation(
-                      update_loop_b, output_indices, update_elem,
-                      output_tensor);
-                  return {updated_output};
-                });
-          })
-          .front();
-  b.create<ReturnOp>(predicated_update);
+        ValueRange predicated_update = EmitUpdateIf(
+            outer_nested_b, in_bounds, {output_tensor},
+            [&](ImplicitLocOpBuilder& nested_b) -> SmallVector<Value> {
+              return EmitZkxLoopOp(
+                  nested_b, thread_and_block_ids, {output_tensor}, updates_map,
+                  [&](ImplicitLocOpBuilder& update_loop_b,
+                      ValueRange symbol_values, ValueRange map_results,
+                      ValueRange output_tensors) -> SmallVector<Value> {
+                    // Extract update element.
+                    auto update_elem =
+                        helper.GetUpdateElement(update_loop_b, map_results);
+                    auto output_indices = std::move(update_offsets);
+                    int64_t output_rank = description.output_shape.size();
+                    output_indices = PadWithZeros(output_indices, output_rank,
+                                                  update_loop_b);
+                    for (int i = 0; i < output_indices.size(); ++i) {
+                      output_indices[i] = update_loop_b.create<arith::AddIOp>(
+                          map_results[i + 1], output_indices[i]);
+                    }
+                    Value output_tensor = output_tensors.front();
+                    Value updated_output = helper.EmitScatterComputation(
+                        update_loop_b, output_indices, update_elem,
+                        output_tensor);
+                    return {updated_output};
+                  });
+            });
+        return predicated_update;
+      });
+  b.create<ReturnOp>(result.front());
 }
 
 absl::Status ScatterWithDistributedUpdates::EmitEntryFunctionImpl(
