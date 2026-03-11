@@ -27,6 +27,7 @@ limitations under the License.
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/Passes.h"
 
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "stablehlo/dialect/Register.h"
 #include "stablehlo/dialect/Version.h"
@@ -102,6 +103,7 @@ absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> ParseMlirModuleString(
   // TODO(chokobole): Uncomment this. Dependency: sdy
   // mlir::sdy::registerAllDialects(registry);
   mlir::stablehlo::registerAllDialects(registry);
+  registry.insert<mlir::prime_ir::elliptic_curve::EllipticCurveDialect>();
   registry.insert<mlir::prime_ir::field::FieldDialect>();
   context.appendDialectRegistry(registry);
 

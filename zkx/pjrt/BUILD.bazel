@@ -179,6 +179,7 @@ zkx_cc_library(
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:ShapeDialect",
         "@llvm-project//mlir:Transforms",
+        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "@prime_ir//prime_ir/Dialect/Field/IR:Field",
         "@stablehlo//stablehlo/dialect:register",
         "@stablehlo//stablehlo/dialect:version",
