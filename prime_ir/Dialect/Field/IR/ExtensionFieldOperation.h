@@ -378,8 +378,7 @@ public:
   // For Fp4 = (Fp2)^2: [a0, a1, a2, a3] -> [[a0,a1], [a2,a3]]
   static ExtensionFieldOperation
   fromFlatPrimeCoeffs(ArrayRef<APInt> flatCoeffs, ExtensionFieldType efType) {
-    unsigned expectedSize = efType.getDegreeOverPrime();
-    assert(flatCoeffs.size() == expectedSize &&
+    assert(flatCoeffs.size() == efType.getDegreeOverPrime() &&
            "Coefficient count mismatch for extension field");
 
     std::array<BaseFieldT, N> newCoeffs;
