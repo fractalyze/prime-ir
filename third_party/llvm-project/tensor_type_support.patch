@@ -5,14 +5,14 @@ index 22a25fd1a5af..1832036990e4 100644
 @@ -41,6 +41,10 @@
  #include <optional>
  #include <vector>
- 
+
 +#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 +#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 +#include "prime_ir/IR/Attributes.h"
 +
  using namespace mlir;
  using namespace mlir::tensor;
- 
+
 @@ -53,6 +57,11 @@ using llvm::mod;
  Operation *TensorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
@@ -27,7 +27,7 @@ index 22a25fd1a5af..1832036990e4 100644
    if (complex::ConstantOp::isBuildableWith(value, type))
 @@ -1465,8 +1474,10 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
  }
- 
+
  OpFoldResult FromElementsOp::fold(FoldAdaptor adaptor) {
 -  if (!llvm::is_contained(adaptor.getElements(), nullptr))
 -    return DenseElementsAttr::get(getType(), adaptor.getElements());
@@ -37,9 +37,54 @@ index 22a25fd1a5af..1832036990e4 100644
 +  }
    return {};
  }
- 
-@@ -4052,7 +4063,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
- 
+
+@@ -1623,9 +1634,12 @@
+ }
+
+ OpFoldResult GatherOp::fold(FoldAdaptor adaptor) {
++  auto resultType = cast<TensorType>(
++      prime_ir::maybeConvertPrimeIRToBuiltinType(
++          cast<ShapedType>(getResult().getType())));
+   if (OpFoldResult reshapedSource = reshapeConstantSource(
+-          llvm::dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
+-          getResult().getType()))
++          dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
++          resultType))
+     return reshapedSource;
+   return {};
+ }
+@@ -1864,9 +1878,12 @@
+ }
+
+ OpFoldResult ReshapeOp::fold(FoldAdaptor adaptor) {
++  auto resultType = cast<TensorType>(
++      prime_ir::maybeConvertPrimeIRToBuiltinType(
++          cast<ShapedType>(getResult().getType())));
+   if (OpFoldResult reshapedSource = reshapeConstantSource(
+-          llvm::dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
+-          getResult().getType()))
++          dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
++          resultType))
+     return reshapedSource;
+
+   // If the producer of operand 'source' is another 'tensor.reshape' op, use the
+@@ -2773,9 +2790,12 @@
+ }
+
+ OpFoldResult ExtractSliceOp::fold(FoldAdaptor adaptor) {
++  auto resultType = cast<TensorType>(
++      prime_ir::maybeConvertPrimeIRToBuiltinType(
++          cast<ShapedType>(getResult().getType())));
+   if (OpFoldResult reshapedSource = reshapeConstantSource(
+-          llvm::dyn_cast_if_present<SplatElementsAttr>(adaptor.getSource()),
+-          getResult().getType()))
++          dyn_cast_if_present<SplatElementsAttr>(adaptor.getSource()),
++          resultType))
+     return reshapedSource;
+   if (getSourceType() == getType() &&
+       succeeded(foldIdentityOffsetSizeAndStrideOpInterface(*this, getType())))
+@@ -4052,7 +4072,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+
    // SplatElementsAttr::get treats single value for second arg as being a
    // splat.
 -  return SplatElementsAttr::get(getType(), {constOperand});
@@ -47,7 +92,7 @@ index 22a25fd1a5af..1832036990e4 100644
 +      cast<ShapedType>(prime_ir::maybeConvertPrimeIRToBuiltinType(getType()));
 +  return SplatElementsAttr::get(destType, {constOperand});
  }
- 
+
  //===----------------------------------------------------------------------===//
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 index 7829b11da096..e86158d51727 100644
@@ -62,4 +107,4 @@ index 7829b11da096..e86158d51727 100644
 +        "@prime_ir//prime_ir/IR:Attributes",
      ],
  )
- 
+
