@@ -74,65 +74,47 @@ limitations under the License.
 #include "zkx/util.h"
 
 namespace zkx::cpu {
-
 namespace {
 
 // A module identifier (prefix) for emitted LLVM modules.
 constexpr std::string_view kZkxModuleIdentifier = "__compute_module";
 
-// Align buffers to XLA:CPU minimal alignment.
-int64_t memory_alignment(LogicalBuffer::Color) {
-  return cpu_function_runtime::MinAlign();
+// Returns a global (per-process) thread pool for ZKX CPU compilation tasks.
+tsl::thread::ThreadPool* GetCompilationThreadPool() {
+  // LLVM compilation has a lot of memory-bound pointer chasing and not
+  // so much CPU-bound work. Based on profiling a few examples, 32 threads seems
+  // to be enough to achieve maximum parallel compilation speedup.
+  static constexpr int kMaxCompilationThreads = 32;
+  static auto* thread_pool = absl::IgnoreLeak(new tsl::thread::ThreadPool(
+      tsl::Env::Default(), "zkx-cpu-llvm-codegen",
+      std::min(kMaxCompilationThreads, tsl::port::MaxParallelism())));
+  return thread_pool;
 }
 
-std::pair<LlvmCompiler::ModuleHook, LlvmCompiler::ModuleHook> GetIRModuleHooks(
-    const HloModule& hlo_module,
-    const LlvmCompiler::ModuleHook& user_pre_optimization_hook,
-    const LlvmCompiler::ModuleHook& user_post_optimization_hook) {
-  // Create the IR hooks. If applicable, each IR hook does the following:
-  //
-  //  * Calls the user supplied module hook.
-  //  * Writes out the IR to a file in the output directory designated by
-  //    --zkx_dump_to
-  const HloModule* hlo_module_ptr = &hlo_module;
-  auto hook = [user_pre_optimization_hook, user_post_optimization_hook,
-               hlo_module_ptr](bool optimized,
-                               const llvm::Module& llvm_module) {
-    const auto& user_hook =
-        !optimized ? user_pre_optimization_hook : user_post_optimization_hook;
-    if (user_hook) {
-      user_hook(llvm_module);
-    }
-
-    // Include LLVM module identifier suffix in case `llvm_module` is just a
-    // part of the original LLVM module constructed by the ZKX.
-    std::string_view id = llvm_module.getModuleIdentifier();
-    size_t pos = std::min(id.size(), 1 + kZkxModuleIdentifier.size());
-    DumpIrIfEnabled(*hlo_module_ptr, llvm_module, optimized,
-                    /*filename_suffix=*/id.substr(pos));
+// Returns task runner that uses the global compilation thread pool.
+JitCompiler::TaskRunner GetCompilationTaskRunner() {
+  return [](JitCompiler::Task task) {
+    GetCompilationThreadPool()->Schedule(std::move(task));
   };
-  return {[hook](const llvm::Module& llvm_module) {
-            return hook(/*optimized=*/false, llvm_module);
-          },
-          [hook](const llvm::Module& llvm_module) {
-            return hook(/*optimized=*/true, llvm_module);
-          }};
 }
 
-absl::Status VerifyLlvmModule(const llvm::Module& llvm_module) {
-  // TODO(chokobole): Uncomment this. Dependency: XLA_SCOPED_LOGGING_TIMER
-  // XLA_SCOPED_LOGGING_TIMER("CpuCompiler - Running LLVM verifier");
+}  // namespace
 
-  std::string err;
-  llvm::raw_string_ostream err_stream(err);
+se::Platform::Id CpuAotCompilationOptions::PlatformId() const {
+  return se::host::kHostPlatformId;
+}
 
-  // verifyModule() returns true if the module is broken.
-  TF_RET_CHECK(!llvm::verifyModule(llvm_module, &err_stream))
-      << "Invalid LLVM IR before optimizations:\n"
-      << err_stream.str()
-      << "\nThis probably indicates a bug in the HLO -> LLVM IR lowering. "
-         "Rerun with --zkx_dump_to to get the IR. ";
-  return absl::OkStatus();
+absl::StatusOr<std::vector<std::unique_ptr<Executable>>> CpuCompiler::Compile(
+    std::unique_ptr<HloModuleGroup> module_group,
+    std::vector<std::vector<se::StreamExecutor*>> executors,
+    const CompileOptions& options) {
+  for (const std::vector<se::StreamExecutor*>& se_vector : executors) {
+    if (se_vector.size() != 1) {
+      return absl::UnimplementedError(
+          "Model partitioning not implemented for the CPU compiler");
+    }
+  }
+  return LlvmCompiler::Compile(std::move(module_group), executors, options);
 }
 
 namespace {
@@ -222,6 +204,195 @@ class CollectProfileCandidates : public DfsHloVisitorWithDefault {
 
 }  // namespace
 
+absl::Status CpuCompiler::RunHloPassesThroughLayoutAssn(
+    HloModule* module, bool is_aot_compile,
+    TargetMachineFeatures* target_machine_features) {
+  HloPassPipeline pipeline("HLO passes through layout assignment");
+
+  // Remove zero-sized HLO from the input so that other passes don't have to
+  // handle it.
+  pipeline.AddPass<ZeroSizedHloElimination>();
+
+  // Inline computations with a single call site.
+  pipeline.AddPass<CallInliner>(/*single_call_site=*/true);
+  pipeline.AddPass<ConditionalCanonicalizer>();
+  pipeline.AddPass<ScatterExpander>(ScatterExpander::kEliminateAllScatters);
+
+  // Run the following passes to a fixed point.
+  [&pipeline =
+       pipeline.AddPass<HloPassFix<HloPassPipeline>>("simplification")] {
+    // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
+    // AddHloVerifier(&pipeline, HloVerifierOpts{},
+    //                /*debug_only=*/true);
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<TupleSimplifier>();
+    pipeline.AddPass<WhileLoopConstantSinking>();
+
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloConstantFolding>();
+  }();
+  pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/false);
+
+  pipeline.AddPass<TupleSimplifier>();
+
+  // Layout assignment uses alias analysis, which requires the call graph to be
+  // flattened.
+  pipeline.AddPass<FlattenCallGraph>();
+  // Run SubByteNormalization because CpuLayoutAssignment may modify a
+  // Layout's element_size_in_bits field.
+  pipeline.AddPass<SubByteNormalization>(
+      SubByteNormalization::SET_ELEMENT_SIZE);
+
+  return pipeline.Run(module).status();
+}
+
+absl::Status CpuCompiler::RunHloPassesAfterLayoutAssn(
+    HloModule* module, bool is_aot_compile,
+    TargetMachineFeatures* target_machine_features,
+    const CompileOptions& compile_options) {
+  HloPassPipeline pipeline("HLO passes after layout assignment");
+
+  {
+    HloPassPipeline normalization_pipeline("hlo normalization");
+    normalization_pipeline.AddPass<ReshapeDecomposer>();
+    // TODO(chokobole): Uncomment this. Dependency: ReduceDecomposer
+    // normalization_pipeline.AddPass<ReduceDecomposer>();
+    normalization_pipeline.AddPass<BroadcastCanonicalizer>();
+    TF_RETURN_IF_ERROR(normalization_pipeline.Run(module).status());
+  }
+
+  // After layout assignment, use a layout-sensitive verifier.
+  pipeline.AddPass<HloPassPipeline>("after layout assignment");
+  // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
+  // AddHloVerifier(&pipeline, HloVerifierOpts{}.MakeLayoutSensitive(),
+  //                /*debug_only=*/true);
+
+  pipeline.AddPass<ReshapeDecomposer>();
+
+  const int max_parallelism =
+      module->config().intra_op_parallelism_threads() > 0
+          ? module->config().intra_op_parallelism_threads()
+          : tsl::port::NumSchedulableCPUs();
+
+  // Add a fusion pass now that layout assignment is done.
+  pipeline.AddPass<CpuInstructionFusion>();
+
+  // The LayoutAssignment pass may leave behind kCopy instructions which are
+  // duplicate or NOPs, so remove them with algebraic simplification and CSE.
+  // Run this to a fixed point.
+  [&pipeline = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
+       "simplification after layout assignment")] {
+    // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
+    // AddHloVerifier(
+    //     &pipeline,
+    //     HloVerifierOpts{}.MakeLayoutSensitive().WithInstructionCanChangeLayout(
+    //         LayoutAssignment::InstructionCanChangeLayout),
+    //     /*debug_only=*/true);
+    pipeline.AddPass<HloDCE>();
+    pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
+  }();
+
+  // Outline ops in the entry computation into calls to subcomputations.
+  if (!is_aot_compile) {
+    // Run parallel task assigner after fusion to assign outer-dimension
+    // partitions. Each parallelized instruction is outlined into a kCall
+    // computation with partition counts in BackendConfig.
+    pipeline.AddPass<ParallelTaskAssigner>(
+        max_parallelism,
+        /*shape_size=*/ShapeSizeBytesFunction());
+  }
+  // Copy insertion should be performed immediately before IR emission to
+  // avoid inserting unnecessary copies (later pass adds an instruction which
+  // materializes the value) or missing a necessary copy (later pass removes
+  // an instruction which materializes a value). DCE must be run immediately
+  // before (and sometime after) copy insertion, to avoid dead code from
+  // interfering with the rewrites.
+  pipeline.AddPass<HloDCE>();
+  pipeline.AddPass<OptimizeInputOutputBufferAlias>(true);
+
+  // If enabled we'll use more precise region based analysis for copy removal.
+  if (module->config()
+          .debug_options()
+          .zkx_cpu_copy_insertion_use_region_analysis()) {
+    pipeline.AddPass<CopyInsertion>(
+        /*can_share_buffer=*/nullptr,
+        /*use_region_based_live_range_analysis=*/-1);
+  } else {
+    pipeline.AddPass<CopyInsertion>();
+  }
+
+  pipeline.AddPass<HloDCE>();
+  return pipeline.Run(module).status();
+}
+
+absl::Status CpuCompiler::RunHloPasses(HloModule* module, bool is_aot_compile,
+                                       llvm::TargetMachine* target_machine,
+                                       const CompileOptions& compile_options) {
+  TargetMachineFeatures target_machine_features(target_machine);
+  TF_RETURN_IF_ERROR(RunHloPassesThroughLayoutAssn(module, is_aot_compile,
+                                                   &target_machine_features));
+
+  return RunHloPassesAfterLayoutAssn(module, is_aot_compile,
+                                     &target_machine_features, compile_options);
+}
+
+namespace {
+
+// Align buffers to ZKX:CPU minimal alignment.
+int64_t memory_alignment(LogicalBuffer::Color) {
+  return cpu_function_runtime::MinAlign();
+}
+
+std::pair<LlvmCompiler::ModuleHook, LlvmCompiler::ModuleHook> GetIRModuleHooks(
+    const HloModule& hlo_module,
+    const LlvmCompiler::ModuleHook& user_pre_optimization_hook,
+    const LlvmCompiler::ModuleHook& user_post_optimization_hook) {
+  // Create the IR hooks. If applicable, each IR hook does the following:
+  //
+  //  * Calls the user supplied module hook.
+  //  * Writes out the IR to a file in the output directory designated by
+  //    --zkx_dump_to
+  const HloModule* hlo_module_ptr = &hlo_module;
+  auto hook = [user_pre_optimization_hook, user_post_optimization_hook,
+               hlo_module_ptr](bool optimized,
+                               const llvm::Module& llvm_module) {
+    const auto& user_hook =
+        !optimized ? user_pre_optimization_hook : user_post_optimization_hook;
+    if (user_hook) {
+      user_hook(llvm_module);
+    }
+
+    // Include LLVM module identifier suffix in case `llvm_module` is just a
+    // part of the original LLVM module constructed by the ZKX.
+    std::string_view id = llvm_module.getModuleIdentifier();
+    size_t pos = std::min(id.size(), 1 + kZkxModuleIdentifier.size());
+    DumpIrIfEnabled(*hlo_module_ptr, llvm_module, optimized,
+                    /*filename_suffix=*/id.substr(pos));
+  };
+  return {[hook](const llvm::Module& llvm_module) {
+            return hook(/*optimized=*/false, llvm_module);
+          },
+          [hook](const llvm::Module& llvm_module) {
+            return hook(/*optimized=*/true, llvm_module);
+          }};
+}
+
+absl::Status VerifyLlvmModule(const llvm::Module& llvm_module) {
+  // TODO(chokobole): Uncomment this. Dependency: XLA_SCOPED_LOGGING_TIMER
+  // XLA_SCOPED_LOGGING_TIMER("CpuCompiler - Running LLVM verifier");
+
+  std::string err;
+  llvm::raw_string_ostream err_stream(err);
+
+  // verifyModule() returns true if the module is broken.
+  TF_RET_CHECK(!llvm::verifyModule(llvm_module, &err_stream))
+      << "Invalid LLVM IR before optimizations:\n"
+      << err_stream.str()
+      << "\nThis probably indicates a bug in the HLO -> LLVM IR lowering. "
+         "Rerun with --zkx_dump_to to get the IR. ";
+  return absl::OkStatus();
+}
+
 absl::Status CreateHloProfilingArtifacts(
     const HloModule& module,
     absl::flat_hash_map<const HloInstruction*, int64_t>*
@@ -257,76 +428,26 @@ absl::Status CreateHloProfilingArtifacts(
   return absl::OkStatus();
 }
 
-// Returns a global (per-process) thread pool for ZKX CPU compilation tasks.
-tsl::thread::ThreadPool* GetCompilationThreadPool() {
-  // LLVM compilation has a lot of memory-bound pointer chasing and not
-  // so much CPU-bound work. Based on profiling a few examples, 32 threads seems
-  // to be enough to achieve maximum parallel compilation speedup.
-  static constexpr int kMaxCompilationThreads = 32;
-  static auto* thread_pool = absl::IgnoreLeak(new tsl::thread::ThreadPool(
-      tsl::Env::Default(), "zkx-cpu-llvm-codegen",
-      std::min(kMaxCompilationThreads, tsl::port::MaxParallelism())));
-  return thread_pool;
+}  // namespace
+
+absl::StatusOr<std::unique_ptr<HloModule>> CpuCompiler::RunHloPasses(
+    std::unique_ptr<HloModule> module, se::StreamExecutor* /*stream_exec*/,
+    const CompileOptions& options) {
+  const HloModuleConfig& config = module->config();
+
+  TF_ASSIGN_OR_RETURN(
+      std::unique_ptr<llvm::TargetMachine> jit_target_machine,
+      JitCompiler::InferTargetMachine(
+          llvm::TargetOptions(), IrCompiler::GetCodeGenOptLevel(config),
+          CpuFeatureFromString(config.debug_options().zkx_cpu_max_isa())));
+
+  TF_RETURN_IF_ERROR(RunHloPasses(module.get(), /*is_aot_compile=*/false,
+                                  jit_target_machine.get(),
+                                  /*compile_options=*/options));
+  return std::move(module);
 }
 
-// Returns task runner that uses the global compilation thread pool.
-JitCompiler::TaskRunner GetCompilationTaskRunner() {
-  return [](JitCompiler::Task task) {
-    GetCompilationThreadPool()->Schedule(std::move(task));
-  };
-}
-
-// If LLVM module has large constants constructed from literals, we don't want
-// to split it, because it will cause us to copy large constants across module
-// parts. We should not be storing large constants in LLVM IR in a first place,
-// but while we do that, we have to be extra-careful, or it leads to extremely
-// long compilation times, OOMs and timeouts.
-//
-// TODO(b/361800465): Figure out how to avoid putting large constants into
-// LLVM IR in the first place.
-bool HasLargeConstants(llvm::Module& module) {
-  static constexpr int kMaxConstantSize = 10000;
-  for (llvm::GlobalVariable& g : module.globals()) {
-    if (!g.hasInitializer()) {
-      continue;
-    }
-
-    llvm::Constant* initializer = g.getInitializer();
-    if (auto* arr = llvm::dyn_cast<llvm::ArrayType>(initializer->getType())) {
-      if (arr->getNumElements() > kMaxConstantSize) return true;
-    }
-  }
-  return false;
-}
-
-inline void VlogMaxIsa(std::string_view max_cpu_isa) {
-  if (VLOG_IS_ON(1) && !max_cpu_isa.empty()) {
-    if (tsl::port::IsX86CPU()) {
-      VLOG(1) << "`zkx_cpu_max_isa` is set. Will not use features newer than: "
-              << max_cpu_isa;
-    } else {
-      VLOG(1) << "`zkx_cpu_max_isa` is set to `" << max_cpu_isa
-              << "`. This flag is not supported on non-x86 CPUs yet.";
-    }
-  }
-}
-
-// We keep HloProto in the CpuExecutable, but we don't need to keep literals
-// payload in it as we use it only for debugging and memory analysis.
-void StripPayloadFromLiteralProto(HloProto& proto) {
-  auto* module = proto.mutable_hlo_module();
-  for (auto& computation : *module->mutable_computations()) {
-    for (auto& instruction : *computation.mutable_instructions()) {
-      // We only keep literal shape to correctly estimate memory usage of the
-      // HLO module, but we don't need the actual literal data.
-      if (instruction.has_literal()) {
-        LiteralProto literal;
-        *literal.mutable_shape() = instruction.literal().shape();
-        *instruction.mutable_literal() = std::move(literal);
-      }
-    }
-  }
-}
+namespace {
 
 // Post-compilation callback functor for use by SimpleOrcJIT.
 //
@@ -486,177 +607,59 @@ llvm::orc::ThreadSafeModule CloneAsThreadSafeModule(
                                      std::move(clone_context));
 }
 
-}  // namespace
+// If LLVM module has large constants constructed from literals, we don't want
+// to split it, because it will cause us to copy large constants across module
+// parts. We should not be storing large constants in LLVM IR in a first place,
+// but while we do that, we have to be extra-careful, or it leads to extremely
+// long compilation times, OOMs and timeouts.
+//
+// TODO(b/361800465): Figure out how to avoid putting large constants into
+// LLVM IR in the first place.
+bool HasLargeConstants(llvm::Module& module) {
+  static constexpr int kMaxConstantSize = 10000;
+  for (llvm::GlobalVariable& g : module.globals()) {
+    if (!g.hasInitializer()) {
+      continue;
+    }
 
-se::Platform::Id CpuAotCompilationOptions::PlatformId() const {
-  return se::host::kHostPlatformId;
-}
-
-absl::StatusOr<std::vector<std::unique_ptr<Executable>>> CpuCompiler::Compile(
-    std::unique_ptr<HloModuleGroup> module_group,
-    std::vector<std::vector<se::StreamExecutor*>> executors,
-    const CompileOptions& options) {
-  for (const std::vector<se::StreamExecutor*>& se_vector : executors) {
-    if (se_vector.size() != 1) {
-      return absl::UnimplementedError(
-          "Model partitioning not implemented for the CPU compiler");
+    llvm::Constant* initializer = g.getInitializer();
+    if (auto* arr = llvm::dyn_cast<llvm::ArrayType>(initializer->getType())) {
+      if (arr->getNumElements() > kMaxConstantSize) return true;
     }
   }
-  return LlvmCompiler::Compile(std::move(module_group), executors, options);
+  return false;
 }
 
-absl::Status CpuCompiler::RunHloPassesThroughLayoutAssn(
-    HloModule* module, bool is_aot_compile,
-    TargetMachineFeatures* target_machine_features) {
-  HloPassPipeline pipeline("HLO passes through layout assignment");
-
-  // Remove zero-sized HLO from the input so that other passes don't have to
-  // handle it.
-  pipeline.AddPass<ZeroSizedHloElimination>();
-
-  // Inline computations with a single call site.
-  pipeline.AddPass<CallInliner>(/*single_call_site=*/true);
-
-  pipeline.AddPass<ConditionalCanonicalizer>();
-
-  pipeline.AddPass<ScatterExpander>(ScatterExpander::kEliminateAllScatters);
-
-  // Run the following passes to a fixed point.
-  [&pipeline =
-       pipeline.AddPass<HloPassFix<HloPassPipeline>>("simplification")] {
-    // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
-    // AddHloVerifier(&pipeline, HloVerifierOpts{},
-    //                /*debug_only=*/true);
-
-    pipeline.AddPass<HloDCE>();
-
-    pipeline.AddPass<TupleSimplifier>();
-    pipeline.AddPass<WhileLoopConstantSinking>();
-
-    pipeline.AddPass<HloDCE>();
-    pipeline.AddPass<HloConstantFolding>();
-  }();
-
-  pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/false);
-
-  pipeline.AddPass<TupleSimplifier>();
-
-  // Layout assignment uses alias analysis, which requires the call graph to be
-  // flattened.
-  pipeline.AddPass<FlattenCallGraph>();
-
-  // Run SubByteNormalization because CpuLayoutAssignment may modify a
-  // Layout's element_size_in_bits field.
-  pipeline.AddPass<SubByteNormalization>(
-      SubByteNormalization::SET_ELEMENT_SIZE);
-
-  return pipeline.Run(module).status();
-}
-
-absl::Status CpuCompiler::RunHloPassesAfterLayoutAssn(
-    HloModule* module, bool is_aot_compile,
-    TargetMachineFeatures* target_machine_features,
-    const CompileOptions& compile_options) {
-  HloPassPipeline pipeline("HLO passes after layout assignment");
-
-  {
-    HloPassPipeline normalization_pipeline("hlo normalization");
-    normalization_pipeline.AddPass<ReshapeDecomposer>();
-    // TODO(chokobole): Uncomment this. Dependency: ReduceDecomposer
-    // normalization_pipeline.AddPass<ReduceDecomposer>();
-    normalization_pipeline.AddPass<BroadcastCanonicalizer>();
-    TF_RETURN_IF_ERROR(normalization_pipeline.Run(module).status());
+inline void VlogMaxIsa(std::string_view max_cpu_isa) {
+  if (VLOG_IS_ON(1) && !max_cpu_isa.empty()) {
+    if (tsl::port::IsX86CPU()) {
+      VLOG(1) << "`zkx_cpu_max_isa` is set. Will not use features newer than: "
+              << max_cpu_isa;
+    } else {
+      VLOG(1) << "`zkx_cpu_max_isa` is set to `" << max_cpu_isa
+              << "`. This flag is not supported on non-x86 CPUs yet.";
+    }
   }
+}
 
-  // After layout assignment, use a layout-sensitive verifier.
-  pipeline.AddPass<HloPassPipeline>("after layout assignment");
-  // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
-  // AddHloVerifier(&pipeline, HloVerifierOpts{}.MakeLayoutSensitive(),
-  //                /*debug_only=*/true);
-
-  pipeline.AddPass<ReshapeDecomposer>();
-
-  // Add a fusion pass now that layout assignment is done.
-  pipeline.AddPass<CpuInstructionFusion>();
-
-  const int max_parallelism =
-      module->config().intra_op_parallelism_threads() > 0
-          ? module->config().intra_op_parallelism_threads()
-          : tsl::port::NumSchedulableCPUs();
-
-  [&pipeline = pipeline.AddPass<HloPassFix<HloPassPipeline>>(
-       "simplification after layout assignment")] {
-    // TODO(chokobole): Uncomment this. Dependency: AddHloVerifier
-    // AddHloVerifier(
-    //     &pipeline,
-    //     HloVerifierOpts{}.MakeLayoutSensitive().WithInstructionCanChangeLayout(
-    //         LayoutAssignment::InstructionCanChangeLayout),
-    //     /*debug_only=*/true);
-    pipeline.AddPass<HloDCE>();
-    pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/true);
-  }();
-
-  // Outline ops in the entry computation into calls to subcomputations.
-  if (!is_aot_compile) {
-    // Run parallel task assigner after fusion to assign outer-dimension
-    // partitions. Each parallelized instruction is outlined into a kCall
-    // computation with partition counts in BackendConfig.
-    pipeline.AddPass<ParallelTaskAssigner>(
-        max_parallelism,
-        /*shape_size=*/ShapeSizeBytesFunction());
+// We keep HloProto in the CpuExecutable, but we don't need to keep literals
+// payload in it as we use it only for debugging and memory analysis.
+void StripPayloadFromLiteralProto(HloProto& proto) {
+  auto* module = proto.mutable_hlo_module();
+  for (auto& computation : *module->mutable_computations()) {
+    for (auto& instruction : *computation.mutable_instructions()) {
+      // We only keep literal shape to correctly estimate memory usage of the
+      // HLO module, but we don't need the actual literal data.
+      if (instruction.has_literal()) {
+        LiteralProto literal;
+        *literal.mutable_shape() = instruction.literal().shape();
+        *instruction.mutable_literal() = std::move(literal);
+      }
+    }
   }
-
-  // Copy insertion should be performed immediately before IR emission to
-  // avoid inserting unnecessary copies (later pass adds an instruction which
-  // materializes the value) or missing a necessary copy (later pass removes
-  // an instruction which materializes a value). DCE must be run immediately
-  // before (and sometime after) copy insertion, to avoid dead code from
-  // interfering with the rewrites.
-  pipeline.AddPass<HloDCE>();
-  pipeline.AddPass<OptimizeInputOutputBufferAlias>(true);
-
-  // If enabled we'll use more precise region based analysis for copy removal.
-  if (module->config()
-          .debug_options()
-          .zkx_cpu_copy_insertion_use_region_analysis()) {
-    pipeline.AddPass<CopyInsertion>(
-        /*can_share_buffer=*/nullptr,
-        /*use_region_based_live_range_analysis=*/-1);
-  } else {
-    pipeline.AddPass<CopyInsertion>();
-  }
-
-  pipeline.AddPass<HloDCE>();
-  return pipeline.Run(module).status();
 }
 
-absl::Status CpuCompiler::RunHloPasses(HloModule* module, bool is_aot_compile,
-                                       llvm::TargetMachine* target_machine,
-                                       const CompileOptions& compile_options) {
-  TargetMachineFeatures target_machine_features(target_machine);
-  TF_RETURN_IF_ERROR(RunHloPassesThroughLayoutAssn(module, is_aot_compile,
-                                                   &target_machine_features));
-
-  return RunHloPassesAfterLayoutAssn(module, is_aot_compile,
-                                     &target_machine_features, compile_options);
-}
-
-absl::StatusOr<std::unique_ptr<HloModule>> CpuCompiler::RunHloPasses(
-    std::unique_ptr<HloModule> module, se::StreamExecutor* /*stream_exec*/,
-    const CompileOptions& options) {
-  const HloModuleConfig& config = module->config();
-
-  TF_ASSIGN_OR_RETURN(
-      std::unique_ptr<llvm::TargetMachine> jit_target_machine,
-      JitCompiler::InferTargetMachine(
-          llvm::TargetOptions(), IrCompiler::GetCodeGenOptLevel(config),
-          CpuFeatureFromString(config.debug_options().zkx_cpu_max_isa())));
-
-  TF_RETURN_IF_ERROR(RunHloPasses(module.get(), /*is_aot_compile=*/false,
-                                  jit_target_machine.get(),
-                                  /*compile_options=*/options));
-  return std::move(module);
-}
+}  // namespace
 
 absl::StatusOr<std::unique_ptr<CpuExecutable>>
 CpuCompiler::CompileCpuExecutable(std::unique_ptr<HloModule> module) {
