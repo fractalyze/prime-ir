@@ -1176,8 +1176,19 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
       }
     }
 
-    Value signedLhs = getSignedFormFromCanonical(lhs, modAttr);
-    Value signedRhs = getSignedFormFromCanonical(rhs, modAttr);
+    // Signed multiply optimization: extract pre-reduction values from
+    // minui(sub, sub+p) to use MulSIExtendedOp. Only safe for single-limb
+    // types — reduceMultiLimb uses unsigned shifts that don't preserve
+    // sign information from MulSIExtendedOp.
+    MontgomeryAttr montAttrVal = modType.getMontgomeryAttr();
+    unsigned limbWidth =
+        montAttrVal.getNPrime().getType().getIntOrFloatBitWidth();
+    unsigned numLimbs = (w + limbWidth - 1) / limbWidth;
+    Value signedLhs, signedRhs;
+    if (numLimbs == 1) {
+      signedLhs = getSignedFormFromCanonical(lhs, modAttr);
+      signedRhs = getSignedFormFromCanonical(rhs, modAttr);
+    }
 
     Value lo, hi;
     if (signedLhs && signedRhs) {
