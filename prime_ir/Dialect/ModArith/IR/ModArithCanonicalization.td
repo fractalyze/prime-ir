@@ -46,8 +46,7 @@ def IsNegativeNine : Constraint<CPred<"isNegativeOf($0, $1, 9)">>;
 
 // Constant materialization
 def GetAsConstant : NativeCodeCall<"$_builder.create<ConstantOp>(odsLoc, $0.getType(), cast<TypedAttr>($1))">;
-def GetZeroAttr : NativeCodeCall<"$_builder.getZeroAttr(cast<IntegerType>($0))">;
-def GetIntegerType : NativeCodeCall<"cast<ModArithType>($0.getType()).getStorageType()">;
+def GetZeroAttr : NativeCodeCall<"cast<ConstantLikeInterface>(getElementTypeOrSelf($0.getType())).createConstantAttr(0)">;
 
 //===----------------------------------------------------------------------===//
 // Include Canonicalization Pattern Files

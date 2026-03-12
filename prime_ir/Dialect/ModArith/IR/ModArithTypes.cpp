@@ -69,4 +69,20 @@ DenseElementsAttr getAttrAsMontgomeryForm(IntegerAttr modulusAttr,
     return valueOp.toMont();
   });
 }
+
+TypedAttr ModArithType::createConstantAttr(int64_t c) const {
+  ModArithOperation op(c, *this);
+  return op.getIntegerAttr();
+}
+
+TypedAttr
+ModArithType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  assert(values.size() == 1);
+  ModArithOperation op(values[0], *this);
+  return op.getIntegerAttr();
+}
+
+ShapedType ModArithType::overrideShapedType(ShapedType type) const {
+  return type.clone(getStorageType());
+}
 } // namespace mlir::prime_ir::mod_arith

@@ -100,6 +100,7 @@ td_library(
         "//prime_ir/Utils:CommonTraits",
         "@llvm-project//mlir:ArithOpsTdFiles",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
+        "@llvm-project//mlir:ConstantLikeInterfaceTdFiles",
         "@llvm-project//mlir:DataLayoutInterfaces",
         "@llvm-project//mlir:InferIntRangeInterfaceTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",

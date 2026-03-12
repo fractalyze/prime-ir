@@ -19,6 +19,7 @@ limitations under the License.
 include "prime_ir/Dialect/ModArith/IR/ModArithDialect.td"
 
 include "mlir/Interfaces/DataLayoutInterfaces.td"
+include "mlir/IR/ConstantLikeInterface.td"
 include "mlir/IR/DialectBase.td"
 include "mlir/IR/BuiltinTypeInterfaces.td"
 include "mlir/IR/CommonTypeConstraints.td"
@@ -32,6 +33,7 @@ class ModArith_Type<string name, string typeMnemonic, list<Trait> traits = []>
 def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
   ]> {
   let summary = "Integer type with modular arithmetic";
