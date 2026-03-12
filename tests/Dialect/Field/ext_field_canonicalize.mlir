@@ -20,6 +20,9 @@
 !QF = !field.ef<2x!PF, 6:i32>
 !QFm = !field.ef<2x!PFm, 6:i32>
 
+// Tower extension: Fp6 = (Fp2)³ where Fp6 = Fp2[w]/(w³ - 2)
+!Fp6 = !field.ef<3x!QF, 2:i32>
+
 //===----------------------------------------------------------------------===//
 // NegateOp constant folding
 //===----------------------------------------------------------------------===//
@@ -323,6 +326,126 @@ func.func @test_tensor_ext_field_fold_mul() -> tensor<2x!QF> {
 }
 
 //===----------------------------------------------------------------------===//
+// Tensor operation constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_ext_tensor_extract_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_tensor_extract_fold() -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<[3, 4]> : [[T]]
+  // CHECK-NOT: tensor.extract
+  // CHECK: return %[[C]] : [[T]]
+  %c1 = arith.constant 1 : index
+  %0 = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %1 = tensor.extract %0[%c1] : tensor<2x!QF>
+  return %1 : !QF
+}
+
+
+// CHECK-LABEL: @test_tower_tensor_extract_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_tensor_extract_fold() -> !Fp6 {
+  // CHECK: %[[C:.*]] = field.constant dense<[6, 5, 4, 3, 2, 1]> : [[T]]
+  // CHECK-NOT: tensor.extract
+  // CHECK: return %[[C]] : [[T]]
+  %c1 = arith.constant 1 : index
+  %0 = field.constant dense<[[[1, 2], [3, 4], [5, 6]], [[6, 5], [4, 3], [2, 1]]]> : tensor<2x!Fp6>
+  %1 = tensor.extract %0[%c1] : tensor<2x!Fp6>
+  return %1 : !Fp6
+}
+
+// CHECK-LABEL: @test_ext_tensor_splat_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_tensor_splat_fold() -> tensor<4x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[\[}}3, 5], [3, 5], [3, 5], [3, 5{{\]\]}}> : [[T]]
+  // CHECK-NOT: tensor.splat
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant [3, 5] : !QF
+  %1 = tensor.splat %0 : tensor<4x!QF>
+  return %1 : tensor<4x!QF>
+}
+
+// CHECK-LABEL: @test_tower_tensor_splat_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_tensor_splat_fold() -> tensor<2x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[\[\[}}1, 2], [3, 4], [5, 6{{\]\]}}, {{\[\[}}1, 2], [3, 4], [5, 6{{\]\]\]}}> : [[T]]
+  // CHECK-NOT: tensor.splat
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
+  %1 = tensor.splat %0 : tensor<2x!Fp6>
+  return %1 : tensor<2x!Fp6>
+}
+
+
+// CHECK-LABEL: @test_ext_tensor_from_elements_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_tensor_from_elements_fold() -> tensor<2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[\[}}1, 2], [3, 4{{\]\]}}> : [[T]]
+  // CHECK-NOT: tensor.from_elements
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant [1, 2] : !QF
+  %1 = field.constant [3, 4] : !QF
+  %2 = tensor.from_elements %0, %1 : tensor<2x!QF>
+  return %2 : tensor<2x!QF>
+}
+
+// CHECK-LABEL: @test_tower_tensor_from_elements_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_tensor_from_elements_fold() -> tensor<2x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[\[\[}}1, 2], [3, 4], [5, 6{{\]\]}}, {{\[\[}}6, 5], [4, 3], [2, 1{{\]\]\]}}> : [[T]]
+  // CHECK-NOT: tensor.from_elements
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
+  %1 = field.constant [6, 5, 4, 3, 2, 1] : !Fp6
+  %2 = tensor.from_elements %0, %1 : tensor<2x!Fp6>
+  return %2 : tensor<2x!Fp6>
+}
+
+// CHECK-LABEL: @test_ext_collapse_shape_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_collapse_shape_fold() -> tensor<4x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[\[}}1, 2], [3, 4], [5, 6], [0, 1{{\]\]}}> : [[T]]
+  // CHECK-NOT: tensor.collapse_shape
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant dense<[[[1, 2], [3, 4]], [[5, 6], [0, 1]]]> : tensor<2x2x!QF>
+  %1 = tensor.collapse_shape %0 [[0, 1]] : tensor<2x2x!QF> into tensor<4x!QF>
+  return %1 : tensor<4x!QF>
+}
+
+// CHECK-LABEL: @test_tower_collapse_shape_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_collapse_shape_fold() -> tensor<4x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[\[\[}}1, 2], [3, 4], [5, 6{{\]\]}}, {{\[\[}}6, 5], [4, 3], [2, 1{{\]\]}}, {{\[\[}}0, 1], [2, 3], [4, 5{{\]\]}}, {{\[\[}}5, 4], [3, 2], [1, 0{{\]\]\]}}> : [[T]]
+  // CHECK-NOT: tensor.collapse_shape
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant dense<[[[[1, 2], [3, 4], [5, 6]], [[6, 5], [4, 3], [2, 1]]], [[[0, 1], [2, 3], [4, 5]], [[5, 4], [3, 2], [1, 0]]]]> : tensor<2x2x!Fp6>
+  %1 = tensor.collapse_shape %0 [[0, 1]] : tensor<2x2x!Fp6> into tensor<4x!Fp6>
+  return %1 : tensor<4x!Fp6>
+}
+
+// CHECK-LABEL: @test_ext_expand_shape_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_expand_shape_fold() -> tensor<2x2x!QF> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[\[\[}}1, 2], [3, 4{{\]\]}}, {{\[\[}}5, 6], [0, 1{{\]\]\]}}> : [[T]]
+  // CHECK-NOT: tensor.expand_shape
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant dense<[[1, 2], [3, 4], [5, 6], [0, 1]]> : tensor<4x!QF>
+  %1 = tensor.expand_shape %0 [[0, 1]] output_shape [2, 2] : tensor<4x!QF> into tensor<2x2x!QF>
+  return %1 : tensor<2x2x!QF>
+}
+
+// CHECK-LABEL: @test_tower_expand_shape_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_expand_shape_fold() -> tensor<2x2x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<{{\[\[\[\[}}1, 2], [3, 4], [5, 6{{\]\]}}, {{\[\[}}6, 5], [4, 3], [2, 1{{\]\]\]}}, {{\[\[\[}}0, 1], [2, 3], [4, 5{{\]\]}}, {{\[\[}}5, 4], [3, 2], [1, 0{{\]\]\]\]}}> : [[T]]
+  // CHECK-NOT: tensor.expand_shape
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant dense<[[[1, 2], [3, 4], [5, 6]], [[6, 5], [4, 3], [2, 1]], [[0, 1], [2, 3], [4, 5]], [[5, 4], [3, 2], [1, 0]]]> : tensor<4x!Fp6>
+  %1 = tensor.expand_shape %0 [[0, 1]] output_shape [2, 2] : tensor<4x!Fp6> into tensor<2x2x!Fp6>
+  return %1 : tensor<2x2x!Fp6>
+}
+
+//===----------------------------------------------------------------------===//
 // Tensor splat constant folding (reshape, gather, extract_slice)
 //===----------------------------------------------------------------------===//
 
@@ -523,12 +646,6 @@ func.func @test_to_mont_from_mont_tensor_cancel(%arg0: tensor<2x!QFm>) -> tensor
 //===----------------------------------------------------------------------===//
 // Tower Extension Field (Fp4 = (Fp2)^2) constant folding
 //===----------------------------------------------------------------------===//
-
-// Tower extension: Fp6 = (Fp2)^3 where Fp6 = Fp2[w]/(w³ - 2)
-// Note: For degree-2 tower extensions, scalar non-residues are always
-// quadratic residues in the base extension field (by Fermat's theorem).
-// So we use degree 3 instead, where 2^16 = 2 ≠ 1 in Fp2 (valid cubic non-residue).
-!Fp6 = !field.ef<3x!QF, 2:i32>
 
 // CHECK-LABEL: @test_tower_fold_negate
 // CHECK-SAME: () -> [[T:.*]] {
