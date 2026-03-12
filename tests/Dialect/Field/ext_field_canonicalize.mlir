@@ -121,6 +121,16 @@ func.func @test_fold_sub() -> !QF {
   return %2 : !QF
 }
 
+// CHECK-LABEL: @test_sub_self_is_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_sub_self_is_zero(%arg0: !QF) -> !QF {
+  // CHECK: %[[C:.*]] = field.constant dense<0> : [[T]]
+  %0 = field.sub %arg0, %arg0 : !QF
+  // CHECK-NOT: field.sub
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : !QF
+}
+
 //===----------------------------------------------------------------------===//
 // MulOp constant folding
 //===----------------------------------------------------------------------===//
@@ -568,6 +578,26 @@ func.func @test_tower_fold_sub() -> !Fp6 {
   // CHECK-NOT: field.sub
   // CHECK: return %[[C]] : [[T]]
   return %2 : !Fp6
+}
+
+// CHECK-LABEL: @test_tower_sub_self_is_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_tower_sub_self_is_zero(%arg0: !Fp6) -> !Fp6 {
+  // CHECK: %[[C:.*]] = field.constant dense<0> : [[T]]
+  %0 = field.sub %arg0, %arg0 : !Fp6
+  // CHECK-NOT: field.sub
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : !Fp6
+}
+
+// CHECK-LABEL: @test_tower_tensor_sub_self_is_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
+func.func @test_tower_tensor_sub_self_is_zero(%arg0: tensor<4x!Fp6>) -> tensor<4x!Fp6> {
+  // CHECK: %[[C:.*]] = field.constant dense<0> : [[T]]
+  %0 = field.sub %arg0, %arg0 : tensor<4x!Fp6>
+  // CHECK-NOT: field.sub
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : tensor<4x!Fp6>
 }
 
 // CHECK-LABEL: @test_tower_fold_mul
