@@ -36,7 +36,7 @@ limitations under the License.
 //    `IsFive`, `IsSix`, `IsSeven`, `IsEight`, `IsNine`, `IsNegativeOne`,
 //    `IsNegativeTwo`, `IsNegativeThree`, `IsNegativeFour`, `IsNegativeFive`,
 //    `IsNegativeSix`, `IsNegativeSeven`, `IsNegativeEight`, `IsNegativeNine`.
-// 3. Define `GetZeroAttr` and `GetIntegerType` for the zero constant pattern.
+// 3. Define `GetZeroAttr` for the zero constant pattern.
 //
 //===----------------------------------------------------------------------===//
 
@@ -202,7 +202,7 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
     // x - x -> 0
     def SubSelfIsZero :
         Pat<(SubOp $x, $x),
-            (GetAsConstant $x, (GetZeroAttr (GetIntegerType $x)))>;
+            (GetAsConstant $x, (GetZeroAttr $x))>;
 }
 
 //===----------------------------------------------------------------------===//

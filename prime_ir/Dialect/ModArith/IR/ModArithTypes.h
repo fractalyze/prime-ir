@@ -20,6 +20,7 @@ limitations under the License.
 // Headers needed for ModArithTypes.h.inc
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/ConstantLikeInterface.h"
 #include "mlir/Interfaces/DataLayoutInterfaces.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.h"
 // IWYU pragma: end_keep

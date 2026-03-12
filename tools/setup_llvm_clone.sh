@@ -57,7 +57,6 @@ patches=(
     "$patch_dir/owning_memref_memset.patch"
     "$patch_dir/linalg_type_support.patch"
     "$patch_dir/tensor_type_support.patch"
-    "$patch_dir/constant_splat_folding.patch"
     "$patch_dir/vector_type_support.patch"
     "$patch_dir/memref_folding.patch"
     "$patch_dir/lazy_linking.patch"

@@ -1,18 +1,17 @@
 diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
-index 22a25fd1a5af..1832036990e4 100644
 --- a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 +++ b/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 @@ -41,6 +41,10 @@
  #include <optional>
  #include <vector>
- 
+
 +#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 +#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 +#include "prime_ir/IR/Attributes.h"
 +
  using namespace mlir;
  using namespace mlir::tensor;
- 
+
 @@ -53,6 +57,11 @@ using llvm::mod;
  Operation *TensorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
@@ -25,32 +24,170 @@ index 22a25fd1a5af..1832036990e4 100644
    if (auto op = arith::ConstantOp::materialize(builder, value, type, loc))
      return op;
    if (complex::ConstantOp::isBuildableWith(value, type))
-@@ -1465,8 +1474,10 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
+@@ -1421,6 +1430,34 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+     auto elementsAttr = llvm::dyn_cast<ElementsAttr>(tensor);
+     if (elementsAttr && elementsAttr.isValidIndex(indices))
+       return elementsAttr.getValues<Attribute>()[indices];
++
++    // Handle element types with multi-value storage (e.g., extension fields)
++    // where the attr shape has extra trailing dimensions for coefficients.
++    if (auto denseAttr = llvm::dyn_cast<DenseIntElementsAttr>(tensor)) {
++      if (auto cli = llvm::dyn_cast<ConstantLikeInterface>(getType())) {
++        auto tensorType =
++            llvm::cast<RankedTensorType>(getTensor().getType());
++        int64_t numFlatValues = denseAttr.getNumElements();
++        int64_t numTensorElements = tensorType.getNumElements();
++        if (numFlatValues > numTensorElements) {
++          int64_t valuesPerElement = numFlatValues / numTensorElements;
++          // Compute linear index in tensor coordinate space.
++          auto tensorShape = tensorType.getShape();
++          int64_t linearIndex = 0;
++          int64_t stride = 1;
++          for (int64_t i = tensorShape.size() - 1; i >= 0; --i) {
++            linearIndex += indices[i] * stride;
++            stride *= tensorShape[i];
++          }
++          auto allValues = denseAttr.getValues<APInt>();
++          SmallVector<APInt> coeffs;
++          int64_t start = linearIndex * valuesPerElement;
++          for (int64_t i = 0; i < valuesPerElement; ++i)
++            coeffs.push_back(*(allValues.begin() + start + i));
++          return cli.createConstantAttrFromValues(coeffs);
++        }
++      }
++    }
+   }
+
+   if (Value result = foldExtractAfterInsert(*this))
+@@ -1465,8 +1502,21 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
  }
- 
+
  OpFoldResult FromElementsOp::fold(FoldAdaptor adaptor) {
 -  if (!llvm::is_contained(adaptor.getElements(), nullptr))
 -    return DenseElementsAttr::get(getType(), adaptor.getElements());
 +  if (!llvm::is_contained(adaptor.getElements(), nullptr)) {
 +    ShapedType type = prime_ir::maybeConvertPrimeIRToBuiltinType(getType());
++    // Handle multi-value element types (e.g., extension fields) where each
++    // element attribute is a DenseIntElementsAttr with coefficient values.
++    if (type.getNumElements() != getType().getNumElements()) {
++      SmallVector<APInt> allValues;
++      for (auto attr : adaptor.getElements()) {
++        for (auto val :
++             llvm::cast<DenseIntElementsAttr>(attr).getValues<APInt>())
++          allValues.push_back(val);
++      }
++      return DenseIntElementsAttr::get(type, allValues);
++    }
 +    return DenseElementsAttr::get(type, adaptor.getElements());
 +  }
    return {};
  }
- 
-@@ -4052,7 +4063,9 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
- 
+
+@@ -1601,9 +1651,12 @@
+ }
+
+ OpFoldResult GatherOp::fold(FoldAdaptor adaptor) {
++  auto resultType = cast<TensorType>(
++      prime_ir::maybeConvertPrimeIRToBuiltinType(
++          cast<ShapedType>(getResult().getType())));
+   if (OpFoldResult reshapedSource = reshapeConstantSource(
+-          llvm::dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
+-          getResult().getType()))
++          dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
++          resultType))
+     return reshapedSource;
+   return {};
+ }
+@@ -1842,9 +1895,12 @@
+ }
+
+ OpFoldResult ReshapeOp::fold(FoldAdaptor adaptor) {
++  auto resultType = cast<TensorType>(
++      prime_ir::maybeConvertPrimeIRToBuiltinType(
++          cast<ShapedType>(getResult().getType())));
+   if (OpFoldResult reshapedSource = reshapeConstantSource(
+-          llvm::dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
+-          getResult().getType()))
++          dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
++          resultType))
+     return reshapedSource;
+
+   // If the producer of operand 'source' is another 'tensor.reshape' op, use the
+@@ -2314,9 +2370,27 @@ void CollapseShapeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+ OpFoldResult ExpandShapeOp::fold(FoldAdaptor adaptor) {
++  // Handle multi-value element types (e.g., extension fields) where
++  // DenseElementsAttr has extra coefficient dimensions.
++  if (auto elements =
++          dyn_cast_or_null<DenseElementsAttr>(adaptor.getOperands().front())) {
++    auto resultType = prime_ir::maybeConvertPrimeIRToBuiltinType(
++        cast<ShapedType>(getResult().getType()));
++    if (resultType != cast<ShapedType>(getResult().getType()))
++      return elements.reshape(resultType);
++  }
+   return foldReshapeOp<ExpandShapeOp, CollapseShapeOp>(*this,
+                                                        adaptor.getOperands());
+ }
+
+ OpFoldResult CollapseShapeOp::fold(FoldAdaptor adaptor) {
++  // Handle multi-value element types (e.g., extension fields) where
++  // DenseElementsAttr has extra coefficient dimensions.
++  if (auto elements =
++          dyn_cast_or_null<DenseElementsAttr>(adaptor.getOperands().front())) {
++    auto resultType = prime_ir::maybeConvertPrimeIRToBuiltinType(
++        cast<ShapedType>(getResult().getType()));
++    if (resultType != cast<ShapedType>(getResult().getType()))
++      return elements.reshape(resultType);
++  }
+   return foldReshapeOp<CollapseShapeOp, ExpandShapeOp>(*this,
+                                                        adaptor.getOperands());
+ }
+@@ -2733,9 +2807,12 @@
+ }
+
+ OpFoldResult ExtractSliceOp::fold(FoldAdaptor adaptor) {
++  auto resultType = cast<TensorType>(
++      prime_ir::maybeConvertPrimeIRToBuiltinType(
++          cast<ShapedType>(getResult().getType())));
+   if (OpFoldResult reshapedSource = reshapeConstantSource(
+-          llvm::dyn_cast_if_present<SplatElementsAttr>(adaptor.getSource()),
+-          getResult().getType()))
++          dyn_cast_if_present<SplatElementsAttr>(adaptor.getSource()),
++          resultType))
+     return reshapedSource;
+   if (getSourceType() == getType() &&
+       succeeded(foldIdentityOffsetSizeAndStrideOpInterface(*this, getType())))
+@@ -4045,15 +4122,28 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+   auto constOperand = adaptor.getInput();
+-  if (!isa_and_nonnull<IntegerAttr, FloatAttr>(constOperand))
++  if (!isa_and_nonnull<IntegerAttr, FloatAttr, DenseIntElementsAttr>(
++          constOperand))
+     return {};
+
+   // Do not fold if the splat is not statically shaped
+   if (!getType().hasStaticShape())
+     return {};
+
    // SplatElementsAttr::get treats single value for second arg as being a
    // splat.
 -  return SplatElementsAttr::get(getType(), {constOperand});
 +  ShapedType destType =
 +      cast<ShapedType>(prime_ir::maybeConvertPrimeIRToBuiltinType(getType()));
++  // Handle multi-value element types (e.g., extension fields) where the
++  // constant operand is a DenseIntElementsAttr with coefficient values.
++  if (auto denseOperand = llvm::dyn_cast<DenseIntElementsAttr>(constOperand)) {
++    int64_t numElements = getType().getNumElements();
++    SmallVector<APInt> allValues;
++    for (int64_t i = 0; i < numElements; ++i)
++      for (auto val : denseOperand.getValues<APInt>())
++        allValues.push_back(val);
++    return DenseIntElementsAttr::get(destType, allValues);
++  }
 +  return SplatElementsAttr::get(destType, {constOperand});
  }
- 
+
  //===----------------------------------------------------------------------===//
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 7829b11da096..e86158d51727 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 @@ -7134,6 +7134,9 @@ cc_library(
@@ -62,4 +199,4 @@ index 7829b11da096..e86158d51727 100644
 +        "@prime_ir//prime_ir/IR:Attributes",
      ],
  )
- 
+

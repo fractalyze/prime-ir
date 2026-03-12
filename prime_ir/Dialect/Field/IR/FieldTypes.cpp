@@ -158,6 +158,8 @@ bool PrimeFieldType::isMontgomery() const { return getIsMontgomery(); }
 
 SmallVector<int64_t> PrimeFieldType::getAttrShape() const { return {}; }
 
+unsigned PrimeFieldType::getDegreeOverPrime() const { return 1; }
+
 TypedAttr PrimeFieldType::createConstantAttr(int64_t c) const {
   PrimeFieldOperation pfOp(c, *this);
   return pfOp.getIntegerAttr();
@@ -548,13 +550,8 @@ ShapedType ExtensionFieldType::overrideShapedType(ShapedType type) const {
 }
 
 unsigned ExtensionFieldType::getDegreeOverPrime() const {
-  Type baseField = getBaseField();
-  if (isa<PrimeFieldType>(baseField)) {
-    return getDegree();
-  }
-  // For tower: multiply degrees
-  auto efBase = cast<ExtensionFieldType>(baseField);
-  return getDegree() * efBase.getDegreeOverPrime();
+  auto baseField = cast<FieldTypeInterface>(getBaseField());
+  return getDegree() * baseField.getDegreeOverPrime();
 }
 
 PrimeFieldType ExtensionFieldType::getBasePrimeField() const {

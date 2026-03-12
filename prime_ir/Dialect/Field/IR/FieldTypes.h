@@ -114,9 +114,7 @@ namespace mlir::prime_ir::field {
 // Returns extension degree (1 for prime field, degree for extension field).
 // Note: Defined after FieldTypes.h.inc to access ExtensionFieldType definition.
 inline unsigned getExtensionDegree(Type fieldType) {
-  if (auto efType = dyn_cast<ExtensionFieldType>(fieldType))
-    return efType.getDegreeOverPrime();
-  return 1;
+  return cast<FieldTypeInterface>(fieldType).getDegreeOverPrime();
 }
 
 // Returns the underlying prime field type.

@@ -1773,20 +1773,46 @@ OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
 namespace {
 
 // Helper to compare a constant attribute with an integer offset.
-// Handles both standard and Montgomery forms.
+// Handles both standard and Montgomery forms, including extension field
+// attributes (DenseIntElementsAttr with flattened prime field coefficients).
 template <typename Predicate>
 bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
                        Predicate pred) {
   Type elementType = getElementTypeOrSelf(val.getType());
 
-  // Extract typed attr, handling splat for prime field tensors
+  // Extract typed attr representing a single field element.
   TypedAttr typedAttr;
   if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
     typedAttr = intAttr;
   } else if (auto splatAttr = dyn_cast<SplatElementsAttr>(attr)) {
     typedAttr = splatAttr.getSplatValue<IntegerAttr>();
   } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr)) {
-    typedAttr = denseAttr;
+    if (auto fti = dyn_cast<FieldTypeInterface>(elementType)) {
+      // Field types: verify all tensor elements are identical by checking
+      // each coefficient repeats the pattern of the first element.
+      unsigned degreeOverPrime = fti.getDegreeOverPrime();
+      auto allValues = denseAttr.getValues<APInt>();
+      unsigned total = allValues.size();
+      if (total % degreeOverPrime != 0)
+        return false;
+
+      for (unsigned i = degreeOverPrime; i < total; ++i) {
+        if (allValues[i] != allValues[i % degreeOverPrime])
+          return false;
+      }
+
+      if (degreeOverPrime == 1) {
+        typedAttr = IntegerAttr::get(denseAttr.getElementType(), allValues[0]);
+      } else {
+        SmallVector<APInt> firstCoeffs(allValues.begin(),
+                                       allValues.begin() + degreeOverPrime);
+        auto singleType = RankedTensorType::get(fti.getAttrShape(),
+                                                denseAttr.getElementType());
+        typedAttr = DenseIntElementsAttr::get(singleType, firstCoeffs);
+      }
+    } else {
+      return false;
+    }
   }
   if (!typedAttr) {
     return false;

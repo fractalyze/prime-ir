@@ -35,7 +35,6 @@ LLVM_PATCHES = [
     # NOTE(chokobole): Patches for supporting PrimeIR Dialects.
     "@prime_ir//third_party/llvm-project:linalg_type_support.patch",
     "@prime_ir//third_party/llvm-project:tensor_type_support.patch",
-    "@prime_ir//third_party/llvm-project:constant_splat_folding.patch",
     "@prime_ir//third_party/llvm-project:vector_type_support.patch",
     "@prime_ir//third_party/llvm-project:memref_folding.patch",
     "@prime_ir//third_party/llvm-project:lazy_linking.patch",
