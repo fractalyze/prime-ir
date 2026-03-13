@@ -279,5 +279,38 @@ TEST_F(ParallelTaskAssignmentTest, LoopFusionWithTransposeNotParallelized) {
   // Either way, no multi-dim checks are performed.
 }
 
+// Regression test: a fusion containing a bitcast that changes the outermost
+// dimension size must not be parallelized. Without this check, the emitter
+// produces a tensor.reshape with mismatched element counts, crashing with
+// "tensor.reshape element count mismatch".
+TEST_F(ParallelTaskAssignmentTest,
+       FusionWithDimChangingBitcastNotParallelized) {
+  constexpr char hlo_string[] = R"(
+  HloModule m
+    fused_computation {
+      p0 = s32[1,131072,1]{2,1,0} parameter(0)
+      bitcast = s32[512,256,1]{2,1,0} bitcast(p0)
+      slice0 = s32[512,128,1]{2,1,0} slice(bitcast), slice={[0:512], [0:128], [0:1]}
+      slice1 = s32[512,128,1]{2,1,0} slice(bitcast), slice={[0:512], [128:256], [0:1]}
+      add = s32[512,128,1]{2,1,0} add(slice0, slice1)
+      sub = s32[512,128,1]{2,1,0} subtract(slice0, slice1)
+      concat = s32[512,256,1]{2,1,0} concatenate(add, sub), dimensions={1}
+      ROOT bitcast2 = s32[131072,1]{1,0} bitcast(concat)
+    }
+
+    ENTRY e {
+      a = s32[1,131072,1]{2,1,0} parameter(0)
+      ROOT fusion = s32[131072,1]{1,0} fusion(a), kind=kLoop, calls=fused_computation
+    }
+  )";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> m,
+                          ParseAndReturnVerifiedModule(hlo_string));
+  TF_ASSERT_OK_AND_ASSIGN(bool changed, RunParallelTaskAssigner(m.get()));
+  // The bitcast [1,131072,1] → [512,256,1] changes dim 0 from 1 to 512,
+  // which makes per-partition scaling incorrect. Must not be parallelized.
+  EXPECT_FALSE(changed);
+}
+
 }  // namespace
 }  // namespace zkx::cpu

@@ -48,13 +48,29 @@ bool FusionContainsUnsafePartitionOp(const HloInstruction* fusion,
     switch (instr->opcode()) {
       case HloOpcode::kParameter:
       case HloOpcode::kConstant:
-      case HloOpcode::kBitcast:
       case HloOpcode::kBitcastConvert:
       case HloOpcode::kBroadcast:
       case HloOpcode::kTuple:
       case HloOpcode::kGetTupleElement:
-      case HloOpcode::kReshape:
         continue;
+      case HloOpcode::kBitcast:
+      case HloOpcode::kReshape: {
+        // Bitcasts/reshapes that change the partition dimension size are
+        // unsafe: subsequent slices/concatenates may operate on remapped
+        // dimensions, making per-partition scaling incorrect.
+        const Shape& in_shape = instr->operand(0)->shape();
+        const Shape& out_shape = instr->shape();
+        if (outermost_dim < in_shape.rank() &&
+            outermost_dim < out_shape.rank() &&
+            in_shape.dimensions(outermost_dim) !=
+                out_shape.dimensions(outermost_dim)) {
+          VLOG(3) << "Fusion " << fusion->name()
+                  << " has bitcast/reshape changing partition dim: "
+                  << instr->ToString();
+          return true;
+        }
+        continue;
+      }
       case HloOpcode::kSlice: {
         const Shape& operand_shape = instr->operand(0)->shape();
         if (operand_shape.rank() == 0) continue;
