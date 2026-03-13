@@ -1,0 +1,26 @@
+# Copyright 2026 Fractalyze Inc. All rights reserved.
+
+name: Pin Bump
+
+on:
+  repository_dispatch:
+    types: [pin-bump]
+
+jobs:
+  bump:
+    if: github.event.client_payload.source_repo == 'stablehlo'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump stablehlo pin (+ sync prime_ir, zk_dtypes)
+        uses: fractalyze/github-actions/pin-bump@main
+        with:
+          upstream_repo: stablehlo
+          upstream_commit: ${{ github.event.client_payload.commit }}
+          pin_file: third_party/stablehlo/workspace.bzl
+          var_prefix: STABLEHLO
+          github_token: ${{ secrets.GH_PAT }}
+          transitive_pins: |
+            prime-ir|third_party/prime_ir/workspace.bzl|third_party/prime_ir/workspace.bzl|PRIME_IR
+            zk_dtypes|third_party/zk_dtypes/workspace.bzl|third_party/py/zk_dtypes/workspace.bzl|ZK_DTYPES

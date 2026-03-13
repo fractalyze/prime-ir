@@ -1,0 +1,20 @@
+# Copyright 2026 Fractalyze Inc. All rights reserved.
+
+name: Notify Downstream
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch pin-bump to jax
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh api repos/fractalyze/jax/dispatches \
+            -f event_type=pin-bump \
+            -f 'client_payload[source_repo]=zkx' \
+            -f 'client_payload[commit]=${{ github.sha }}'
