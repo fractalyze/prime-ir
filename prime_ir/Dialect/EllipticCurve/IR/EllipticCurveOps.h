@@ -37,7 +37,6 @@ namespace mlir::prime_ir::elliptic_curve {
 ParseResult parseEllipticCurveConstant(OpAsmParser &parser,
                                        OperationState &result);
 
-// WARNING: Assumes Jacobian or XYZZ point types
 Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType);
 
 } // namespace mlir::prime_ir::elliptic_curve

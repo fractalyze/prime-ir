@@ -104,6 +104,22 @@ func.func @test_double(%affine1: !affine, %jacobian1: !jacobian, %xyzz1: !xyzz) 
   return
 }
 
+// CHECK-LABEL: @test_addition_cross_kind
+func.func @test_addition_cross_kind(%affine1: !affine, %affine2: !affine) {
+  // CHECK-NOT: elliptic_curve.add
+  // affine, affine -> xyzz (natural result is jacobian, requires conversion)
+  %xyzz1 = elliptic_curve.add %affine1, %affine2 : !affine, !affine -> !xyzz
+  return
+}
+
+// CHECK-LABEL: @test_double_cross_kind
+func.func @test_double_cross_kind(%affine1: !affine) {
+  // CHECK-NOT: elliptic_curve.double
+  // affine -> xyzz (natural result is jacobian, requires conversion)
+  %xyzz1 = elliptic_curve.double %affine1 : !affine -> !xyzz
+  return
+}
+
 // CHECK-LABEL: @test_negation
 func.func @test_negation(%affine1: !affine, %jacobian1: !jacobian, %xyzz1: !xyzz) {
 
