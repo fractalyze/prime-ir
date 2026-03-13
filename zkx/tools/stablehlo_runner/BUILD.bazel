@@ -155,6 +155,7 @@ zkx_test(
     backends = ["gpu"],
     data = [
         "ntt.stablehlo.mlir",
+        "pairing_check.stablehlo.mlir",
         "poseidon2_permutation.stablehlo.mlir",
     ],
     deps = [

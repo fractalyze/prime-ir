@@ -63,5 +63,10 @@ TEST_F(StablehloCompilationTest, NttCompiles) {
   EXPECT_THAT(GetOptimizedModule(std::move(*hlo_module)), IsOk());
 }
 
+TEST_F(StablehloCompilationTest, PairingCheckConverts) {
+  auto hlo_module = LoadStablehloModule("pairing_check.stablehlo.mlir");
+  ASSERT_THAT(hlo_module, IsOk());
+}
+
 }  // namespace
 }  // namespace zkx
