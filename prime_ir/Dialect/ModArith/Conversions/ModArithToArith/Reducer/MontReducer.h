@@ -58,6 +58,12 @@ public:
   // Assumes that both are in the range [0, n).
   Value getCanonicalDiff(Value lhs, Value rhs);
 
+  // Reduces a value accumulated in a wider type back to [0, p) in storage type.
+  // The input is in a wider integer type (e.g., i64 for i32 storage) with
+  // value bounded by numLeaves * (p - 1). Performs ceil(log₂(numLeaves))
+  // binary conditional subtractions, then truncates to storage type.
+  Value reduceFromWiderType(Value accumulated, unsigned numLeaves);
+
 private:
   // Creates a properly typed constant for the modulus based on the input type.
   // Handles splatting for vector types automatically.

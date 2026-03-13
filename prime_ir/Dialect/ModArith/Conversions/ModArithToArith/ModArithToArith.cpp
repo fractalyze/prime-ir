@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <utility>
 
+#include "llvm/Support/MathExtras.h"
 #include "mlir/Analysis/DataFlow/DeadCodeAnalysis.h"
 #include "mlir/Analysis/DataFlow/IntegerRangeAnalysis.h"
 #include "mlir/Analysis/DataFlowFramework.h"
@@ -376,6 +377,87 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
   }
   for (Value v : toErase)
     boundMap.erase(v);
+}
+
+//===----------------------------------------------------------------------===//
+// Widened Accumulation: Add Chain Analysis
+//===----------------------------------------------------------------------===//
+
+// Pre-analysis that identifies add chain roots and their leaf counts.
+// An AddOp is a "chain root" if it has any non-AddOp user or multiple uses.
+// An AddOp is "intermediate" if it has exactly one use and that use is another
+// AddOp. The chain's leaves are non-intermediate operands.
+struct AddChainAnalysis {
+  DenseMap<Operation *, unsigned> rootToNumLeaves;
+  DenseSet<Operation *> intermediates;
+
+  void analyze(Operation *moduleOp) {
+    moduleOp->walk([&](AddOp addOp) {
+      if (!isChainRoot(addOp))
+        return;
+      SmallVector<Operation *> chainIntermediates;
+      unsigned numLeaves = countLeaves(addOp, chainIntermediates);
+      rootToNumLeaves[addOp] = numLeaves;
+      for (Operation *op : chainIntermediates)
+        intermediates.insert(op);
+    });
+  }
+
+private:
+  static bool isChainRoot(AddOp op) {
+    if (!op->hasOneUse())
+      return true;
+    return !isa<AddOp>(*op->getUsers().begin());
+  }
+
+  static unsigned countLeaves(AddOp op,
+                              SmallVector<Operation *> &intermediates) {
+    unsigned total = 0;
+    for (Value operand : {op.getLhs(), op.getRhs()}) {
+      auto defAddOp = operand.getDefiningOp<AddOp>();
+      if (defAddOp && defAddOp->hasOneUse()) {
+        intermediates.push_back(defAddOp);
+        total += countLeaves(defAddOp, intermediates);
+      } else {
+        ++total;
+      }
+    }
+    return total;
+  }
+};
+
+// Recursively emits widened adds for an add chain. Walks original IR structure
+// (preserved during dialect conversion) and uses remapped values for leaves.
+Value emitWidenedAddChain(AddOp addOp, ImplicitLocOpBuilder &b, Type widerType,
+                          DenseMap<Operation *, Value> &cache,
+                          const AddChainAnalysis &analysis,
+                          ConversionPatternRewriter &rewriter) {
+  auto it = cache.find(addOp);
+  if (it != cache.end())
+    return it->second;
+
+  auto emitOperand = [&](Value operand) -> Value {
+    auto defAddOp = operand.getDefiningOp<AddOp>();
+    if (defAddOp && defAddOp->hasOneUse() &&
+        analysis.intermediates.contains(defAddOp)) {
+      return emitWidenedAddChain(defAddOp, b, widerType, cache, analysis,
+                                 rewriter);
+    }
+    // Leaf: get the already-converted value and extend to wider type.
+    Value converted = rewriter.getRemappedValue(operand);
+    if (!converted)
+      return {};
+    return b.create<arith::ExtUIOp>(widerType, converted);
+  };
+
+  Value lhs = emitOperand(addOp.getLhs());
+  Value rhs = emitOperand(addOp.getRhs());
+  if (!lhs || !rhs)
+    return {};
+
+  Value result = b.create<arith::AddIOp>(lhs, rhs);
+  cache[addOp] = result;
+  return result;
 }
 
 } // namespace
@@ -741,7 +823,11 @@ struct ConvertMontInverse : public BoundMapPattern<MontInverseOp> {
 };
 
 struct ConvertAdd : public BoundMapPattern<AddOp> {
-  using BoundMapPattern::BoundMapPattern;
+  ConvertAdd(const TypeConverter &tc, MLIRContext *context,
+             const BoundMap *boundMap, const AddChainAnalysis *addChainAnalysis,
+             unsigned minChainLength, PatternBenefit benefit = 1)
+      : BoundMapPattern(tc, context, boundMap, benefit),
+        addChainAnalysis(addChainAnalysis), minChainLength(minChainLength) {}
 
   LogicalResult
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
@@ -751,6 +837,49 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     APInt modulus = modArithType.getModulus().getValue();
     unsigned storageWidth = modArithType.getStorageBitWidth();
     unsigned modWidth = modulus.getActiveBits();
+
+    // Try widened accumulation for chain roots.
+    // When lazy reduction is active (boundMap != null) and modWidth <
+    // storageWidth, lazy reduction already handles the within-width
+    // accumulation optimally. Widening is only applied when:
+    //   - lazy reduction is disabled, OR
+    //   - modWidth == storageWidth (full-width: no headroom for lazy reduction)
+    bool shouldTryWiden = addChainAnalysis && minChainLength > 0 &&
+                          (!this->boundMap || modWidth == storageWidth);
+    if (shouldTryWiden) {
+      auto rootIt = addChainAnalysis->rootToNumLeaves.find(op);
+      if (rootIt != addChainAnalysis->rootToNumLeaves.end()) {
+        unsigned numLeaves = rootIt->second;
+        if (numLeaves >= minChainLength) {
+          unsigned extraBits = llvm::Log2_64_Ceil(numLeaves);
+          unsigned neededWidth = modWidth + extraBits;
+          unsigned widerWidth = llvm::bit_ceil(neededWidth);
+
+          if (widerWidth > storageWidth) {
+            Type widerScalarType =
+                IntegerType::get(op.getContext(), widerWidth);
+            Type widerType = widerScalarType;
+            if (auto shapedType =
+                    dyn_cast<ShapedType>(adaptor.getLhs().getType()))
+              widerType =
+                  shapedType.cloneWith(shapedType.getShape(), widerScalarType);
+
+            DenseMap<Operation *, Value> widenedCache;
+            Value wideResult = emitWidenedAddChain(
+                op, b, widerType, widenedCache, *addChainAnalysis, rewriter);
+            if (wideResult) {
+              MontReducer montReducer(b, modArithType);
+              Value result =
+                  montReducer.reduceFromWiderType(wideResult, numLeaves);
+              rewriter.replaceOp(op, result);
+              return success();
+            }
+          }
+        }
+      }
+    }
+
+    // Fallback: per-add conversion with lazy reduction support.
     uint64_t resBound = lookupKp(op.getResult());
 
     // Pre-reduce lazy inputs whose umax sum would overflow w bits.
@@ -816,6 +945,10 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     rewriter.replaceOp(op, result);
     return success();
   }
+
+private:
+  const AddChainAnalysis *addChainAnalysis;
+  unsigned minChainLength;
 };
 
 struct ConvertDouble : public BoundMapPattern<DoubleOp> {
@@ -1657,16 +1790,26 @@ void ModArithToArith::runOnOperation() {
   }
   const BoundMap *bm = lazyReduction ? &moduleBoundMap : nullptr;
 
+  // Pre-analyze add chains for widened accumulation.
+  AddChainAnalysis addChainAnalysis;
+  if (minChainLengthForWidening > 0) {
+    addChainAnalysis.analyze(module);
+  }
+  const AddChainAnalysis *aca =
+      minChainLengthForWidening > 0 ? &addChainAnalysis : nullptr;
+
   ConversionTarget target(*context);
   target.addIllegalDialect<ModArithDialect>();
   target.addLegalDialect<arith::ArithDialect>();
 
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
+  // ConvertAdd uses both BoundMap and AddChainAnalysis.
+  patterns.add<ConvertAdd>(typeConverter, context, bm, aca,
+                           minChainLengthForWidening);
   // Patterns that use BoundMap for lazy reduction analysis.
   patterns.add<
       // clang-format off
-      ConvertAdd,
       ConvertCmp,
       ConvertDouble,
       ConvertInverse,
