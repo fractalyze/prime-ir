@@ -71,6 +71,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/Transforms/BufferizableOpInterfaceImpl.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "prime_ir/Dialect/ModArith/Transforms/BufferizableOpInterfaceImpl.h"
 #include "prime_ir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
 #include "prime_ir/Dialect/Poly/IR/PolyDialect.h"
 #include "prime_ir/Dialect/Poly/IR/PolyOps.h"
@@ -352,6 +353,8 @@ std::unique_ptr<llvm::Module> CreateLLVMModule(
         registry);
     mlir::prime_ir::elliptic_curve::
         registerBufferizableOpInterfaceExternalModels(registry);
+    mlir::prime_ir::mod_arith::registerBufferizableOpInterfaceExternalModels(
+        registry);
   }
   if (pass_flag.enable_elliptic_curve_to_llvm) {
     mlir::prime_ir::elliptic_curve::registerConvertEllipticCurveToLLVMInterface(
