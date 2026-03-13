@@ -1,0 +1,23 @@
+# Copyright 2026 Fractalyze Inc. All rights reserved.
+
+name: Notify Downstream
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        downstream: [stablehlo, zkx]
+    steps:
+      - name: Dispatch pin-bump to ${{ matrix.downstream }}
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          gh api repos/fractalyze/${{ matrix.downstream }}/dispatches \
+            -f event_type=pin-bump \
+            -f 'client_payload[source_repo]=prime-ir' \
+            -f 'client_payload[commit]=${{ github.sha }}'
