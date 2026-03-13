@@ -111,16 +111,21 @@ LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
 }
 } // namespace
 
-// WARNING: Assumes Jacobian or XYZZ point types
 Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   auto baseFieldType = cast<PointTypeInterface>(pointType).getBaseFieldType();
   Value zeroBF = field::createFieldZero(baseFieldType, b);
   Value oneBF = field::createFieldOne(baseFieldType, b);
-  return isa<XYZZType>(pointType)
-             ? b.create<FromCoordsOp>(pointType,
-                                      ValueRange{oneBF, oneBF, zeroBF, zeroBF})
-             : b.create<FromCoordsOp>(pointType,
-                                      ValueRange{oneBF, oneBF, zeroBF});
+  if (isa<AffineType>(pointType)) {
+    return b.create<FromCoordsOp>(pointType, ValueRange{zeroBF, zeroBF});
+  }
+  if (isa<JacobianType>(pointType)) {
+    return b.create<FromCoordsOp>(pointType, ValueRange{oneBF, oneBF, zeroBF});
+  }
+  if (isa<XYZZType>(pointType)) {
+    return b.create<FromCoordsOp>(pointType,
+                                  ValueRange{oneBF, oneBF, zeroBF, zeroBF});
+  }
+  llvm_unreachable("Unsupported point type for createZeroPoint");
 }
 
 /////////////// VERIFY OPS /////////////////

@@ -294,6 +294,31 @@ func.func @test_add_fold() -> !jacobian {
   return %2 : !jacobian
 }
 
+// CHECK-LABEL: @test_add_fold_cross_kind
+// CHECK-SAME: () -> [[XYZZ:.*]] {
+func.func @test_add_fold_cross_kind() -> !xyzz {
+  // add(affine, affine) -> xyzz: cross-kind output requires conversion
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.add
+  // CHECK: return %[[C]] : [[XYZZ]]
+  %0 = elliptic_curve.constant dense<[1, 2]> : !affine
+  %1 = elliptic_curve.constant dense<[3, 4]> : !affine
+  %2 = elliptic_curve.add %0, %1 : !affine, !affine -> !xyzz
+  return %2 : !xyzz
+}
+
+// CHECK-LABEL: @test_double_fold_cross_kind
+// CHECK-SAME: () -> [[XYZZ:.*]] {
+func.func @test_double_fold_cross_kind() -> !xyzz {
+  // double(affine) -> xyzz: cross-kind output requires conversion
+  // CHECK: %[[C:.*]] = elliptic_curve.constant
+  // CHECK-NOT: elliptic_curve.double
+  // CHECK: return %[[C]] : [[XYZZ]]
+  %0 = elliptic_curve.constant dense<[1, 2]> : !affine
+  %1 = elliptic_curve.double %0 : !affine -> !xyzz
+  return %1 : !xyzz
+}
+
 // CHECK-LABEL: @test_sub_fold
 // CHECK-SAME: () -> [[JACOBIAN:.*]] {
 func.func @test_sub_fold() -> !jacobian {

@@ -86,8 +86,10 @@ PointCodeGen PointCodeGen::add(const PointCodeGen &other,
     }
   }
 
-  return applyBinaryOp(codeGen, other.codeGen,
-                       [](const auto &a, const auto &b) { return a + b; });
+  PointCodeGen result =
+      applyBinaryOp(codeGen, other.codeGen,
+                    [](const auto &a, const auto &b) { return a + b; });
+  return result.convert(outputKind);
 }
 
 PointCodeGen PointCodeGen::dbl(PointKind outputKind) const {
@@ -97,7 +99,9 @@ PointCodeGen PointCodeGen::dbl(PointKind outputKind) const {
       return std::get<AffinePointCodeGen>(codeGen).DoubleToXyzz();
     }
   }
-  return applyUnaryOp(codeGen, [](const auto &v) { return v.Double(); });
+  PointCodeGen result =
+      applyUnaryOp(codeGen, [](const auto &v) { return v.Double(); });
+  return result.convert(outputKind);
 }
 
 namespace {
