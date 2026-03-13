@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Dispatch pin-bump to stablehlo
         env:
-          GH_TOKEN: ${{ secrets.GH_PAT }}
+          GH_TOKEN: ${{ secrets.BUMPER_GH_PAT }}
         run: |
           gh api repos/fractalyze/stablehlo/dispatches \
             -f event_type=pin-bump \

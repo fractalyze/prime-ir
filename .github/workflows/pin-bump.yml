@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.BUMPER_GH_PAT }}
 
       - name: Route and bump pin
         uses: fractalyze/github-actions/pin-bump@main
@@ -20,4 +22,4 @@ jobs:
           upstream_commit: ${{ github.event.client_payload.commit }}
           pin_file: third_party/zk_dtypes/workspace.bzl
           var_prefix: ZK_DTYPES
-          github_token: ${{ secrets.GH_PAT }}
+          github_token: ${{ secrets.BUMPER_GH_PAT }}
