@@ -256,6 +256,7 @@ zkx_cc_library(
         "//zkx/service:call_inliner",
         "//zkx/service:copy_insertion",
         "//zkx/service:dump",
+        "//zkx/service:layout_normalization",
         "//zkx/service:llvm_compiler",
         "//zkx/service:scatter_expander",
         "//zkx/service:scatter_simplifier",

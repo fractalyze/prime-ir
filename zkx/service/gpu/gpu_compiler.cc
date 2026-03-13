@@ -106,6 +106,7 @@ limitations under the License.
 #include "zkx/service/gpu/transforms/reduction_layout_normalizer.h"
 #include "zkx/service/gpu/transforms/reduction_splitter.h"
 #include "zkx/service/gpu/transforms/tree_reduction_rewriter.h"
+#include "zkx/service/layout_normalization.h"
 #include "zkx/service/llvm_ir/llvm_command_line_options.h"
 #include "zkx/service/llvm_ir/llvm_util.h"
 #include "zkx/service/scatter_expander.h"
@@ -529,7 +530,7 @@ absl::Status RunLayoutNormalizationPasses(
 
   layout_normalization_pipeline.AddPass<ReshapeDecomposer>();
   // TODO(batzor): Add HloPassFix<MoveCopyToUsers>
-  // TODO(batzor): Add LayoutNormalization
+  layout_normalization_pipeline.AddPass<LayoutNormalization>();
   // The LayoutAssignment pass may leave behind kCopy instructions which are
   // duplicate or NOPs, so remove them with algebraic simplification and CSE.
   layout_normalization_pipeline.AddPass<HloPassFix<GpuAlgebraicSimplifier>>(
@@ -692,8 +693,8 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
     pipeline.AddPass<ReshapeDecomposer>();
     // TODO(batzor): Add ReduceDecomposer
     // TODO(batzor): Add DotNormalizer
-    // TODO(batzor): Add LayoutNormalization
 
+    pipeline.AddPass<LayoutNormalization>();
     // Remove any redundant operations (such as bitcasts) introduced by layout
     // normalization.
     pipeline.AddPass<HloPassFix<GpuAlgebraicSimplifier>>(simplifier_options,
@@ -728,7 +729,8 @@ absl::Status GpuCompiler::OptimizeHloPostLayoutAssignment(
   pipeline.AddPass<HostOffloadLegalize>(
       static_cast<int64_t>(se::MemoryType::kHost),
       /*after_layout=*/true);
-  // TODO(batzor): Add LayoutNormalization
+
+  pipeline.AddPass<LayoutNormalization>();
 
   // Layout normalization will create scatters that are not simplified and
   // also have unsorted update_window_dims.

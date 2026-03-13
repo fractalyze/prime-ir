@@ -1199,29 +1199,30 @@ zkx_cc_library(
     ],
 )
 
-zkx_cc_unittest(
-    name = "layout_assignment_unittest",
-    srcs = ["layout_assignment_unittest.cc"],
+zkx_cc_library(
+    name = "layout_normalization",
+    srcs = ["layout_normalization.cc"],
+    hdrs = ["layout_normalization.h"],
     deps = [
-        ":computation_layout",
-        ":layout_assignment",
-        ":logical_buffer",
-        ":pattern_matcher",
+        ":hlo_creation_utils",
+        ":shape_inference",
         "//xla/tsl/platform:errors",
-        "//xla/tsl/platform:status",
         "//xla/tsl/platform:statusor",
         "//zkx:literal",
-        "//zkx:literal_util",
-        "//zkx:shape_layout",
+        "//zkx:permutation_util",
         "//zkx:shape_util",
+        "//zkx:status_macros",
         "//zkx:util",
         "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/ir:dfs_hlo_visitor_with_default",
         "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/parser:hlo_parser",
-        "//zkx/hlo/testlib:pattern_matcher_gmock",
-        "//zkx/tests:hlo_test_base",
-        "@com_google_absl//absl/log:check",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/hlo/pass:hlo_pass_interface",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_set",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
     ],
 )
@@ -1766,21 +1767,6 @@ zkx_cc_library(
     ],
 )
 
-zkx_cc_unittest(
-    name = "transpose_folding_unittest",
-    srcs = ["transpose_folding_unittest.cc"],
-    deps = [
-        ":transpose_folding",
-        "//zkx:zkx_data_cc_proto",
-        "//zkx/hlo/builder:zkx_builder",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/hlo/utils:hlo_matchers",
-        "//zkx/tests:hlo_test_base",
-        "@com_google_absl//absl/status:status_matchers",
-        "@com_google_absl//absl/strings",
-    ],
-)
-
 zkx_cc_library(
     name = "tuple_util",
     srcs = ["tuple_util.cc"],
@@ -1931,6 +1917,47 @@ zkx_cc_library(
 )
 
 zkx_cc_unittest(
+    name = "fusion_node_indexing_evaluation_unittest",
+    srcs = ["fusion_node_indexing_evaluation_unittest.cc"],
+    deps = [
+        ":fusion_node_indexing_evaluation",
+        ":instruction_fusion",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/tests:hlo_test_base",
+        "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log:check",
+    ],
+)
+
+zkx_cc_unittest(
+    name = "layout_assignment_unittest",
+    srcs = ["layout_assignment_unittest.cc"],
+    deps = [
+        ":computation_layout",
+        ":layout_assignment",
+        ":logical_buffer",
+        ":pattern_matcher",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:status",
+        "//xla/tsl/platform:statusor",
+        "//zkx:literal",
+        "//zkx:literal_util",
+        "//zkx:shape_layout",
+        "//zkx:shape_util",
+        "//zkx:util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/parser:hlo_parser",
+        "//zkx/hlo/testlib:pattern_matcher_gmock",
+        "//zkx/tests:hlo_test_base",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/types:span",
+    ],
+)
+
+zkx_cc_unittest(
     name = "service_unittests",
     srcs = [
         "call_graph_unittest.cc",
@@ -1954,6 +1981,7 @@ zkx_cc_unittest(
         # "hlo_verifier_unittest.cc",
         "host_offload_utils_unittest.cc",
         "instruction_fusion_unittest.cc",
+        "layout_normalization_unittest.cc",
         "lockable_unittest.cc",
         # TODO(chokobole): Add unittest. Dependency: HloTestBase
         # "latency_hiding_scheduler_unittest.cc",
@@ -1973,6 +2001,7 @@ zkx_cc_unittest(
         # TODO(chokobole): Add unittest. Dependency: PlatformUtil::GetStreamExecutors
         # "shaped_buffer_unittest.cc",
         "stream_pool_unittest.cc",
+        "transpose_folding_unittest.cc",
         "value_range_unittest.cc",
         "while_loop_constant_sinking_unittest.cc",
         "while_loop_unroller_unittest.cc",
@@ -1998,6 +2027,7 @@ zkx_cc_unittest(
         ":hlo_proto_util",
         ":host_offload_utils",
         ":instruction_fusion",
+        ":layout_normalization",
         ":lockable",
         ":mapped_ptr_container_sorter",
         ":name_uniquer",
@@ -2011,6 +2041,7 @@ zkx_cc_unittest(
         ":slow_operation_alarm",
         ":stream_pool",
         ":test_compilation_environment_cc_proto",
+        ":transpose_folding",
         ":value_range",
         ":while_loop_constant_sinking",
         ":while_loop_unroller",
@@ -2027,6 +2058,7 @@ zkx_cc_unittest(
         "//zkx:shape_util",
         "//zkx:util",
         "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/builder:zkx_builder",
         "//zkx/hlo/evaluator:hlo_evaluator",
         "//zkx/hlo/ir:hlo",
         "//zkx/hlo/ir:hlo_opcode",
@@ -2045,23 +2077,10 @@ zkx_cc_unittest(
         "@com_google_absl//absl/algorithm:container",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:status_matchers",
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/synchronization",
         "@com_google_absl//absl/time",
         "@com_google_absl//absl/types:span",
-    ],
-)
-
-zkx_cc_unittest(
-    name = "fusion_node_indexing_evaluation_unittest",
-    srcs = ["fusion_node_indexing_evaluation_unittest.cc"],
-    deps = [
-        ":fusion_node_indexing_evaluation",
-        ":instruction_fusion",
-        "//zkx/hlo/ir:hlo",
-        "//zkx/tests:hlo_test_base",
-        "@com_google_absl//absl/algorithm:container",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log:check",
     ],
 )
