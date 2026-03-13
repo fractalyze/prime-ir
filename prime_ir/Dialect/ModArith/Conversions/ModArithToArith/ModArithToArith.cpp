@@ -1181,9 +1181,7 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
     // types — reduceMultiLimb uses unsigned shifts that don't preserve
     // sign information from MulSIExtendedOp.
     MontgomeryAttr montAttrVal = modType.getMontgomeryAttr();
-    unsigned limbWidth =
-        montAttrVal.getNPrime().getType().getIntOrFloatBitWidth();
-    unsigned numLimbs = (w + limbWidth - 1) / limbWidth;
+    unsigned numLimbs = montAttrVal.getNumLimbs();
     Value signedLhs, signedRhs;
     if (numLimbs == 1) {
       signedLhs = getSignedFormFromCanonical(lhs, modAttr);
@@ -1224,11 +1222,9 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   IntegerType intType = modType.getStorageType();
   IntegerType intExtType = intType.scaleElementBitwidth(2);
 
-  const unsigned modBitWidth = intType.getWidth();
-  const unsigned limbWidth = modBitWidth > APInt::APINT_BITS_PER_WORD
-                                 ? APInt::APINT_BITS_PER_WORD
-                                 : modBitWidth;
-  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+  MontgomeryAttr montAttrVal = modType.getMontgomeryAttr();
+  const unsigned limbWidth = montAttrVal.getLimbWidth();
+  const unsigned numLimbs = montAttrVal.getNumLimbs();
 
   MontReducer montReducer(b, modType);
   if (numLimbs == 1) {

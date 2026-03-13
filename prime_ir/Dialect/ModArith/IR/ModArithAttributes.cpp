@@ -35,6 +35,19 @@ IntegerAttr MontgomeryAttr::getRSquared() const { return getImpl()->rSquared; }
 const SmallVector<IntegerAttr> &MontgomeryAttr::getInvTwoPowers() const {
   return getImpl()->invTwoPowers;
 }
+unsigned MontgomeryAttr::getLimbWidth() const {
+  return getNPrime().getType().getIntOrFloatBitWidth();
+}
+unsigned MontgomeryAttr::getNumLimbs() const {
+  unsigned lw = getLimbWidth();
+  APInt modulus = getModulus().getValue();
+  unsigned storageBits = storageBits = modulus.getBitWidth();
+  if (modulus.isPowerOf2()) {
+    // Binary field: 2ⁿ needs n bits for storage (not n + 1)
+    --storageBits;
+  }
+  return (storageBits + lw - 1) / lw;
+}
 
 namespace detail {
 
