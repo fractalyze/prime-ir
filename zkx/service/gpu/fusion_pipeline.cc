@@ -25,6 +25,7 @@ limitations under the License.
 #include "zkx/service/gpu/transforms/horizontal_input_fusion.h"
 #include "zkx/service/gpu/transforms/horizontal_loop_fusion.h"
 #include "zkx/service/gpu/transforms/multi_output_fusion.h"
+#include "zkx/service/gpu/transforms/poseidon2_fusion_rewriter.h"
 #include "zkx/service/gpu/transforms/priority_fusion.h"
 
 namespace zkx::gpu {
@@ -50,6 +51,11 @@ HloPassPipeline FusionPipeline(
   // fusion.AddInvariantCheckerDebug<HloVerifier>(
   //     std::make_unique<CpuGpuVerifierMetadata>(std::move(opts)),
   //     "hlo verifier (debug)");
+
+  // Detect Poseidon2 permutation pattern and wrap into a single kCustom fusion
+  // before PriorityFusion can split it into multiple kernels.
+  fusion.AddPass<Poseidon2FusionRewriter>();
+  fusion.AddPass<HloDCE>();
 
   GpuHloCostAnalysis::Options cost_analysis_options{
       shape_size_bytes_function,

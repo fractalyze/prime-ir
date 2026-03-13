@@ -161,6 +161,7 @@ zkx_cc_library(
         "//zkx/service/gpu/transforms:horizontal_input_fusion",
         "//zkx/service/gpu/transforms:horizontal_loop_fusion",
         "//zkx/service/gpu/transforms:multi_output_fusion",
+        "//zkx/service/gpu/transforms:poseidon2_fusion_rewriter",
         "//zkx/service/gpu/transforms:priority_fusion",
         "//zkx/stream_executor:device_description",
     ],

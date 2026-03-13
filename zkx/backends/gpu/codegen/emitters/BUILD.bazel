@@ -216,6 +216,30 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "poseidon2",
+    srcs = ["poseidon2.cc"],
+    hdrs = ["poseidon2.h"],
+    deps = [
+        ":emitter_base",
+        "//zkx/codegen/emitters:computation_partitioner",
+        "//zkx/hlo/analysis:indexing_map",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/service/gpu:hlo_fusion_analysis",
+        "//zkx/service/gpu:launch_dimensions",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/strings",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:SCFDialect",
+        "@llvm-project//mlir:TensorDialect",
+        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
+    ],
+)
+
+zkx_cc_library(
     name = "reduction",
     srcs = ["reduction.cc"],
     hdrs = ["reduction.h"],

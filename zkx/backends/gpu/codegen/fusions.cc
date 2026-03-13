@@ -25,6 +25,7 @@ limitations under the License.
 #include "zkx/backends/gpu/codegen/emitters/in_place_dynamic_update_slice.h"
 #include "zkx/backends/gpu/codegen/emitters/input_slices.h"
 #include "zkx/backends/gpu/codegen/emitters/loop.h"
+#include "zkx/backends/gpu/codegen/emitters/poseidon2.h"
 #include "zkx/backends/gpu/codegen/emitters/reduction.h"
 #include "zkx/backends/gpu/codegen/emitters/scatter.h"
 #include "zkx/backends/gpu/codegen/emitters/transpose.h"
@@ -77,6 +78,9 @@ std::unique_ptr<FusionInterface> GetFusionEmitter(
   switch (analysis.GetEmitterFusionKind()) {
     case HloFusionAnalysis::EmitterFusionKind::kCustomFusion: {
       const auto& config = backend_config.custom_fusion_config();
+      if (absl::StartsWith(config.name(), "poseidon2:")) {
+        return std::make_unique<Poseidon2Fusion>(analysis);
+      }
       if (absl::StrContains(config.name(), "address_computation")) {
         // TODO(chokobole): Implement this. Dependency: DynamicSliceFusion
         // return std::make_unique<DynamicSliceFusion>(analysis);

@@ -1439,6 +1439,15 @@ zkx_cc_library(
 )
 
 zkx_cc_library(
+    name = "poseidon2_reference",
+    hdrs = ["poseidon2_reference.h"],
+    deps = [
+        "//zkx:literal",
+        "//zkx:literal_util",
+    ],
+)
+
+zkx_cc_library(
     name = "profile_guided_latency_estimator",
     srcs = ["profile_guided_latency_estimator.cc"],
     hdrs = ["profile_guided_latency_estimator.h"],
