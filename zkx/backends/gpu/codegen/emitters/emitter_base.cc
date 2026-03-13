@@ -21,15 +21,12 @@ limitations under the License.
 #include <utility>
 
 #include "absl/algorithm/container.h"
-#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/log/vlog_is_on.h"
 #include "absl/strings/str_cat.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/Linker/Linker.h"
+#include "llvm/Passes/PassBuilder.h"
 #include "llvm/Support/Casting.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
@@ -78,6 +75,7 @@ limitations under the License.
 #include "xla/tsl/platform/errors.h"
 #include "xla/tsl/platform/statusor.h"
 #include "zkx/backends/gpu/codegen/emitters/ir/zkx_gpu_ops.h"
+#include "zkx/backends/gpu/codegen/emitters/large_int_return_to_out_param.h"
 #include "zkx/backends/gpu/codegen/emitters/transforms/passes.h"
 #include "zkx/backends/gpu/runtime/kernel_thunk.h"
 #include "zkx/codegen/emitters/elemental_hlo_to_mlir.h"
@@ -274,6 +272,24 @@ absl::StatusOr<FusionEmissionResult> EmitterBase::Emit(
   return result;
 }
 
+// static
+void EmitterBase::RunLLVMPasses(llvm::Module& module) {
+  llvm::LoopAnalysisManager LAM;
+  llvm::FunctionAnalysisManager FAM;
+  llvm::CGSCCAnalysisManager CGAM;
+  llvm::ModuleAnalysisManager MAM;
+  llvm::PassBuilder PB;
+  PB.registerModuleAnalyses(MAM);
+  PB.registerCGSCCAnalyses(CGAM);
+  PB.registerFunctionAnalyses(FAM);
+  PB.registerLoopAnalyses(LAM);
+  PB.crossRegisterProxies(LAM, FAM, CGAM, MAM);
+
+  llvm::ModulePassManager MPM;
+  MPM.addPass(LargeIntReturnToOutParamPass());
+  MPM.run(module, MAM);
+}
+
 absl::StatusOr<std::unique_ptr<llvm::Module>> EmitterBase::CreateLLVMModule(
     mlir::MLIRContext& mlir_context, llvm::LLVMContext& llvm_context,
     const se::DeviceDescription& device, const HloFusionInstruction& fusion,
@@ -306,6 +322,9 @@ absl::StatusOr<std::unique_ptr<llvm::Module>> EmitterBase::CreateLLVMModule(
       mlir::translateModuleToLLVMIR(module.get(), llvm_context);
   TF_RET_CHECK(llvm_module != nullptr)
       << "Failed to translate module to LLVM IR.";
+
+  // Run LLVM passes on the translated module.
+  RunLLVMPasses(*llvm_module);
 
   return llvm_module;
 }

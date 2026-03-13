@@ -22,6 +22,7 @@ limitations under the License.
 #include "absl/status/status.h"
 #include "absl/strings/str_replace.h"
 #include "gtest/gtest.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/Support/raw_ostream.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
@@ -148,6 +149,124 @@ TEST_F(EmitterBaseTest, CreateMlirModule) {
     // CHECK:        %[[RET:.*]] = tensor.insert %[[VAL]]
     // CHECK-SAME:     into %[[OUT]][%[[TID]]]
     // CHECK:        return %[[RET]]
+  )"));
+  EXPECT_TRUE(filecheck_result);
+}
+
+TEST(RewriteLargeIntReturnToOutParamTest, RewritesI256InternalFunction) {
+  llvm::LLVMContext ctx;
+  auto module = std::make_unique<llvm::Module>("test", ctx);
+
+  auto* i256_ty = llvm::IntegerType::get(ctx, 256);
+  auto* i32_ty = llvm::IntegerType::get(ctx, 32);
+  auto* ptr_ty = llvm::PointerType::get(ctx, 0);
+  auto* void_ty = llvm::Type::getVoidTy(ctx);
+
+  // Create: define internal i256 @helper(ptr %buf, i32 %idx) {
+  //           %gep = getelementptr i256, ptr %buf, i32 %idx
+  //           %val = load i256, ptr %gep
+  //           ret i256 %val
+  //         }
+  auto* helper_fn_ty = llvm::FunctionType::get(i256_ty, {ptr_ty, i32_ty},
+                                               /*isVarArg=*/false);
+  auto* helper = llvm::Function::Create(
+      helper_fn_ty, llvm::Function::InternalLinkage, "helper", module.get());
+  {
+    auto* bb = llvm::BasicBlock::Create(ctx, "entry", helper);
+    llvm::IRBuilder<> b(bb);
+    auto* gep = b.CreateGEP(i256_ty, helper->getArg(0), {helper->getArg(1)});
+    auto* val = b.CreateLoad(i256_ty, gep);
+    b.CreateRet(val);
+  }
+
+  // Create: define void @caller(ptr %in, ptr %out) {
+  //           %r = call i256 @helper(ptr %in, i32 42)
+  //           store i256 %r, ptr %out
+  //           ret void
+  //         }
+  auto* caller_fn_ty = llvm::FunctionType::get(void_ty, {ptr_ty, ptr_ty},
+                                               /*isVarArg=*/false);
+  auto* caller = llvm::Function::Create(
+      caller_fn_ty, llvm::Function::ExternalLinkage, "caller", module.get());
+  {
+    auto* bb = llvm::BasicBlock::Create(ctx, "entry", caller);
+    llvm::IRBuilder<> b(bb);
+    auto* idx = llvm::ConstantInt::get(i32_ty, 42);
+    auto* result = b.CreateCall(helper, {caller->getArg(0), idx});
+    b.CreateStore(result, caller->getArg(1));
+    b.CreateRetVoid();
+  }
+
+  // Run the pass.
+  EmitterBase::RunLLVMPasses(*module);
+
+  std::string out;
+  llvm::raw_string_ostream stream(out);
+  stream << *module;
+
+  // The original @helper returning i256 must be gone. The new @helper.out
+  // returns void with an extra ptr out parameter. The caller uses
+  // alloca+call+load instead of direct i256 return.
+  TF_ASSERT_OK_AND_ASSIGN(auto filecheck_result, RunFileCheck(out, R"(
+    // CHECK-NOT:   define internal i256
+    // CHECK:       define void @caller
+    // CHECK:         %[[ALLOCA:.*]] = alloca i256
+    // CHECK:         call void @helper.out(ptr %{{.*}}, i32 42, ptr %[[ALLOCA]])
+    // CHECK:         %[[LOAD:.*]] = load i256, ptr %[[ALLOCA]]
+    // CHECK:         store i256 %[[LOAD]]
+    // CHECK:       define internal void @helper.out(ptr %{{.*}}, i32 %{{.*}}, ptr %out)
+    // CHECK:         store i256
+    // CHECK-NEXT:    ret void
+  )"));
+  EXPECT_TRUE(filecheck_result);
+}
+
+TEST(RewriteLargeIntReturnToOutParamTest, SkipsSmallIntAndExternalFunctions) {
+  llvm::LLVMContext ctx;
+  auto module = std::make_unique<llvm::Module>("test", ctx);
+
+  auto* i64_ty = llvm::IntegerType::get(ctx, 64);
+  auto* i256_ty = llvm::IntegerType::get(ctx, 256);
+  auto* ptr_ty = llvm::PointerType::get(ctx, 0);
+
+  // Internal function returning i64 — should NOT be rewritten.
+  auto* small_fn_ty = llvm::FunctionType::get(i64_ty, {ptr_ty},
+                                              /*isVarArg=*/false);
+  auto* small_fn =
+      llvm::Function::Create(small_fn_ty, llvm::Function::InternalLinkage,
+                             "small_helper", module.get());
+  {
+    auto* bb = llvm::BasicBlock::Create(ctx, "entry", small_fn);
+    llvm::IRBuilder<> b(bb);
+    auto* val = b.CreateLoad(i64_ty, small_fn->getArg(0));
+    b.CreateRet(val);
+  }
+
+  // External function returning i256 — should NOT be rewritten.
+  auto* ext_fn_ty = llvm::FunctionType::get(i256_ty, {ptr_ty},
+                                            /*isVarArg=*/false);
+  auto* ext_fn =
+      llvm::Function::Create(ext_fn_ty, llvm::Function::ExternalLinkage,
+                             "external_helper", module.get());
+  {
+    auto* bb = llvm::BasicBlock::Create(ctx, "entry", ext_fn);
+    llvm::IRBuilder<> b(bb);
+    auto* val = b.CreateLoad(i256_ty, ext_fn->getArg(0));
+    b.CreateRet(val);
+  }
+
+  EmitterBase::RunLLVMPasses(*module);
+
+  std::string out;
+  llvm::raw_string_ostream stream(out);
+  stream << *module;
+
+  // Both functions should remain unchanged.
+  TF_ASSERT_OK_AND_ASSIGN(auto filecheck_result, RunFileCheck(out, R"(
+    // CHECK: define internal i64 @small_helper(ptr
+    // CHECK: define i256 @external_helper(ptr
+    // CHECK-NOT: @small_helper.out
+    // CHECK-NOT: @external_helper.out
   )"));
   EXPECT_TRUE(filecheck_result);
 }

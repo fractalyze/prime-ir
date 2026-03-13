@@ -62,6 +62,10 @@ class EmitterBase : public KernelFusionInterface {
       const std::string& entry_function_name,
       const BufferAssignment* buffer_assignment) const;
 
+  // Runs LLVM IR passes on the translated module (e.g., rewriting large integer
+  // return types to out-params for NVPTX compatibility). Visible for testing.
+  static void RunLLVMPasses(llvm::Module& module);
+
   // Visible for testing. `buffer_assignment` is optional for testing (assigns
   // a different buffer to each tensor).
   absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> CreateMLIRModule(

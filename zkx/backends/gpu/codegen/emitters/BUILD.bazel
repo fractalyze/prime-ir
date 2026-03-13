@@ -57,6 +57,7 @@ zkx_cc_library(
         "//zkx:util",
         "//zkx:zkx_data_cc_proto",
         "//zkx/backends/gpu/codegen:fusion_emitter",
+        "//zkx/backends/gpu/codegen/emitters:large_int_return_to_out_param",
         "//zkx/backends/gpu/codegen/emitters/ir:zkx_gpu",
         "//zkx/backends/gpu/codegen/emitters/transforms:passes",
         "//zkx/backends/gpu/runtime:kernel_thunk",
@@ -90,6 +91,7 @@ zkx_cc_library(
         "@com_google_absl//absl/strings",
         "@llvm-project//llvm:Core",
         "@llvm-project//llvm:Linker",
+        "@llvm-project//llvm:Passes",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AffineDialect",
         "@llvm-project//mlir:AffineToStandard",
@@ -185,6 +187,18 @@ zkx_cc_library(
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:SCFDialect",
         "@llvm-project//mlir:TensorDialect",
+    ],
+)
+
+zkx_cc_library(
+    name = "large_int_return_to_out_param",
+    srcs = ["large_int_return_to_out_param.cc"],
+    hdrs = ["large_int_return_to_out_param.h"],
+    deps = [
+        "@com_google_absl//absl/log:check",
+        "@llvm-project//llvm:Core",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//llvm:TransformUtils",
     ],
 )
 
