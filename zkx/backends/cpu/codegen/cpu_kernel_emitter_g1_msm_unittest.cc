@@ -25,4 +25,9 @@ TYPED_TEST(MSMTest, G1MSM) {
   this->RunAndVerify();
 }
 
+TYPED_TEST(MSMTest, G1MSMSmall) {
+  this->SetUpMSMSmall();
+  this->RunAndVerify();
+}
+
 }  // namespace zkx::cpu

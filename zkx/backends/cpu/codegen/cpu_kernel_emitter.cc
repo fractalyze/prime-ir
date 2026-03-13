@@ -1067,10 +1067,13 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitMsmOp(
     auto result_type = mlir_utils::PrimitiveTypeToMlirType(shape.element_type(),
                                                            b.getContext());
     if (num_scalar_mul < num_threads) {
-      int32_t degree = static_cast<int32_t>(
-          base::Log2Ceiling(static_cast<uint64_t>(num_scalar_mul)));
-      return b.create<mlir::prime_ir::elliptic_curve::MSMOp>(
+      int32_t degree = std::max(1, static_cast<int32_t>(base::Log2Ceiling(
+                                       static_cast<uint64_t>(num_scalar_mul))));
+      auto msm_result = b.create<mlir::prime_ir::elliptic_curve::MSMOp>(
           result_type, scalars, bases, degree, window_bits);
+      return b.create<mlir::tensor::FromElementsOp>(
+          MakeMlirTensorTypeWithoutLayout(shape, b.getContext()),
+          mlir::ValueRange{msm_result});
     }
 
     pass_flag_.enable_expand_strided_metadata = true;

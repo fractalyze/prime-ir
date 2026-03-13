@@ -43,7 +43,26 @@ class MSMTest : public CpuKernelEmitterTest {
         primitive_util::NativeToPrimitiveType<AffinePoint>());
     ret_typename_ = primitive_util::LowercasePrimitiveTypeName(
         primitive_util::NativeToPrimitiveType<JacobianPoint>());
+  }
+
+ protected:
+  // MSM with num_scalar_muls > num_threads (parallel path).
+  void SetUpMSM() {
     num_scalar_muls_ = tsl::port::MaxParallelism() + 1;
+    InitInputs();
+    SetUpMSMImpl();
+  }
+
+  // MSM with num_scalar_muls = 1, which is < num_threads (small path).
+  // Exercises the single-threaded MSMOp + FromElementsOp wrapping.
+  void SetUpMSMSmall() {
+    num_scalar_muls_ = 1;
+    InitInputs();
+    SetUpMSMImpl();
+  }
+
+ private:
+  void InitInputs() {
     x_ = base::CreateVector(num_scalar_muls_,
                             []() { return ScalarField::Random(); });
     y_ = base::CreateVector(num_scalar_muls_,
@@ -52,8 +71,7 @@ class MSMTest : public CpuKernelEmitterTest {
     literals_.push_back(LiteralUtil::CreateR1<AffinePoint>(y_));
   }
 
- protected:
-  void SetUpMSM() {
+  void SetUpMSMImpl() {
     hlo_text_ = absl::Substitute(R"(
       ENTRY %main {
         %x = $0[$3] parameter(0)
