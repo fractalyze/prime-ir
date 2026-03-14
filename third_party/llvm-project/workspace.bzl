@@ -22,10 +22,6 @@ LLVM_SHA256 = "95792e50d5f84847721545b645a6ca2c2b3b7610d02e3de07d65a6148e68508c"
 # NOTE(chokobole): The order of the patches is important. If you update this,
 # please update the order in the tools/setup_llvm_clone.sh script.
 LLVM_PATCHES = [
-    # TODO(chokobole): Remove once the issues are resolved upstream.
-    "@prime_ir//third_party/llvm-project:cuda_runtime.patch",
-    "@prime_ir//third_party/llvm-project:kernel_outlining.patch",
-    "@prime_ir//third_party/llvm-project:nvptx_lowering.patch",
     # TODO(chokobole): Remove owning_memref_free.patch once we upgrade the version of LLVM.
     # See https://github.com/llvm/llvm-project/pull/153133
     "@prime_ir//third_party/llvm-project:owning_memref_free.patch",

@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <utility>
 
-#include "mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtDialect.h"
@@ -68,7 +67,7 @@ struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
     auto destMemref =
         b.create<bufferization::ToBufferOp>(memrefType, adaptor.getDest());
 
-    auto parallelOp = b.create<scf::ParallelOp>(
+    b.create<scf::ParallelOp>(
         /*lowerBound=*/lowerBounds,
         /*upperBound=*/upperBounds,
         /*steps=*/steps,
@@ -103,12 +102,6 @@ struct ConvertBitReverse : public OpConversionPattern<BitReverseOp> {
                 thenBuilder.create<scf::YieldOp>();
               });
         });
-
-    // Forward GPU mapping attribute if present.
-    StringRef gpuMappingAttrName = gpu::getMappingAttrName();
-    if (auto gpuMappingAttr = op->getAttr(gpuMappingAttrName)) {
-      parallelOp->setAttr(gpuMappingAttrName, gpuMappingAttr);
-    }
 
     auto result = b.create<bufferization::ToTensorOp>(
         tensorType, destMemref, /*restrict=*/true, /*writable=*/true);
