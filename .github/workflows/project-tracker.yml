@@ -1,0 +1,13 @@
+name: Project Tracker
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, converted_to_draft, closed]
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: fractalyze/github-actions/project-tracker@main
+        with:
+          project_token: ${{ secrets.ORG_PROJECT_TOKEN }}
