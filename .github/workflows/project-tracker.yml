@@ -10,4 +10,4 @@ jobs:
     steps:
       - uses: fractalyze/github-actions/project-tracker@main
         with:
-          project_token: ${{ secrets.ORG_PROJECT_TOKEN }}
+          project_token: ${{ secrets.PROJECT_TRACKER_GH_PAT }}
