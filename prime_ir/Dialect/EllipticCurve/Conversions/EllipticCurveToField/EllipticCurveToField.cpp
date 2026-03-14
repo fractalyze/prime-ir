@@ -437,296 +437,6 @@ struct ConvertMSM : public OpConversionPattern<MSMOp> {
   }
 };
 
-struct ConvertScalarDecomp : public OpConversionPattern<ScalarDecompOp> {
-  explicit ConvertScalarDecomp(MLIRContext *context)
-      : OpConversionPattern<ScalarDecompOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(ScalarDecompOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    Value scalars =
-        cast<field::PrimeFieldType>(op.getScalars().getType().getElementType())
-                .isMontgomery()
-            ? b.create<field::FromMontOp>(
-                   field::getStandardFormType(op.getScalars().getType()),
-                   op.getScalars())
-                  .getResult()
-            : op.getScalars();
-    RankedTensorType scalarsType = cast<RankedTensorType>(scalars.getType());
-    field::PrimeFieldType scalarFieldType =
-        cast<field::PrimeFieldType>(scalarsType.getElementType());
-    int32_t bitsPerWindow = op.getBitsPerWindow();
-
-    unsigned scalarBitWidth = scalarFieldType.getStorageBitWidth();
-    IntegerType scalarIntType = b.getIntegerType(scalarBitWidth);
-    scalars =
-        b.create<field::BitcastOp>(scalarsType.clone(scalarIntType), scalars)
-            .getResult();
-
-    // Use scalar_max_bits if specified, otherwise use the arithmetic bit size
-    // of scalar modulus
-    if (auto scalarMaxBitsAttr = op.getScalarMaxBitsAttr()) {
-      scalarBitWidth = scalarMaxBitsAttr.getValue().getSExtValue();
-      scalarIntType = b.getIntegerType(scalarBitWidth);
-      scalars =
-          b.create<arith::TruncIOp>(scalarsType.clone(scalarIntType), scalars);
-    }
-
-    int32_t numWindows = (scalarBitWidth + bitsPerWindow - 1) / bitsPerWindow;
-    int64_t totalSize = scalarsType.getNumElements() * numWindows;
-
-    RankedTensorType resultType =
-        scalarsType.clone({totalSize}, b.getIndexType());
-    IntegerType windowBitIntType = b.getIntegerType(bitsPerWindow);
-    Value zero = b.create<arith::ConstantIndexOp>(0);
-    Value numWindowsIndex = b.create<arith::ConstantIndexOp>(numWindows);
-    Value zeroSplitScalar = b.create<arith::ConstantIntOp>(windowBitIntType, 0);
-    Value bitsPerWindowIndex = b.create<arith::ConstantIndexOp>(bitsPerWindow);
-    Value bucketIndices = b.create<tensor::GenerateOp>(
-        resultType, SmallVector<Value>{},
-        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
-          ImplicitLocOpBuilder nb(loc, nestedBuilder);
-          Value splitScalarIdx = ivs[0];
-
-          Value scalarIdx =
-              nb.create<arith::DivUIOp>(splitScalarIdx, numWindowsIndex);
-          Value windowIdx =
-              nb.create<arith::RemUIOp>(splitScalarIdx, numWindowsIndex);
-
-          Value scalar =
-              nb.create<tensor::ExtractOp>(scalars, ValueRange{scalarIdx});
-          Value windowOffset =
-              nb.create<arith::MulIOp>(windowIdx, bitsPerWindowIndex);
-          Value windowOffsetInt =
-              nb.create<arith::IndexCastOp>(scalarIntType, windowOffset);
-          Value shiftedScalar =
-              nb.create<arith::ShRUIOp>(scalar, windowOffsetInt);
-          Value splitScalar =
-              nb.create<arith::TruncIOp>(windowBitIntType, shiftedScalar);
-
-          Value isZeroSplitScalar = nb.create<arith::CmpIOp>(
-              arith::CmpIPredicate::eq, splitScalar, zeroSplitScalar);
-
-          // Calculate bucket index: if splitScalar is 0, bucketIdx = 0;
-          // otherwise bucketIdx = (window << bitsPerWindow) | splitScalar
-          Value windowShift =
-              nb.create<arith::ShLIOp>(windowIdx, bitsPerWindowIndex);
-          Value splitScalarIndex =
-              nb.create<arith::IndexCastUIOp>(nb.getIndexType(), splitScalar);
-          Value bucketIdx =
-              nb.create<arith::OrIOp>(windowShift, splitScalarIndex);
-          bucketIdx =
-              nb.create<arith::SelectOp>(isZeroSplitScalar, zero, bucketIdx);
-          nb.create<tensor::YieldOp>(bucketIdx);
-        });
-
-    Value pointIndices = b.create<tensor::GenerateOp>(
-        resultType, SmallVector<Value>{},
-        [&](OpBuilder &nestedBuilder, Location loc, ValueRange ivs) {
-          ImplicitLocOpBuilder nb(loc, nestedBuilder);
-          Value splitScalarIdx = ivs[0];
-
-          Value scalarIdx =
-              nb.create<arith::DivUIOp>(splitScalarIdx, numWindowsIndex);
-          nb.create<tensor::YieldOp>(scalarIdx);
-        });
-
-    rewriter.replaceOp(op, {bucketIndices, pointIndices});
-    return success();
-  }
-};
-
-struct ConvertBucketAcc : public OpConversionPattern<BucketAccOp> {
-  explicit ConvertBucketAcc(MLIRContext *context)
-      : OpConversionPattern<BucketAccOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(BucketAccOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    Value zero = b.create<arith::ConstantIndexOp>(0);
-    Value one = b.create<arith::ConstantIndexOp>(1);
-
-    Value points = op.getPoints();
-    Value sortedPointIndices = op.getSortedPointIndices();
-    Value sortedUniqueBucketIndices = op.getSortedUniqueBucketIndices();
-    Value bucketOffsets = op.getBucketOffsets();
-    TensorType bucketResultsType = op.getBucketResults().getType();
-    Type outputType = bucketResultsType.getElementType();
-
-    // Create buckets and initialize all buckets to zeroPoint
-    MemRefType memrefBucketResultsType =
-        MemRefType::get(bucketResultsType.getShape(), outputType);
-    Value bucketResults = b.create<memref::AllocOp>(memrefBucketResultsType);
-    Value zeroPoint = createZeroPoint(b, outputType);
-    b.create<linalg::FillOp>(zeroPoint, bucketResults);
-
-    // Compute bucket accumulation across all buckets
-    Value nofBucketsToCompute = b.create<arith::ConstantIndexOp>(
-        cast<TensorType>(sortedUniqueBucketIndices.getType()).getNumElements());
-    b.create<scf::ParallelOp>(
-        zero, nofBucketsToCompute, one,
-        [&](OpBuilder &builder, Location loc, ValueRange ivs) {
-          ImplicitLocOpBuilder b0(loc, builder);
-          Value i = ivs[0];
-
-          Value bucketOffsetStart =
-              b0.create<tensor::ExtractOp>(bucketOffsets, i);
-          Value indexPlusOne = b0.create<arith::AddIOp>(i, one);
-          Value bucketOffsetEnd =
-              b0.create<tensor::ExtractOp>(bucketOffsets, indexPlusOne);
-
-          // TODO(ashjeong): Replace with linalg::ReduceOp once supported on
-          // the EC level Aggregate all points per bucket
-          auto pointLoop = b0.create<scf::ForOp>(
-              /*lowerBound=*/bucketOffsetStart, /*upperBound=*/bucketOffsetEnd,
-              /*step=*/one, zeroPoint,
-              [&](OpBuilder &builder, Location loc, Value j, ValueRange args) {
-                ImplicitLocOpBuilder b1(loc, builder);
-                Value bucketResult = args[0];
-
-                Value pointIndex =
-                    b1.create<tensor::ExtractOp>(sortedPointIndices, j);
-                Value point = b1.create<tensor::ExtractOp>(points, pointIndex);
-                bucketResult =
-                    b1.create<AddOp>(outputType, bucketResult, point);
-                b1.create<scf::YieldOp>(bucketResult);
-              });
-
-          Value bucketIndex =
-              b0.create<tensor::ExtractOp>(sortedUniqueBucketIndices, i);
-          b0.create<memref::StoreOp>(pointLoop.getResult(0), bucketResults,
-                                     bucketIndex);
-          b0.create<scf::ReduceOp>();
-        });
-
-    // Convert bucket results to tensor
-    Value bucketResultsTensor =
-        b.create<bufferization::ToTensorOp>(bucketResultsType, bucketResults,
-                                            /*restrict=*/true);
-    rewriter.replaceOp(op, bucketResultsTensor);
-    return success();
-  }
-};
-
-struct ConvertBucketReduce : public OpConversionPattern<BucketReduceOp> {
-  explicit ConvertBucketReduce(MLIRContext *context)
-      : OpConversionPattern<BucketReduceOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(BucketReduceOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    Value buckets = op.getBuckets();
-    RankedTensorType bucketsType = cast<RankedTensorType>(buckets.getType());
-    Type pointType = bucketsType.getElementType();
-    Type standardScalarType = field::getStandardFormType(op.getScalarType());
-    Type scalarIntType = op.getScalarType().getStorageType();
-
-    // Create bucket weights vector
-    int64_t numBucketsPerWindow = bucketsType.getShape()[1];
-    RankedTensorType arithWeightsType =
-        bucketsType.clone({numBucketsPerWindow}, scalarIntType);
-    SmallVector<Value> weightDims =
-        numBucketsPerWindow == ShapedType::kDynamic
-            ? SmallVector<Value>{b.create<tensor::DimOp>(buckets, 1)}
-            : SmallVector<Value>{};
-    Value arithWeights = b.create<tensor::GenerateOp>(
-        arithWeightsType, weightDims,
-        [&](OpBuilder &builder, Location loc, ValueRange args) {
-          ImplicitLocOpBuilder b0(loc, builder);
-          Value arithScalar =
-              b0.create<arith::IndexCastOp>(scalarIntType, args[0]);
-          b0.create<tensor::YieldOp>(arithScalar);
-        });
-    RankedTensorType weightsType = arithWeightsType.clone(standardScalarType);
-    Value fieldWeights = b.create<field::BitcastOp>(weightsType, arithWeights);
-
-    // Create output windows tensor
-    int64_t numWindows = bucketsType.getShape()[0];
-    RankedTensorType windowsType = bucketsType.clone({numWindows}, pointType);
-    SmallVector<Value> windowDims =
-        numWindows == ShapedType::kDynamic
-            ? SmallVector<Value>{b.create<tensor::DimOp>(buckets, 0)}
-            : SmallVector<Value>{};
-    Value zeroPoint = createZeroPoint(b, pointType);
-    Value windows = b.create<tensor::GenerateOp>(
-        windowsType, windowDims,
-        [&](OpBuilder &builder, Location loc, ValueRange args) {
-          builder.create<tensor::YieldOp>(loc, zeroPoint);
-        });
-
-    // Calculate windows
-    auto res = b.create<linalg::MatvecOp>(ValueRange{buckets, fieldWeights},
-                                          ValueRange{windows});
-
-    rewriter.replaceOp(op, res.getResult(0));
-    return success();
-  }
-};
-
-struct ConvertWindowReduce : public OpConversionPattern<WindowReduceOp> {
-  explicit ConvertWindowReduce(MLIRContext *context)
-      : OpConversionPattern<WindowReduceOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(WindowReduceOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    Value windows = op.getWindows();
-    Type pointType = cast<RankedTensorType>(windows.getType()).getElementType();
-    Type standardScalarType = getStandardFormType(op.getScalarType());
-    Type scalarIntType = op.getScalarType().getStorageType();
-
-    // Create output 0D tensor
-    Value zeroPoint = createZeroPoint(b, pointType);
-    Value outputTensor = b.create<tensor::FromElementsOp>(
-        RankedTensorType::get({}, pointType), zeroPoint);
-
-    // Calculate weighted windows reduction
-    SmallVector<int64_t, 1> reductionDims = {0};
-    Value c =
-        b.create<arith::ConstantIntOp>(scalarIntType, op.getBitsPerWindow());
-    Value base = b.create<field::ConstantOp>(standardScalarType, 2);
-    // TODO(ashjeong): Try benchmarking against creating a separate weights
-    // tensor & dot product. We want to test whether calculating  2ᶜⁱ in
-    // parallel and reducing is faster than two loops of calculating 2ᶜⁱ
-    // iteratively then reducing.
-    auto total = b.create<linalg::ReduceOp>(
-        windows, outputTensor, reductionDims,
-        [&](OpBuilder &builder, Location loc, ValueRange args) {
-          ImplicitLocOpBuilder b0(loc, builder);
-          // Current point (args[0]) and accumulator (args[1]).
-          Value i = b0.create<linalg::IndexOp>(0);
-          Value arithI = b0.create<arith::IndexCastOp>(scalarIntType, i);
-          Value exp = b0.create<arith::MulIOp>(c, arithI);
-          Value weight = b0.create<field::PowUIOp>(base, exp);
-          Value weightedValue =
-              b0.create<ScalarMulOp>(pointType, weight, args[0]);
-
-          Value sum = b0.create<AddOp>(pointType, args[1], weightedValue);
-          b0.create<linalg::YieldOp>(sum);
-        });
-
-    auto result = b.create<tensor::ExtractOp>(total.getResult(0));
-    rewriter.replaceOp(op, result);
-    return success();
-  }
-};
-
 struct ConvertPairingCheck : public OpConversionPattern<PairingCheckOp> {
   explicit ConvertPairingCheck(MLIRContext *context)
       : OpConversionPattern<PairingCheckOp>(context) {}
@@ -806,8 +516,6 @@ void EllipticCurveToField::runOnOperation() {
   target.addIllegalOp<
       // clang-format off
       AddOp,
-      BucketAccOp,
-      BucketReduceOp,
       ConstantOp,
       CmpOp,
       ConvertPointTypeOp,
@@ -816,11 +524,8 @@ void EllipticCurveToField::runOnOperation() {
       MSMOp,
       NegateOp,
       PairingCheckOp,
-      ScalarDecompOp,
       ScalarMulOp,
-      SubOp,
-      WindowReduceOp,
-      linalg::MatvecOp
+      SubOp
       // clang-format on
       >();
 
@@ -864,8 +569,6 @@ void EllipticCurveToField::runOnOperation() {
   patterns.add<
       // clang-format off
       ConvertAdd,
-      ConvertBucketAcc,
-      ConvertBucketReduce,
       ConvertConstant,
       ConvertCmp,
       ConvertConvertPointType,
@@ -874,9 +577,7 @@ void EllipticCurveToField::runOnOperation() {
       ConvertMSM,
       ConvertNegate,
       ConvertPairingCheck,
-      ConvertScalarDecomp,
-      ConvertSub,
-      ConvertWindowReduce
+      ConvertSub
       // clang-format on
       >(context);
 
