@@ -44,6 +44,7 @@ limitations under the License.
 #include "zkx/backends/cpu/runtime/thunk_proto_serdes.h"
 #include "zkx/hlo/pass/hlo_pass_fix.h"
 #include "zkx/hlo/pass/hlo_pass_pipeline.h"
+#include "zkx/hlo/transforms/expanders/bitcast_dtypes_expander.h"
 #include "zkx/hlo/transforms/expanders/reshape_decomposer.h"
 #include "zkx/hlo/transforms/simplifiers/broadcast_canonicalizer.h"
 #include "zkx/hlo/transforms/simplifiers/conditional_canonicalizer.h"
@@ -231,6 +232,8 @@ absl::Status CpuCompiler::RunHloPassesThroughLayoutAssn(
     pipeline.AddPass<HloDCE>();
     pipeline.AddPass<HloConstantFolding>();
   }();
+  pipeline.AddPass<BitcastDtypesExpander>();
+
   pipeline.AddPass<HloCSE>(/*is_layout_sensitive=*/false);
 
   pipeline.AddPass<TupleSimplifier>();

@@ -18,6 +18,30 @@ load("//bazel:zkx_cc.bzl", "zkx_cc_library", "zkx_cc_unittest")
 package(default_visibility = ["//visibility:public"])
 
 zkx_cc_library(
+    name = "bitcast_dtypes_expander",
+    srcs = ["bitcast_dtypes_expander.cc"],
+    hdrs = ["bitcast_dtypes_expander.h"],
+    deps = [
+        ":op_expander_pass",
+        "//xla/tsl/platform:statusor",
+        "//zkx:primitive_util",
+        "//zkx:shape_util",
+        "//zkx:zkx_data_cc_proto",
+        "//zkx/hlo/builder:zkx_builder",
+        "//zkx/hlo/builder:zkx_computation",
+        "//zkx/hlo/builder/lib:arithmetic",
+        "//zkx/hlo/builder/lib:broadcast",
+        "//zkx/hlo/builder/lib:constants",
+        "//zkx/hlo/ir:hlo",
+        "//zkx/hlo/ir:hlo_opcode",
+        "//zkx/service:hlo_creation_utils",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+zkx_cc_library(
     name = "op_expander_pass",
     srcs = ["op_expander_pass.cc"],
     hdrs = ["op_expander_pass.h"],
@@ -48,13 +72,18 @@ zkx_cc_library(
 zkx_cc_unittest(
     name = "expanders_unittests",
     srcs = [
+        "bitcast_dtypes_expander_unittest.cc",
         "reshape_decomposer_unittest.cc",
     ],
     deps = [
+        ":bitcast_dtypes_expander",
         ":reshape_decomposer",
+        "//xla/tsl/platform:statusor",
         "//zkx/hlo/parser:hlo_parser",
+        "//zkx/hlo/testlib:file_check",
         "//zkx/hlo/testlib:hlo_hardware_independent_test_base",
         "@com_google_absl//absl/algorithm:container",
+        "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest",
     ],
 )

@@ -65,6 +65,7 @@ limitations under the License.
 #include "zkx/hlo/ir/hlo_module_group.h"
 #include "zkx/hlo/pass/hlo_pass_fix.h"
 #include "zkx/hlo/pass/hlo_pass_pipeline.h"
+#include "zkx/hlo/transforms/expanders/bitcast_dtypes_expander.h"
 #include "zkx/hlo/transforms/expanders/reshape_decomposer.h"
 #include "zkx/hlo/transforms/host_offload_legalize.h"
 #include "zkx/hlo/transforms/simplifiers/broadcast_canonicalizer.h"
@@ -417,7 +418,7 @@ absl::Status RunOptimizationPasses(
     // TODO(batzor): Add ScatterSliceSimplifier
     pipeline.AddPass<GpuAlgebraicSimplifier>(layout_insensitive_algsimp_opts,
                                              gpu_version);
-    // TODO(batzor): Add BitcastDtypesExpander
+    pipeline.AddPass<BitcastDtypesExpander>();
     // TODO(batzor): Add DotMerger
     // TODO(batzor): Add SortSimplifier
     pipeline.AddPass<TupleSimplifier>();

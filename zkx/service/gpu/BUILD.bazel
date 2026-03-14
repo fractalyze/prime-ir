@@ -240,6 +240,7 @@ zkx_cc_library(
         "//zkx/hlo/pass:hlo_pass_fix",
         "//zkx/hlo/pass:hlo_pass_pipeline",
         "//zkx/hlo/transforms:host_offload_legalize",
+        "//zkx/hlo/transforms/expanders:bitcast_dtypes_expander",
         "//zkx/hlo/transforms/expanders:reshape_decomposer",
         "//zkx/hlo/transforms/simplifiers:broadcast_canonicalizer",
         "//zkx/hlo/transforms/simplifiers:conditional_canonicalizer",
