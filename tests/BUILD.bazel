@@ -52,8 +52,6 @@ filegroup(
         "bn254_ec_utils.mlir",
         "bn254_field_defs.mlir",
         "default_print_utils.mlir",
-        "poseidon2.mlir",
-        "poseidon2_packed.mlir",
         ":libruntime_functions.so",
         ":lit.cfg.py",
         "//tools:prime-ir-opt",
@@ -89,8 +87,6 @@ glob_lit_tests(
         "bn254_ec_utils.mlir",
         "bn254_field_defs.mlir",
         "default_print_utils.mlir",
-        "poseidon2.mlir",
-        "poseidon2_packed.mlir",
     ],
     test_file_exts = ["mlir"],
 )
