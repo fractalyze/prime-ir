@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <utility>
 
-#include "mlir/Dialect/GPU/Transforms/ParallelLoopMapper.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "prime_ir/Dialect/Field/IR/FieldAttributes.h"
@@ -154,7 +153,7 @@ static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
 }
 
 static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
-                     Value source, Value dest, Attribute gpuMappingAttr) {
+                     Value source, Value dest) {
   auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
   auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
 
@@ -396,11 +395,6 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
               });
         }
 
-        // Forward GPU mapping attribute if present.
-        if (gpuMappingAttr) {
-          parallelLoop->setAttr(gpu::getMappingAttrName(), gpuMappingAttr);
-        }
-
         // ---------------------------------------------------------------------
         // Update control variables for the next stage:
         // For the forward NTT:
@@ -463,28 +457,19 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
 
     Value nttResult;
 
-    Attribute nttMappingAttr = op->getAttr("ntt_gpu_mapping");
-    Attribute bitReverseMappingAttr = op->getAttr("bit_reverse_gpu_mapping");
-
     // Transform the input tensor to bit-reversed order at first if performing
     // forward NTT.
     if (!adaptor.getInverse() && adaptor.getBitReverse()) {
       auto bitReversed = b.create<tensor_ext::BitReverseOp>(
           adaptor.getSource(), adaptor.getDest(), /*dimension=*/0);
 
-      // Forward GPU mapping attribute if present.
-      if (bitReverseMappingAttr) {
-        bitReversed->setAttr(gpu::getMappingAttrName(), bitReverseMappingAttr);
-      }
-
       // NOTE(batzor): We should not use `dest` operand for the destination
       // here. Otherwise, writable `ToBufferOp` will be called twice on the same
       // `dest` SSA Value causing conflict and force memory copy.
-      nttResult = fastNTT(b, adaptor, bitReversed.getResult(),
-                          bitReversed.getResult(), nttMappingAttr);
+      nttResult =
+          fastNTT(b, adaptor, bitReversed.getResult(), bitReversed.getResult());
     } else {
-      nttResult = fastNTT(b, adaptor, adaptor.getSource(), adaptor.getDest(),
-                          nttMappingAttr);
+      nttResult = fastNTT(b, adaptor, adaptor.getSource(), adaptor.getDest());
     }
 
     // Transform the input tensor to bit-reversed order at last if performing
@@ -492,12 +477,6 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     if (adaptor.getInverse() && adaptor.getBitReverse()) {
       auto nttResultBitReversed = b.create<tensor_ext::BitReverseOp>(
           nttResult, nttResult, /*dimension=*/0);
-
-      // Forward GPU mapping attribute if present.
-      if (bitReverseMappingAttr) {
-        nttResultBitReversed->setAttr(gpu::getMappingAttrName(),
-                                      bitReverseMappingAttr);
-      }
 
       rewriter.replaceOp(op, nttResultBitReversed);
     } else {
