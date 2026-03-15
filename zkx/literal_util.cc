@@ -27,6 +27,7 @@ limitations under the License.
 #include "zk_dtypes/include/field/prime_field.h"
 #include "zk_dtypes/include/geometry/point_declarations.h"
 #include "zkx/base/containers/container_util.h"
+#include "zkx/types.h"
 
 namespace zkx {
 namespace {
@@ -73,6 +74,8 @@ template <typename NativeT>
 NativeT GetMaxImpl() {
   if constexpr (std::numeric_limits<NativeT>::is_integer) {
     return std::numeric_limits<NativeT>::max();
+  } else if constexpr (is_big_int_v<NativeT>) {
+    return NativeT::Max();
   } else if constexpr (zk_dtypes::IsComparable<NativeT>) {
     return NativeT::Max();
   }
@@ -83,6 +86,8 @@ template <typename NativeT>
 NativeT GetMinImpl() {
   if constexpr (std::numeric_limits<NativeT>::is_integer) {
     return std::numeric_limits<NativeT>::min();
+  } else if constexpr (is_big_int_v<NativeT>) {
+    return NativeT::Min();
   } else if constexpr (zk_dtypes::IsComparable<NativeT>) {
     return NativeT::Min();
   }
