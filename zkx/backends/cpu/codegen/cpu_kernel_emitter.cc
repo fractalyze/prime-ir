@@ -2271,6 +2271,7 @@ absl::StatusOr<mlir::Value> CpuKernelEmitter::EmitOp(
                                           /*attributes=*/std::nullopt, b);
       }
       EnableZkTypePasses(src_type);
+      EnableZkTypePasses(dst_type);
       auto output_type =
           MakeMlirTensorTypeWithoutLayout(instr->shape(), b.getContext());
       int64_t src_bytes = ShapeUtil::ByteSizeOfPrimitiveType(src_type);
