@@ -95,4 +95,29 @@ TYPED_TEST(FieldR2TensorBinaryTest, Add) {
   this->RunAndVerify();
 }
 
+TYPED_TEST_SUITE(ExtFieldBitcastConvertTest, ExtensionFieldTypes);
+
+TYPED_TEST(ExtFieldBitcastConvertTest, ExtFieldToField) {
+  // BitcastDtypesExpander needs a matching unsigned integral type for the
+  // EF storage width. Skip non-power-of-2 sizes (e.g., GoldilocksX3Mont
+  // is 24 bytes / 192 bits — no U192 in HLO).
+  if constexpr ((sizeof(TypeParam) & (sizeof(TypeParam) - 1)) != 0) {
+    GTEST_SKIP() << "No unsigned integral type for " << sizeof(TypeParam) * 8
+                 << "-bit EF";
+  } else {
+    this->SetUpExtFieldToField();
+    this->RunAndVerify(/*run_hlo_passes=*/true);
+  }
+}
+
+TYPED_TEST(ExtFieldBitcastConvertTest, FieldToExtField) {
+  if constexpr ((sizeof(TypeParam) & (sizeof(TypeParam) - 1)) != 0) {
+    GTEST_SKIP() << "No unsigned integral type for " << sizeof(TypeParam) * 8
+                 << "-bit EF";
+  } else {
+    this->SetUpFieldToExtField();
+    this->RunAndVerify(/*run_hlo_passes=*/true);
+  }
+}
+
 }  // namespace zkx::gpu

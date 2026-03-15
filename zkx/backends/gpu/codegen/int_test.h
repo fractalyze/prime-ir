@@ -357,6 +357,66 @@ class IntTest : public BaseIntTest<T>, public CudaKernelEmitterTest {
     expected_literal_ = LiteralUtil::CreateR1<T>(
         base::CreateVector(E - S, [&x](size_t i) { return x[i + S]; }));
   }
+
+  // Cross-dtype bitcast: T[4] → int8_t[4, sizeof(T)].
+  void SetUpBitcastConvertDtypesToSmaller() {
+    constexpr static int64_t N = 4;
+    constexpr static int64_t ratio = sizeof(T) / sizeof(int8_t);
+
+    std::string_view dst_typename = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<int8_t>());
+
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %x = $0[$1] parameter(0)
+        ROOT %ret = $2[$1, $3] bitcast-convert(%x)
+      }
+    )",
+                                 x_typename_, N, dst_typename, ratio);
+
+    std::vector<T> input(N);
+    Array2D<int8_t> expected(N, ratio);
+    for (int64_t i = 0; i < N; ++i) {
+      input[i] = BaseIntTest<T>::GetRandomValue();
+      int8_t bytes[sizeof(T)];
+      std::memcpy(bytes, &input[i], sizeof(T));
+      for (int64_t j = 0; j < ratio; ++j) {
+        expected({i, j}) = bytes[j];
+      }
+    }
+    literals_.push_back(LiteralUtil::CreateR1<T>(input));
+    expected_literal_ = LiteralUtil::CreateR2FromArray2D<int8_t>(expected);
+  }
+
+  // Cross-dtype bitcast: int8_t[4, sizeof(T)] → T[4].
+  void SetUpBitcastConvertDtypesToLarger() {
+    constexpr static int64_t N = 4;
+    constexpr static int64_t ratio = sizeof(T) / sizeof(int8_t);
+
+    std::string_view src_typename = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<int8_t>());
+
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %x = $0[$1, $2] parameter(0)
+        ROOT %ret = $3[$1] bitcast-convert(%x)
+      }
+    )",
+                                 src_typename, N, ratio, x_typename_);
+
+    Array2D<int8_t> input(N, ratio);
+    std::vector<T> expected(N);
+    for (int64_t i = 0; i < N; ++i) {
+      int8_t bytes[sizeof(T)];
+      for (int64_t j = 0; j < ratio; ++j) {
+        bytes[j] = static_cast<int8_t>(base::Uniform<uint8_t>());
+        input({i, j}) = bytes[j];
+      }
+      std::memcpy(&expected[i], bytes, sizeof(T));
+    }
+    literals_.push_back(LiteralUtil::CreateR2FromArray2D<int8_t>(input));
+    expected_literal_ = LiteralUtil::CreateR1<T>(expected);
+  }
 };
 
 }  // namespace zkx::gpu

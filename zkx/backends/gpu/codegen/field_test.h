@@ -531,6 +531,73 @@ class FieldR2TransposeTest : public CudaKernelEmitterTest {
   std::vector<std::vector<F>> expected_;
 };
 
+template <typename EF>
+class ExtFieldBitcastConvertTest : public CudaKernelEmitterTest {
+ public:
+  using F = typename EF::Config::BaseField;
+  constexpr static int64_t N = 2;
+  constexpr static int64_t D = sizeof(EF) / sizeof(F);
+
+  void SetUp() override {
+    CudaKernelEmitterTest::SetUp();
+    ef_typename_ = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<EF>());
+    f_typename_ = primitive_util::LowercasePrimitiveTypeName(
+        primitive_util::NativeToPrimitiveType<F>());
+    x_ = base::CreateVector(N, []() { return EF::Random(); });
+    literals_.push_back(LiteralUtil::CreateR1<EF>(x_));
+  }
+
+ protected:
+  void SetUpExtFieldToField() {
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %p = $0[$2] parameter(0)
+        ROOT %ret = $1[$2,$3] bitcast-convert(%p)
+      }
+    )",
+                                 ef_typename_, f_typename_, N, D);
+
+    Array2D<F> expected(N, D);
+    for (int64_t i = 0; i < N; ++i) {
+      F coeffs[D];
+      std::memcpy(coeffs, &x_[i], sizeof(EF));
+      for (int64_t j = 0; j < D; ++j) {
+        expected({i, j}) = coeffs[j];
+      }
+    }
+    expected_literal_ = LiteralUtil::CreateR2FromArray2D<F>(expected);
+  }
+
+  void SetUpFieldToExtField() {
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %p = $0[$2,$3] parameter(0)
+        ROOT %ret = $1[$2] bitcast-convert(%p)
+      }
+    )",
+                                 f_typename_, ef_typename_, N, D);
+
+    Array2D<F> input(N, D);
+    std::vector<EF> expected(N);
+    for (int64_t i = 0; i < N; ++i) {
+      F coeffs[D];
+      for (int64_t j = 0; j < D; ++j) {
+        coeffs[j] = F::Random();
+        input({i, j}) = coeffs[j];
+      }
+      std::memcpy(&expected[i], coeffs, sizeof(EF));
+    }
+    literals_[0] = LiteralUtil::CreateR2FromArray2D<F>(input);
+    expected_literal_ = LiteralUtil::CreateR1<EF>(expected);
+  }
+
+ private:
+  std::string_view ef_typename_;
+  std::string_view f_typename_;
+  std::vector<EF> x_;
+};
+
 }  // namespace zkx::gpu
 
 #endif  // ZKX_BACKENDS_GPU_CODEGEN_FIELD_TEST_H_
