@@ -399,6 +399,11 @@ inline Value mapMhloOpToStdScalarOp<mhlo::BitcastConvertOp>(
   if (operand.getType() == resultType) {
     return operand;
   }
+  if (isa<mlir::prime_ir::field::FieldTypeInterface>(operand.getType()) ||
+      isa<mlir::prime_ir::field::FieldTypeInterface>(resultType)) {
+    return b->create<mlir::prime_ir::field::BitcastOp>(loc, resultType,
+                                                       operand);
+  }
   return b->create<arith::BitcastOp>(loc, resultType, operand);
 }
 
