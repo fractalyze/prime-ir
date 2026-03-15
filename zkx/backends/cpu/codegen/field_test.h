@@ -25,8 +25,8 @@ limitations under the License.
 #include "absl/strings/substitute.h"
 
 #include "xla/tsl/platform/status.h"
+#include "zk_dtypes/include/all_types.h"
 #include "zk_dtypes/include/batch_inverse.h"
-#include "zk_dtypes/include/field/babybear/babybearx4.h"
 #include "zk_dtypes/include/field/root_of_unity.h"
 #include "zkx/array2d.h"
 #include "zkx/backends/cpu/codegen/cpu_kernel_emitter_test.h"
@@ -888,17 +888,49 @@ class ExtFieldBitcastConvertTest : public CpuKernelEmitterTest {
   }
 
  protected:
-  // EF[N] → F[N,D] bitcast-convert → EF[N] bitcast-convert: round-trip.
-  void SetUpExtFieldToFieldRoundTrip() {
+  // EF[N] → F[N, D]: decompose each EF into D base field coefficients.
+  void SetUpExtFieldToField() {
     hlo_text_ = absl::Substitute(R"(
       ENTRY %main {
         %p = $0[$2] parameter(0)
-        %bc1 = $1[$2,$3] bitcast-convert(%p)
-        ROOT %ret = $0[$2] bitcast-convert(%bc1)
+        ROOT %ret = $1[$2,$3] bitcast-convert(%p)
       }
     )",
                                  ef_typename_, f_typename_, N, D);
-    expected_literal_ = LiteralUtil::CreateR1<EF>(x_);
+
+    Array2D<F> expected(N, D);
+    for (int64_t i = 0; i < N; ++i) {
+      F coeffs[D];
+      std::memcpy(coeffs, &x_[i], sizeof(EF));
+      for (int64_t j = 0; j < D; ++j) {
+        expected({i, j}) = coeffs[j];
+      }
+    }
+    expected_literal_ = LiteralUtil::CreateR2FromArray2D<F>(expected);
+  }
+
+  // F[N, D] → EF[N]: compose D base field coefficients into each EF.
+  void SetUpFieldToExtField() {
+    hlo_text_ = absl::Substitute(R"(
+      ENTRY %main {
+        %p = $0[$2,$3] parameter(0)
+        ROOT %ret = $1[$2] bitcast-convert(%p)
+      }
+    )",
+                                 f_typename_, ef_typename_, N, D);
+
+    Array2D<F> input(N, D);
+    std::vector<EF> expected(N);
+    for (int64_t i = 0; i < N; ++i) {
+      F coeffs[D];
+      for (int64_t j = 0; j < D; ++j) {
+        coeffs[j] = F::Random();
+        input({i, j}) = coeffs[j];
+      }
+      std::memcpy(&expected[i], coeffs, sizeof(EF));
+    }
+    literals_[0] = LiteralUtil::CreateR2FromArray2D<F>(input);
+    expected_literal_ = LiteralUtil::CreateR1<EF>(expected);
   }
 
  private:

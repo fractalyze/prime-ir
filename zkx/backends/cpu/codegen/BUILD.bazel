@@ -177,7 +177,7 @@ zkx_cc_library(
         "//zkx/math/field:prime_field_serde",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/strings",
-        "@zk_dtypes//zk_dtypes:babybearx4",
+        "@zk_dtypes//zk_dtypes:all_types",
         "@zk_dtypes//zk_dtypes:batch_inverse",
         "@zk_dtypes//zk_dtypes:root_of_unity",
     ],

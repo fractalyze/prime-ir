@@ -270,6 +270,16 @@ TYPED_TEST(IntTest, BitReverse) {
   this->RunAndVerify();
 }
 
+TYPED_TEST(IntTest, BitcastConvertDtypesToSmaller) {
+  this->SetUpBitcastConvertDtypesToSmaller();
+  this->RunAndVerify(/*run_hlo_passes=*/true);
+}
+
+TYPED_TEST(IntTest, BitcastConvertDtypesToLarger) {
+  this->SetUpBitcastConvertDtypesToLarger();
+  this->RunAndVerify(/*run_hlo_passes=*/true);
+}
+
 TYPED_TEST(IntTest, BroadcastScalar) {
   this->SetUpBroadcastScalar();
   this->RunAndVerify();
