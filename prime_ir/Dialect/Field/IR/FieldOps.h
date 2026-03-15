@@ -41,10 +41,6 @@ PrimeFieldType getResultPrimeFieldType(OpType op) {
 Type getStandardFormType(Type type);
 Type getMontgomeryFormType(Type type);
 
-// Check if a type is a field-like type (PrimeFieldType, ExtensionFieldType,
-// ModArithType, or IntegerType).
-bool isFieldLikeType(Type type);
-
 // Check if the bitcast is a tensor reinterpret bitcast between extension field
 // and prime field tensors. Also accepts mod_arith::ModArithType as equivalent
 // to PrimeFieldType (for use after type conversion in FieldToModArith).
