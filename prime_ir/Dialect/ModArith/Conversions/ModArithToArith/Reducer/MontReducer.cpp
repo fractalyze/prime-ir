@@ -82,14 +82,6 @@ Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
   auto cmod = createModulusConst(lhs.getType());
   auto sub = b.create<arith::SubIOp>(lhs, rhs);
   auto add = b.create<arith::AddIOp>(sub, cmod);
-  APInt mod = cast<IntegerAttr>(modAttr).getValue();
-  if (mod.isSignBitSet()) {
-    // When p > 2^(w-1), diff + p can overflow, so minui gives wrong results.
-    // Fall back to cmpi + select.
-    auto underflowed =
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, lhs, rhs);
-    return b.create<arith::SelectOp>(underflowed, add, sub).getResult();
-  }
   return b.create<arith::MinUIOp>(sub, add).getResult();
 }
 
@@ -139,8 +131,8 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
       cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
 
   // Compute number of limbs.
-  const unsigned limbWidth = montAttr.getLimbWidth();
-  const unsigned numLimbs = montAttr.getNumLimbs();
+  const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
+  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
 
   TypedAttr bInvAttr = montAttr.getBInv();
   Type limbType = nPrimeAttr.getType();
@@ -229,7 +221,11 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
 }
 
 Value MontReducer::reduce(Value tLow, Value tHigh, bool lazy) {
-  const unsigned numLimbs = montAttr.getNumLimbs();
+  TypedAttr nPrimeAttr = montAttr.getNPrime();
+  const unsigned modBitWidth =
+      cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
+  const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
+  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
   return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, lazy)
                        : reduceMultiLimb(tLow, tHigh, lazy);
 }

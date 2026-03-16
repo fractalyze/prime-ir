@@ -23,3 +23,4 @@ jobs:
           pin_file: third_party/zk_dtypes/workspace.bzl
           var_prefix: ZK_DTYPES
           github_token: ${{ secrets.BUMPER_GH_PAT }}
+          read_token: ${{ secrets.FRACTALYZE_REPOS_READ_TOKEN }}
