@@ -387,6 +387,7 @@ def Field_ExtToCoeffsOp : Field_Op_Base<"ext_to_coeffs"> {
   let results = (outs Variadic<AnyTypeOf<[Field_PrimeFieldType, Field_ExtensionFieldType, ModArith_ModArithType, AnySignlessInteger]>>:$output);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasCanonicalizer = 1;
+  let hasFolder = 1;
   let hasVerifier = 1;
 }
 

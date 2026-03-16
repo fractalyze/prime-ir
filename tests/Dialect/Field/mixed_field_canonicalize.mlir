@@ -201,6 +201,79 @@ func.func @test_fold_mul_cubic_ext_base() -> !CF {
 !QF = !field.ef<2x!PF, 6:i32>
 
 //===----------------------------------------------------------------------===//
+// Mixed-type strength reduction via expansion + ExtToCoeffsOp fold
+//===----------------------------------------------------------------------===//
+// When a mixed-type op has an EF constant, the pipeline:
+// 1. ExpandMixed{Mul,Additive}Op decomposes into ext_to_coeffs + same-type ops
+// 2. ExtToCoeffsOp::fold constant-folds the EF constant into PF coefficients
+// 3. DRR strength reduction patterns apply to the resulting same-type ops
+
+// CHECK-LABEL: @test_mixed_mul_by_ef_two
+func.func @test_mixed_mul_by_ef_two(%pf: !PF) -> !QF {
+  // pf * EF(2, 0) -> ext_from_coeffs(double(pf), 0)
+  // CHECK-DAG: %[[Z:.*]] = field.constant 0
+  // CHECK-DAG: %[[D:.*]] = field.double
+  // CHECK: field.ext_from_coeffs
+  %c = field.constant [2, 0] : !QF
+  %0 = field.mul %pf, %c : !PF, !QF
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mixed_mul_by_ef_three
+func.func @test_mixed_mul_by_ef_three(%pf: !PF) -> !QF {
+  // pf * EF(3, 0) -> ext_from_coeffs(pf + double(pf), 0)
+  // CHECK-DAG: %[[Z:.*]] = field.constant 0
+  // CHECK-DAG: %[[D:.*]] = field.double
+  // CHECK: field.add
+  // CHECK: field.ext_from_coeffs
+  %c = field.constant [3, 0] : !QF
+  %0 = field.mul %pf, %c : !PF, !QF
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mixed_mul_by_ef_neg_one
+func.func @test_mixed_mul_by_ef_neg_one(%pf: !PF) -> !QF {
+  // pf * EF(6, 0) mod 7 = pf * (-1) -> ext_from_coeffs(double(pf + double(pf)), 0)
+  // (MulBySixRhs: x * 6 -> double(x + double(x)))
+  // CHECK-DAG: %[[Z:.*]] = field.constant 0
+  // CHECK: field.double
+  // CHECK: field.ext_from_coeffs
+  %c = field.constant [6, 0] : !QF
+  %0 = field.mul %pf, %c : !PF, !QF
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mixed_add_pf_ef_const
+func.func @test_mixed_add_pf_ef_const(%pf: !PF) -> !QF {
+  // pf + EF(3, 5) -> ext_from_coeffs(pf + 3, 5)
+  // CHECK-DAG: %[[C3:.*]] = field.constant 3
+  // CHECK-DAG: %[[C5:.*]] = field.constant 5
+  // CHECK: field.add
+  // CHECK: field.ext_from_coeffs
+  %c = field.constant [3, 5] : !QF
+  %0 = field.add %pf, %c : !PF, !QF
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mixed_sub_pf_ef_const
+func.func @test_mixed_sub_pf_ef_const(%pf: !PF) -> !QF {
+  // pf - EF(1, 2) -> ext_from_coeffs(pf - 1, negate(2))
+  // negate(2) mod 7 = 5, constant-folded
+  // CHECK-DAG: %[[C5:.*]] = field.constant 5
+  // CHECK-DAG: %[[C1:.*]] = field.constant 1
+  // CHECK: field.sub
+  // CHECK: field.ext_from_coeffs
+  %c = field.constant [1, 2] : !QF
+  %0 = field.sub %pf, %c : !PF, !QF
+  return %0 : !QF
+}
+
+// -----
+
+!PF = !field.pf<7:i32>
+!QF = !field.ef<2x!PF, 6:i32>
+
+//===----------------------------------------------------------------------===//
 // Tensor mixed-type ops (elementwise)
 //===----------------------------------------------------------------------===//
 

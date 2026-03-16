@@ -826,6 +826,47 @@ LogicalResult ExtToCoeffsOp::verify() {
                        << inputType;
 }
 
+LogicalResult
+ExtToCoeffsOp::fold(FoldAdaptor adaptor,
+                    SmallVectorImpl<OpFoldResult> &results) {
+  auto inputAttr = dyn_cast_or_null<DenseIntElementsAttr>(adaptor.getInput());
+  if (!inputAttr)
+    return failure();
+
+  auto efType = cast<ExtensionFieldType>(getInput().getType());
+  unsigned degree = efType.getDegree();
+  Type baseField = efType.getBaseField();
+
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    // Simple extension: each coefficient is a scalar PF constant.
+    auto values = inputAttr.getValues<APInt>();
+    for (unsigned i = 0; i < degree; ++i) {
+      results.push_back(IntegerAttr::get(pfType.getStorageType(), values[i]));
+    }
+    return success();
+  }
+
+  if (auto subEfType = dyn_cast<ExtensionFieldType>(baseField)) {
+    // Tower extension: each coefficient is an EF constant.
+    unsigned subDegreeOverPrime = subEfType.getDegreeOverPrime();
+    auto values = inputAttr.getValues<APInt>();
+
+    auto subAttrShape = subEfType.getAttrShape();
+    auto subTensorType = RankedTensorType::get(
+        subAttrShape, subEfType.getBasePrimeField().getStorageType());
+
+    for (unsigned i = 0; i < degree; ++i) {
+      SmallVector<APInt> coeffs(
+          values.begin() + i * subDegreeOverPrime,
+          values.begin() + (i + 1) * subDegreeOverPrime);
+      results.push_back(DenseIntElementsAttr::get(subTensorType, coeffs));
+    }
+    return success();
+  }
+
+  return failure();
+}
+
 LogicalResult ExtFromCoeffsOp::verify() {
   Type outputType = getType();
   auto efType = dyn_cast<ExtensionFieldType>(outputType);
