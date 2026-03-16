@@ -837,3 +837,40 @@ func.func @test_tower_gather_splat_constant_fold() -> tensor<2x1x!Fp6> {
   // CHECK: return %[[C]] : [[T]]
   return %1 : tensor<2x1x!Fp6>
 }
+
+//===----------------------------------------------------------------------===//
+// ExtToCoeffsOp constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_ext_to_coeffs_fold_simple
+func.func @test_ext_to_coeffs_fold_simple() -> (!PF, !PF) {
+  // ext_to_coeffs of a constant should fold to individual PF constants.
+  // CHECK-DAG: %[[C3:.*]] = field.constant 3
+  // CHECK-DAG: %[[C5:.*]] = field.constant 5
+  // CHECK-NOT: field.ext_to_coeffs
+  // CHECK: return %[[C3]], %[[C5]]
+  %c = field.constant [3, 5] : !QF
+  %c0, %c1 = field.ext_to_coeffs %c : (!QF) -> (!PF, !PF)
+  return %c0, %c1 : !PF, !PF
+}
+
+// CHECK-LABEL: @test_ext_to_coeffs_fold_tower
+func.func @test_ext_to_coeffs_fold_tower() -> (!QF, !QF, !QF) {
+  // ext_to_coeffs of a tower constant should fold to individual EF constants.
+  // CHECK-DAG: %[[C0:.*]] = field.constant dense<[1, 2]>
+  // CHECK-DAG: %[[C1:.*]] = field.constant dense<[3, 4]>
+  // CHECK-DAG: %[[C2:.*]] = field.constant dense<[5, 6]>
+  // CHECK-NOT: field.ext_to_coeffs
+  // CHECK: return %[[C0]], %[[C1]], %[[C2]]
+  %c = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
+  %c0, %c1, %c2 = field.ext_to_coeffs %c : (!Fp6) -> (!QF, !QF, !QF)
+  return %c0, %c1, %c2 : !QF, !QF, !QF
+}
+
+// CHECK-LABEL: @test_ext_to_coeffs_nonfold
+func.func @test_ext_to_coeffs_nonfold(%arg: !QF) -> (!PF, !PF) {
+  // Non-constant input should NOT fold.
+  // CHECK: field.ext_to_coeffs
+  %c0, %c1 = field.ext_to_coeffs %arg : (!QF) -> (!PF, !PF)
+  return %c0, %c1 : !PF, !PF
+}
