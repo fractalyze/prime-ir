@@ -41,6 +41,11 @@ def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
     IntegerAttr getRSquared() const;
     IntegerAttr getBInv() const;
     const SmallVector<IntegerAttr> &getInvTwoPowers() const;
+
+    // Returns the limb bit-width (the bit-width of n').
+    unsigned getLimbWidth() const;
+    // Returns the number of limbs needed to represent a value.
+    unsigned getNumLimbs() const;
   }];
   let assemblyFormat = "`<`$modulus`>`";
   let genStorageClass = 0;

@@ -139,8 +139,8 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
       cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
 
   // Compute number of limbs.
-  const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
-  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+  const unsigned limbWidth = montAttr.getLimbWidth();
+  const unsigned numLimbs = montAttr.getNumLimbs();
 
   TypedAttr bInvAttr = montAttr.getBInv();
   Type limbType = nPrimeAttr.getType();
@@ -229,11 +229,7 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
 }
 
 Value MontReducer::reduce(Value tLow, Value tHigh, bool lazy) {
-  TypedAttr nPrimeAttr = montAttr.getNPrime();
-  const unsigned modBitWidth =
-      cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
-  const unsigned limbWidth = nPrimeAttr.getType().getIntOrFloatBitWidth();
-  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+  const unsigned numLimbs = montAttr.getNumLimbs();
   return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, lazy)
                        : reduceMultiLimb(tLow, tHigh, lazy);
 }

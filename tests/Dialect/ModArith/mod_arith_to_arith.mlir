@@ -281,6 +281,44 @@ func.func @test_double_wide_headroom(%input : !Zp30) -> !Zp30 {
 
 // -----
 
+// BN254 Fr (Montgomery): 256-bit modulus, 64-bit limbs → numLimbs = 4.
+// Signed multiply optimization must NOT apply to multi-limb types because
+// reduceMultiLimb uses unsigned shifts that don't preserve sign information.
+// sub → mont_mul must use mului_extended, not mulsi_extended.
+!BN254m = !mod_arith.int<21888242871839275222246405745257275088548364400416034343698204186575808495617 : i256, true>
+
+// CHECK-LABEL: @test_mont_mul_multi_limb_no_signed_opt
+func.func @test_mont_mul_multi_limb_no_signed_opt(%a : !BN254m, %b : !BN254m, %c : !BN254m) -> !BN254m {
+  // Both subs produce minui(x-y, x-y+p) which getSignedFormFromCanonical can
+  // match. For multi-limb types, ConvertMontMul must NOT use the signed form.
+  %lhs = mod_arith.sub %a, %b : !BN254m
+  %rhs = mod_arith.sub %b, %c : !BN254m
+  // CHECK-NOT: arith.mulsi_extended
+  // CHECK: arith.mului_extended
+  %res = mod_arith.mont_mul %lhs, %rhs : !BN254m
+  return %res : !BN254m
+}
+
+// -----
+
+// BabyBear (Montgomery): 32-bit modulus, 32-bit limbs → numLimbs = 1.
+// Signed multiply optimization is safe for single-limb types because
+// reduceSingleLimb handles signed inputs via isFromSignedMul.
+!BBm = !mod_arith.int<2013265921 : i32, true>
+
+// CHECK-LABEL: @test_mont_mul_single_limb_signed_opt
+func.func @test_mont_mul_single_limb_signed_opt(%a : !BBm, %b : !BBm, %c : !BBm) -> !BBm {
+  // Both subs produce minui(x-y, x-y+p). For single-limb types,
+  // getSignedFormFromCanonical should match and use mulsi_extended.
+  %lhs = mod_arith.sub %a, %b : !BBm
+  %rhs = mod_arith.sub %b, %c : !BBm
+  // CHECK: arith.mulsi_extended
+  %res = mod_arith.mont_mul %lhs, %rhs : !BBm
+  return %res : !BBm
+}
+
+// -----
+
 // Goldilocks: p = 2⁶⁴ - 2³² + 1, p > 2⁶³ so getCanonicalDiff must use
 // cmpi + select instead of minui (diff + p overflows i64).
 !Gp = !mod_arith.int<18446744069414584321 : i64>

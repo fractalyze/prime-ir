@@ -1176,8 +1176,17 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
       }
     }
 
-    Value signedLhs = getSignedFormFromCanonical(lhs, modAttr);
-    Value signedRhs = getSignedFormFromCanonical(rhs, modAttr);
+    // Signed multiply optimization: extract pre-reduction values from
+    // minui(sub, sub+p) to use MulSIExtendedOp. Only safe for single-limb
+    // types — reduceMultiLimb uses unsigned shifts that don't preserve
+    // sign information from MulSIExtendedOp.
+    MontgomeryAttr montAttrVal = modType.getMontgomeryAttr();
+    unsigned numLimbs = montAttrVal.getNumLimbs();
+    Value signedLhs, signedRhs;
+    if (numLimbs == 1) {
+      signedLhs = getSignedFormFromCanonical(lhs, modAttr);
+      signedRhs = getSignedFormFromCanonical(rhs, modAttr);
+    }
 
     Value lo, hi;
     if (signedLhs && signedRhs) {
@@ -1213,11 +1222,9 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   IntegerType intType = modType.getStorageType();
   IntegerType intExtType = intType.scaleElementBitwidth(2);
 
-  const unsigned modBitWidth = intType.getWidth();
-  const unsigned limbWidth = modBitWidth > APInt::APINT_BITS_PER_WORD
-                                 ? APInt::APINT_BITS_PER_WORD
-                                 : modBitWidth;
-  const unsigned numLimbs = (modBitWidth + limbWidth - 1) / limbWidth;
+  MontgomeryAttr montAttrVal = modType.getMontgomeryAttr();
+  const unsigned limbWidth = montAttrVal.getLimbWidth();
+  const unsigned numLimbs = montAttrVal.getNumLimbs();
 
   MontReducer montReducer(b, modType);
   if (numLimbs == 1) {
