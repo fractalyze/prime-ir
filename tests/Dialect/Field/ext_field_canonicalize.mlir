@@ -341,6 +341,44 @@ func.func @test_ext_tensor_extract_fold() -> !QF {
   return %1 : !QF
 }
 
+// CHECK-LABEL: @test_ext_tensor_extract_splat_0d
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_tensor_extract_splat_0d() -> !QF {
+  // Extracting from a 0-d splat EF tensor should produce a valid EF constant.
+  // CHECK: %[[C:.*]] = field.constant dense<1> : [[T]]
+  // CHECK-NOT: tensor.extract
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant dense<1> : tensor<!QF>
+  %1 = tensor.extract %0[] : tensor<!QF>
+  return %1 : !QF
+}
+
+// CHECK-LABEL: @test_ext_tensor_extract_splat_1d
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_ext_tensor_extract_splat_1d() -> !QF {
+  // Extracting from a 1-d splat EF tensor should produce a valid EF constant.
+  // CHECK: %[[C:.*]] = field.constant dense<3> : [[T]]
+  // CHECK-NOT: tensor.extract
+  // CHECK: return %[[C]] : [[T]]
+  %c0 = arith.constant 0 : index
+  %0 = field.constant dense<3> : tensor<2x!QF>
+  %1 = tensor.extract %0[%c0] : tensor<2x!QF>
+  return %1 : !QF
+}
+
+// CHECK-LABEL: @test_tower_tensor_extract_splat
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_tower_tensor_extract_splat() -> !Fp6 {
+  // Extracting from a splat tower EF tensor should produce a valid EF constant.
+  // CHECK: %[[C:.*]] = field.constant dense<2> : [[T]]
+  // CHECK-NOT: tensor.extract
+  // CHECK: return %[[C]] : [[T]]
+  %c0 = arith.constant 0 : index
+  %0 = field.constant dense<2> : tensor<2x!Fp6>
+  %1 = tensor.extract %0[%c0] : tensor<2x!Fp6>
+  return %1 : !Fp6
+}
+
 
 // CHECK-LABEL: @test_tower_tensor_extract_fold
 // CHECK-SAME: () -> [[T:.*]] {
