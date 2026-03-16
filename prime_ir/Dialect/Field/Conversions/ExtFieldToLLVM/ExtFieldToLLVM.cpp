@@ -103,8 +103,22 @@ struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
     Type inputType = op.getInput().getType();
     Type outputType = op.getType();
 
-    // Handle tensor reinterpret bitcasts (extension field <-> prime
-    // field). Scalar bitcasts are handled in FieldToModArith.
+    // Handle scalar EF <-> integer bitcasts.
+    if (!isa<ShapedType>(inputType) && !isa<ShapedType>(outputType)) {
+      auto inputEF =
+          dyn_cast<ExtensionFieldType>(getElementTypeOrSelf(inputType));
+      auto outputEF =
+          dyn_cast<ExtensionFieldType>(getElementTypeOrSelf(outputType));
+      auto inputInt = dyn_cast<IntegerType>(inputType);
+      auto outputInt = dyn_cast<IntegerType>(outputType);
+
+      if (inputEF && outputInt)
+        return convertEFToInteger(op, adaptor, rewriter, inputEF, outputInt);
+      if (inputInt && outputEF)
+        return convertIntegerToEF(op, adaptor, rewriter, inputInt, outputEF);
+    }
+
+    // Handle tensor reinterpret bitcasts only.
     if (!isTensorReinterpretBitcast(inputType, outputType))
       return failure();
 
@@ -143,6 +157,52 @@ private:
     return 1;
   }
 
+  // EF struct → iN: type-pun through stack memory (alloca + store + load).
+  // LLVM's SROA eliminates the alloca at -O1+, making this a register-level
+  // noop. This assumes little-endian layout (x86/ARM targets) so that struct
+  // field 0 maps to the low bits of the loaded integer.
+  LogicalResult convertEFToInteger(BitcastOp op, OpAdaptor adaptor,
+                                   ConversionPatternRewriter &rewriter,
+                                   ExtensionFieldType efType,
+                                   IntegerType intType) const {
+    Location loc = op.getLoc();
+    Value input = adaptor.getInput();
+    auto structType = cast<LLVM::LLVMStructType>(input.getType());
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+
+    Value one = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
+    Value alloca =
+        rewriter.create<LLVM::AllocaOp>(loc, ptrType, structType, one);
+    rewriter.create<LLVM::StoreOp>(loc, input, alloca);
+    Value result = rewriter.create<LLVM::LoadOp>(loc, intType, alloca);
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+
+  // iN → EF struct: type-pun through stack memory (alloca + store + load).
+  // See convertEFToInteger for rationale.
+  LogicalResult convertIntegerToEF(BitcastOp op, OpAdaptor adaptor,
+                                   ConversionPatternRewriter &rewriter,
+                                   IntegerType intType,
+                                   ExtensionFieldType efType) const {
+    Location loc = op.getLoc();
+    Value input = adaptor.getInput();
+    Type convertedEFType = typeConverter->convertType(efType);
+    auto structType = cast<LLVM::LLVMStructType>(convertedEFType);
+    auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
+
+    Value one = rewriter.create<LLVM::ConstantOp>(
+        loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
+    Value alloca = rewriter.create<LLVM::AllocaOp>(loc, ptrType, intType, one);
+    rewriter.create<LLVM::StoreOp>(loc, input, alloca);
+    Value result = rewriter.create<LLVM::LoadOp>(loc, structType, alloca);
+
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+
   LogicalResult convertMemRefBitcast(BitcastOp op, OpAdaptor adaptor,
                                      ConversionPatternRewriter &rewriter,
                                      Type convertedOutputType) const {
@@ -157,7 +217,15 @@ private:
     // Extract input descriptor fields.
     MemRefDescriptor inputDesc(adaptor.getInput());
 
-    // Build output descriptor with correct metadata.
+    // Same-shape bitcast (e.g., memref<2x4xEF4> → memref<2x4xi128>): both
+    // element types have the same byte size, so the descriptor is identical.
+    if (inputMemRef.getShape() == outputMemRef.getShape()) {
+      rewriter.replaceOp(op, adaptor.getInput());
+      return success();
+    }
+
+    // Different-shape reinterpret (e.g., memref<2xEF4> → memref<8xPF>):
+    // rebuild the descriptor with adjusted offset/sizes/strides.
     auto outputDesc = MemRefDescriptor::poison(rewriter, loc, llvmDescTy);
 
     // Same underlying memory — pointers are shared.

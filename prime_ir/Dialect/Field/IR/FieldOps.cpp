@@ -504,33 +504,14 @@ LogicalResult ToMontOp::verify() {
   return success();
 }
 
-bool isFieldLikeType(Type type) {
-  return isa<PrimeFieldType, ExtensionFieldType, mod_arith::ModArithType,
-             IntegerType>(type);
-}
-
 namespace {
 
-// Helper function to compute the total number of prime field elements
-// represented by a shaped type. IntegerType is treated as a single element
-// (after mod-arith-to-arith lowering). For tower extensions, uses
-// getDegreeOverPrime() to get the total degree.
-std::optional<int64_t> getTotalPrimeFieldElements(ShapedType shapedType) {
-  if (!shapedType.hasStaticShape()) {
-    return std::nullopt;
-  }
-
-  Type elementType = shapedType.getElementType();
-  int64_t numElements = shapedType.getNumElements();
-
-  if (isa<PrimeFieldType, mod_arith::ModArithType, IntegerType>(elementType)) {
-    return numElements;
-  }
-  if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    // Use getDegreeOverPrime() to handle tower extensions correctly
-    return numElements * efType.getDegreeOverPrime();
-  }
-  return std::nullopt;
+// Check if a type can participate in a tensor reinterpret bitcast: field types
+// (PF, EF, ModArith) or IntegerType (which appears after mod-arith-to-arith
+// lowers PF to its storage integer).
+bool isBitcastableElementType(Type type) {
+  return isa<PrimeFieldType, ExtensionFieldType, mod_arith::ModArithType,
+             IntegerType>(type);
 }
 
 } // namespace
@@ -546,10 +527,8 @@ bool isTensorReinterpretBitcast(Type inputType, Type outputType) {
   Type inputElementType = inputShaped.getElementType();
   Type outputElementType = outputShaped.getElementType();
 
-  // Both element types must be field-like types (prime, extension, or
-  // mod_arith)
-  if (!isFieldLikeType(inputElementType) ||
-      !isFieldLikeType(outputElementType)) {
+  if (!isBitcastableElementType(inputElementType) ||
+      !isBitcastableElementType(outputElementType)) {
     return false;
   }
 
@@ -600,13 +579,6 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
       outputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
     } else {
       outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
-    }
-
-    // The total number of prime field elements must match
-    auto inputTotal = getTotalPrimeFieldElements(inputShaped);
-    auto outputTotal = getTotalPrimeFieldElements(outputShaped);
-    if (!inputTotal || !outputTotal || *inputTotal != *outputTotal) {
-      return false;
     }
 
     // Total bitwidth must match
@@ -671,7 +643,19 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     }
   }
 
-  // Case 4: prime field <- > integer bitcast
+  // Case 4: extension field <-> integer bitcast (same storage bitwidth)
+  if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
+    if (auto outputInt = dyn_cast<IntegerType>(outputElementType)) {
+      return inputEF.getStorageBitWidth() == outputInt.getWidth();
+    }
+  }
+  if (auto inputInt = dyn_cast<IntegerType>(inputElementType)) {
+    if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
+      return inputInt.getWidth() == outputEF.getStorageBitWidth();
+    }
+  }
+
+  // Case 5: prime field <-> integer bitcast
   if (!isa<PrimeFieldType, IntegerType>(inputElementType) ||
       !isa<PrimeFieldType, IntegerType>(outputElementType)) {
     return false;
@@ -705,42 +689,32 @@ LogicalResult BitcastOp::verify() {
     auto inputShaped = cast<ShapedType>(inputType);
     auto outputShaped = cast<ShapedType>(outputType);
 
-    auto inputTotal = getTotalPrimeFieldElements(inputShaped);
-    auto outputTotal = getTotalPrimeFieldElements(outputShaped);
-    if (!inputTotal || !outputTotal) {
+    if (!inputShaped.hasStaticShape() || !outputShaped.hasStaticShape()) {
       return emitOpError()
              << "tensor reinterpret bitcast requires static shapes";
     }
-    if (*inputTotal != *outputTotal) {
-      return emitOpError() << "tensor reinterpret bitcast requires matching "
-                              "total prime field "
-                              "element count; input has "
-                           << *inputTotal << " elements but output has "
-                           << *outputTotal;
-    }
 
-    // Check bitwidth (handles tower extensions via getBasePrimeField and
-    // getDegreeOverPrime)
-    Type inputElementType = inputShaped.getElementType();
-    Type outputElementType = outputShaped.getElementType();
-    unsigned inputBitWidth;
-    if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      inputBitWidth = efType.getStorageBitWidth();
-    } else {
-      inputBitWidth = getIntOrPrimeFieldBitWidth(inputElementType);
+    // Check total bitwidth (handles both tensor reinterpret and same-shape
+    // element-wise bitcasts).
+    Type inputElemType = inputShaped.getElementType();
+    Type outputElemType = outputShaped.getElementType();
+
+    auto getElementBitWidth = [](Type t) -> unsigned {
+      if (auto ef = dyn_cast<ExtensionFieldType>(t))
+        return ef.getStorageBitWidth();
+      return getIntOrPrimeFieldBitWidth(t);
+    };
+
+    unsigned inputTotal =
+        getElementBitWidth(inputElemType) * inputShaped.getNumElements();
+    unsigned outputTotal =
+        getElementBitWidth(outputElemType) * outputShaped.getNumElements();
+    if (inputTotal != outputTotal) {
+      return emitOpError()
+             << "tensor bitcast requires matching total bitwidth; input has "
+             << inputTotal << " bits but output has " << outputTotal << " bits";
     }
-    unsigned outputBitWidth;
-    if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      outputBitWidth = efType.getStorageBitWidth();
-    } else {
-      outputBitWidth = getIntOrPrimeFieldBitWidth(outputElementType);
-    }
-    return emitOpError()
-           << "tensor reinterpret bitcast requires matching total bitwidth; "
-              "input has "
-           << (inputBitWidth * inputShaped.getNumElements())
-           << " bits but output has "
-           << (outputBitWidth * outputShaped.getNumElements()) << " bits";
+    return success();
   }
 
   // Check shape compatibility for non-tensor-reinterpret cases
