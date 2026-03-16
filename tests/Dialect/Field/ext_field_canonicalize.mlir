@@ -546,6 +546,16 @@ func.func @test_mul_by_three(%arg0: !QF) -> !QF {
   return %0 : !QF
 }
 
+// CHECK-LABEL: @test_ef_mul_by_ef_splat_not_identity
+func.func @test_ef_mul_by_ef_splat_not_identity(%arg0: !QF) -> !QF {
+  // [1, 1] is NOT the multiplicative identity (which is [1, 0]).
+  // DRR MulByOne must NOT fire — the mul must remain.
+  // CHECK: field.mul
+  %c = field.constant [1, 1] : !QF
+  %0 = field.mul %arg0, %c : !QF
+  return %0 : !QF
+}
+
 // CHECK-LABEL: @test_tensor_mul_by_two_is_double
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_tensor_mul_by_two_is_double(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {

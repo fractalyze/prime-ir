@@ -162,6 +162,15 @@ func.func @test_expand_mul_base_ext(%base: !PF, %ext: !QF) -> !QF {
   return %0 : !QF
 }
 
+// Splat EF constant [2, 2] must not match MulByTwo DRR directly.
+// CHECK-LABEL: @test_mixed_mul_splat_ef_const
+func.func @test_mixed_mul_splat_ef_const(%x: !PF) -> !QF {
+  // CHECK: field.ext_from_coeffs
+  %c = field.constant [2, 2] : !QF
+  %0 = field.mul %x, %c : !PF, !QF
+  return %0 : !QF
+}
+
 // -----
 
 !PF = !field.pf<7:i32>

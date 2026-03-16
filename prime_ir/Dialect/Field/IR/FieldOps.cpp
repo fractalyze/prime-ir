@@ -1793,11 +1793,22 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
                        Predicate pred) {
   Type elementType = getElementTypeOrSelf(val.getType());
 
+  // Guard DRR patterns against mixed-type ops: a DenseElementsAttr paired with
+  // a scalar PF value means the constant is an EF value. DRR patterns would
+  // produce a PF result instead of the required EF result type.
+  if (isa<DenseElementsAttr>(attr) && !isa<ShapedType>(val.getType()) &&
+      !isa<ExtensionFieldType>(elementType))
+    return false;
+
   // Extract typed attr representing a single field element.
   TypedAttr typedAttr;
   if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
     typedAttr = intAttr;
   } else if (auto splatAttr = dyn_cast<SplatElementsAttr>(attr)) {
+    // For EF types, a splat [v,v,...,v] can never be a valid scalar embedding
+    // [v,0,...,0] (unless degreeOverPrime == 1, but then it's PF).
+    if (isa<ExtensionFieldType>(elementType))
+      return false;
     typedAttr = splatAttr.getSplatValue<IntegerAttr>();
   } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr)) {
     if (auto fti = dyn_cast<FieldTypeInterface>(elementType)) {
@@ -1840,6 +1851,15 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
     stdType = getStandardFormType(elementType);
     valueOp = valueOp.fromMont();
   }
+  // Bail out if the offset exceeds the prime modulus (e.g., IsNine with mod 7
+  // would crash the FieldOperation constructor).
+  auto pfType = dyn_cast<PrimeFieldType>(stdType);
+  if (!pfType) {
+    if (auto efType = dyn_cast<ExtensionFieldType>(stdType))
+      pfType = cast<PrimeFieldType>(efType.getBaseField());
+  }
+  if (pfType && offset >= pfType.getModulus().getValue().getZExtValue())
+    return false;
   FieldOperation offsetOp(static_cast<uint64_t>(offset), stdType);
   return pred(valueOp, offsetOp);
 }
