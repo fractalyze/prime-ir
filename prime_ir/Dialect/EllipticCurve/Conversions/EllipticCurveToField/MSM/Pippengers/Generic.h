@@ -31,7 +31,7 @@ public:
         parallel(parallel) {
     // Note that the required number of buckets per window is 2^{bitsPerWindow}
     // - 1 since we don't need the "zero" bucket.
-    numBuckets = (1 << bitsPerWindow) - 1;
+    numBuckets = (size_t{1} << bitsPerWindow) - 1;
   }
 
   // Process is as follows:
