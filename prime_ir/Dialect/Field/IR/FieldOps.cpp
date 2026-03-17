@@ -306,6 +306,17 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
   }
 
   if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
+    // For extension field types, an IntegerAttr (e.g., from a splat tensor
+    // fold) must be expanded into a DenseIntElementsAttr with the splat value
+    // replicated across all coefficients.
+    if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
+      auto storageType = efType.getBasePrimeField().getStorageType();
+      auto tensorType =
+          RankedTensorType::get(efType.getAttrShape(), storageType);
+      auto splatAttr =
+          DenseIntElementsAttr::get(tensorType, intAttr.getValue());
+      return builder.create<ConstantOp>(loc, type, splatAttr);
+    }
     return builder.create<ConstantOp>(loc, type, intAttr);
   }
   return builder.create<ConstantOp>(loc, type,
