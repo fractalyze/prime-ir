@@ -188,29 +188,3 @@ func.func @test_memref(%arg0: memref<3x!affine>, %arg1: memref<3x!affine>) {
   memref.store %affine, %arg0[%c0] : memref<3x!affine>
   return
 }
-
-// result bucket_indices = <(#numScalars * #numWindows) x index>
-// result point_indices = <(#numScalars * #numWindows) x index>
-func.func @test_scalar_decomp(%scalars: tensor<6x!SFm>) {
-  %bucket_indices, %point_indices = elliptic_curve.scalar_decomp %scalars {bitsPerWindow = 2 : i16, scalarMaxBits = 4 : i16} : (tensor<6x!SFm>) -> (tensor<12xindex>, tensor<12xindex>)
-  return
-}
-
-// result buckets = <#totalBuckets x pointType>
-func.func @test_bucket_acc(%points: tensor<3x!affine>, %sorted_point_indices: tensor<6xindex>, %sorted_unique_bucket_indices: tensor<4xindex>, %bucket_offsets: tensor<5xindex>) {
-  %msm_result = elliptic_curve.bucket_acc %points, %sorted_point_indices, %sorted_unique_bucket_indices, %bucket_offsets: (tensor<3x!affine>, tensor<6xindex>, tensor<4xindex>, tensor<5xindex>) -> tensor<8x!jacobian>
-  return
-}
-
-// input buckets = <#windows x #bucketsPerWindow x pointType>
-func.func @test_bucket_reduce(%buckets: tensor<?x?x!jacobian>) {
-  %msm_result = elliptic_curve.bucket_reduce %buckets {scalarType = !SF}: (tensor<?x?x!jacobian>) -> tensor<?x!jacobian>
-  return
-}
-
-// input windows = <#windows x pointType>
-// CHECK-LABEL: @test_window_reduce
-func.func @test_window_reduce(%windows: tensor<128x!jacobian>) {
-  %msm_result = elliptic_curve.window_reduce %windows {bitsPerWindow = 2 : i16, scalarType = !SF}: (tensor<128x!jacobian>) -> !jacobian
-  return
-}

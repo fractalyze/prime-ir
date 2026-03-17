@@ -17,9 +17,7 @@ limitations under the License.
 #include "mlir/InitAllDialects.h"
 #include "mlir/InitAllExtensions.h"
 #include "mlir/InitAllPasses.h"
-#include "mlir/Target/LLVMIR/Dialect/GPU/GPUToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
-#include "mlir/Target/LLVMIR/Dialect/NVVM/NVVMToLLVMIRTranslation.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h"
@@ -61,8 +59,6 @@ int main(int argc, char **argv) {
       registry);
   mlir::prime_ir::arith_ext::registerSpecializeArithToAVXPasses();
   mlir::registerAllDialects(registry);
-  mlir::registerGPUDialectTranslation(registry);
-  mlir::registerNVVMDialectTranslation(registry);
   mlir::registerLLVMDialectTranslation(registry);
   mlir::registerAllExtensions(registry);
 
