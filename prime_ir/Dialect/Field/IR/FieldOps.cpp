@@ -800,6 +800,45 @@ LogicalResult ExtToCoeffsOp::verify() {
                        << inputType;
 }
 
+LogicalResult ExtToCoeffsOp::fold(FoldAdaptor adaptor,
+                                  SmallVectorImpl<OpFoldResult> &results) {
+  auto inputAttr = dyn_cast_or_null<DenseIntElementsAttr>(adaptor.getInput());
+  if (!inputAttr)
+    return failure();
+
+  auto efType = cast<ExtensionFieldType>(getInput().getType());
+  unsigned degree = efType.getDegree();
+  Type baseField = efType.getBaseField();
+
+  if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
+    // Simple extension: each coefficient is a scalar PF constant.
+    auto values = inputAttr.getValues<APInt>();
+    for (unsigned i = 0; i < degree; ++i) {
+      results.push_back(IntegerAttr::get(pfType.getStorageType(), values[i]));
+    }
+    return success();
+  }
+
+  if (auto subEfType = dyn_cast<ExtensionFieldType>(baseField)) {
+    // Tower extension: each coefficient is an EF constant.
+    unsigned subDegreeOverPrime = subEfType.getDegreeOverPrime();
+    auto values = inputAttr.getValues<APInt>();
+
+    auto subAttrShape = subEfType.getAttrShape();
+    auto subTensorType = RankedTensorType::get(
+        subAttrShape, subEfType.getBasePrimeField().getStorageType());
+
+    for (unsigned i = 0; i < degree; ++i) {
+      SmallVector<APInt> coeffs(values.begin() + i * subDegreeOverPrime,
+                                values.begin() + (i + 1) * subDegreeOverPrime);
+      results.push_back(DenseIntElementsAttr::get(subTensorType, coeffs));
+    }
+    return success();
+  }
+
+  return failure();
+}
+
 LogicalResult ExtFromCoeffsOp::verify() {
   Type outputType = getType();
   auto efType = dyn_cast<ExtensionFieldType>(outputType);
@@ -1754,11 +1793,22 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
                        Predicate pred) {
   Type elementType = getElementTypeOrSelf(val.getType());
 
+  // Guard DRR patterns against mixed-type ops: a DenseElementsAttr paired with
+  // a scalar PF value means the constant is an EF value. DRR patterns would
+  // produce a PF result instead of the required EF result type.
+  if (isa<DenseElementsAttr>(attr) && !isa<ShapedType>(val.getType()) &&
+      !isa<ExtensionFieldType>(elementType))
+    return false;
+
   // Extract typed attr representing a single field element.
   TypedAttr typedAttr;
   if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
     typedAttr = intAttr;
   } else if (auto splatAttr = dyn_cast<SplatElementsAttr>(attr)) {
+    // For EF types, a splat [v,v,...,v] can never be a valid scalar embedding
+    // [v,0,...,0] (unless degreeOverPrime == 1, but then it's PF).
+    if (isa<ExtensionFieldType>(elementType))
+      return false;
     typedAttr = splatAttr.getSplatValue<IntegerAttr>();
   } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr)) {
     if (auto fti = dyn_cast<FieldTypeInterface>(elementType)) {
@@ -1801,6 +1851,15 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
     stdType = getStandardFormType(elementType);
     valueOp = valueOp.fromMont();
   }
+  // Bail out if the offset exceeds the prime modulus (e.g., IsNine with mod 7
+  // would crash the FieldOperation constructor).
+  auto pfType = dyn_cast<PrimeFieldType>(stdType);
+  if (!pfType) {
+    if (auto efType = dyn_cast<ExtensionFieldType>(stdType))
+      pfType = cast<PrimeFieldType>(efType.getBaseField());
+  }
+  if (pfType && offset >= pfType.getModulus().getValue().getZExtValue())
+    return false;
   FieldOperation offsetOp(static_cast<uint64_t>(offset), stdType);
   return pred(valueOp, offsetOp);
 }
