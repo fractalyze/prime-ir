@@ -131,6 +131,51 @@ func.func @test_lower_inverse(%arg0: !QF) -> !QF {
     return %inv : !QF
 }
 
+// Tensor extension field inverse uses Montgomery's batch inversion trick:
+// O(3(n-1)) field multiplications + 1 scalar inversion.
+// CHECK-LABEL: @test_tensor_batch_inverse
+func.func @test_tensor_batch_inverse(%arg0: tensor<2x!QF>) -> tensor<2x!QF> {
+    // Forward pass: extract a[0], build prefix products in scf.for.
+    // CHECK:      tensor.extract %arg0
+    // CHECK:      tensor.empty
+    // CHECK:      tensor.insert
+    // CHECK:      scf.for
+    // CHECK:        tensor.extract
+    // CHECK:        field.ext_to_coeffs
+    // CHECK:        field.ext_from_coeffs
+    // CHECK:        tensor.insert
+    // Single scalar inverse on the total product (lowered to mod_arith).
+    // CHECK:      mod_arith.inverse
+    // CHECK:      field.ext_from_coeffs
+    // Backward pass: recover individual inverses.
+    // CHECK:      tensor.empty
+    // CHECK:      scf.for
+    // CHECK:        tensor.extract
+    // CHECK:        field.ext_to_coeffs
+    // CHECK:        field.ext_from_coeffs
+    // CHECK:        tensor.insert
+    // CHECK:        tensor.extract
+    // CHECK:        field.ext_to_coeffs
+    // CHECK:        field.ext_from_coeffs
+    // Final insert for result[0].
+    // CHECK:      tensor.insert
+    %inv = field.inverse %arg0 : tensor<2x!QF>
+    return %inv : tensor<2x!QF>
+}
+
+// Multi-dimensional tensor: collapse to 1-D, batch inverse, expand back.
+// CHECK-LABEL: @test_multidim_tensor_batch_inverse
+func.func @test_multidim_tensor_batch_inverse(%arg0: tensor<2x3x!QF>) -> tensor<2x3x!QF> {
+    // CHECK:      tensor.collapse_shape %arg0 {{\[}}[0, 1]{{\]}}
+    // CHECK:      scf.for
+    // CHECK:      mod_arith.inverse
+    // CHECK:      scf.for
+    // CHECK:      tensor.insert
+    // CHECK:      tensor.expand_shape {{.*}} {{\[}}[0, 1]{{\]}}
+    %inv = field.inverse %arg0 : tensor<2x3x!QF>
+    return %inv : tensor<2x3x!QF>
+}
+
 // CHECK-LABEL: @test_lower_cmp_eq
 func.func @test_lower_cmp_eq(%arg0: !QF, %arg1: !QF) -> i1 {
     // CHECK-COUNT-2: field.ext_to_coeffs
