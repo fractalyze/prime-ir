@@ -254,8 +254,7 @@ def ModArith_MontSquareOp : ModArith_UnaryOp<"mont_square"> {
   let hasFolder = 1;
 }
 
-def ModArith_InverseOp : ModArith_Op_Base<"inverse", [SameOperandsAndResultType, Involution,
-    DeclareOpInterfaceMethods<InferIntRangeInterface, ["inferResultRanges"]>]> {
+def ModArith_InverseOp : ModArith_UnaryOp<"inverse", [Involution]> {
   let summary = "Modular inverse operation";
   let description = [{
     Computes the modular inverse of a given modular type integer.
@@ -266,9 +265,6 @@ def ModArith_InverseOp : ModArith_Op_Base<"inverse", [SameOperandsAndResultType,
     %c0 = mod_arith.inverse %0 : !mod_arith.int<7:i4>
     ```
   }];
-  let arguments = (ins ModArithLike:$input);
-  let results = (outs ModArithLike:$output);
-  let assemblyFormat = "operands attr-dict `:` type($output)";
   let hasFolder = 1;
 }
 

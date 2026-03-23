@@ -382,17 +382,18 @@ struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     auto tensorType = dyn_cast<RankedTensorType>(op.getOutput().getType());
-    if (!tensorType || !isa<ExtensionFieldType>(tensorType.getElementType()) ||
-        !tensorType.hasStaticShape())
+    if (!tensorType)
       return Base::matchAndRewrite(op, adaptor, rewriter);
 
-    return emitEFBatchInverse(op, rewriter, tensorType);
+    return emitBatchInverse(op, rewriter, tensorType);
   }
 
 private:
-  LogicalResult emitEFBatchInverse(InverseOp op,
-                                   ConversionPatternRewriter &rewriter,
-                                   RankedTensorType tensorType) const {
+  LogicalResult emitBatchInverse(InverseOp op,
+                                 ConversionPatternRewriter &rewriter,
+                                 RankedTensorType tensorType) const {
+    if (!tensorType.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "dynamic shape not yet supported");
     int64_t n = tensorType.getNumElements();
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     Value input = op.getInput();
@@ -928,7 +929,7 @@ void FieldToModArith::runOnOperation() {
   // types. ElementwiseMappable ops (add, sub, ...) are scalarized by
   // convert-elementwise-to-linalg. Mark them as legal here so
   // field-to-mod-arith passes through these ops without failing.
-  // Note: InverseOp is NOT listed — ConvertInverse handles tensor EF inverse
+  // Note: InverseOp is NOT listed — ConvertInverse handles all tensor inverses
   // via Montgomery's batch inversion trick.
   target
       .addDynamicallyLegalOp<AddOp, SubOp, MulOp, NegateOp, DoubleOp, SquareOp>(

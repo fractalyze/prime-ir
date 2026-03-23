@@ -97,11 +97,15 @@ func.func @test_lower_inverse(%lhs : !PF1) -> !PF1 {
   return %res : !PF1
 }
 
+// Tensor inverse uses Montgomery's batch inversion at the field level.
 // CHECK-LABEL: @test_lower_inverse_vec
-// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_lower_inverse_vec(%lhs : !PFv) -> !PFv {
   // CHECK-NOT: field.inverse
-  // CHECK: %[[RES:.*]] = mod_arith.inverse %[[LHS]] : [[T]]
+  // CHECK:     scf.for
+  // CHECK:       mod_arith.mul
+  // CHECK:     mod_arith.inverse
+  // CHECK:     scf.for
+  // CHECK:       mod_arith.mul
   %res = field.inverse %lhs : !PFv
   return %res : !PFv
 }

@@ -49,7 +49,6 @@ public:
   BYInverter(ImplicitLocOpBuilder &b, Type inputType);
 
   Value Generate(Value input, bool isMont);
-  Value BatchGenerate(Value input, bool isMont, ShapedType shapedType);
   JumpResult GenerateJump(Value f, Value g, Value eta);
   FGResult GenerateFG(Value f, Value g, TMatrix t);
   DEResult GenerateDE(Value d, Value e, TMatrix t);

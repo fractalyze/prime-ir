@@ -617,6 +617,9 @@ struct ConvertInverse : public BoundMapPattern<InverseOp> {
   LogicalResult
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (isa<ShapedType>(op.getInput().getType()))
+      return rewriter.notifyMatchFailure(op, "shaped inverse not supported");
+
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ModArithType modType = getResultModArithType(op);
 
@@ -635,42 +638,6 @@ struct ConvertInverse : public BoundMapPattern<InverseOp> {
     }
 
     BYInverter inverter(b, op.getInput().getType());
-    if (auto shapedType = dyn_cast<ShapedType>(op.getInput().getType())) {
-      auto convertedType = cast<ShapedType>(input.getType());
-      int64_t rank = shapedType.getRank();
-
-      if (rank == 0) {
-        // Rank-0: extract scalar, invert, wrap back.
-        Value scalar = b.create<tensor::ExtractOp>(input);
-        Value inverted = inverter.Generate(scalar, false);
-        Value result = b.create<tensor::FromElementsOp>(convertedType,
-                                                        ValueRange{inverted});
-        rewriter.replaceOp(op, result);
-        return success();
-      }
-
-      // Rank >= 2: flatten to rank-1 via collapse_shape.
-      if (rank > 1) {
-        auto flatType = RankedTensorType::get({shapedType.getNumElements()},
-                                              convertedType.getElementType());
-        SmallVector<ReassociationIndices> reassoc = {
-            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
-        input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
-      }
-
-      auto flatShaped = cast<ShapedType>(input.getType());
-      Value result = inverter.BatchGenerate(input, false, flatShaped);
-
-      // Rank >= 2: restore original shape via expand_shape.
-      if (rank > 1) {
-        SmallVector<ReassociationIndices> reassoc = {
-            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
-        result = b.create<tensor::ExpandShapeOp>(shapedType, result, reassoc);
-      }
-
-      rewriter.replaceOp(op, result);
-      return success();
-    }
     Value result = inverter.Generate(input, false);
     rewriter.replaceOp(op, result);
     return success();
@@ -683,6 +650,9 @@ struct ConvertMontInverse : public BoundMapPattern<MontInverseOp> {
   LogicalResult
   matchAndRewrite(MontInverseOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (isa<ShapedType>(op.getInput().getType()))
+      return rewriter.notifyMatchFailure(op, "shaped inverse not supported");
+
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ModArithType modType = getResultModArithType(op);
@@ -701,39 +671,6 @@ struct ConvertMontInverse : public BoundMapPattern<MontInverseOp> {
     }
 
     BYInverter inverter(b, op.getInput().getType());
-    if (auto shapedType = dyn_cast<ShapedType>(op.getInput().getType())) {
-      auto convertedType = cast<ShapedType>(input.getType());
-      int64_t rank = shapedType.getRank();
-
-      if (rank == 0) {
-        Value scalar = b.create<tensor::ExtractOp>(input);
-        Value inverted = inverter.Generate(scalar, true);
-        Value result = b.create<tensor::FromElementsOp>(convertedType,
-                                                        ValueRange{inverted});
-        rewriter.replaceOp(op, result);
-        return success();
-      }
-
-      if (rank > 1) {
-        auto flatType = RankedTensorType::get({shapedType.getNumElements()},
-                                              convertedType.getElementType());
-        SmallVector<ReassociationIndices> reassoc = {
-            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
-        input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
-      }
-
-      auto flatShaped = cast<ShapedType>(input.getType());
-      Value result = inverter.BatchGenerate(input, true, flatShaped);
-
-      if (rank > 1) {
-        SmallVector<ReassociationIndices> reassoc = {
-            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
-        result = b.create<tensor::ExpandShapeOp>(shapedType, result, reassoc);
-      }
-
-      rewriter.replaceOp(op, result);
-      return success();
-    }
     Value result = inverter.Generate(input, true);
     rewriter.replaceOp(op, result);
     return success();
