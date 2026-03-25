@@ -347,14 +347,15 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
     }
   });
 
-  // Phase 2: Consumer-aware clamping. Erase lazy entries that no consumer
-  // can benefit from, to preserve canonical patterns for downstream ops.
-  // Only applies to add/sub/double results — REDC lazy output from
-  // MontMulOp/MontSquareOp/MontReduceOp is an orthogonal optimization.
+  // Phase 2: Consumer-aware clamping. Erase lazy entries unless ALL consumers
+  // can benefit from laziness. If any consumer requires canonical input (e.g.,
+  // field.ext_from_coeffs, func.return, mod_arith.inverse), the value must be
+  // reduced — a lazy value would propagate unreduced through ext_from_coeffs →
+  // ext_to_coeffs round-trips where the bound information is lost.
   SmallVector<Value> toErase;
   for (auto &[val, umax] : boundMap) {
     Operation *defOp = val.getDefiningOp();
-    if (!defOp || isa<MontMulOp, MontSquareOp, MontReduceOp>(defOp))
+    if (!defOp)
       continue;
     auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(val.getType()));
     if (!modType)
@@ -364,14 +365,14 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
     APInt p = modType.getModulus().getValue().zext(dw);
     if (kpFromUmax(umax, p) <= 1)
       continue;
-    bool anyBenefit = false;
+    bool allBenefit = true;
     for (Operation *user : val.getUsers()) {
-      if (canAcceptLazy(user, val, umax, boundMap, p, w)) {
-        anyBenefit = true;
+      if (!canAcceptLazy(user, val, umax, boundMap, p, w)) {
+        allBenefit = false;
         break;
       }
     }
-    if (!anyBenefit)
+    if (!allBenefit)
       toErase.push_back(val);
   }
   for (Value v : toErase)
@@ -617,6 +618,9 @@ struct ConvertInverse : public BoundMapPattern<InverseOp> {
   LogicalResult
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (isa<ShapedType>(op.getInput().getType()))
+      return rewriter.notifyMatchFailure(op, "shaped inverse not supported");
+
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ModArithType modType = getResultModArithType(op);
 
@@ -635,42 +639,6 @@ struct ConvertInverse : public BoundMapPattern<InverseOp> {
     }
 
     BYInverter inverter(b, op.getInput().getType());
-    if (auto shapedType = dyn_cast<ShapedType>(op.getInput().getType())) {
-      auto convertedType = cast<ShapedType>(input.getType());
-      int64_t rank = shapedType.getRank();
-
-      if (rank == 0) {
-        // Rank-0: extract scalar, invert, wrap back.
-        Value scalar = b.create<tensor::ExtractOp>(input);
-        Value inverted = inverter.Generate(scalar, false);
-        Value result = b.create<tensor::FromElementsOp>(convertedType,
-                                                        ValueRange{inverted});
-        rewriter.replaceOp(op, result);
-        return success();
-      }
-
-      // Rank >= 2: flatten to rank-1 via collapse_shape.
-      if (rank > 1) {
-        auto flatType = RankedTensorType::get({shapedType.getNumElements()},
-                                              convertedType.getElementType());
-        SmallVector<ReassociationIndices> reassoc = {
-            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
-        input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
-      }
-
-      auto flatShaped = cast<ShapedType>(input.getType());
-      Value result = inverter.BatchGenerate(input, false, flatShaped);
-
-      // Rank >= 2: restore original shape via expand_shape.
-      if (rank > 1) {
-        SmallVector<ReassociationIndices> reassoc = {
-            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
-        result = b.create<tensor::ExpandShapeOp>(shapedType, result, reassoc);
-      }
-
-      rewriter.replaceOp(op, result);
-      return success();
-    }
     Value result = inverter.Generate(input, false);
     rewriter.replaceOp(op, result);
     return success();
@@ -683,6 +651,9 @@ struct ConvertMontInverse : public BoundMapPattern<MontInverseOp> {
   LogicalResult
   matchAndRewrite(MontInverseOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    if (isa<ShapedType>(op.getInput().getType()))
+      return rewriter.notifyMatchFailure(op, "shaped inverse not supported");
+
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     ModArithType modType = getResultModArithType(op);
@@ -701,39 +672,6 @@ struct ConvertMontInverse : public BoundMapPattern<MontInverseOp> {
     }
 
     BYInverter inverter(b, op.getInput().getType());
-    if (auto shapedType = dyn_cast<ShapedType>(op.getInput().getType())) {
-      auto convertedType = cast<ShapedType>(input.getType());
-      int64_t rank = shapedType.getRank();
-
-      if (rank == 0) {
-        Value scalar = b.create<tensor::ExtractOp>(input);
-        Value inverted = inverter.Generate(scalar, true);
-        Value result = b.create<tensor::FromElementsOp>(convertedType,
-                                                        ValueRange{inverted});
-        rewriter.replaceOp(op, result);
-        return success();
-      }
-
-      if (rank > 1) {
-        auto flatType = RankedTensorType::get({shapedType.getNumElements()},
-                                              convertedType.getElementType());
-        SmallVector<ReassociationIndices> reassoc = {
-            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
-        input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
-      }
-
-      auto flatShaped = cast<ShapedType>(input.getType());
-      Value result = inverter.BatchGenerate(input, true, flatShaped);
-
-      if (rank > 1) {
-        SmallVector<ReassociationIndices> reassoc = {
-            llvm::to_vector(llvm::seq<int64_t>(0, rank))};
-        result = b.create<tensor::ExpandShapeOp>(shapedType, result, reassoc);
-      }
-
-      rewriter.replaceOp(op, result);
-      return success();
-    }
     Value result = inverter.Generate(input, true);
     rewriter.replaceOp(op, result);
     return success();
@@ -1461,140 +1399,6 @@ namespace rewrites {
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/ModArithToArith.cpp.inc"
 } // namespace rewrites
 
-//===----------------------------------------------------------------------===//
-// Boundary reduction patterns (only active with lazy-reduction)
-//===----------------------------------------------------------------------===//
-
-// Reduce lazy values at func.return boundaries.
-struct ConvertReturnWithReduction : public BoundMapPattern<func::ReturnOp> {
-  ConvertReturnWithReduction(const TypeConverter &tc, MLIRContext *context,
-                             const BoundMap *boundMap)
-      : BoundMapPattern(tc, context, boundMap, /*benefit=*/10) {}
-
-  LogicalResult
-  matchAndRewrite(func::ReturnOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    SmallVector<Value> newOperands;
-    bool changed = false;
-
-    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
-      Value origOperand = op.getOperand(i);
-      Value convertedOperand = adaptor.getOperands()[i];
-      auto modType =
-          dyn_cast<ModArithType>(getElementTypeOrSelf(origOperand.getType()));
-      uint64_t bound = lookupKp(origOperand);
-      if (modType && bound > 1) {
-        MontReducer reducer(b, modType);
-        newOperands.push_back(
-            reducer.getCanonicalFromExtended(convertedOperand, bound));
-        changed = true;
-      } else {
-        newOperands.push_back(convertedOperand);
-      }
-    }
-
-    if (!changed)
-      return failure();
-
-    rewriter.replaceOpWithNewOp<func::ReturnOp>(op, newOperands);
-    return success();
-  }
-};
-
-// Reduce lazy values at memref.store boundaries.
-struct ConvertStoreWithReduction : public BoundMapPattern<memref::StoreOp> {
-  ConvertStoreWithReduction(const TypeConverter &tc, MLIRContext *context,
-                            const BoundMap *boundMap)
-      : BoundMapPattern(tc, context, boundMap, /*benefit=*/10) {}
-
-  LogicalResult
-  matchAndRewrite(memref::StoreOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    Value storedValue = op.getValue();
-    auto modType =
-        dyn_cast<ModArithType>(getElementTypeOrSelf(storedValue.getType()));
-    uint64_t bound = lookupKp(storedValue);
-    if (!modType || bound <= 1)
-      return failure();
-
-    MontReducer reducer(b, modType);
-    Value reduced = reducer.getCanonicalFromExtended(adaptor.getValue(), bound);
-    rewriter.replaceOpWithNewOp<memref::StoreOp>(
-        op, reduced, adaptor.getMemref(), adaptor.getIndices());
-    return success();
-  }
-};
-
-// Reduce lazy values at scf.yield boundaries (for scf.for iter_args).
-struct ConvertYieldWithReduction : public BoundMapPattern<scf::YieldOp> {
-  ConvertYieldWithReduction(const TypeConverter &tc, MLIRContext *context,
-                            const BoundMap *boundMap)
-      : BoundMapPattern(tc, context, boundMap, /*benefit=*/10) {}
-
-  LogicalResult
-  matchAndRewrite(scf::YieldOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    if (!isa<scf::ForOp>(op->getParentOp()))
-      return failure();
-
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    SmallVector<Value> newOperands;
-    bool changed = false;
-
-    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
-      Value origOperand = op.getOperand(i);
-      Value convertedOperand = adaptor.getOperands()[i];
-      auto modType =
-          dyn_cast<ModArithType>(getElementTypeOrSelf(origOperand.getType()));
-      uint64_t bound = lookupKp(origOperand);
-      if (modType && bound > 1) {
-        MontReducer reducer(b, modType);
-        newOperands.push_back(
-            reducer.getCanonicalFromExtended(convertedOperand, bound));
-        changed = true;
-      } else {
-        newOperands.push_back(convertedOperand);
-      }
-    }
-
-    if (!changed)
-      return failure();
-
-    rewriter.replaceOpWithNewOp<scf::YieldOp>(op, newOperands);
-    return success();
-  }
-};
-
-// Reduce lazy values at bufferization.materialize_in_destination boundaries.
-struct ConvertMaterializeWithReduction
-    : public BoundMapPattern<bufferization::MaterializeInDestinationOp> {
-  ConvertMaterializeWithReduction(const TypeConverter &tc, MLIRContext *context,
-                                  const BoundMap *boundMap)
-      : BoundMapPattern(tc, context, boundMap, /*benefit=*/10) {}
-
-  LogicalResult
-  matchAndRewrite(bufferization::MaterializeInDestinationOp op,
-                  OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    Value source = op.getSource();
-    auto modType =
-        dyn_cast<ModArithType>(getElementTypeOrSelf(source.getType()));
-    uint64_t bound = lookupKp(source);
-    if (!modType || bound <= 1)
-      return failure();
-
-    MontReducer reducer(b, modType);
-    Value reduced =
-        reducer.getCanonicalFromExtended(adaptor.getSource(), bound);
-    rewriter.replaceOpWithNewOp<bufferization::MaterializeInDestinationOp>(
-        op, reduced, adaptor.getDest());
-    return success();
-  }
-};
-
 struct ModArithToArith : impl::ModArithToArithBase<ModArithToArith> {
   using ModArithToArithBase::ModArithToArithBase;
 
@@ -1696,17 +1500,6 @@ void ModArithToArith::runOnOperation() {
       ConvertToMont
       // clang-format on
       >(typeConverter, context);
-  // Boundary patterns: reduce lazy values that escape via return/store/yield.
-  if (lazyReduction) {
-    patterns.add<
-        // clang-format off
-        ConvertMaterializeWithReduction,
-        ConvertReturnWithReduction,
-        ConvertStoreWithReduction,
-        ConvertYieldWithReduction
-        // clang-format on
-        >(typeConverter, context, bm);
-  }
 
   // Catch-all: converts any op whose operands/results carry mod_arith types.
   patterns.add<ConvertAny<void>>(typeConverter, context);

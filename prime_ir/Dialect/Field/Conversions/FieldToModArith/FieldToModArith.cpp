@@ -18,12 +18,14 @@ limitations under the License.
 #include <utility>
 
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SparseTensor/IR/SparseTensor.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -317,6 +319,16 @@ struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
   LogicalResult
   matchAndRewrite(OpT op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Extension field inline codegen (ExtensionFieldCodeGen) operates on scalar
+    // elements only. Shaped extension field types need separate handling:
+    // ElementwiseMappable ops are scalarized by convert-elementwise-to-linalg,
+    // while non-ElementwiseMappable ops (e.g., inverse) require a dedicated
+    // batch lowering pass. Prime field shaped types are fine since mod_arith
+    // ops natively support them.
+    if (isa<ShapedType>(op.getOutput().getType()) &&
+        isa<ExtensionFieldType>(getElementTypeOrSelf(op.getOutput())))
+      return failure();
+
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ScopedBuilderContext scopedBuilderContext(&b);
 
@@ -342,6 +354,17 @@ protected:
   LoweringMode mode;
 };
 
+/// Lowers field.inverse for both scalar and tensor types.
+///
+/// Scalar: delegates to ConvertFieldOpBase (intrinsic or inline codegen).
+/// Tensor EF: Montgomery's batch inversion trick.
+///   Given a₀, a₁, ..., aₙ₋₁:
+///     Forward:  prefix[0] = a₀; prefix[i] = prefix[i-1] * a[i]
+///     Inverse:  inv = prefix[n-1]⁻¹
+///     Backward: result[i] = inv * prefix[i-1]; inv = inv * a[i]  (i = n-1..1)
+///               result[0] = inv
+///   Uses O(3(n-1)) field multiplications + 1 field inversion instead of n
+///   independent inversions.
 struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
   using Base::Base;
   Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
@@ -353,6 +376,131 @@ struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
         .inverse();
+  }
+
+  LogicalResult
+  matchAndRewrite(InverseOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto tensorType = dyn_cast<RankedTensorType>(op.getOutput().getType());
+    if (!tensorType)
+      return Base::matchAndRewrite(op, adaptor, rewriter);
+
+    return emitBatchInverse(op, rewriter, tensorType);
+  }
+
+private:
+  LogicalResult emitBatchInverse(InverseOp op,
+                                 ConversionPatternRewriter &rewriter,
+                                 RankedTensorType tensorType) const {
+    if (!tensorType.hasStaticShape())
+      return rewriter.notifyMatchFailure(op, "dynamic shape not yet supported");
+    int64_t n = tensorType.getNumElements();
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    Value input = op.getInput();
+    Type elemType = tensorType.getElementType();
+
+    if (n == 0) {
+      rewriter.replaceOp(op, input);
+      return success();
+    }
+
+    // Scalar: extract, invert, wrap back.
+    if (tensorType.getRank() == 0) {
+      Value elem = b.create<tensor::ExtractOp>(input, ValueRange{});
+      Value inv = b.create<InverseOp>(elem);
+      Value result = b.create<tensor::FromElementsOp>(tensorType, inv);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    // Collapse multi-dimensional tensors to 1-D for linear indexing.
+    auto flatType = RankedTensorType::get({n}, elemType);
+    bool needsReshape = tensorType.getRank() != 1;
+    if (needsReshape) {
+      SmallVector<ReassociationIndices> reassoc = {
+          llvm::to_vector(llvm::seq<int64_t>(0, tensorType.getRank()))};
+      input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
+    }
+
+    Value c0 = b.create<arith::ConstantIndexOp>(0);
+    Value result;
+
+    if (n == 1) {
+      Value elem = b.create<tensor::ExtractOp>(input, ValueRange{c0});
+      Value inv = b.create<InverseOp>(elem);
+      result = b.create<tensor::EmptyOp>(flatType.getShape(), elemType);
+      result = b.create<tensor::InsertOp>(inv, result, ValueRange{c0});
+    } else {
+      // n >= 2: Montgomery's batch inversion.
+      Value c1 = b.create<arith::ConstantIndexOp>(1);
+      Value cN = b.create<arith::ConstantIndexOp>(n);
+      Value cNm1 = b.create<arith::ConstantIndexOp>(n - 1);
+
+      // Forward pass: build prefix products.
+      // prefix[0] = a[0]; prefix[i] = prefix[i-1] * a[i]
+      Value a0 = b.create<tensor::ExtractOp>(input, ValueRange{c0});
+      Value prefixInit =
+          b.create<tensor::EmptyOp>(flatType.getShape(), elemType);
+      prefixInit = b.create<tensor::InsertOp>(a0, prefixInit, ValueRange{c0});
+
+      auto fwdLoop = b.create<scf::ForOp>(
+          c1, cN, c1, ValueRange{prefixInit, a0},
+          [&](OpBuilder &nb, Location loc, Value iv, ValueRange iterArgs) {
+            ImplicitLocOpBuilder lb(loc, nb);
+            Value prefixTensor = iterArgs[0];
+            Value runningProduct = iterArgs[1];
+            Value elem = lb.create<tensor::ExtractOp>(input, ValueRange{iv});
+            Value product = lb.create<MulOp>(runningProduct, elem);
+            Value updated = lb.create<tensor::InsertOp>(product, prefixTensor,
+                                                        ValueRange{iv});
+            lb.create<scf::YieldOp>(ValueRange{updated, product});
+          });
+      Value prefixTensor = fwdLoop.getResult(0);
+      Value totalProduct = fwdLoop.getResult(1);
+
+      // Single scalar inverse.
+      Value inv = b.create<InverseOp>(totalProduct);
+
+      // Backward pass: recover individual inverses.
+      // for i in [n-1, n-2, ..., 1]:
+      //   result[i] = inv * prefix[i-1]; inv = inv * a[i]
+      Value resultInit =
+          b.create<tensor::EmptyOp>(flatType.getShape(), elemType);
+
+      auto bwdLoop = b.create<scf::ForOp>(
+          c0, cNm1, c1, ValueRange{resultInit, inv},
+          [&](OpBuilder &nb, Location loc, Value iv, ValueRange iterArgs) {
+            ImplicitLocOpBuilder lb(loc, nb);
+            Value resultTensor = iterArgs[0];
+            Value curInv = iterArgs[1];
+            // Map forward index iv to reverse index: currIdx = n-1-iv
+            Value currIdx = lb.create<arith::SubIOp>(cNm1, iv);
+            Value prevIdx = lb.create<arith::SubIOp>(currIdx, c1);
+            Value prevPrefix =
+                lb.create<tensor::ExtractOp>(prefixTensor, ValueRange{prevIdx});
+            Value elemInv = lb.create<MulOp>(curInv, prevPrefix);
+            Value updated = lb.create<tensor::InsertOp>(elemInv, resultTensor,
+                                                        ValueRange{currIdx});
+            Value origElem =
+                lb.create<tensor::ExtractOp>(input, ValueRange{currIdx});
+            Value newInv = lb.create<MulOp>(curInv, origElem);
+            lb.create<scf::YieldOp>(ValueRange{updated, newInv});
+          });
+
+      // result[0] = final inv (= a₀⁻¹).
+      result = bwdLoop.getResult(0);
+      inv = bwdLoop.getResult(1);
+      result = b.create<tensor::InsertOp>(inv, result, ValueRange{c0});
+    }
+
+    if (needsReshape) {
+      SmallVector<ReassociationIndices> reassoc = {
+          llvm::to_vector(llvm::seq<int64_t>(0, tensorType.getRank()))};
+      result = b.create<tensor::ExpandShapeOp>(tensorType, result, reassoc);
+    }
+
+    rewriter.replaceOp(op, result);
+    return success();
   }
 };
 
@@ -774,9 +922,25 @@ void FieldToModArith::runOnOperation() {
 
   // Mark field operations as dynamically legal if they contain BinaryFieldType
   // (those will be handled by BinaryFieldToArith pass instead)
-  target.addDynamicallyLegalOp<ConstantOp, AddOp, SubOp, MulOp, NegateOp,
-                               DoubleOp, SquareOp, InverseOp, CmpOp, PowUIOp>(
+  target.addDynamicallyLegalOp<ConstantOp, CmpOp, PowUIOp>(
       [](Operation *op) { return operationContainsBinaryFieldType(op); });
+
+  // ConvertFieldOpBase patterns cannot inline-codegen shaped extension field
+  // types. ElementwiseMappable ops (add, sub, ...) are scalarized by
+  // convert-elementwise-to-linalg. Mark them as legal here so
+  // field-to-mod-arith passes through these ops without failing.
+  // Note: InverseOp is NOT listed — ConvertInverse handles all tensor inverses
+  // via Montgomery's batch inversion trick.
+  target
+      .addDynamicallyLegalOp<AddOp, SubOp, MulOp, NegateOp, DoubleOp, SquareOp>(
+          [](Operation *op) {
+            if (operationContainsBinaryFieldType(op))
+              return true;
+            return llvm::any_of(op->getResultTypes(), [](Type t) {
+              return isa<ShapedType>(t) &&
+                     isa<ExtensionFieldType>(getElementTypeOrSelf(t));
+            });
+          });
 
   // Mark remaining field dialect ops as illegal (prime/extension field ops)
   target.addIllegalDialect<FieldDialect>();

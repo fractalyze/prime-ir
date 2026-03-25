@@ -18,11 +18,6 @@
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_TEST_INVERSE < %t
 
-// RUN: prime-ir-opt %s -mod-arith-to-arith -convert-elementwise-to-linalg -one-shot-bufferize -convert-linalg-to-parallel-loops -convert-scf-to-cf -convert-cf-to-llvm -convert-to-llvm -convert-vector-to-llvm \
-// RUN:   | mlir-runner -e test_lower_inverse_tensor -entry-point-result=void \
-// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
-// RUN: FileCheck %s -check-prefix=CHECK_TEST_INVERSE_TENSOR < %t
-
 // RUN: prime-ir-opt %s -mod-arith-to-arith -convert-elementwise-to-linalg -one-shot-bufferize  -convert-linalg-to-parallel-loops -convert-scf-to-cf -convert-cf-to-llvm -convert-to-llvm -convert-vector-to-llvm \
 // RUN:   | mlir-runner -e test_lower_mont_reduce -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
@@ -92,35 +87,6 @@ func.func @test_lower_inverse() {
 // CHECK_TEST_INVERSE-NEXT: [1]
 // CHECK_TEST_INVERSE: data =
 // CHECK_TEST_INVERSE-NEXT: [1]
-
-func.func @test_lower_inverse_tensor() {
-  %p1 = arith.constant 3723 : i256
-  %p2 = arith.constant 3724 : i256
-  %p3 = arith.constant 3725 : i256
-  %tensor1 = tensor.from_elements %p1, %p2, %p3 : tensor<3xi256>
-  %tensor2 = mod_arith.bitcast %tensor1 : tensor<3xi256> -> tensor<3x!Fq>
-  %inv = mod_arith.inverse %tensor2 : tensor<3x!Fq>
-  %mul = mod_arith.mul %inv, %tensor2 : tensor<3x!Fq>
-  %ext = mod_arith.bitcast %mul : tensor<3x!Fq> -> tensor<3xi256>
-  %trunc = arith.trunci %ext : tensor<3xi256> to tensor<3xi32>
-  %1 = bufferization.to_buffer %trunc : tensor<3xi32> to memref<3xi32>
-  %U1 = memref.cast %1 : memref<3xi32> to memref<*xi32>
-  func.call @printMemrefI32(%U1) : (memref<*xi32>) -> ()
-
-  %tensor_mont = mod_arith.to_mont %tensor2 : tensor<3x!Fqm>
-  %inv_mont = mod_arith.inverse %tensor_mont : tensor<3x!Fqm>
-  %mul_mont = mod_arith.mul %inv_mont, %tensor_mont : tensor<3x!Fqm>
-  %from_mont = mod_arith.from_mont %mul_mont : tensor<3x!Fq>
-  %ext2 = mod_arith.bitcast %from_mont : tensor<3x!Fq> -> tensor<3xi256>
-  %trunc2 = arith.trunci %ext2 : tensor<3xi256> to tensor<3xi32>
-  %2 = bufferization.to_buffer %trunc2 : tensor<3xi32> to memref<3xi32>
-  %U2 = memref.cast %2 : memref<3xi32> to memref<*xi32>
-  func.call @printMemrefI32(%U2) : (memref<*xi32>) -> ()
-  return
-}
-
-// CHECK_TEST_INVERSE_TENSOR: [1, 1, 1]
-// CHECK_TEST_INVERSE_TENSOR: [1, 1, 1]
 
 func.func @test_lower_mont_reduce() {
   %p = arith.constant 2188824287183927522224640574525727508854836440041603434369820418657580849561 : i256
