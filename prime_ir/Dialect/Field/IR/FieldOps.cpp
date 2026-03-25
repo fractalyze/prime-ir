@@ -1853,6 +1853,13 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
     return false;
   }
 
+  // Mixed-type case: PF IntegerAttr paired with an EF element type.
+  // Compare in PF context since the constant is a PF scalar embedding.
+  if (isa<IntegerAttr>(typedAttr)) {
+    if (auto efType = dyn_cast<ExtensionFieldType>(elementType))
+      elementType = efType.getBasePrimeField();
+  }
+
   // Use fromUnchecked because the attribute is already stored in the correct
   // representation (Montgomery form for Montgomery types).
   FieldOperation valueOp =
