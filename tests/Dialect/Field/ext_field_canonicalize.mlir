@@ -607,6 +607,94 @@ func.func @test_tensor_mul_by_two_is_double(%arg0: tensor<2x!QF>) -> tensor<2x!Q
 }
 
 //===----------------------------------------------------------------------===//
+// Mixed-type mul canonicalization (EF × PF constant)
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_mixed_ef_pf_mul_by_zero
+func.func @test_mixed_ef_pf_mul_by_zero(%arg0: !QF) -> !QF {
+  // EF * PF(0) -> zero (lowered as ext_from_coeffs of PF zeros)
+  %c0 = field.constant 0 : !PF
+  %0 = field.mul %arg0, %c0 : !QF, !PF
+  // CHECK-NOT: field.mul
+  // CHECK: field.ext_from_coeffs
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mixed_ef_pf_mul_by_two
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mixed_ef_pf_mul_by_two(%arg0: !QF) -> !QF {
+  // EF * PF(2) -> double(EF)
+  %c2 = field.constant 2 : !PF
+  %0 = field.mul %arg0, %c2 : !QF, !PF
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: return %[[D]] : [[T]]
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mixed_ef_pf_mul_by_three
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mixed_ef_pf_mul_by_three(%arg0: !QF) -> !QF {
+  // EF * PF(3) -> EF + double(EF)
+  %c3 = field.constant 3 : !PF
+  %0 = field.mul %arg0, %c3 : !QF, !PF
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[R:.*]] = field.add %[[ARG0]], %[[D]] : [[T]]
+  // CHECK: return %[[R]] : [[T]]
+  return %0 : !QF
+}
+
+// Montgomery variant of the crash reproducer.
+
+// CHECK-LABEL: @test_mixed_ef_pf_mont_mul_by_two
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mixed_ef_pf_mont_mul_by_two(%arg0: !QFm) -> !QFm {
+  %c2 = field.constant 2 : !PFm
+  %0 = field.mul %arg0, %c2 : !QFm, !PFm
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: return %[[D]] : [[T]]
+  return %0 : !QFm
+}
+
+// Tower mixed-type: Fp6 × QF constant.
+
+// CHECK-LABEL: @test_tower_mixed_mul_by_two
+func.func @test_tower_mixed_mul_by_two(%arg0: !Fp6) -> !Fp6 {
+  // Fp6 * QF([2,0]) should strength-reduce the per-coefficient muls.
+  %c2 = field.constant [2, 0] : !QF
+  %0 = field.mul %arg0, %c2 : !Fp6, !QF
+  // CHECK-NOT: field.mul
+  // CHECK-COUNT-3: field.double
+  // CHECK-NOT: field.double
+  return %0 : !Fp6
+}
+
+// CHECK-LABEL: @test_tower_mixed_mul_by_zero
+func.func @test_tower_mixed_mul_by_zero(%arg0: !Fp6) -> !Fp6 {
+  // Fp6 * QF([0,0]) -> zero
+  %c0 = field.constant [0, 0] : !QF
+  %0 = field.mul %arg0, %c0 : !Fp6, !QF
+  // CHECK-NOT: field.mul
+  // CHECK: field.ext_from_coeffs
+  return %0 : !Fp6
+}
+
+// PF × Tower: constant PF scalar multiplying a tower EF.
+// Verifies that PF constants on the LHS also canonicalize correctly.
+
+// CHECK-LABEL: @test_mixed_pf_tower_mul_by_two
+func.func @test_mixed_pf_tower_mul_by_two(%arg0: !Fp6) -> !Fp6 {
+  %c2 = field.constant [2, 0] : !QF
+  %0 = field.mul %c2, %arg0 : !QF, !Fp6
+  // CHECK-NOT: field.mul
+  // CHECK-COUNT-3: field.double
+  // CHECK-NOT: field.double
+  return %0 : !Fp6
+}
+
+//===----------------------------------------------------------------------===//
 // BitcastOp folding
 //===----------------------------------------------------------------------===//
 
