@@ -26,7 +26,7 @@
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_add_ext_base() -> !QF {
   // [1, 2] + 3 = [1 + 3, 2] = [4, 2] (mod 7)
-  // CHECK: %[[C:.*]] = field.constant dense<[4, 2]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [4, 2] : [[T]]
   // CHECK: return %[[C]]
   %0 = field.constant [1, 2] : !QF
   %1 = field.constant 3 : !PF
@@ -38,7 +38,7 @@ func.func @test_fold_add_ext_base() -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_sub_ext_base() -> !QF {
   // [5, 3] - 2 = [3, 3] (mod 7)
-  // CHECK: %[[C:.*]] = field.constant dense<3> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [3, 3] : [[T]]
   // CHECK: return %[[C]]
   %0 = field.constant [5, 3] : !QF
   %1 = field.constant 2 : !PF
@@ -50,7 +50,7 @@ func.func @test_fold_sub_ext_base() -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_mul_ext_base() -> !QF {
   // [2, 3] * 4 = [2 * 4, 3 * 4] = [8, 12] = [1, 5] (mod 7)
-  // CHECK: %[[C:.*]] = field.constant dense<[1, 5]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [1, 5] : [[T]]
   // CHECK: return %[[C]]
   %0 = field.constant [2, 3] : !QF
   %1 = field.constant 4 : !PF
@@ -71,7 +71,7 @@ func.func @test_fold_mul_ext_base() -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_add_base_ext() -> !QF {
   // 3 + [1, 2] = [4, 2] (mod 7)
-  // CHECK: %[[C:.*]] = field.constant dense<[4, 2]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [4, 2] : [[T]]
   // CHECK: return %[[C]]
   %0 = field.constant 3 : !PF
   %1 = field.constant [1, 2] : !QF
@@ -83,7 +83,7 @@ func.func @test_fold_add_base_ext() -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_sub_base_ext() -> !QF {
   // 3 - [1, 2] = [3 - 1, -2] = [2, 5] (mod 7)
-  // CHECK: %[[C:.*]] = field.constant dense<[2, 5]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [2, 5] : [[T]]
   // CHECK: return %[[C]]
   %0 = field.constant 3 : !PF
   %1 = field.constant [1, 2] : !QF
@@ -95,7 +95,7 @@ func.func @test_fold_sub_base_ext() -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_mul_base_ext() -> !QF {
   // 4 * [2, 3] = [8, 12] = [1, 5] (mod 7)
-  // CHECK: %[[C:.*]] = field.constant dense<[1, 5]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [1, 5] : [[T]]
   // CHECK: return %[[C]]
   %0 = field.constant 4 : !PF
   %1 = field.constant [2, 3] : !QF
@@ -184,7 +184,7 @@ func.func @test_mixed_mul_splat_ef_const(%x: !PF) -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_add_cubic_ext_base() -> !CF {
   // [1, 2, 3] + 5 = [6, 2, 3] (mod 7)
-  // CHECK: %[[C:.*]] = field.constant dense<[6, 2, 3]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [6, 2, 3] : [[T]]
   // CHECK: return %[[C]]
   %0 = field.constant [1, 2, 3] : !CF
   %1 = field.constant 5 : !PF
@@ -196,7 +196,7 @@ func.func @test_fold_add_cubic_ext_base() -> !CF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_mul_cubic_ext_base() -> !CF {
   // [1, 2, 3] * 2 = [2, 4, 6] (mod 7)
-  // CHECK: %[[C:.*]] = field.constant dense<[2, 4, 6]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [2, 4, 6] : [[T]]
   // CHECK: return %[[C]]
   %0 = field.constant [1, 2, 3] : !CF
   %1 = field.constant 2 : !PF

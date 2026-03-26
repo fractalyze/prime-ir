@@ -285,7 +285,7 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     attrShape.append(towerDims.begin(), towerDims.end());
     auto attrType = RankedTensorType::get(attrShape, pfType.getStorageType());
     auto denseElementsAttr = DenseIntElementsAttr::get(attrType, parsedInts);
-    result.addAttribute("value", denseElementsAttr);
+    result.addAttribute("value", maybeToMontgomery(efType, denseElementsAttr));
     result.addTypes(parsedType);
     return success();
   }
@@ -349,7 +349,17 @@ void ConstantOp::print(OpAsmPrinter &p) {
   Type elementType = getElementTypeOrSelf(type);
   Attribute value = maybeToStandard(elementType, getValue());
 
-  p.printAttributeWithoutType(value);
+  // Scalar EF constants are stored as DenseIntElementsAttr, but the parser
+  // expects list syntax [c₀, c₁, ...] rather than dense<[c₀, c₁, ...]>.
+  if (!isa<ShapedType>(type) && isa<ExtensionFieldType>(elementType)) {
+    auto denseAttr = cast<DenseIntElementsAttr>(value);
+    p << "[";
+    llvm::interleaveComma(denseAttr.getValues<APInt>(), p,
+                          [&](const APInt &v) { p << v; });
+    p << "]";
+  } else {
+    p.printAttributeWithoutType(value);
+  }
   p << " : ";
   p.printType(type);
 }

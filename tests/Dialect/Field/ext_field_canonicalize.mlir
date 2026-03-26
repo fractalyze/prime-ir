@@ -30,7 +30,7 @@
 // CHECK-LABEL: @test_fold_negate
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_negate() -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<[6, 5]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [6, 5] : [[T]]
   // -[1, 2] mod 7 = [6, 5]
   %0 = field.constant [1, 2] : !QF
   %1 = field.negate %0 : !QF
@@ -46,7 +46,7 @@ func.func @test_fold_negate() -> !QF {
 // CHECK-LABEL: @test_fold_double
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_double() -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<[2, 4]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [2, 4] : [[T]]
   // 2 * [1, 2] mod 7 = [2, 4]
   %0 = field.constant [1, 2] : !QF
   %1 = field.double %0 : !QF
@@ -62,7 +62,7 @@ func.func @test_fold_double() -> !QF {
 // CHECK-LABEL: @test_fold_square
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_square() -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<4> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [4, 4] : [[T]]
   // [a, b]² = [a² + ξ * b², 2 * a * b] where ξ = 6
   // [1, 2]² = [1 + 6 * 4, 2 * 1 * 2] = [25, 4] mod 7 = [4, 4]
   %0 = field.constant [1, 2] : !QF
@@ -79,7 +79,7 @@ func.func @test_fold_square() -> !QF {
 // CHECK-LABEL: @test_fold_inverse
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_inverse() -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<[3, 1]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [3, 1] : [[T]]
   // [a, b]⁻¹ = [a / norm, -b / norm] where norm = a² - ξ * b²
   // [1, 2]⁻¹: norm = 1 - 6 * 4 = -23 ≡ 5 (mod 7), 5⁻¹ = 3
   // = [1 * 3, -2 * 3] = [3, -6] = [3, 1]
@@ -97,7 +97,7 @@ func.func @test_fold_inverse() -> !QF {
 // CHECK-LABEL: @test_fold_add
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_add() -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<[4, 6]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [4, 6] : [[T]]
   // [1, 2] + [3, 4] = [4, 6]
   %0 = field.constant [1, 2] : !QF
   %1 = field.constant [3, 4] : !QF
@@ -114,7 +114,7 @@ func.func @test_fold_add() -> !QF {
 // CHECK-LABEL: @test_fold_sub
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_sub() -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<5> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [5, 5] : [[T]]
   // [1, 2] - [3, 4] = [-2, -2] mod 7 = [5, 5]
   %0 = field.constant [1, 2] : !QF
   %1 = field.constant [3, 4] : !QF
@@ -127,7 +127,7 @@ func.func @test_fold_sub() -> !QF {
 // CHECK-LABEL: @test_sub_self_is_zero
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_sub_self_is_zero(%arg0: !QF) -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<0> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [0, 0] : [[T]]
   %0 = field.sub %arg0, %arg0 : !QF
   // CHECK-NOT: field.sub
   // CHECK: return %[[C]] : [[T]]
@@ -141,7 +141,7 @@ func.func @test_sub_self_is_zero(%arg0: !QF) -> !QF {
 // CHECK-LABEL: @test_fold_mul
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_fold_mul() -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<[2, 3]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [2, 3] : [[T]]
   // [a₀, a₁] * [b₀, b₁] = [a₀b₀ + ξa₁b₁, a₀b₁ + a₁b₀] where ξ = 6
   // [1, 2] * [3, 4] = [1*3 + 6*2*4, 1*4 + 2*3] = [51, 10] mod 7 = [2, 3]
   %0 = field.constant [1, 2] : !QF
@@ -332,7 +332,7 @@ func.func @test_tensor_ext_field_fold_mul() -> tensor<2x!QF> {
 // CHECK-LABEL: @test_ext_tensor_extract_fold
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_ext_tensor_extract_fold() -> !QF {
-  // CHECK: %[[C:.*]] = field.constant dense<[3, 4]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [3, 4] : [[T]]
   // CHECK-NOT: tensor.extract
   // CHECK: return %[[C]] : [[T]]
   %c1 = arith.constant 1 : index
@@ -345,7 +345,7 @@ func.func @test_ext_tensor_extract_fold() -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_ext_tensor_extract_splat_0d() -> !QF {
   // Extracting from a 0-d splat EF tensor should produce a valid EF constant.
-  // CHECK: %[[C:.*]] = field.constant dense<1> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [1, 1] : [[T]]
   // CHECK-NOT: tensor.extract
   // CHECK: return %[[C]] : [[T]]
   %0 = field.constant dense<1> : tensor<!QF>
@@ -357,7 +357,7 @@ func.func @test_ext_tensor_extract_splat_0d() -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_ext_tensor_extract_splat_1d() -> !QF {
   // Extracting from a 1-d splat EF tensor should produce a valid EF constant.
-  // CHECK: %[[C:.*]] = field.constant dense<3> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [3, 3] : [[T]]
   // CHECK-NOT: tensor.extract
   // CHECK: return %[[C]] : [[T]]
   %c0 = arith.constant 0 : index
@@ -370,7 +370,7 @@ func.func @test_ext_tensor_extract_splat_1d() -> !QF {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_tower_tensor_extract_splat() -> !Fp6 {
   // Extracting from a splat tower EF tensor should produce a valid EF constant.
-  // CHECK: %[[C:.*]] = field.constant dense<2> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [2, 2, 2, 2, 2, 2] : [[T]]
   // CHECK-NOT: tensor.extract
   // CHECK: return %[[C]] : [[T]]
   %c0 = arith.constant 0 : index
@@ -383,7 +383,7 @@ func.func @test_tower_tensor_extract_splat() -> !Fp6 {
 // CHECK-LABEL: @test_tower_tensor_extract_fold
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_tower_tensor_extract_fold() -> !Fp6 {
-  // CHECK: %[[C:.*]] = field.constant dense<[6, 5, 4, 3, 2, 1]> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [6, 5, 4, 3, 2, 1] : [[T]]
   // CHECK-NOT: tensor.extract
   // CHECK: return %[[C]] : [[T]]
   %c1 = arith.constant 1 : index
@@ -786,7 +786,7 @@ func.func @test_to_mont_from_mont_tensor_cancel(%arg0: tensor<2x!QFm>) -> tensor
 // CHECK-LABEL: @test_tower_fold_negate
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_tower_fold_negate() -> !Fp6 {
-  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[6, 5], [4, 3], [2, 1]{{\]}}> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [6, 5, 4, 3, 2, 1] : [[T]]
   // -[1, 2, 3, 4, 5, 6] mod 7 = [6, 5, 4, 3, 2, 1]
   %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
   %1 = field.negate %0 : !Fp6
@@ -798,7 +798,7 @@ func.func @test_tower_fold_negate() -> !Fp6 {
 // CHECK-LABEL: @test_tower_fold_double
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_tower_fold_double() -> !Fp6 {
-  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[2, 4], [6, 1], [3, 5]{{\]}}> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [2, 4, 6, 1, 3, 5] : [[T]]
   // 2 * [1, 2, 3, 4, 5, 6] mod 7 = [2, 4, 6, 8, 10, 12] mod 7 = [2, 4, 6, 1, 3, 5]
   %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
   %1 = field.double %0 : !Fp6
@@ -810,7 +810,7 @@ func.func @test_tower_fold_double() -> !Fp6 {
 // CHECK-LABEL: @test_tower_fold_add
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_tower_fold_add() -> !Fp6 {
-  // CHECK: %[[C:.*]] = field.constant dense<6> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [6, 6, 6, 6, 6, 6] : [[T]]
   // [1, 2, 3, 4, 5, 6] + [5, 4, 3, 2, 1, 0] mod 7 = [6, 6, 6, 6, 6, 6] (splat, shape-independent)
   %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
   %1 = field.constant [5, 4, 3, 2, 1, 0] : !Fp6
@@ -823,7 +823,7 @@ func.func @test_tower_fold_add() -> !Fp6 {
 // CHECK-LABEL: @test_tower_fold_sub
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_tower_fold_sub() -> !Fp6 {
-  // CHECK: %[[C:.*]] = field.constant dense<{{\[}}[3, 5], [0, 2], [4, 6]{{\]}}> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [3, 5, 0, 2, 4, 6] : [[T]]
   // [1, 2, 3, 4, 5, 6] - [5, 4, 3, 2, 1, 0] mod 7 = [-4, -2, 0, 2, 4, 6] mod 7 = [3, 5, 0, 2, 4, 6]
   %0 = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
   %1 = field.constant [5, 4, 3, 2, 1, 0] : !Fp6
@@ -836,7 +836,7 @@ func.func @test_tower_fold_sub() -> !Fp6 {
 // CHECK-LABEL: @test_tower_sub_self_is_zero
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
 func.func @test_tower_sub_self_is_zero(%arg0: !Fp6) -> !Fp6 {
-  // CHECK: %[[C:.*]] = field.constant dense<0> : [[T]]
+  // CHECK: %[[C:.*]] = field.constant [0, 0, 0, 0, 0, 0] : [[T]]
   %0 = field.sub %arg0, %arg0 : !Fp6
   // CHECK-NOT: field.sub
   // CHECK: return %[[C]] : [[T]]
@@ -993,9 +993,9 @@ func.func @test_ext_to_coeffs_fold_simple() -> (!PF, !PF) {
 // CHECK-LABEL: @test_ext_to_coeffs_fold_tower
 func.func @test_ext_to_coeffs_fold_tower() -> (!QF, !QF, !QF) {
   // ext_to_coeffs of a tower constant should fold to individual EF constants.
-  // CHECK-DAG: %[[C0:.*]] = field.constant dense<[1, 2]>
-  // CHECK-DAG: %[[C1:.*]] = field.constant dense<[3, 4]>
-  // CHECK-DAG: %[[C2:.*]] = field.constant dense<[5, 6]>
+  // CHECK-DAG: %[[C0:.*]] = field.constant [1, 2]
+  // CHECK-DAG: %[[C1:.*]] = field.constant [3, 4]
+  // CHECK-DAG: %[[C2:.*]] = field.constant [5, 6]
   // CHECK-NOT: field.ext_to_coeffs
   // CHECK: return %[[C0]], %[[C1]], %[[C2]]
   %c = field.constant [1, 2, 3, 4, 5, 6] : !Fp6
