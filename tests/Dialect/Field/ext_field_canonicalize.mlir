@@ -695,6 +695,51 @@ func.func @test_mixed_pf_tower_mul_by_two(%arg0: !Fp6) -> !Fp6 {
 }
 
 //===----------------------------------------------------------------------===//
+// Mixed-type tensor constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_mixed_tensor_add_pf_ef
+// CHECK:         field.constant dense<[3, 0]>
+// CHECK-NOT:     field.add
+func.func @test_mixed_tensor_add_pf_ef() -> tensor<!QF> {
+  %pf = field.constant dense<3> : tensor<!PF>
+  %ef = field.constant dense<[0, 0]> : tensor<!QF>
+  %r = field.add %pf, %ef : tensor<!PF>, tensor<!QF>
+  return %r : tensor<!QF>
+}
+
+// CHECK-LABEL: @test_mixed_tensor_sub_ef_pf
+// CHECK:         field.constant dense<[4, 2]>
+// CHECK-NOT:     field.sub
+func.func @test_mixed_tensor_sub_ef_pf() -> tensor<!QF> {
+  %ef = field.constant dense<[5, 2]> : tensor<!QF>
+  %pf = field.constant dense<1> : tensor<!PF>
+  %r = field.sub %ef, %pf : tensor<!QF>, tensor<!PF>
+  return %r : tensor<!QF>
+}
+
+// CHECK-LABEL: @test_mixed_tensor_mul_pf_ef
+// CHECK:         field.constant dense<[6, 3]>
+// CHECK-NOT:     field.mul
+func.func @test_mixed_tensor_mul_pf_ef() -> tensor<!QF> {
+  %pf = field.constant dense<3> : tensor<!PF>
+  %ef = field.constant dense<[2, 1]> : tensor<!QF>
+  %r = field.mul %pf, %ef : tensor<!PF>, tensor<!QF>
+  return %r : tensor<!QF>
+}
+
+// Ranked tensor: 2 × PF(2) * [1,0] = [2,0] and 3 × PF(3) * [0,1] = [0,3].
+// CHECK-LABEL: @test_mixed_tensor_2d_mul_pf_ef
+// CHECK:         field.constant dense<[2, 0, 0, 3]>
+// CHECK-NOT:     field.mul
+func.func @test_mixed_tensor_2d_mul_pf_ef() -> tensor<2x!QF> {
+  %pf = field.constant dense<[2, 3]> : tensor<2x!PF>
+  %ef = field.constant dense<[[1, 0], [0, 1]]> : tensor<2x!QF>
+  %r = field.mul %pf, %ef : tensor<2x!PF>, tensor<2x!QF>
+  return %r : tensor<2x!QF>
+}
+
+//===----------------------------------------------------------------------===//
 // BitcastOp folding
 //===----------------------------------------------------------------------===//
 

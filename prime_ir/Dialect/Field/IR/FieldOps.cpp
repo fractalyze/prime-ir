@@ -1475,26 +1475,82 @@ OpFoldResult foldMixedBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
 
   Type lhsElemType = getElementTypeOrSelf(op->getLhs().getType());
   Type rhsElemType = getElementTypeOrSelf(op->getRhs().getType());
+  auto efType = cast<ExtensionFieldType>(getElementTypeOrSelf(op->getType()));
 
-  auto lhsTypedAttr = dyn_cast<TypedAttr>(lhsAttr);
-  auto rhsTypedAttr = dyn_cast<TypedAttr>(rhsAttr);
-  if (!lhsTypedAttr || !rhsTypedAttr)
+  // Scalar operands: fold directly.
+  if (!isa<ShapedType>(op->getLhs().getType()) &&
+      !isa<ShapedType>(op->getRhs().getType())) {
+    auto lhsTypedAttr = dyn_cast<TypedAttr>(lhsAttr);
+    auto rhsTypedAttr = dyn_cast<TypedAttr>(rhsAttr);
+    if (!lhsTypedAttr || !rhsTypedAttr)
+      return {};
+
+    auto lhsOp = FieldOperation::fromUnchecked(lhsTypedAttr, lhsElemType);
+    auto rhsOp = FieldOperation::fromUnchecked(rhsTypedAttr, rhsElemType);
+    SmallVector<APInt> flatCoeffs =
+        static_cast<SmallVector<APInt>>(fn(lhsOp, rhsOp));
+    auto tensorType = RankedTensorType::get(
+        efType.getAttrShape(), efType.getBasePrimeField().getStorageType());
+    return DenseIntElementsAttr::get(tensorType, flatCoeffs);
+  }
+
+  // Tensor operands: fold element-wise. This loop runs at compile time and
+  // iterates over every element, but it only fires when both operands are
+  // constants — in practice these are small hand-written literals, not large
+  // tensors.
+  auto lhsDense = dyn_cast<DenseIntElementsAttr>(lhsAttr);
+  auto rhsDense = dyn_cast<DenseIntElementsAttr>(rhsAttr);
+  if (!lhsDense || !rhsDense)
     return {};
 
-  FieldOperation lhsOp =
-      FieldOperation::fromUnchecked(lhsTypedAttr, lhsElemType);
-  FieldOperation rhsOp =
-      FieldOperation::fromUnchecked(rhsTypedAttr, rhsElemType);
+  auto lhsFti = dyn_cast<FieldTypeInterface>(lhsElemType);
+  auto rhsFti = dyn_cast<FieldTypeInterface>(rhsElemType);
+  if (!lhsFti || !rhsFti)
+    return {};
 
-  FieldOperation result = fn(lhsOp, rhsOp);
+  unsigned lhsDeg = lhsFti.getDegreeOverPrime();
+  unsigned rhsDeg = rhsFti.getDegreeOverPrime();
+  auto lhsVals = lhsDense.getValues<APInt>();
+  auto rhsVals = rhsDense.getValues<APInt>();
+  if (lhsVals.size() % lhsDeg != 0 || rhsVals.size() % rhsDeg != 0)
+    return {};
+  unsigned numElems = lhsVals.size() / lhsDeg;
+  if (numElems != rhsVals.size() / rhsDeg)
+    return {};
 
-  // Result is always the extension field type.
-  auto efType = cast<ExtensionFieldType>(getElementTypeOrSelf(op->getType()));
-  SmallVector<APInt> flatCoeffs = static_cast<SmallVector<APInt>>(result);
-  auto towerShape = efType.getAttrShape();
-  auto tensorType = RankedTensorType::get(
-      towerShape, efType.getBasePrimeField().getStorageType());
-  return DenseIntElementsAttr::get(tensorType, flatCoeffs);
+  auto intType = lhsDense.getElementType();
+
+  // Extract the i-th field element as a TypedAttr suitable for
+  // FieldOperation::fromUnchecked (IntegerAttr for PF, DenseIntElementsAttr
+  // for EF).
+  auto extractElem = [intType](DenseIntElementsAttr dense, unsigned deg,
+                               unsigned idx,
+                               FieldTypeInterface fti) -> TypedAttr {
+    auto vals = dense.getValues<APInt>();
+    if (deg == 1)
+      return IntegerAttr::get(intType, vals[idx]);
+    SmallVector<APInt> coeffs;
+    for (unsigned j = 0; j < deg; ++j)
+      coeffs.push_back(vals[idx * deg + j]);
+    return DenseIntElementsAttr::get(
+        RankedTensorType::get(fti.getAttrShape(), intType), coeffs);
+  };
+
+  SmallVector<APInt> resultCoeffs;
+  for (unsigned i = 0; i < numElems; ++i) {
+    auto lhsOp = FieldOperation::fromUnchecked(
+        extractElem(lhsDense, lhsDeg, i, lhsFti), lhsElemType);
+    auto rhsOp = FieldOperation::fromUnchecked(
+        extractElem(rhsDense, rhsDeg, i, rhsFti), rhsElemType);
+    SmallVector<APInt> elemCoeffs =
+        static_cast<SmallVector<APInt>>(fn(lhsOp, rhsOp));
+    resultCoeffs.append(elemCoeffs);
+  }
+
+  auto storageType = efType.getBasePrimeField().getStorageType();
+  auto resultType = RankedTensorType::get(
+      {static_cast<int64_t>(resultCoeffs.size())}, storageType);
+  return DenseIntElementsAttr::get(resultType, resultCoeffs);
 }
 
 template <typename Op, typename Func>
