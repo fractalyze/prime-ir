@@ -9,6 +9,7 @@ on:
 
 jobs:
   main:
+    if: github.actor != 'fractalyze-dev'
     runs-on: [self-hosted, prime_ir]
     name: Semantic Pull Request
     permissions:

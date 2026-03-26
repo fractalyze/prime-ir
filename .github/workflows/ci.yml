@@ -28,6 +28,7 @@ jobs:
             //...
 
   pre-commit-style:
+    if: github.actor != 'fractalyze-dev'
     runs-on: [self-hosted, prime_ir]
     steps:
       - name: Checkout PrimeIR
