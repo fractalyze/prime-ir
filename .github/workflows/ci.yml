@@ -8,13 +8,11 @@ on:
   pull_request:
     branches: ["main"]
 
-# Ensure that only a single job or workflow using the same
-# concurrency group will run at a time. This would cancel
-# any in-progress jobs in the same github workflow and github
-# ref (e.g. refs/heads/main or refs/pull/<pr_number>/merge).
+# Cancel in-progress runs for PRs (same head branch), but never cancel
+# pushes to main so that every merge gets a full CI run.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   build-and-test:
