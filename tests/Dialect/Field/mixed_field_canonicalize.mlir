@@ -305,3 +305,163 @@ func.func @test_tensor_mul_ext_base(
   %0 = field.mul %ext, %base : tensor<4x!QF>, tensor<4x!PF>
   return %0 : tensor<4x!QF>
 }
+
+// -----
+
+!PF = !field.pf<7:i32>
+!QF = !field.ef<2x!PF, 6:i32>
+
+//===----------------------------------------------------------------------===//
+// Mixed-type mul DRR canonicalization (EF × PF constant)
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_mixed_ef_pf_mul_by_zero
+func.func @test_mixed_ef_pf_mul_by_zero(%arg0: !QF) -> !QF {
+  // EF * PF(0) -> zero (lowered as ext_from_coeffs of PF zeros)
+  %c0 = field.constant 0 : !PF
+  %0 = field.mul %arg0, %c0 : !QF, !PF
+  // CHECK-NOT: field.mul
+  // CHECK: field.ext_from_coeffs
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mixed_ef_pf_mul_by_two
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mixed_ef_pf_mul_by_two(%arg0: !QF) -> !QF {
+  // EF * PF(2) -> double(EF)
+  %c2 = field.constant 2 : !PF
+  %0 = field.mul %arg0, %c2 : !QF, !PF
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: return %[[D]] : [[T]]
+  return %0 : !QF
+}
+
+// CHECK-LABEL: @test_mixed_ef_pf_mul_by_three
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mixed_ef_pf_mul_by_three(%arg0: !QF) -> !QF {
+  // EF * PF(3) -> EF + double(EF)
+  %c3 = field.constant 3 : !PF
+  %0 = field.mul %arg0, %c3 : !QF, !PF
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: %[[R:.*]] = field.add %[[ARG0]], %[[D]] : [[T]]
+  // CHECK: return %[[R]] : [[T]]
+  return %0 : !QF
+}
+
+// -----
+
+!PFm = !field.pf<7:i32, true>
+!QFm = !field.ef<2x!PFm, 6:i32>
+
+//===----------------------------------------------------------------------===//
+// Montgomery variant
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_mixed_ef_pf_mont_mul_by_two
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mixed_ef_pf_mont_mul_by_two(%arg0: !QFm) -> !QFm {
+  %c2 = field.constant 2 : !PFm
+  %0 = field.mul %arg0, %c2 : !QFm, !PFm
+  // CHECK-NOT: field.mul
+  // CHECK: %[[D:.*]] = field.double %[[ARG0]] : [[T]]
+  // CHECK: return %[[D]] : [[T]]
+  return %0 : !QFm
+}
+
+// -----
+
+!PF = !field.pf<7:i32>
+!QF = !field.ef<2x!PF, 6:i32>
+
+// Tower extension: Fp6 = (Fp2)³ where Fp6 = Fp2[w]/(w³ - 2)
+!Fp6 = !field.ef<3x!QF, 2:i32>
+
+//===----------------------------------------------------------------------===//
+// Tower mixed-type: Fp6 × QF constant
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tower_mixed_mul_by_two
+func.func @test_tower_mixed_mul_by_two(%arg0: !Fp6) -> !Fp6 {
+  // Fp6 * QF([2,0]) should strength-reduce the per-coefficient muls.
+  %c2 = field.constant [2, 0] : !QF
+  %0 = field.mul %arg0, %c2 : !Fp6, !QF
+  // CHECK-NOT: field.mul
+  // CHECK-COUNT-3: field.double
+  // CHECK-NOT: field.double
+  return %0 : !Fp6
+}
+
+// CHECK-LABEL: @test_tower_mixed_mul_by_zero
+func.func @test_tower_mixed_mul_by_zero(%arg0: !Fp6) -> !Fp6 {
+  // Fp6 * QF([0,0]) -> zero
+  %c0 = field.constant [0, 0] : !QF
+  %0 = field.mul %arg0, %c0 : !Fp6, !QF
+  // CHECK-NOT: field.mul
+  // CHECK: field.ext_from_coeffs
+  return %0 : !Fp6
+}
+
+// PF × Tower: constant PF scalar multiplying a tower EF.
+// Verifies that PF constants on the LHS also canonicalize correctly.
+
+// CHECK-LABEL: @test_mixed_pf_tower_mul_by_two
+func.func @test_mixed_pf_tower_mul_by_two(%arg0: !Fp6) -> !Fp6 {
+  %c2 = field.constant [2, 0] : !QF
+  %0 = field.mul %c2, %arg0 : !QF, !Fp6
+  // CHECK-NOT: field.mul
+  // CHECK-COUNT-3: field.double
+  // CHECK-NOT: field.double
+  return %0 : !Fp6
+}
+
+// -----
+
+!PF = !field.pf<7:i32>
+!QF = !field.ef<2x!PF, 6:i32>
+
+//===----------------------------------------------------------------------===//
+// Mixed-type tensor constant folding
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_mixed_tensor_add_pf_ef
+// CHECK:         field.constant dense<[3, 0]>
+// CHECK-NOT:     field.add
+func.func @test_mixed_tensor_add_pf_ef() -> tensor<!QF> {
+  %pf = field.constant dense<3> : tensor<!PF>
+  %ef = field.constant dense<[0, 0]> : tensor<!QF>
+  %r = field.add %pf, %ef : tensor<!PF>, tensor<!QF>
+  return %r : tensor<!QF>
+}
+
+// CHECK-LABEL: @test_mixed_tensor_sub_ef_pf
+// CHECK:         field.constant dense<[4, 2]>
+// CHECK-NOT:     field.sub
+func.func @test_mixed_tensor_sub_ef_pf() -> tensor<!QF> {
+  %ef = field.constant dense<[5, 2]> : tensor<!QF>
+  %pf = field.constant dense<1> : tensor<!PF>
+  %r = field.sub %ef, %pf : tensor<!QF>, tensor<!PF>
+  return %r : tensor<!QF>
+}
+
+// CHECK-LABEL: @test_mixed_tensor_mul_pf_ef
+// CHECK:         field.constant dense<[6, 3]>
+// CHECK-NOT:     field.mul
+func.func @test_mixed_tensor_mul_pf_ef() -> tensor<!QF> {
+  %pf = field.constant dense<3> : tensor<!PF>
+  %ef = field.constant dense<[2, 1]> : tensor<!QF>
+  %r = field.mul %pf, %ef : tensor<!PF>, tensor<!QF>
+  return %r : tensor<!QF>
+}
+
+// Ranked tensor: PF(2) * [1,0] = [2,0] and PF(3) * [0,1] = [0,3].
+// CHECK-LABEL: @test_mixed_tensor_2d_mul_pf_ef
+// CHECK:         field.constant dense<[2, 0, 0, 3]>
+// CHECK-NOT:     field.mul
+func.func @test_mixed_tensor_2d_mul_pf_ef() -> tensor<2x!QF> {
+  %pf = field.constant dense<[2, 3]> : tensor<2x!PF>
+  %ef = field.constant dense<[[1, 0], [0, 1]]> : tensor<2x!QF>
+  %r = field.mul %pf, %ef : tensor<2x!PF>, tensor<2x!QF>
+  return %r : tensor<2x!QF>
+}
