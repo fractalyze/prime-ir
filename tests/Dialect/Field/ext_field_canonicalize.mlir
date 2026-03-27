@@ -922,3 +922,18 @@ func.func @test_ext_to_coeffs_nonfold(%arg: !QF) -> (!PF, !PF) {
   %c0, %c1 = field.ext_to_coeffs %arg : (!QF) -> (!PF, !PF)
   return %c0, %c1 : !PF, !PF
 }
+
+//===----------------------------------------------------------------------===//
+// tensor.extract fold with OOB index must not crash
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_extract_ef_oob_index
+func.func @test_tensor_extract_ef_oob_index() -> !QF {
+  // An out-of-bounds index (-1) on an extension-field tensor constant must
+  // bail out of constant folding instead of crashing.
+  // CHECK: tensor.extract
+  %cst = field.constant dense<[[1, 2], [3, 4]]> : tensor<2x!QF>
+  %c = arith.constant -1 : index
+  %0 = tensor.extract %cst[%c] : tensor<2x!QF>
+  return %0 : !QF
+}

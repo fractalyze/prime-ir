@@ -409,3 +409,18 @@ func.func @test_tensor_g2_negate_fold() -> tensor<2x!g2jacobian> {
   %1 = elliptic_curve.negate %0 : tensor<2x!g2jacobian>
   return %1 : tensor<2x!g2jacobian>
 }
+
+//===----------------------------------------------------------------------===//
+// tensor.extract fold with OOB index must not crash
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_tensor_extract_ec_oob_index
+func.func @test_tensor_extract_ec_oob_index() -> !jacobian {
+  // An out-of-bounds index (-1) on an EC point tensor constant must
+  // bail out of constant folding instead of crashing.
+  // CHECK: tensor.extract
+  %cst = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
+  %c = arith.constant -1 : index
+  %0 = tensor.extract %cst[%c] : tensor<2x!jacobian>
+  return %0 : !jacobian
+}
