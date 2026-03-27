@@ -457,7 +457,8 @@ func.func @test_mixed_tensor_mul_pf_ef() -> tensor<!QF> {
 
 // Ranked tensor: PF(2) * [1,0] = [2,0] and PF(3) * [0,1] = [0,3].
 // CHECK-LABEL: @test_mixed_tensor_2d_mul_pf_ef
-// CHECK:         field.constant dense<[2, 0, 0, 3]>
+// CHECK:         field.constant dense
+// CHECK-SAME:    [2, 0], [0, 3]
 // CHECK-NOT:     field.mul
 func.func @test_mixed_tensor_2d_mul_pf_ef() -> tensor<2x!QF> {
   %pf = field.constant dense<[2, 3]> : tensor<2x!PF>

@@ -1551,8 +1551,11 @@ OpFoldResult foldMixedBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
   }
 
   auto storageType = efType.getBasePrimeField().getStorageType();
-  auto resultType = RankedTensorType::get(
-      {static_cast<int64_t>(resultCoeffs.size())}, storageType);
+  auto resultShapedType = cast<ShapedType>(op->getType());
+  auto towerShape = efType.getAttrShape();
+  SmallVector<int64_t> attrShape(resultShapedType.getShape());
+  attrShape.append(towerShape.begin(), towerShape.end());
+  auto resultType = RankedTensorType::get(attrShape, storageType);
   return DenseIntElementsAttr::get(resultType, resultCoeffs);
 }
 
