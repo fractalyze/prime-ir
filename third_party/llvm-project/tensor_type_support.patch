@@ -24,7 +24,28 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
    if (auto op = arith::ConstantOp::materialize(builder, value, type, loc))
      return op;
    if (complex::ConstantOp::isBuildableWith(value, type))
-@@ -1421,6 +1430,29 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+@@ -1398,4 +1407,18 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+     // If this is a splat elements attribute, simply return the value.
+     // All of the elements of a splat attribute are the same.
+-    if (auto splatTensor = llvm::dyn_cast<SplatElementsAttr>(tensor))
+-      return splatTensor.getSplatValue<Attribute>();
++    if (auto splatTensor = llvm::dyn_cast<SplatElementsAttr>(tensor)) {
++      // For element types with multi-value storage (e.g., extension fields),
++      // the attr has extra trailing coefficient dims beyond the tensor rank.
++      // Replicate the splat value across all coefficients.
++      auto tensorType =
++          llvm::cast<RankedTensorType>(getTensor().getType());
++      if (auto cli = llvm::dyn_cast<ConstantLikeInterface>(getType());
++          cli && splatTensor.getType().getRank() > tensorType.getRank()) {
++        int64_t valuesPerElement =
++            splatTensor.getNumElements() / tensorType.getNumElements();
++        APInt splatValue = splatTensor.getSplatValue<APInt>();
++        SmallVector<APInt> coeffs(valuesPerElement, splatValue);
++        return cli.createConstantAttrFromValues(coeffs);
++      }
++      return splatTensor.getSplatValue<Attribute>();
++    }
+@@ -1421,6 +1444,29 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
      auto elementsAttr = llvm::dyn_cast<ElementsAttr>(tensor);
      if (elementsAttr && elementsAttr.isValidIndex(indices))
        return elementsAttr.getValues<Attribute>()[indices];

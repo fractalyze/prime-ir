@@ -306,16 +306,19 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
   }
 
   if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
-    // For extension field types, an IntegerAttr (e.g., from a splat tensor
-    // fold) must be expanded into a DenseIntElementsAttr with the splat value
-    // replicated across all coefficients.
+    // For extension field types, an IntegerAttr represents a prime-field
+    // scalar embedded into the extension field: only the free coefficient
+    // (degree-0) is set, with all higher-degree coefficients zero.
     if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
       auto storageType = efType.getBasePrimeField().getStorageType();
+      assert(intAttr.getValue().getBitWidth() == storageType.getWidth() &&
+             "IntegerAttr bit width must match base prime storage type");
+      auto coeffs =
+          makeScalarCoeffs(intAttr.getValue(), efType.getDegreeOverPrime());
       auto tensorType =
           RankedTensorType::get(efType.getAttrShape(), storageType);
-      auto splatAttr =
-          DenseIntElementsAttr::get(tensorType, intAttr.getValue());
-      return builder.create<ConstantOp>(loc, type, splatAttr);
+      auto scalarAttr = DenseIntElementsAttr::get(tensorType, coeffs);
+      return builder.create<ConstantOp>(loc, type, scalarAttr);
     }
     return builder.create<ConstantOp>(loc, type, intAttr);
   }
