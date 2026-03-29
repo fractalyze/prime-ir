@@ -27,6 +27,8 @@ cc_library(
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LinalgDialect",
         "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
     ],
 )

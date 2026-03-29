@@ -16,6 +16,8 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/MontReducer.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
@@ -27,11 +29,50 @@ MontReducer::MontReducer(ImplicitLocOpBuilder &b, ModArithType modArithType)
     : b(b), modAttr(modArithType.getModulus()),
       montAttr(modArithType.getMontgomeryAttr()) {}
 
-Value MontReducer::createModulusConst(Type inputType) {
+// Create a splat constant that works for both static and dynamic tensor shapes.
+// For static shapes, uses SplatElementsAttr (compile-time constant).
+// For dynamic shapes, uses linalg.fill(scalar, tensor.empty(dims)).
+static Value createSplatConst(ImplicitLocOpBuilder &b, TypedAttr scalarAttr,
+                              ShapedType shapedType, Value shapeRef) {
+  if (shapedType.hasStaticShape()) {
+    return b.create<arith::ConstantOp>(
+        SplatElementsAttr::get(shapedType, scalarAttr));
+  }
+  // Dynamic: fill an empty tensor with the scalar value.
+  Value scalar = b.create<arith::ConstantOp>(scalarAttr);
+  SmallVector<Value> dynamicDims;
+  for (int64_t i = 0; i < shapedType.getRank(); ++i) {
+    if (shapedType.isDynamicDim(i)) {
+      auto idx = b.create<arith::ConstantIndexOp>(i);
+      dynamicDims.push_back(b.create<tensor::DimOp>(shapeRef, idx));
+    }
+  }
+  Value empty = b.create<tensor::EmptyOp>(shapedType, dynamicDims);
+  return b.create<linalg::FillOp>(scalar, empty).getResult(0);
+}
+
+Value MontReducer::createModulusConst(Type inputType, Value inputValue) {
   TypedAttr modAttr = this->modAttr;
   if (auto shapedType = dyn_cast<ShapedType>(inputType)) {
     if (!isa<VectorType>(this->modAttr.getType())) {
-      modAttr = SplatElementsAttr::get(shapedType, this->modAttr);
+      if (shapedType.hasStaticShape()) {
+        modAttr = SplatElementsAttr::get(shapedType, this->modAttr);
+        return b.create<arith::ConstantOp>(modAttr);
+      }
+      // Dynamic shape: SplatElementsAttr requires static shapes.
+      // Create scalar constant + linalg.fill into tensor.empty with
+      // runtime dims extracted from inputValue.
+      Value scalar = b.create<arith::ConstantOp>(this->modAttr);
+      auto tensorType = cast<RankedTensorType>(shapedType);
+      SmallVector<Value> dynamicDims;
+      for (int64_t i = 0; i < tensorType.getRank(); ++i) {
+        if (tensorType.isDynamicDim(i)) {
+          auto idx = b.create<arith::ConstantIndexOp>(i);
+          dynamicDims.push_back(b.create<tensor::DimOp>(inputValue, idx));
+        }
+      }
+      Value empty = b.create<tensor::EmptyOp>(tensorType, dynamicDims);
+      return b.create<linalg::FillOp>(scalar, empty).getResult(0);
     }
   }
   return b.create<arith::ConstantOp>(modAttr);
@@ -54,9 +95,11 @@ Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
   for (int i = m - 1; i >= 0; --i) {
     APInt multiple = mod.zext(w) * APInt(w, uint64_t{1} << i);
     TypedAttr multipleAttr = IntegerAttr::get(modAttr.getType(), multiple);
+    Value threshConst;
     if (auto shapedType = dyn_cast<ShapedType>(input.getType()))
-      multipleAttr = SplatElementsAttr::get(shapedType, multipleAttr);
-    auto threshConst = b.create<arith::ConstantOp>(multipleAttr);
+      threshConst = createSplatConst(b, multipleAttr, shapedType, input);
+    else
+      threshConst = b.create<arith::ConstantOp>(multipleAttr);
 
     auto sub = b.create<arith::SubIOp>(input, threshConst);
     input = b.create<arith::MinUIOp>(sub, input).getResult();
@@ -65,7 +108,7 @@ Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
 }
 
 Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
-  auto cmod = createModulusConst(input.getType());
+  auto cmod = createModulusConst(input.getType(), input);
   // NOTE(chokobole): 'ult' is generally preferred over 'uge' for
   // better performance. However, using 'ult' would require inverting the
   // overflow check logic. Currently, 'uge' is used for clearer logic, but
@@ -79,7 +122,7 @@ Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
 }
 
 Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
-  auto cmod = createModulusConst(lhs.getType());
+  auto cmod = createModulusConst(lhs.getType(), lhs);
   auto sub = b.create<arith::SubIOp>(lhs, rhs);
   auto add = b.create<arith::AddIOp>(sub, cmod);
   APInt mod = cast<IntegerAttr>(modAttr).getValue();
@@ -101,12 +144,15 @@ bool MontReducer::isFromSignedMul(Value input) {
 Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh, bool lazy) {
   TypedAttr nInvAttr = montAttr.getNInv();
   Type limbType = nInvAttr.getType();
+  Value nInvConst;
   if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
-    limbType = shapedType.cloneWith(std::nullopt, limbType);
-    nInvAttr = SplatElementsAttr::get(cast<ShapedType>(limbType), nInvAttr);
+    auto nInvShaped = shapedType.cloneWith(std::nullopt, nInvAttr.getType());
+    nInvConst =
+        createSplatConst(b, nInvAttr, cast<ShapedType>(nInvShaped), tLow);
+  } else {
+    nInvConst = b.create<arith::ConstantOp>(nInvAttr);
   }
-  auto nInvConst = b.create<arith::ConstantOp>(nInvAttr);
-  auto modConst = createModulusConst(tLow.getType());
+  auto modConst = createModulusConst(tLow.getType(), tLow);
 
   // Compute m = tLow * nInv (mod base).
   auto m = b.create<arith::MulIOp>(tLow, nInvConst);
