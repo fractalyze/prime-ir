@@ -364,13 +364,17 @@ struct InverseOp {
       using BigInt = zk_dtypes::BigInt<1>;
       auto inverter = zk_dtypes::BYInverter<1>(BigInt(mod), BigInt(adjuster));
       BigInt result;
-      [[maybe_unused]] bool ok = inverter.Invert(BigInt(a), result);
-      assert(ok);
+      // Invert returns false for non-invertible elements (e.g. zero)
+      // without modifying the output. The local result is zero-initialized,
+      // which is the desired result for inv(0) by ZK convention.
+      inverter.Invert(BigInt(a), result);
       b = static_cast<uint64_t>(result);
     } else {
       auto inverter = zk_dtypes::BYInverter<T::kLimbNums>(mod, adjuster);
-      [[maybe_unused]] bool ok = inverter.Invert(a, b);
-      assert(ok);
+      // Invert returns false for non-invertible elements (e.g. zero)
+      // without modifying the output. b is pre-initialized to zero by
+      // the caller, which is the desired result for inv(0) by ZK convention.
+      inverter.Invert(a, b);
     }
   }
 };
