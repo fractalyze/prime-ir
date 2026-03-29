@@ -29,16 +29,19 @@ MontReducer::MontReducer(ImplicitLocOpBuilder &b, ModArithType modArithType)
     : b(b), modAttr(modArithType.getModulus()),
       montAttr(modArithType.getMontgomeryAttr()) {}
 
+namespace {
+
 // Create a splat constant that works for both static and dynamic tensor shapes.
 // For static shapes, uses SplatElementsAttr (compile-time constant).
 // For dynamic shapes, uses linalg.fill(scalar, tensor.empty(dims)).
-static Value createSplatConst(ImplicitLocOpBuilder &b, TypedAttr scalarAttr,
-                              ShapedType shapedType, Value shapeRef) {
+Value createSplatConst(ImplicitLocOpBuilder &b, TypedAttr scalarAttr,
+                       ShapedType shapedType, Value shapeRef) {
   if (shapedType.hasStaticShape()) {
     return b.create<arith::ConstantOp>(
         SplatElementsAttr::get(shapedType, scalarAttr));
   }
-  // Dynamic: fill an empty tensor with the scalar value.
+  assert(shapeRef &&
+         "A shape reference value must be provided for dynamic shapes.");
   Value scalar = b.create<arith::ConstantOp>(scalarAttr);
   SmallVector<Value> dynamicDims;
   for (int64_t i = 0; i < shapedType.getRank(); ++i) {
@@ -51,31 +54,15 @@ static Value createSplatConst(ImplicitLocOpBuilder &b, TypedAttr scalarAttr,
   return b.create<linalg::FillOp>(scalar, empty).getResult(0);
 }
 
+} // namespace
+
 Value MontReducer::createModulusConst(Type inputType, Value inputValue) {
-  TypedAttr modAttr = this->modAttr;
   if (auto shapedType = dyn_cast<ShapedType>(inputType)) {
     if (!isa<VectorType>(this->modAttr.getType())) {
-      if (shapedType.hasStaticShape()) {
-        modAttr = SplatElementsAttr::get(shapedType, this->modAttr);
-        return b.create<arith::ConstantOp>(modAttr);
-      }
-      // Dynamic shape: SplatElementsAttr requires static shapes.
-      // Create scalar constant + linalg.fill into tensor.empty with
-      // runtime dims extracted from inputValue.
-      Value scalar = b.create<arith::ConstantOp>(this->modAttr);
-      auto tensorType = cast<RankedTensorType>(shapedType);
-      SmallVector<Value> dynamicDims;
-      for (int64_t i = 0; i < tensorType.getRank(); ++i) {
-        if (tensorType.isDynamicDim(i)) {
-          auto idx = b.create<arith::ConstantIndexOp>(i);
-          dynamicDims.push_back(b.create<tensor::DimOp>(inputValue, idx));
-        }
-      }
-      Value empty = b.create<tensor::EmptyOp>(tensorType, dynamicDims);
-      return b.create<linalg::FillOp>(scalar, empty).getResult(0);
+      return createSplatConst(b, this->modAttr, shapedType, inputValue);
     }
   }
-  return b.create<arith::ConstantOp>(modAttr);
+  return b.create<arith::ConstantOp>(this->modAttr);
 }
 
 Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
