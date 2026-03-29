@@ -250,6 +250,17 @@ TYPED_TEST(ModArithOperationTest, Inverse) {
       /*aMustBeNonZero=*/true);
 }
 
+TYPED_TEST(ModArithOperationTest, InverseOfZero) {
+  using PrimeFieldType = TypeParam;
+
+  // inv(0) = 0 by ZK convention.
+  auto zero = PrimeFieldType::Zero();
+  auto modArithZero = ModArithOperation::fromZkDtype(&this->context, zero);
+  auto result = modArithZero.inverse();
+  auto expected = ModArithOperation::fromZkDtype(&this->context, zero);
+  EXPECT_EQ(result, expected);
+}
+
 TYPED_TEST(ModArithOperationTest, FromMont) {
   using PrimeFieldType = TypeParam;
 
