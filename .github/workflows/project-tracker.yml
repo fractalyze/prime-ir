@@ -1,13 +1,11 @@
-name: Project Tracker
+name: Sync PR to Project
 
 on:
-  pull_request:
-    types: [opened, ready_for_review, converted_to_draft, closed]
+  pull_request_target:
+    types: [opened, reopened, converted_to_draft, ready_for_review, closed]
 
 jobs:
-  track:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: fractalyze/github-actions/project-tracker@main
-        with:
-          project_token: ${{ secrets.PROJECT_TRACKER_GH_PAT }}
+  sync:
+    uses: fractalyze/.github-private/.github/workflows/sync-project-fields.yml@main
+    secrets:
+      PROJECT_TRACKER_GH_PAT: ${{ secrets.PROJECT_TRACKER_GH_PAT }}
