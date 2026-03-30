@@ -107,7 +107,7 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   // functions regardless of visibility, which defeats PairingOutliner's
   // strategy of outlining CyclotomicSquare/MulBy034/MulBy014 as shared
   // func.func helpers. In the default "inline" lowering mode for
-  // FieldToModArith, there are no IntrinsicFunctionGenerator functions to
+  // FieldToModArith, there are no outlined functions to
   // inline either.
   // pm.addPass(createInlinerPass());
   pm.addPass(affine::createAffineScalarReplacementPass());

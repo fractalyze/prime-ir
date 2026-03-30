@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef PRIME_IR_UTILS_INTRINSICFUNCTIONGENERATORBASE_H_
-#define PRIME_IR_UTILS_INTRINSICFUNCTIONGENERATORBASE_H_
+#ifndef PRIME_IR_UTILS_FUNCTIONOUTLINERBASE_H_
+#define PRIME_IR_UTILS_FUNCTIONOUTLINERBASE_H_
 
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -24,26 +24,26 @@ limitations under the License.
 
 namespace mlir::prime_ir {
 
-/// Check if an operation is inside an intrinsic function (has `__prime_ir_`
-/// prefix). Used to prevent infinite recursion when lowering intrinsic function
+/// Check if an operation is inside an outlined function (has `__prime_ir_`
+/// prefix). Used to prevent infinite recursion when lowering outlined function
 /// bodies.
-inline bool isInsideIntrinsicFunction(Operation *op) {
+inline bool isInsideOutlinedFunction(Operation *op) {
   if (auto parentFunc = op->getParentOfType<func::FuncOp>())
     return parentFunc.getName().starts_with("__prime_ir_");
   return false;
 }
 
-/// CRTP base class for intrinsic function generators.
+/// CRTP base class for function outliners.
 ///
-/// Provides common infrastructure for creating and managing intrinsic functions
+/// Provides common infrastructure for creating and managing outlined functions
 /// that wrap high-level operations. Derived classes customize behavior by
 /// providing type-specific implementations.
 ///
 /// Example usage:
 /// @code
-/// class MyIntrinsicGenerator
-///     : public IntrinsicFunctionGeneratorBase<MyIntrinsicGenerator> {
-///   using Base = IntrinsicFunctionGeneratorBase<MyIntrinsicGenerator>;
+/// class MyOutliner
+///     : public FunctionOutlinerBase<MyIntrinsicGenerator> {
+///   using Base = FunctionOutlinerBase<MyIntrinsicGenerator>;
 /// public:
 ///   explicit MyIntrinsicGenerator(ModuleOp module) : Base(module) {}
 ///
@@ -59,9 +59,9 @@ inline bool isInsideIntrinsicFunction(Operation *op) {
 /// };
 /// @endcode
 template <typename Derived>
-class IntrinsicFunctionGeneratorBase {
+class FunctionOutlinerBase {
 public:
-  explicit IntrinsicFunctionGeneratorBase(ModuleOp module)
+  explicit FunctionOutlinerBase(ModuleOp module)
       : module_(module), symbolTable_(module) {}
 
   ModuleOp getModule() const { return module_; }
@@ -126,4 +126,4 @@ private:
 
 } // namespace mlir::prime_ir
 
-#endif // PRIME_IR_UTILS_INTRINSICFUNCTIONGENERATORBASE_H_
+#endif // PRIME_IR_UTILS_FUNCTIONOUTLINERBASE_H_

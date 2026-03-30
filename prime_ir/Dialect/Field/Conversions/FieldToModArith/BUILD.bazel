@@ -68,20 +68,6 @@ prime_ir_cc_library(
 )
 
 prime_ir_cc_library(
-    name = "IntrinsicFunctionGenerator",
-    srcs = ["IntrinsicFunctionGenerator.cpp"],
-    hdrs = ["IntrinsicFunctionGenerator.h"],
-    deps = [
-        "//prime_ir/Dialect/Field/IR:Field",
-        "//prime_ir/Utils:IntrinsicFunctionGeneratorBase",
-        "//prime_ir/Utils:LoweringMode",
-        "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:FuncDialect",
-        "@llvm-project//mlir:IR",
-    ],
-)
-
-prime_ir_cc_library(
     name = "FieldToModArith",
     srcs = ["FieldToModArith.cpp"],
     hdrs = [
@@ -90,7 +76,6 @@ prime_ir_cc_library(
     deps = [
         ":ConversionUtils",
         ":FieldCodeGen",
-        ":IntrinsicFunctionGenerator",
         ":pass_inc_gen",
         "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
@@ -99,6 +84,8 @@ prime_ir_cc_library(
         "//prime_ir/Utils:BitSerialAlgorithm",
         "//prime_ir/Utils:BuilderContext",
         "//prime_ir/Utils:ConversionUtils",
+        "//prime_ir/Utils:KnownModulus",
+        "//prime_ir/Utils:LoweringMode",
         "//prime_ir/Utils:ShapedTypeConverter",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:AffineDialect",
@@ -106,7 +93,6 @@ prime_ir_cc_library(
         "@llvm-project//mlir:BufferizationDialect",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
-        "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:LinalgDialect",
         "@llvm-project//mlir:MemRefDialect",
         "@llvm-project//mlir:Pass",

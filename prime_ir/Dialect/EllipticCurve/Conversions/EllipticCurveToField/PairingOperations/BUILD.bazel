@@ -24,7 +24,7 @@ prime_ir_cc_library(
     hdrs = ["PairingOutliner.h"],
     deps = [
         "//prime_ir/Dialect/Field/IR:Field",
-        "//prime_ir/Utils:IntrinsicFunctionGeneratorBase",
+        "//prime_ir/Utils:FunctionOutlinerBase",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",

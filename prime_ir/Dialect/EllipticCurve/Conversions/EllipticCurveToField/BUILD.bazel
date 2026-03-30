@@ -42,21 +42,6 @@ prime_ir_cc_library(
 )
 
 prime_ir_cc_library(
-    name = "IntrinsicFunctionGenerator",
-    srcs = ["IntrinsicFunctionGenerator.cpp"],
-    hdrs = ["IntrinsicFunctionGenerator.h"],
-    deps = [
-        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "//prime_ir/Dialect/Field/IR:Field",
-        "//prime_ir/Utils:IntrinsicFunctionGeneratorBase",
-        "//prime_ir/Utils:LoweringMode",
-        "@llvm-project//llvm:Support",
-        "@llvm-project//mlir:FuncDialect",
-        "@llvm-project//mlir:IR",
-    ],
-)
-
-prime_ir_cc_library(
     name = "EllipticCurveToField",
     srcs = ["EllipticCurveToField.cpp"],
     hdrs = [
@@ -64,7 +49,6 @@ prime_ir_cc_library(
     ],
     deps = [
         ":ConversionUtils",
-        ":IntrinsicFunctionGenerator",
         ":pass_inc_gen",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers:Generic",
         "//prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PairingOperations:PairingCodeGen",
@@ -73,6 +57,7 @@ prime_ir_cc_library(
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Utils:BitSerialAlgorithm",
         "//prime_ir/Utils:ConversionUtils",
+        "//prime_ir/Utils:LoweringMode",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:BufferizationDialect",
         "@llvm-project//mlir:FuncDialect",

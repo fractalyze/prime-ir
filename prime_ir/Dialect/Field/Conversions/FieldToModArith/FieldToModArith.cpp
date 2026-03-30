@@ -21,8 +21,6 @@ limitations under the License.
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -42,7 +40,6 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/ConversionUtils.h"
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldCodeGen.h"
-#include "prime_ir/Dialect/Field/Conversions/FieldToModArith/IntrinsicFunctionGenerator.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -52,12 +49,72 @@ limitations under the License.
 #include "prime_ir/Utils/BitSerialAlgorithm.h"
 #include "prime_ir/Utils/BuilderContext.h"
 #include "prime_ir/Utils/ConversionUtils.h"
+#include "prime_ir/Utils/KnownModulus.h"
+#include "prime_ir/Utils/LoweringMode.h"
 #include "prime_ir/Utils/ShapedTypeConverter.h"
 
 namespace mlir::prime_ir::field {
 
 #define GEN_PASS_DEF_FIELDTOMODARITH
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.h.inc"
+
+namespace {
+
+// ---- AOT Runtime helpers ----
+
+// Check if AOTRuntime should be used for this extension field operation.
+// AOT is used for extension fields that are computationally expensive:
+//   degree >= 4 (quartic+, always expensive regardless of prime size)
+//   OR degree >= 2 AND prime > 64-bit (large-prime quadratic/cubic)
+static bool shouldUseFieldAOTRuntime(Operation *op, Type fieldType,
+                                     LoweringMode mode) {
+  if (mode == LoweringMode::Inline)
+    return false;
+  auto efType = dyn_cast<ExtensionFieldType>(fieldType);
+  if (!efType)
+    return false;
+  unsigned degree = efType.getDegreeOverPrime();
+  unsigned primeBits = efType.getBasePrimeField().getStorageBitWidth();
+  if (degree < 2)
+    return false;
+  bool expensive = degree >= 4 || primeBits > 64;
+  if (!expensive)
+    return false;
+  return mode == LoweringMode::AOTRuntime || mode == LoweringMode::Auto;
+}
+
+// Build the zk_dtypes-style extension suffix by walking the tower.
+// ef<2x ef<3x pf>> → "x3x2",  ef<2x pf> → "x2",  ef<4x pf> → "x4"
+static std::string getExtensionTowerSuffix(ExtensionFieldType efType) {
+  std::string suffix;
+  Type cur = efType;
+  while (auto ef = dyn_cast<ExtensionFieldType>(cur)) {
+    suffix = "x" + std::to_string(ef.getDegree()) + suffix;
+    cur = ef.getBaseField();
+  }
+  return suffix;
+}
+
+// Build AOT runtime function name for extension field operations.
+// Pattern: "ef_<op>_<prime_alias><tower_suffix>[_mont]"
+// Follows zk_dtypes tower naming: bn254_bfx2, babybearx4, mersenne31x2x2.
+// Example: "ef_mul_bn254_bfx2_mont", "ef_inverse_mersenne31x2x2"
+static std::optional<std::string> getFieldAOTFuncName(llvm::StringRef op,
+                                                      Type fieldType) {
+  auto efType = dyn_cast<ExtensionFieldType>(fieldType);
+  if (!efType)
+    return std::nullopt;
+
+  auto baseAlias =
+      getKnownModulusAlias(efType.getBasePrimeField().getModulus().getValue());
+  if (!baseAlias)
+    return std::nullopt;
+
+  std::string towerSuffix = getExtensionTowerSuffix(efType);
+  std::string montSuffix =
+      isMontgomery(efType.getBasePrimeField()) ? "_mont" : "";
+  return ("ef_" + op + "_" + *baseAlias + towerSuffix + montSuffix).str();
+}
 
 class FieldToModArithTypeConverter : public ShapedTypeConverter {
 public:
@@ -309,39 +366,42 @@ struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
   using OpAdaptor = typename OpConversionPattern<OpT>::OpAdaptor;
 
   ConvertFieldOpBase(const TypeConverter &converter, MLIRContext *context,
-                     IntrinsicFunctionGenerator *generator = nullptr,
                      LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<OpT>(converter, context), generator(generator),
-        mode(mode) {
+      : OpConversionPattern<OpT>(converter, context), mode(mode) {
     this->setHasBoundedRewriteRecursion(true);
   }
 
   LogicalResult
   matchAndRewrite(OpT op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // Extension field inline codegen (ExtensionFieldCodeGen) operates on scalar
-    // elements only. Shaped extension field types need separate handling:
-    // ElementwiseMappable ops are scalarized by convert-elementwise-to-linalg,
-    // while non-ElementwiseMappable ops (e.g., inverse) require a dedicated
-    // batch lowering pass. Prime field shaped types are fine since mod_arith
-    // ops natively support them.
     if (isa<ShapedType>(op.getOutput().getType()) &&
         isa<ExtensionFieldType>(getElementTypeOrSelf(op.getOutput())))
       return failure();
 
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    ScopedBuilderContext scopedBuilderContext(&b);
-
-    if (generator) {
-      Type fieldType = getElementTypeOrSelf(op.getOutput());
-      if (IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode)) {
-        auto efType = cast<ExtensionFieldType>(fieldType);
-        rewriter.replaceOp(
-            op, static_cast<const Derived *>(this)->emitIntrinsicCall(
-                    rewriter, op.getLoc(), efType, adaptor));
+    // AOT runtime path: emit direct func.call to pre-compiled function.
+    Type fieldType = getElementTypeOrSelf(op.getOutput());
+    if (shouldUseFieldAOTRuntime(op, fieldType, mode)) {
+      auto funcName =
+          static_cast<const Derived *>(this)->getAOTFuncName(fieldType);
+      if (funcName) {
+        auto moduleOp = op->template getParentOfType<ModuleOp>();
+        auto funcType = FunctionType::get(
+            op->getContext(), op->getOperandTypes(), op->getResultTypes());
+        if (!moduleOp.template lookupSymbol<func::FuncOp>(*funcName)) {
+          OpBuilder::InsertionGuard guard(rewriter);
+          rewriter.setInsertionPointToStart(moduleOp.getBody());
+          auto funcDecl =
+              rewriter.create<func::FuncOp>(op->getLoc(), *funcName, funcType);
+          funcDecl.setPrivate();
+        }
+        rewriter.replaceOpWithNewOp<func::CallOp>(
+            op, *funcName, op->getResultTypes(), op->getOperands());
         return success();
       }
     }
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    ScopedBuilderContext scopedBuilderContext(&b);
 
     rewriter.replaceOp(
         op,
@@ -350,13 +410,12 @@ struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
   }
 
 protected:
-  IntrinsicFunctionGenerator *generator;
   LoweringMode mode;
 };
 
 /// Lowers field.inverse for both scalar and tensor types.
 ///
-/// Scalar: delegates to ConvertFieldOpBase (intrinsic or inline codegen).
+/// Scalar: delegates to ConvertFieldOpBase (AOT or inline codegen).
 /// Tensor EF: Montgomery's batch inversion trick.
 ///   Given a₀, a₁, ..., aₙ₋₁:
 ///     Forward:  prefix[0] = a₀; prefix[i] = prefix[i-1] * a[i]
@@ -367,10 +426,8 @@ protected:
 ///   independent inversions.
 struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
   using Base::Base;
-  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
-                          OpAdaptor adaptor) const {
-    return generator->emitQuarticInverseCall(b, loc, efType,
-                                             adaptor.getInput());
+  std::optional<std::string> getAOTFuncName(Type fieldType) const {
+    return getFieldAOTFuncName("inverse", fieldType);
   }
   Value emitInlineCodeGen(InverseOp op, OpAdaptor adaptor) const {
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -506,9 +563,8 @@ private:
 
 struct ConvertNegate : ConvertFieldOpBase<NegateOp, ConvertNegate> {
   using Base::Base;
-  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
-                          OpAdaptor adaptor) const {
-    return generator->emitNegateCall(b, loc, efType, adaptor.getInput());
+  std::optional<std::string> getAOTFuncName(Type fieldType) const {
+    return std::nullopt; // cheap op, always inline
   }
   Value emitInlineCodeGen(NegateOp op, OpAdaptor adaptor) const {
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -518,10 +574,8 @@ struct ConvertNegate : ConvertFieldOpBase<NegateOp, ConvertNegate> {
 
 struct ConvertAdd : ConvertFieldOpBase<AddOp, ConvertAdd> {
   using Base::Base;
-  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
-                          OpAdaptor adaptor) const {
-    return generator->emitAddCall(b, loc, efType, adaptor.getLhs(),
-                                  adaptor.getRhs());
+  std::optional<std::string> getAOTFuncName(Type fieldType) const {
+    return std::nullopt; // cheap op, always inline
   }
   Value emitInlineCodeGen(AddOp op, OpAdaptor adaptor) const {
     Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
@@ -534,10 +588,7 @@ struct ConvertAdd : ConvertFieldOpBase<AddOp, ConvertAdd> {
 
 struct ConvertDouble : ConvertFieldOpBase<DoubleOp, ConvertDouble> {
   using Base::Base;
-  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
-                          OpAdaptor adaptor) const {
-    return generator->emitDoubleCall(b, loc, efType, adaptor.getInput());
-  }
+  std::optional<std::string> getAOTFuncName(Type) const { return std::nullopt; }
   Value emitInlineCodeGen(DoubleOp op, OpAdaptor adaptor) const {
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
@@ -547,10 +598,8 @@ struct ConvertDouble : ConvertFieldOpBase<DoubleOp, ConvertDouble> {
 
 struct ConvertSub : ConvertFieldOpBase<SubOp, ConvertSub> {
   using Base::Base;
-  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
-                          OpAdaptor adaptor) const {
-    return generator->emitSubCall(b, loc, efType, adaptor.getLhs(),
-                                  adaptor.getRhs());
+  std::optional<std::string> getAOTFuncName(Type fieldType) const {
+    return std::nullopt; // cheap op, always inline
   }
   Value emitInlineCodeGen(SubOp op, OpAdaptor adaptor) const {
     Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
@@ -563,10 +612,8 @@ struct ConvertSub : ConvertFieldOpBase<SubOp, ConvertSub> {
 
 struct ConvertMul : ConvertFieldOpBase<MulOp, ConvertMul> {
   using Base::Base;
-  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
-                          OpAdaptor adaptor) const {
-    return generator->emitQuarticMulCall(b, loc, efType, adaptor.getLhs(),
-                                         adaptor.getRhs());
+  std::optional<std::string> getAOTFuncName(Type fieldType) const {
+    return getFieldAOTFuncName("mul", fieldType);
   }
   Value emitInlineCodeGen(MulOp op, OpAdaptor adaptor) const {
     Type lhsType = getElementTypeOrSelf(op.getLhs().getType());
@@ -579,9 +626,8 @@ struct ConvertMul : ConvertFieldOpBase<MulOp, ConvertMul> {
 
 struct ConvertSquare : ConvertFieldOpBase<SquareOp, ConvertSquare> {
   using Base::Base;
-  Value emitIntrinsicCall(OpBuilder &b, Location loc, ExtensionFieldType efType,
-                          OpAdaptor adaptor) const {
-    return generator->emitQuarticSquareCall(b, loc, efType, adaptor.getInput());
+  std::optional<std::string> getAOTFuncName(Type fieldType) const {
+    return getFieldAOTFuncName("square", fieldType);
   }
   Value emitInlineCodeGen(SquareOp op, OpAdaptor adaptor) const {
     Type fieldType = getElementTypeOrSelf(op.getOutput());
@@ -774,8 +820,6 @@ namespace rewrites {
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
 } // namespace rewrites
 
-namespace {
-
 // Check if a type contains BinaryFieldType
 bool containsBinaryFieldType(Type type) {
   Type elemType = getElementTypeOrSelf(type);
@@ -799,86 +843,6 @@ bool operationContainsBinaryFieldType(Operation *op) {
 
 } // namespace
 
-/// Outline high-degree extension field ops into shared intrinsic functions.
-///
-/// This pre-processing step runs before applyPartialConversion to work around
-/// a fundamental limitation: intrinsic functions created during dialect
-/// conversion (via raw OpBuilder) are invisible to the conversion framework,
-/// and applyPartialConversion rolls back all changes on failure.
-///
-/// Multi-level intrinsic strategy:
-/// 1. Pre-create intrinsic functions for ALL tower levels (Fp12, Fp6, Fp2)
-///    so the generator finds existing functions during conversion
-/// 2. Replace user function ops with calls to top-level intrinsics
-/// 3. During conversion, intrinsic function bodies expand one level,
-///    with sub-ops redirected to lower-level intrinsics via the generator
-static void outlineExtensionFieldOps(ModuleOp module, LoweringMode mode,
-                                     IntrinsicFunctionGenerator &generator) {
-  // Phase 1: Discover all extension field types and pre-create intrinsics
-  // for the full tower hierarchy. This ensures the generator's
-  // getOrCreateFunction always finds existing functions (via SymbolTable
-  // lookup) during conversion, avoiding raw OpBuilder function creation.
-  DenseSet<Type> seenTypes;
-  module.walk([&](Operation *op) {
-    if (!isa<AddOp, SubOp, NegateOp, DoubleOp, MulOp, SquareOp, InverseOp>(op))
-      return;
-    Type fieldType = getElementTypeOrSelf(op->getResult(0).getType());
-    if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
-      if (efType.getDegreeOverPrime() >= 2 &&
-          efType.getBasePrimeField().getStorageBitWidth() > 64 &&
-          !seenTypes.contains(efType)) {
-        seenTypes.insert(efType);
-        generator.preCreateIntrinsicsForTower(efType);
-      }
-    }
-  });
-
-  // Phase 2: Replace qualifying ops in user functions with intrinsic calls
-  SmallVector<Operation *> opsToOutline;
-  module.walk([&](Operation *op) {
-    if (isInsideIntrinsicFunction(op))
-      return;
-    if (!isa<AddOp, SubOp, NegateOp, DoubleOp, MulOp, SquareOp, InverseOp>(op))
-      return;
-    Type fieldType = getElementTypeOrSelf(op->getResult(0).getType());
-    if (IntrinsicFunctionGenerator::shouldUseIntrinsic(op, fieldType, mode))
-      opsToOutline.push_back(op);
-  });
-
-  for (Operation *op : opsToOutline) {
-    OpBuilder builder(op);
-    auto efType = cast<ExtensionFieldType>(
-        getElementTypeOrSelf(op->getResult(0).getType()));
-
-    Value result;
-    if (auto addOp = dyn_cast<AddOp>(op)) {
-      result = generator.emitAddCall(builder, op->getLoc(), efType,
-                                     addOp.getLhs(), addOp.getRhs());
-    } else if (auto subOp = dyn_cast<SubOp>(op)) {
-      result = generator.emitSubCall(builder, op->getLoc(), efType,
-                                     subOp.getLhs(), subOp.getRhs());
-    } else if (auto negateOp = dyn_cast<NegateOp>(op)) {
-      result = generator.emitNegateCall(builder, op->getLoc(), efType,
-                                        negateOp.getInput());
-    } else if (auto doubleOp = dyn_cast<DoubleOp>(op)) {
-      result = generator.emitDoubleCall(builder, op->getLoc(), efType,
-                                        doubleOp.getInput());
-    } else if (auto mulOp = dyn_cast<MulOp>(op)) {
-      result = generator.emitQuarticMulCall(builder, op->getLoc(), efType,
-                                            mulOp.getLhs(), mulOp.getRhs());
-    } else if (auto squareOp = dyn_cast<SquareOp>(op)) {
-      result = generator.emitQuarticSquareCall(builder, op->getLoc(), efType,
-                                               squareOp.getInput());
-    } else if (auto inverseOp = dyn_cast<InverseOp>(op)) {
-      result = generator.emitQuarticInverseCall(builder, op->getLoc(), efType,
-                                                inverseOp.getInput());
-    }
-
-    op->getResult(0).replaceAllUsesWith(result);
-    op->erase();
-  }
-}
-
 struct FieldToModArith : impl::FieldToModArithBase<FieldToModArith> {
   using FieldToModArithBase::FieldToModArithBase;
 
@@ -890,33 +854,7 @@ void FieldToModArith::runOnOperation() {
   ModuleOp module = getOperation();
   FieldToModArithTypeConverter typeConverter(context);
 
-  // Parse the lowering mode option
   LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
-
-  // Generator must outlive both outlining and conversion to maintain the
-  // SymbolTable cache — conversion patterns look up existing functions.
-  std::optional<IntrinsicFunctionGenerator> generator;
-  if (mode != LoweringMode::Inline) {
-    generator.emplace(module);
-
-    // Pre-pass: outline high-degree extension field ops into shared functions.
-    // Also pre-creates intrinsic functions for all tower levels so the
-    // generator always finds existing functions during conversion.
-    outlineExtensionFieldOps(module, mode, *generator);
-
-    // Set LLVM internal linkage on intrinsic functions to avoid duplicate
-    // symbol errors when multiple HLO computations are compiled as separate
-    // LLVM modules and linked together in the JIT.
-    // Only set when the LLVM dialect is loaded (e.g., in the ZKX JIT pipeline).
-    if (context->getLoadedDialect<LLVM::LLVMDialect>()) {
-      auto internalLinkage =
-          LLVM::LinkageAttr::get(context, LLVM::Linkage::Internal);
-      module.walk([&](func::FuncOp funcOp) {
-        if (funcOp.getName().starts_with("__prime_ir_"))
-          funcOp->setAttr("llvm.linkage", internalLinkage);
-      });
-    }
-  }
 
   ConversionTarget target(*context);
 
@@ -951,11 +889,6 @@ void FieldToModArith::runOnOperation() {
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
 
-  // Pass the generator to conversion patterns for multi-level intrinsic calls:
-  // when converting Fp12 intrinsic bodies, the Fp6 sub-ops should call pre-
-  // created Fp6 intrinsics instead of being expanded inline.
-  IntrinsicFunctionGenerator *generatorPtr =
-      generator.has_value() ? &*generator : nullptr;
   patterns.add<
       // clang-format off
       ConvertAdd,
@@ -966,7 +899,7 @@ void FieldToModArith::runOnOperation() {
       ConvertSquare,
       ConvertSub
       // clang-format on
-      >(typeConverter, context, generatorPtr, mode);
+      >(typeConverter, context, mode);
 
   patterns.add<
       // clang-format off

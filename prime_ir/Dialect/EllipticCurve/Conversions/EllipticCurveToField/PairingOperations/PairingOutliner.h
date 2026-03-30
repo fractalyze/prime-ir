@@ -19,7 +19,7 @@ limitations under the License.
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Value.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
-#include "prime_ir/Utils/IntrinsicFunctionGeneratorBase.h"
+#include "prime_ir/Utils/FunctionOutlinerBase.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
@@ -33,8 +33,8 @@ namespace mlir::prime_ir::elliptic_curve {
 ///
 /// This class lazily creates func.func helpers using the same codegen CRTP
 /// infrastructure, and replaces inline expansion with func.call.
-class PairingOutliner : public IntrinsicFunctionGeneratorBase<PairingOutliner> {
-  using Base = IntrinsicFunctionGeneratorBase<PairingOutliner>;
+class PairingOutliner : public FunctionOutlinerBase<PairingOutliner> {
+  using Base = FunctionOutlinerBase<PairingOutliner>;
 
 public:
   explicit PairingOutliner(ModuleOp module) : Base(module) {}
