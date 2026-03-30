@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_defs.mlir %s \
+// RUN: cat %S/../../bn254_defs.mlir %S/../../bn254_ec_helpers.mlir %s \
 // RUN:   | prime-ir-opt -elliptic-curve-to-field -canonicalize \
 // RUN:   | FileCheck %s -enable-var-scope
 

@@ -13,35 +13,35 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %s \
+// RUN: cat %S/../../bn254_defs.mlir %S/../../bn254_ec_mont_helpers.mlir %s \
 // RUN:   | prime-ir-opt -linalg-generalize-named-ops -split-input-file \
 // RUN:   | FileCheck %s -enable-var-scope
 
 // CHECK-LABEL: @test_g2_msm_by_dot_product
-func.func @test_g2_msm_by_dot_product(%scalars: tensor<3x!PF>, %points: tensor<3x!g2jacobian>) -> tensor<!g2jacobian> {
+func.func @test_g2_msm_by_dot_product(%scalars: tensor<3x!PF>, %points: tensor<3x!g2jacobianm>) -> tensor<!g2jacobianm> {
   // CHECK-NOT: linalg.dot
-  %result = tensor.empty() : tensor<!g2jacobian>
-  %msm_result = linalg.dot ins(%scalars, %points : tensor<3x!PF>, tensor<3x!g2jacobian>) outs(%result: tensor<!g2jacobian>) -> tensor<!g2jacobian>
-  return %msm_result : tensor<!g2jacobian>
+  %result = tensor.empty() : tensor<!g2jacobianm>
+  %msm_result = linalg.dot ins(%scalars, %points : tensor<3x!PF>, tensor<3x!g2jacobianm>) outs(%result: tensor<!g2jacobianm>) -> tensor<!g2jacobianm>
+  return %msm_result : tensor<!g2jacobianm>
 }
 
 // CHECK-LABEL: @test_affine_tensor_reduce_to_jacobian
-func.func @test_affine_tensor_reduce_to_jacobian(%points: tensor<4x!affine>) -> tensor<!jacobian> {
+func.func @test_affine_tensor_reduce_to_jacobian(%points: tensor<4x!affinem>) -> tensor<!jacobianm> {
   // Create zero point for jacobian accumulation
   %zeroPF = field.constant 0 : !PFm
   %onePF = field.constant 1 : !PFm
-  %zero_jacobian = elliptic_curve.from_coords %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobian
+  %zero_jacobian = elliptic_curve.from_coords %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobianm
 
   // Initialize output tensor with zero point
-  %init = tensor.from_elements %zero_jacobian : tensor<!jacobian>
+  %init = tensor.from_elements %zero_jacobian : tensor<!jacobianm>
 
   // Use linalg.reduce to sum all affine points into jacobian result
   // CHECK-NOT: linalg.reduce
-  %reduced = linalg.reduce ins(%points : tensor<4x!affine>) outs(%init : tensor<!jacobian>) dimensions = [0]
-    (%affine_point: !affine, %jacobian_acc: !jacobian) {
-      %sum = elliptic_curve.add %affine_point, %jacobian_acc : !affine, !jacobian -> !jacobian
-      linalg.yield %sum : !jacobian
+  %reduced = linalg.reduce ins(%points : tensor<4x!affinem>) outs(%init : tensor<!jacobianm>) dimensions = [0]
+    (%affine_point: !affinem, %jacobian_acc: !jacobianm) {
+      %sum = elliptic_curve.add %affine_point, %jacobian_acc : !affinem, !jacobianm -> !jacobianm
+      linalg.yield %sum : !jacobianm
     }
 
-  return %reduced: tensor<!jacobian>
+  return %reduced: tensor<!jacobianm>
 }

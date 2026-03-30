@@ -19,6 +19,7 @@ limitations under the License.
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/Pattern.h"
 #include "mlir/Conversion/MemRefToLLVM/MemRefToLLVM.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"

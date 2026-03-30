@@ -1,0 +1,88 @@
+# Copyright 2026 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:mlir.bzl", "prime_ir_mlir_cc_import")
+
+package(default_visibility = ["//visibility:public"])
+
+# ---- BN254 Fq2 ----
+
+genrule(
+    name = "field_runtime_bn254_combined",
+    srcs = [
+        "//prime_ir/Runtime:bn254_defs.mlir",
+        "//prime_ir/Runtime/gen:field_ops_bn254_bfx2.mlir",
+    ],
+    outs = ["field_runtime_bn254.mlir"],
+    cmd = "cat $(SRCS) > $@",
+)
+
+prime_ir_mlir_cc_import(
+    name = "field_runtime_bn254_ciface",
+    llc_flags = ["-O2"],
+    mlir_src = ":field_runtime_bn254_combined",
+    prime_ir_opt_flags = ["-field-to-llvm"],
+)
+
+# ---- BabyBear x4 ----
+
+genrule(
+    name = "field_runtime_babybear_combined",
+    srcs = [
+        "//prime_ir/Runtime:babybear_defs.mlir",
+        "//prime_ir/Runtime/gen:field_ops_babybearx4.mlir",
+    ],
+    outs = ["field_runtime_babybear.mlir"],
+    cmd = "cat $(SRCS) > $@",
+)
+
+prime_ir_mlir_cc_import(
+    name = "field_runtime_babybear_ciface",
+    llc_flags = ["-O2"],
+    mlir_src = ":field_runtime_babybear_combined",
+    prime_ir_opt_flags = ["-field-to-llvm"],
+)
+
+# ---- KoalaBear x4 ----
+
+genrule(
+    name = "field_runtime_koalabear_combined",
+    srcs = [
+        "//prime_ir/Runtime:koalabear_defs.mlir",
+        "//prime_ir/Runtime/gen:field_ops_koalabearx4.mlir",
+    ],
+    outs = ["field_runtime_koalabear.mlir"],
+    cmd = "cat $(SRCS) > $@",
+)
+
+prime_ir_mlir_cc_import(
+    name = "field_runtime_koalabear_ciface",
+    llc_flags = ["-O2"],
+    mlir_src = ":field_runtime_koalabear_combined",
+    prime_ir_opt_flags = ["-field-to-llvm"],
+)
+
+# ---- Public library ----
+
+cc_library(
+    name = "FieldRuntime",
+    deps = [
+        ":field_runtime_babybear_ciface",
+        ":field_runtime_bn254_ciface",
+        ":field_runtime_koalabear_ciface",
+        "@llvm-project//mlir:mlir_c_runner_utils",
+    ],
+)

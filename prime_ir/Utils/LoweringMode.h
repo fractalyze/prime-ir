@@ -24,26 +24,26 @@ namespace mlir::prime_ir {
 ///
 /// This enum controls how operations are lowered during dialect conversions:
 /// - Inline: All operations are expanded inline (default behavior)
-/// - Intrinsic: Complex operations are lowered to function calls with
-///   out-parameters to avoid large aggregate returns (useful for NVPTX)
 /// - Auto: Uses heuristics to decide based on operation complexity
+/// - AOTRuntime: Uses AOT-compiled runtime library for EC/field operations
 enum class LoweringMode {
   /// All operations are expanded inline (default).
   Inline,
-  /// Complex operations are lowered to function calls.
-  Intrinsic,
   /// Use heuristics to decide based on complexity.
-  Auto
+  Auto,
+  /// Use AOT-compiled runtime library for EC/field operations.
+  /// Emits RuntimeCallOp which lowers to external function calls,
+  /// resolved from pre-compiled .o at link time.
+  AOTRuntime
 };
 
 /// Parse the lowering mode from a string.
 /// Returns LoweringMode::Inline for unrecognized values.
 inline LoweringMode parseLoweringMode(llvm::StringRef mode) {
-  if (mode == "intrinsic")
-    return LoweringMode::Intrinsic;
   if (mode == "auto")
     return LoweringMode::Auto;
-  // Default to inline
+  if (mode == "aot_runtime")
+    return LoweringMode::AOTRuntime;
   return LoweringMode::Inline;
 }
 
@@ -52,10 +52,10 @@ inline llvm::StringRef loweringModeToString(LoweringMode mode) {
   switch (mode) {
   case LoweringMode::Inline:
     return "inline";
-  case LoweringMode::Intrinsic:
-    return "intrinsic";
   case LoweringMode::Auto:
     return "auto";
+  case LoweringMode::AOTRuntime:
+    return "aot_runtime";
   }
   return "inline";
 }

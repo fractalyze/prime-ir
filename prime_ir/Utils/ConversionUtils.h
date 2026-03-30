@@ -23,6 +23,7 @@ limitations under the License.
 #include "mlir/Support/LLVM.h"
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "prime_ir/Utils/LoweringMode.h"
 
 namespace mlir::prime_ir {
 
@@ -96,6 +97,24 @@ struct ConvertBinOp : public OpConversionPattern<SourceArithOp> {
 void addStructuralConversionPatterns(TypeConverter &typeConverter,
                                      RewritePatternSet &patterns,
                                      ConversionTarget &target);
+
+// Returns true if the op has 2+ operands and at least one is defined by a
+// constant-like op. Used to skip AOT for ops where inline expansion enables
+// constant folding or strength reduction (e.g., mul-by-constant).
+bool hasConstantOperand(Operation *op);
+
+/// Common configuration for AOT-aware conversion patterns.
+/// Holds lowering mode and the inline-constant-ops flag.
+struct AOTConfig {
+  LoweringMode mode = LoweringMode::Inline;
+  bool inlineConstOps = true;
+};
+
+// Emit a func.call to an AOT-compiled function, declaring it as
+// func.func private if not already present. Returns the call result.
+// Used by both EllipticCurveToField and FieldToModArith AOT paths.
+Value emitAOTFuncCall(Operation *op, StringRef funcName, Type resultType,
+                      ValueRange operands, ConversionPatternRewriter &rewriter);
 
 } // namespace mlir::prime_ir
 

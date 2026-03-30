@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_defs.mlir %S/../../bn254_ec_mont_helpers.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | prime-ir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_ops_in_order -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t
@@ -26,40 +26,40 @@ func.func @test_ops_in_order() {
   %var7 = field.constant 7 : !SFm
 
   // (1,2)
-  %affine1 = elliptic_curve.from_coords %var1, %var2 : (!PFm, !PFm) -> !affine
+  %affine1 = elliptic_curve.from_coords %var1, %var2 : (!PFm, !PFm) -> !affinem
   // (1,2,1)
-  %jacobian1 = elliptic_curve.from_coords %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobian
+  %jacobian1 = elliptic_curve.from_coords %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobianm
 
-  %jacobian2 = elliptic_curve.add %affine1, %jacobian1 : !affine, !jacobian -> !jacobian
-  func.call @printG1JacobianMont(%jacobian2) : (!jacobian) -> ()
+  %jacobian2 = elliptic_curve.add %affine1, %jacobian1 : !affinem, !jacobianm -> !jacobianm
+  func.call @printG1JacobianMont(%jacobian2) : (!jacobianm) -> ()
 
-  %jacobian3 = elliptic_curve.sub %affine1, %jacobian2 : !affine, !jacobian -> !jacobian
-  func.call @printG1JacobianMont(%jacobian3) : (!jacobian) -> ()
+  %jacobian3 = elliptic_curve.sub %affine1, %jacobian2 : !affinem, !jacobianm -> !jacobianm
+  func.call @printG1JacobianMont(%jacobian3) : (!jacobianm) -> ()
 
-  %jacobian4 = elliptic_curve.negate %jacobian3 : !jacobian
-  func.call @printG1JacobianMont(%jacobian4) : (!jacobian) -> ()
+  %jacobian4 = elliptic_curve.negate %jacobian3 : !jacobianm
+  func.call @printG1JacobianMont(%jacobian4) : (!jacobianm) -> ()
 
-  %jacobian5 = elliptic_curve.double %jacobian4 : !jacobian -> !jacobian
-  func.call @printG1JacobianMont(%jacobian5) : (!jacobian) -> ()
+  %jacobian5 = elliptic_curve.double %jacobian4 : !jacobianm -> !jacobianm
+  func.call @printG1JacobianMont(%jacobian5) : (!jacobianm) -> ()
 
-  %xyzz1 = elliptic_curve.convert_point_type %affine1 : !affine -> !xyzz
-  func.call @printG1XyzzMont(%xyzz1) : (!xyzz) -> ()
+  %xyzz1 = elliptic_curve.convert_point_type %affine1 : !affinem -> !xyzzm
+  func.call @printG1XyzzMont(%xyzz1) : (!xyzzm) -> ()
 
-  %affine2 = elliptic_curve.convert_point_type %xyzz1 : !xyzz -> !affine
-  func.call @printG1AffineMont(%affine2) : (!affine) -> ()
+  %affine2 = elliptic_curve.convert_point_type %xyzz1 : !xyzzm -> !affinem
+  func.call @printG1AffineMont(%affine2) : (!affinem) -> ()
 
-  %jacobian6 = elliptic_curve.scalar_mul %var7, %affine2 : !SFm, !affine -> !jacobian
-  %affine2_1 = elliptic_curve.convert_point_type %jacobian6 : !jacobian -> !affine
-  %jacobian6_1 = elliptic_curve.convert_point_type %affine2_1 : !affine -> !jacobian
-  func.call @printG1JacobianMont(%jacobian6_1) : (!jacobian) -> ()
+  %jacobian6 = elliptic_curve.scalar_mul %var7, %affine2 : !SFm, !affinem -> !jacobianm
+  %affine2_1 = elliptic_curve.convert_point_type %jacobian6 : !jacobianm -> !affinem
+  %jacobian6_1 = elliptic_curve.convert_point_type %affine2_1 : !affinem -> !jacobianm
+  func.call @printG1JacobianMont(%jacobian6_1) : (!jacobianm) -> ()
 
-  %affine3 = elliptic_curve.convert_point_type %jacobian6 : !jacobian -> !affine
-  func.call @printG1AffineMont(%affine3) : (!affine) -> ()
+  %affine3 = elliptic_curve.convert_point_type %jacobian6 : !jacobianm -> !affinem
+  func.call @printG1AffineMont(%affine3) : (!affinem) -> ()
 
-  %xyzz2 = elliptic_curve.add %affine3, %xyzz1 : !affine, !xyzz -> !xyzz
-  %affine4 = elliptic_curve.convert_point_type %xyzz2 : !xyzz -> !affine
-  %xyzz3 = elliptic_curve.convert_point_type %affine4 : !affine -> !xyzz
-  func.call @printG1XyzzMont(%xyzz3) : (!xyzz) -> ()
+  %xyzz2 = elliptic_curve.add %affine3, %xyzz1 : !affinem, !xyzzm -> !xyzzm
+  %affine4 = elliptic_curve.convert_point_type %xyzz2 : !xyzzm -> !affinem
+  %xyzz3 = elliptic_curve.convert_point_type %affine4 : !affinem -> !xyzzm
+  func.call @printG1XyzzMont(%xyzz3) : (!xyzzm) -> ()
 
   return
 }

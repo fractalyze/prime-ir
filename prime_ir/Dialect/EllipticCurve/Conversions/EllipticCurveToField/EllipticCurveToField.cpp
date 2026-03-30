@@ -24,7 +24,6 @@ limitations under the License.
 #include "mlir/Support/LogicalResult.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/ConversionUtils.h"
-#include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/IntrinsicFunctionGenerator.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/MSM/Pippengers/Generic.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PairingOperations/PairingCodeGen.h"
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/PointOperations/PointCodeGen.h"
@@ -35,11 +34,87 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/BitSerialAlgorithm.h"
 #include "prime_ir/Utils/ConversionUtils.h"
+#include "prime_ir/Utils/LoweringMode.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
 #define GEN_PASS_DEF_ELLIPTICCURVETOFIELD
 #include "prime_ir/Dialect/EllipticCurve/Conversions/EllipticCurveToField/EllipticCurveToField.h.inc"
+
+// ---- AOT Runtime helpers ----
+
+static llvm::StringRef pointKindToString(PointKind kind) {
+  switch (kind) {
+  case PointKind::kAffine:
+    return "affine";
+  case PointKind::kJacobian:
+    return "jacobian";
+  case PointKind::kXYZZ:
+    return "xyzz";
+  }
+  llvm_unreachable("unknown PointKind");
+}
+
+// Return "_mont" suffix if the field uses Montgomery form, else "".
+static std::string getMontSuffix(Type baseFieldType) {
+  return field::isMontgomery(baseFieldType) ? "_mont" : "";
+}
+
+// Build AOT runtime function name from curve alias and point kind.
+// Example: "ec_add_bn254_g1_xyzz", "ec_add_bn254_g2_xyzz_mont"
+static std::optional<std::string> getAOTRuntimeFuncName(llvm::StringRef op,
+                                                        Type pointType) {
+  auto pti = dyn_cast<PointTypeInterface>(pointType);
+  if (!pti)
+    return std::nullopt;
+
+  auto curveAttr = dyn_cast<ShortWeierstrassAttr>(pti.getCurveAttr());
+  if (!curveAttr)
+    return std::nullopt;
+  auto alias = getKnownCurveAlias(curveAttr);
+  if (!alias)
+    return std::nullopt;
+
+  return ("ec_" + op + "_" + *alias + "_" +
+          pointKindToString(pti.getPointKind()) +
+          getMontSuffix(pti.getBaseFieldType()))
+      .str();
+}
+
+// Build AOT runtime name for point type conversions.
+// Example: "ec_jacobian_to_affine_bn254_g1", "ec_xyzz_to_affine_bn254_g2_mont"
+static std::optional<std::string>
+getConvertFuncName(PointTypeInterface inputPti, PointTypeInterface outputPti) {
+  auto curveAttr = dyn_cast<ShortWeierstrassAttr>(inputPti.getCurveAttr());
+  if (!curveAttr)
+    return std::nullopt;
+  auto alias = getKnownCurveAlias(curveAttr);
+  if (!alias)
+    return std::nullopt;
+
+  return ("ec_" + pointKindToString(inputPti.getPointKind()) + "_to_" +
+          pointKindToString(outputPti.getPointKind()) + "_" + *alias +
+          getMontSuffix(inputPti.getBaseFieldType()))
+      .str();
+}
+
+// Check if AOTRuntime should be used for this operation.
+// When inlineConstOps is true, ops with 2+ operands where at least one is
+// constant skip AOT to allow constant folding / strength reduction.
+static bool shouldUseAOTRuntime(Operation *op, Type pointType,
+                                LoweringMode mode, bool inlineConstOps) {
+  if (mode == LoweringMode::Inline)
+    return false;
+  if (inlineConstOps && hasConstantOperand(op))
+    return false;
+  if (mode == LoweringMode::AOTRuntime)
+    return true;
+  // Auto: AOT for extension field curves (G2), inline for prime field (G1)
+  auto pti = dyn_cast<PointTypeInterface>(pointType);
+  if (!pti)
+    return false;
+  return isa<field::ExtensionFieldType>(pti.getBaseFieldType());
+}
 
 struct ConvertConstant : public OpConversionPattern<ConstantOp> {
   explicit ConvertConstant(MLIRContext *context)
@@ -182,37 +257,75 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
 
 struct ConvertConvertPointType
     : public OpConversionPattern<ConvertPointTypeOp> {
-  explicit ConvertConvertPointType(MLIRContext *context)
-      : OpConversionPattern<ConvertPointTypeOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  explicit ConvertConvertPointType(MLIRContext *context,
+                                   AOTConfig aotConfig = {})
+      : OpConversionPattern<ConvertPointTypeOp>(context), aotConfig(aotConfig) {
+  }
 
   LogicalResult
   matchAndRewrite(ConvertPointTypeOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Type inputType = op.getInput().getType();
+    Type outputType = getElementTypeOrSelf(op.getType());
+
+    // AOT runtime path for point type conversions.
+    if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                            aotConfig.inlineConstOps)) {
+      auto inputPti = cast<PointTypeInterface>(inputType);
+      auto outputPti = cast<PointTypeInterface>(outputType);
+      auto funcName = getConvertFuncName(inputPti, outputPti);
+      if (funcName) {
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
+                                               {op.getInput()}, rewriter));
+        return success();
+      }
+    }
+
+    // Inline path.
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ScopedBuilderContext scopedBuilderContext(&b);
 
-    Type inputType = op.getInput().getType();
     PointCodeGen inputCodeGen(inputType, adaptor.getInput());
-    Type outputType = getElementTypeOrSelf(op.getType());
-    PointKind outputKind = cast<PointTypeInterface>(outputType).getPointKind();
-    rewriter.replaceOp(op, {inputCodeGen.convert(outputKind)});
+    PointKind outKind = cast<PointTypeInterface>(outputType).getPointKind();
+    rewriter.replaceOp(op, {inputCodeGen.convert(outKind)});
     return success();
   }
+
+  AOTConfig aotConfig;
 };
 
 ///////////// POINT ARITHMETIC OPERATIONS //////////////
 
 struct ConvertAdd : public OpConversionPattern<AddOp> {
-  explicit ConvertAdd(MLIRContext *context)
-      : OpConversionPattern<AddOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  explicit ConvertAdd(MLIRContext *context, AOTConfig aotConfig = {})
+      : OpConversionPattern<AddOp>(context), aotConfig(aotConfig) {}
 
   LogicalResult
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Type outputType = getElementTypeOrSelf(op.getType());
+
+    // AOT runtime path: emit func.call for known curves.
+    if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                            aotConfig.inlineConstOps)) {
+      Type lhsType = getElementTypeOrSelf(op->getOperandTypes()[0]);
+      Type rhsType = getElementTypeOrSelf(op->getOperandTypes()[1]);
+      // Determine function name based on types.
+      std::string opName;
+      if (lhsType == rhsType)
+        opName = "add";
+      else
+        opName = "mixed_add";
+      auto funcName = getAOTRuntimeFuncName(opName, outputType);
+      if (funcName) {
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
+                                               {op.getLhs(), op.getRhs()},
+                                               rewriter));
+        return success();
+      }
+    }
+
+    // Inline path (original).
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ScopedBuilderContext scopedBuilderContext(&b);
 
@@ -220,32 +333,44 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
     PointCodeGen lhsCodeGen(lhsPointType, adaptor.getLhs());
     Type rhsPointType = getElementTypeOrSelf(op->getOperandTypes()[1]);
     PointCodeGen rhsCodeGen(rhsPointType, adaptor.getRhs());
-    Type outputType = getElementTypeOrSelf(op.getType());
     PointKind outputKind = cast<PointTypeInterface>(outputType).getPointKind();
     rewriter.replaceOp(op, {lhsCodeGen.add(rhsCodeGen, outputKind)});
     return success();
   }
+
+  AOTConfig aotConfig;
 };
 
 struct ConvertDouble : public OpConversionPattern<DoubleOp> {
-  explicit ConvertDouble(MLIRContext *context)
-      : OpConversionPattern<DoubleOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  explicit ConvertDouble(MLIRContext *context, AOTConfig aotConfig = {})
+      : OpConversionPattern<DoubleOp>(context), aotConfig(aotConfig) {}
 
   LogicalResult
   matchAndRewrite(DoubleOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    Type outputType = getElementTypeOrSelf(op.getType());
+
+    if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                            aotConfig.inlineConstOps)) {
+      auto funcName = getAOTRuntimeFuncName("double", outputType);
+      if (funcName) {
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
+                                               {op.getInput()}, rewriter));
+        return success();
+      }
+    }
+
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ScopedBuilderContext scopedBuilderContext(&b);
 
     Type inputType = op.getInput().getType();
     PointCodeGen inputCodeGen(inputType, adaptor.getInput());
-    Type outputType = getElementTypeOrSelf(op.getType());
     PointKind outputKind = cast<PointTypeInterface>(outputType).getPointKind();
     rewriter.replaceOp(op, {inputCodeGen.dbl(outputKind)});
     return success();
   }
+
+  AOTConfig aotConfig;
 };
 
 struct ConvertNegate : public OpConversionPattern<NegateOp> {
@@ -361,11 +486,8 @@ Value fieldPrimeToInteger(ImplicitLocOpBuilder &b, Value fieldVal) {
 // Currently implements Double-and-Add algorithm
 // TODO(ashjeong): implement GLV
 struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
-  ConvertScalarMul(MLIRContext *context,
-                   IntrinsicFunctionGenerator *generator = nullptr,
-                   LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<ScalarMulOp>(context), generator(generator),
-        mode(mode) {}
+  explicit ConvertScalarMul(MLIRContext *context, AOTConfig aotConfig = {})
+      : OpConversionPattern<ScalarMulOp>(context), aotConfig(aotConfig) {}
 
   LogicalResult
   matchAndRewrite(ScalarMulOp op, OpAdaptor adaptor,
@@ -378,13 +500,18 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     Type pointType = op.getPoint().getType();
     Type outputType = op.getType();
 
-    // Use intrinsic for complex cases (G2 points, etc.)
-    if (generator &&
-        IntrinsicFunctionGenerator::shouldUseIntrinsic(op, pointType, mode)) {
-      Value result = generator->emitScalarMulCall(
-          rewriter, op.getLoc(), pointType, outputType, point, scalarPF);
-      rewriter.replaceOp(op, result);
-      return success();
+    // AOT runtime path: emit func.call for scalar multiply.
+    // Use "scalar_mul" for affine input, "scalar_mul_jac" for jacobian input.
+    if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                            aotConfig.inlineConstOps)) {
+      std::string opName =
+          isa<AffineType>(pointType) ? "scalar_mul" : "scalar_mul_jac";
+      auto funcName = getAOTRuntimeFuncName(opName, outputType);
+      if (funcName) {
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
+                                               {scalarPF, point}, rewriter));
+        return success();
+      }
     }
 
     // Inline implementation: Double-and-Add algorithm
@@ -407,8 +534,7 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
   }
 
 private:
-  IntrinsicFunctionGenerator *generator;
-  LoweringMode mode;
+  AOTConfig aotConfig;
 };
 
 // Currently implements Pippenger's
@@ -493,25 +619,6 @@ void EllipticCurveToField::runOnOperation() {
   // Parse lowering mode option
   LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
 
-  // Create intrinsic function generator if needed
-  std::unique_ptr<IntrinsicFunctionGenerator> intrinsicGenerator;
-  if (mode != LoweringMode::Inline) {
-    intrinsicGenerator = std::make_unique<IntrinsicFunctionGenerator>(module);
-
-    // Pre-create intrinsic functions before conversion so their body ops are
-    // part of the module when applyPartialConversion builds its worklist.
-    // Without this, getOrCreateScalarMulFunction creates functions during
-    // pattern matching via a plain OpBuilder, so the ScalarMulOp inside the
-    // intrinsic body is never added to the worklist and remains unconverted.
-    module.walk([&](ScalarMulOp op) {
-      Type pointType = op.getPoint().getType();
-      if (IntrinsicFunctionGenerator::shouldUseIntrinsic(op, pointType, mode)) {
-        intrinsicGenerator->getOrCreateScalarMulFunction(
-            op.getType(), op.getScalar().getType());
-      }
-    });
-  }
-
   ConversionTarget target(*context);
   target.addIllegalOp<
       // clang-format off
@@ -558,8 +665,12 @@ void EllipticCurveToField::runOnOperation() {
   linalg::populateLinalgNamedOpsGeneralizationPatterns(patterns);
   rewrites::populateWithGenerated(patterns);
 
-  // Register ConvertScalarMul with intrinsic mode support
-  patterns.add<ConvertScalarMul>(context, intrinsicGenerator.get(), mode);
+  // Register patterns with mode-aware lowering (inline vs AOT runtime).
+  patterns.add<ConvertScalarMul>(context, AOTConfig{mode, inlineConstantOps});
+  patterns.add<ConvertAdd>(context, AOTConfig{mode, inlineConstantOps});
+  patterns.add<ConvertDouble>(context, AOTConfig{mode, inlineConstantOps});
+  patterns.add<ConvertConvertPointType>(context,
+                                        AOTConfig{mode, inlineConstantOps});
   // NOTE: We intentionally do NOT add function signature conversion patterns.
   // Converting function signatures would require converting all operations that
   // use EC tensor types (e.g., linalg.reduce), which is beyond the scope of
@@ -568,11 +679,8 @@ void EllipticCurveToField::runOnOperation() {
 
   patterns.add<
       // clang-format off
-      ConvertAdd,
       ConvertConstant,
       ConvertCmp,
-      ConvertConvertPointType,
-      ConvertDouble,
       ConvertIsZero,
       ConvertMSM,
       ConvertNegate,

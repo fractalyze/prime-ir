@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_defs.mlir %S/../../bn254_ec_mont_helpers.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | prime-ir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_pairing_check -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t
@@ -37,14 +37,14 @@ func.func @test_pairing_check() {
   // G1 generator: (1, 2)
   %g1x = field.constant 1 : !PFm
   %g1y = field.constant 2 : !PFm
-  %g1 = elliptic_curve.from_coords %g1x, %g1y : (!PFm, !PFm) -> !affine
+  %g1 = elliptic_curve.from_coords %g1x, %g1y : (!PFm, !PFm) -> !affinem
 
   // G2 generator coordinates
   %g2x = field.constant [10857046999023057135944570762232829481370756359578518086990519993285655852781,
                           11559732032986387107991004021392285783925812861821192530917403151452391805634] : !QFm
   %g2y = field.constant [8495653923123431417604973247489272438418190587263600148770280649306958101930,
                           4082367875863433681332203403145435568316851327593401208105741076214120093531] : !QFm
-  %g2 = elliptic_curve.from_coords %g2x, %g2y : (!QFm, !QFm) -> !g2affine
+  %g2 = elliptic_curve.from_coords %g2x, %g2y : (!QFm, !QFm) -> !g2affinem
 
   // Scalars
   %s3 = field.constant 3 : !SFm
@@ -52,27 +52,27 @@ func.func @test_pairing_check() {
   %s15 = field.constant 15 : !SFm
 
   // P1 = 3·G1 (affine)
-  %p1_jac = elliptic_curve.scalar_mul %s3, %g1 : !SFm, !affine -> !jacobian
-  %p1 = elliptic_curve.convert_point_type %p1_jac : !jacobian -> !affine
+  %p1_jac = elliptic_curve.scalar_mul %s3, %g1 : !SFm, !affinem -> !jacobianm
+  %p1 = elliptic_curve.convert_point_type %p1_jac : !jacobianm -> !affinem
 
   // P2 = 15·G1 (affine)
-  %p2_jac = elliptic_curve.scalar_mul %s15, %g1 : !SFm, !affine -> !jacobian
-  %p2 = elliptic_curve.convert_point_type %p2_jac : !jacobian -> !affine
+  %p2_jac = elliptic_curve.scalar_mul %s15, %g1 : !SFm, !affinem -> !jacobianm
+  %p2 = elliptic_curve.convert_point_type %p2_jac : !jacobianm -> !affinem
 
   // Q1 = 5·G2 (affine)
-  %q1_jac = elliptic_curve.scalar_mul %s5, %g2 : !SFm, !g2affine -> !g2jacobian
-  %q1 = elliptic_curve.convert_point_type %q1_jac : !g2jacobian -> !g2affine
+  %q1_jac = elliptic_curve.scalar_mul %s5, %g2 : !SFm, !g2affinem -> !g2jacobianm
+  %q1 = elliptic_curve.convert_point_type %q1_jac : !g2jacobianm -> !g2affinem
 
   // Q2 = -G2 (affine)
-  %neg_g2 = elliptic_curve.negate %g2 : !g2affine
+  %neg_g2 = elliptic_curve.negate %g2 : !g2affinem
 
   // Build tensors
-  %g1_pts = tensor.from_elements %p1, %p2 : tensor<2x!affine>
-  %g2_pts = tensor.from_elements %q1, %neg_g2 : tensor<2x!g2affine>
+  %g1_pts = tensor.from_elements %p1, %p2 : tensor<2x!affinem>
+  %g2_pts = tensor.from_elements %q1, %neg_g2 : tensor<2x!g2affinem>
 
   // Pairing check: e(3·G1, 5·G2) * e(15·G1, -G2) = 1 → true
   %result = elliptic_curve.pairing_check %g1_pts, %g2_pts
-      : tensor<2x!affine>, tensor<2x!g2affine> -> i1
+      : tensor<2x!affinem>, tensor<2x!g2affinem> -> i1
 
   func.call @printI1(%result) : (i1) -> ()
   return

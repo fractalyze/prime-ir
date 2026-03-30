@@ -27,16 +27,10 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
 
     The `lowering-mode` option controls how operations are lowered:
     - `inline` (default): All operations are expanded inline.
-    - `intrinsic`: Complex operations (quartic extension field mul/square/inverse)
-      are lowered to function calls instead of inline expansion.
-    - `auto`: Uses heuristics to decide - quartic (degree >= 4) operations use
-      intrinsic mode, while simpler operations are inlined.
-
-    The intrinsic mode is useful for:
-    - Reducing code size for complex operations (Toom-Cook generates many ops)
-    - Avoiding NVPTX code generation issues with large aggregate returns
-      (See https://github.com/fractalyze/zkx/issues/84)
-    - Maintaining control flow for debugging
+    - `aot_runtime`: Extension field ops (degree >= 2, >64-bit prime) are
+      lowered to func.call to pre-compiled AOT runtime functions.
+    - `auto`: Uses heuristics — AOT for qualifying extension fields, inline
+      for prime fields and small extension fields.
   }];
   let dependentDialects = [
     "arith::ArithDialect",
@@ -50,7 +44,11 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
   let options = [
     Option<"loweringMode", "lowering-mode", "std::string",
            /*default=*/"\"inline\"",
-           "Lowering mode: 'inline' (default), 'intrinsic', or 'auto'">,
+           "Lowering mode: 'inline' (default), 'auto', or 'aot_runtime'">,
+    Option<"inlineConstantOps", "inline-constant-ops", "bool",
+           /*default=*/"true",
+           "When true, ops with 2+ operands where at least one is constant "
+           "skip AOT and are inlined for constant folding/strength reduction.">,
   ];
 }
 
