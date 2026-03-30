@@ -16,7 +16,7 @@
 """Wrappers around pywrap rules for PrimeIR."""
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 load(
     "//third_party/rules_pywrap:pywrap.impl.bzl",
     "pybind_extension",
@@ -42,10 +42,10 @@ def nanobind_pywrap_extension(
     lib_name = name + "_pywrap_library"
     src_cc_name = name + "_pywrap_stub.c"
 
-    # We put the entire contents of the extension in a single cc_library, which will become part of
+    # We put the entire contents of the extension in a single prime_ir_cc_library, which will become part of
     # the common pywrap library. All the contents of all extensions will end up in the common
     # library.
-    cc_library(
+    prime_ir_cc_library(
         name = lib_name,
         srcs = srcs,
         copts = copts,

@@ -13,13 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 
-load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_binary")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_binary(
+prime_ir_cc_binary(
     name = "prime-ir-lsp",
     srcs = ["prime-ir-lsp.cpp"],
     deps = [
@@ -34,7 +34,7 @@ cc_binary(
     ],
 )
 
-cc_binary(
+prime_ir_cc_binary(
     name = "prime-ir-opt",
     srcs = ["prime-ir-opt.cpp"],
     deps = [

@@ -61,7 +61,9 @@ public:
 private:
   // Creates a properly typed constant for the modulus based on the input type.
   // Handles splatting for vector types automatically.
-  Value createModulusConst(Type inputType);
+  // For dynamic tensor shapes, inputValue is used to extract runtime dims
+  // for the linalg.fill broadcast pattern.
+  Value createModulusConst(Type inputType, Value inputValue = {});
 
   // Single-limb REDC: modulus fits in one machine word.
   // When lazy is true, skips the final conditional subtraction and returns

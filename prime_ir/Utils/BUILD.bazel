@@ -14,13 +14,13 @@
 # ==============================================================================
 
 load("@llvm-project//mlir:tblgen.bzl", "td_library")
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "APIntUtils",
     srcs = ["APIntUtils.cpp"],
     hdrs = ["APIntUtils.h"],
@@ -29,7 +29,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "AssemblyFormatUtils",
     srcs = ["AssemblyFormatUtils.cpp"],
     hdrs = ["AssemblyFormatUtils.h"],
@@ -40,7 +40,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "BitcastOpUtils",
     hdrs = ["BitcastOpUtils.h"],
     deps = [
@@ -49,7 +49,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "BufferizationUtils",
     hdrs = ["BufferizationUtils.h"],
     deps = [
@@ -60,7 +60,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "BuilderContext",
     hdrs = ["BuilderContext.h"],
     deps = [
@@ -93,7 +93,7 @@ td_library(
     deps = ["@llvm-project//mlir:OpBaseTdFiles"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ConstantFolder",
     hdrs = ["ConstantFolder.h"],
     deps = [
@@ -102,12 +102,12 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "CanonicalizationPatterns",
     hdrs = ["CanonicalizationPatterns.inc"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ControlFlowOperation",
     srcs = ["ControlFlowOperation.cpp"],
     hdrs = ["ControlFlowOperation.h"],
@@ -121,7 +121,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ConversionUtils",
     srcs = ["ConversionUtils.cpp"],
     hdrs = ["ConversionUtils.h"],
@@ -137,7 +137,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "KnownModulus",
     srcs = ["KnownModulus.cpp"],
     hdrs = ["KnownModulus.h"],
@@ -149,7 +149,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "OpUtils",
     srcs = ["OpUtils.cpp"],
     hdrs = ["OpUtils.h"],
@@ -158,7 +158,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "Power",
     hdrs = ["Power.h"],
     deps = [
@@ -169,7 +169,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ShapedTypeConverter",
     srcs = ["ShapedTypeConverter.cpp"],
     hdrs = ["ShapedTypeConverter.h"],
@@ -178,7 +178,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "SimpleStructBuilder",
     srcs = ["SimpleStructBuilder.cpp"],
     hdrs = ["SimpleStructBuilder.h"],
@@ -189,7 +189,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ZkDtypes",
     hdrs = ["ZkDtypes.h"],
     deps = [
@@ -198,7 +198,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "IntrinsicFunctionGeneratorBase",
     hdrs = ["IntrinsicFunctionGeneratorBase.h"],
     deps = [
@@ -208,7 +208,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "LoweringMode",
     hdrs = ["LoweringMode.h"],
     deps = [
@@ -216,7 +216,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "BitSerialAlgorithm",
     srcs = ["BitSerialAlgorithm.cpp"],
     hdrs = ["BitSerialAlgorithm.h"],

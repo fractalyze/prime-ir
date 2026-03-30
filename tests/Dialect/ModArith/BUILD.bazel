@@ -13,8 +13,8 @@
 # limitations under the License.
 # ==============================================================================
 
-load("@rules_cc//cc:defs.bzl", "cc_test")
 load("//bazel:lit.bzl", "glob_lit_tests")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_test")
 
 glob_lit_tests(
     name = "all_tests",
@@ -23,7 +23,7 @@ glob_lit_tests(
     test_file_exts = ["mlir"],
 )
 
-cc_test(
+prime_ir_cc_test(
     name = "ModArithOperationTest",
     srcs = ["ModArithOperationTest.cpp"],
     deps = [
@@ -38,7 +38,7 @@ cc_test(
     ],
 )
 
-cc_test(
+prime_ir_cc_test(
     name = "BitcastOpTest",
     srcs = ["BitcastOpTest.cpp"],
     deps = [

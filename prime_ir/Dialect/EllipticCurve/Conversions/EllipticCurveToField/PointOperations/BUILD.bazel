@@ -13,13 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "FieldCodeGen",
     srcs = ["FieldCodeGen.cpp"],
     hdrs = ["FieldCodeGen.h"],
@@ -34,7 +34,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PointCodeGen",
     srcs = ["PointCodeGen.cpp"],
     hdrs = ["PointCodeGen.h"],
@@ -55,7 +55,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PointCodeGenBaseForward",
     hdrs = ["PointCodeGenBaseForward.h"],
     deps = ["//prime_ir/Dialect/EllipticCurve/IR:PointKind"],

@@ -13,13 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "MontReducer",
     srcs = ["MontReducer.cpp"],
     hdrs = ["MontReducer.h"],
@@ -27,6 +27,8 @@ cc_library(
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "@llvm-project//mlir:ArithDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LinalgDialect",
         "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
     ],
 )

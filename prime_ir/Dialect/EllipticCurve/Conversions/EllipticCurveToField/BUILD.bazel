@@ -14,13 +14,13 @@
 # ==============================================================================
 
 load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "FieldDialectArithmetic",
     hdrs = ["FieldDialectArithmetic.h"],
     deps = [
@@ -30,7 +30,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ConversionUtils",
     srcs = ["ConversionUtils.cpp"],
     hdrs = ["ConversionUtils.h"],
@@ -41,7 +41,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "IntrinsicFunctionGenerator",
     srcs = ["IntrinsicFunctionGenerator.cpp"],
     hdrs = ["IntrinsicFunctionGenerator.h"],
@@ -56,7 +56,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "EllipticCurveToField",
     srcs = ["EllipticCurveToField.cpp"],
     hdrs = [
