@@ -82,6 +82,13 @@ static bool shouldUseFieldAOTRuntime(Operation *op, Type fieldType,
   bool expensive = degree >= 4 || primeBits > 64;
   if (!expensive)
     return false;
+  // Skip AOT for mixed-type operations (e.g., PF × EF). AOT functions expect
+  // homogeneous types, and inline expansion is actually more efficient for
+  // scalar broadcast anyway.
+  for (Value operand : op->getOperands()) {
+    if (getElementTypeOrSelf(operand.getType()) != fieldType)
+      return false;
+  }
   return mode == LoweringMode::AOTRuntime || mode == LoweringMode::Auto;
 }
 

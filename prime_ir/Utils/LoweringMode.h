@@ -32,8 +32,8 @@ enum class LoweringMode {
   /// Use heuristics to decide based on complexity.
   Auto,
   /// Use AOT-compiled runtime library for EC/field operations.
-  /// Emits RuntimeCallOp which lowers to external function calls,
-  /// resolved from pre-compiled .o at link time.
+  /// Emits func.call to pre-compiled functions, resolved from
+  /// AOT-compiled .o at link time.
   AOTRuntime
 };
 

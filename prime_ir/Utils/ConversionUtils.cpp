@@ -25,6 +25,7 @@ limitations under the License.
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/SCF/Transforms/Patterns.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OperationSupport.h"
@@ -227,19 +228,52 @@ bool hasConstantOperand(Operation *op) {
 Value emitAOTFuncCall(Operation *op, StringRef funcName, Type resultType,
                       ValueRange operands,
                       ConversionPatternRewriter &rewriter) {
+  auto loc = op->getLoc();
+
+  // Unwrap 0-rank tensor operands to scalar types. AOT runtime functions
+  // operate on scalars, but callers (e.g., cpu_kernel_emitter) may wrap
+  // values in 0-rank tensors.
+  SmallVector<Value> scalarOperands;
+  for (Value operand : operands) {
+    if (auto tensorType = dyn_cast<RankedTensorType>(operand.getType())) {
+      if (tensorType.getRank() == 0) {
+        operand =
+            rewriter.create<tensor::ExtractOp>(loc, operand, ValueRange{});
+      }
+    }
+    scalarOperands.push_back(operand);
+  }
+
+  // Unwrap 0-rank tensor result type.
+  Type scalarResultType = resultType;
+  bool wrapResult = false;
+  if (auto tensorType = dyn_cast<RankedTensorType>(resultType)) {
+    if (tensorType.getRank() == 0) {
+      scalarResultType = tensorType.getElementType();
+      wrapResult = true;
+    }
+  }
+
   auto moduleOp = op->getParentOfType<ModuleOp>();
-  auto funcType =
-      FunctionType::get(op->getContext(), operands.getTypes(), {resultType});
+  auto funcType = FunctionType::get(
+      op->getContext(), llvm::to_vector(ValueRange(scalarOperands).getTypes()),
+      {scalarResultType});
   if (!moduleOp.lookupSymbol<func::FuncOp>(funcName)) {
     OpBuilder::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToStart(moduleOp.getBody());
-    auto funcDecl =
-        rewriter.create<func::FuncOp>(op->getLoc(), funcName, funcType);
+    auto funcDecl = rewriter.create<func::FuncOp>(loc, funcName, funcType);
     funcDecl.setPrivate();
   }
-  auto callOp = rewriter.create<func::CallOp>(op->getLoc(), funcName,
-                                              resultType, operands);
-  return callOp.getResult(0);
+  auto callOp = rewriter.create<func::CallOp>(loc, funcName, scalarResultType,
+                                              scalarOperands);
+  Value result = callOp.getResult(0);
+
+  // Wrap scalar result back into 0-rank tensor.
+  if (wrapResult) {
+    result = rewriter.create<tensor::FromElementsOp>(
+        loc, cast<RankedTensorType>(resultType), result);
+  }
+  return result;
 }
 
 } // namespace mlir::prime_ir
