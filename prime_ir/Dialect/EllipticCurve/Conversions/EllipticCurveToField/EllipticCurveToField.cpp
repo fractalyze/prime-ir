@@ -99,12 +99,16 @@ getConvertFuncName(PointTypeInterface inputPti, PointTypeInterface outputPti) {
 }
 
 // Check if AOTRuntime should be used for this operation.
+// When inlineConstOps is true, ops with 2+ operands where at least one is
+// constant skip AOT to allow constant folding / strength reduction.
 static bool shouldUseAOTRuntime(Operation *op, Type pointType,
-                                LoweringMode mode) {
+                                LoweringMode mode, bool inlineConstOps) {
+  if (mode == LoweringMode::Inline)
+    return false;
+  if (inlineConstOps && hasConstantOperand(op))
+    return false;
   if (mode == LoweringMode::AOTRuntime)
     return true;
-  if (mode != LoweringMode::Auto)
-    return false;
   // Auto: AOT for extension field curves (G2), inline for prime field (G1)
   auto pti = dyn_cast<PointTypeInterface>(pointType);
   if (!pti)
@@ -253,9 +257,10 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
 
 struct ConvertConvertPointType
     : public OpConversionPattern<ConvertPointTypeOp> {
-  ConvertConvertPointType(MLIRContext *context,
-                          LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<ConvertPointTypeOp>(context), mode(mode) {}
+  explicit ConvertConvertPointType(MLIRContext *context,
+                                   AOTConfig aotConfig = {})
+      : OpConversionPattern<ConvertPointTypeOp>(context), aotConfig(aotConfig) {
+  }
 
   LogicalResult
   matchAndRewrite(ConvertPointTypeOp op, OpAdaptor adaptor,
@@ -264,7 +269,8 @@ struct ConvertConvertPointType
     Type outputType = getElementTypeOrSelf(op.getType());
 
     // AOT runtime path for point type conversions.
-    if (shouldUseAOTRuntime(op, outputType, mode)) {
+    if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                            aotConfig.inlineConstOps)) {
       auto inputPti = cast<PointTypeInterface>(inputType);
       auto outputPti = cast<PointTypeInterface>(outputType);
       auto funcName = getConvertFuncName(inputPti, outputPti);
@@ -285,14 +291,14 @@ struct ConvertConvertPointType
     return success();
   }
 
-  LoweringMode mode;
+  AOTConfig aotConfig;
 };
 
 ///////////// POINT ARITHMETIC OPERATIONS //////////////
 
 struct ConvertAdd : public OpConversionPattern<AddOp> {
-  explicit ConvertAdd(MLIRContext *context, LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<AddOp>(context), mode(mode) {}
+  explicit ConvertAdd(MLIRContext *context, AOTConfig aotConfig = {})
+      : OpConversionPattern<AddOp>(context), aotConfig(aotConfig) {}
 
   LogicalResult
   matchAndRewrite(AddOp op, OpAdaptor adaptor,
@@ -300,7 +306,8 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
     Type outputType = getElementTypeOrSelf(op.getType());
 
     // AOT runtime path: emit func.call for known curves.
-    if (shouldUseAOTRuntime(op, outputType, mode)) {
+    if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                            aotConfig.inlineConstOps)) {
       Type lhsType = getElementTypeOrSelf(op->getOperandTypes()[0]);
       Type rhsType = getElementTypeOrSelf(op->getOperandTypes()[1]);
       // Determine function name based on types.
@@ -331,19 +338,20 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
     return success();
   }
 
-  LoweringMode mode;
+  AOTConfig aotConfig;
 };
 
 struct ConvertDouble : public OpConversionPattern<DoubleOp> {
-  explicit ConvertDouble(MLIRContext *context, LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<DoubleOp>(context), mode(mode) {}
+  explicit ConvertDouble(MLIRContext *context, AOTConfig aotConfig = {})
+      : OpConversionPattern<DoubleOp>(context), aotConfig(aotConfig) {}
 
   LogicalResult
   matchAndRewrite(DoubleOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
     Type outputType = getElementTypeOrSelf(op.getType());
 
-    if (shouldUseAOTRuntime(op, outputType, mode)) {
+    if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                            aotConfig.inlineConstOps)) {
       auto funcName = getAOTRuntimeFuncName("double", outputType);
       if (funcName) {
         rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
@@ -362,7 +370,7 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
     return success();
   }
 
-  LoweringMode mode;
+  AOTConfig aotConfig;
 };
 
 struct ConvertNegate : public OpConversionPattern<NegateOp> {
@@ -478,9 +486,8 @@ Value fieldPrimeToInteger(ImplicitLocOpBuilder &b, Value fieldVal) {
 // Currently implements Double-and-Add algorithm
 // TODO(ashjeong): implement GLV
 struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
-  ConvertScalarMul(MLIRContext *context,
-                   LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<ScalarMulOp>(context), mode(mode) {}
+  explicit ConvertScalarMul(MLIRContext *context, AOTConfig aotConfig = {})
+      : OpConversionPattern<ScalarMulOp>(context), aotConfig(aotConfig) {}
 
   LogicalResult
   matchAndRewrite(ScalarMulOp op, OpAdaptor adaptor,
@@ -495,7 +502,8 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
 
     // AOT runtime path: emit func.call for scalar multiply.
     // Use "scalar_mul" for affine input, "scalar_mul_jac" for jacobian input.
-    if (shouldUseAOTRuntime(op, outputType, mode)) {
+    if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                            aotConfig.inlineConstOps)) {
       std::string opName =
           isa<AffineType>(pointType) ? "scalar_mul" : "scalar_mul_jac";
       auto funcName = getAOTRuntimeFuncName(opName, outputType);
@@ -526,7 +534,7 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
   }
 
 private:
-  LoweringMode mode;
+  AOTConfig aotConfig;
 };
 
 // Currently implements Pippenger's
@@ -658,10 +666,11 @@ void EllipticCurveToField::runOnOperation() {
   rewrites::populateWithGenerated(patterns);
 
   // Register patterns with mode-aware lowering (inline vs AOT runtime).
-  patterns.add<ConvertScalarMul>(context, mode);
-  patterns.add<ConvertAdd>(context, mode);
-  patterns.add<ConvertDouble>(context, mode);
-  patterns.add<ConvertConvertPointType>(context, mode);
+  patterns.add<ConvertScalarMul>(context, AOTConfig{mode, inlineConstantOps});
+  patterns.add<ConvertAdd>(context, AOTConfig{mode, inlineConstantOps});
+  patterns.add<ConvertDouble>(context, AOTConfig{mode, inlineConstantOps});
+  patterns.add<ConvertConvertPointType>(context,
+                                        AOTConfig{mode, inlineConstantOps});
   // NOTE: We intentionally do NOT add function signature conversion patterns.
   // Converting function signatures would require converting all operations that
   // use EC tensor types (e.g., linalg.reduce), which is beyond the scope of

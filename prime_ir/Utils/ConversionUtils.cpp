@@ -215,6 +215,15 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
                                                        target);
 }
 
+bool hasConstantOperand(Operation *op) {
+  if (op->getNumOperands() < 2)
+    return false;
+  return llvm::any_of(op->getOperands(), [](Value operand) {
+    auto *defOp = operand.getDefiningOp();
+    return defOp && defOp->hasTrait<OpTrait::ConstantLike>();
+  });
+}
+
 Value emitAOTFuncCall(Operation *op, StringRef funcName, Type resultType,
                       ValueRange operands,
                       ConversionPatternRewriter &rewriter) {

@@ -45,6 +45,10 @@ def EllipticCurveToField : Pass<"elliptic-curve-to-field", "ModuleOp"> {
     Option<"loweringMode", "lowering-mode", "std::string",
            /*default=*/"\"inline\"",
            "Lowering mode: 'inline' (default), 'auto', or 'aot_runtime'">,
+    Option<"inlineConstantOps", "inline-constant-ops", "bool",
+           /*default=*/"true",
+           "When true, ops with 2+ operands where at least one is constant "
+           "skip AOT and are inlined for constant folding/strength reduction.">,
   ];
 }
 

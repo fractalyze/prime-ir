@@ -67,8 +67,10 @@ namespace {
 //   degree >= 4 (quartic+, always expensive regardless of prime size)
 //   OR degree >= 2 AND prime > 64-bit (large-prime quadratic/cubic)
 static bool shouldUseFieldAOTRuntime(Operation *op, Type fieldType,
-                                     LoweringMode mode) {
+                                     LoweringMode mode, bool inlineConstOps) {
   if (mode == LoweringMode::Inline)
+    return false;
+  if (inlineConstOps && hasConstantOperand(op))
     return false;
   auto efType = dyn_cast<ExtensionFieldType>(fieldType);
   if (!efType)
@@ -366,8 +368,8 @@ struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
   using OpAdaptor = typename OpConversionPattern<OpT>::OpAdaptor;
 
   ConvertFieldOpBase(const TypeConverter &converter, MLIRContext *context,
-                     LoweringMode mode = LoweringMode::Inline)
-      : OpConversionPattern<OpT>(converter, context), mode(mode) {
+                     AOTConfig aotConfig = {})
+      : OpConversionPattern<OpT>(converter, context), aotConfig(aotConfig) {
     this->setHasBoundedRewriteRecursion(true);
   }
 
@@ -380,7 +382,8 @@ struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
 
     // AOT runtime path: emit func.call to pre-compiled function.
     Type fieldType = getElementTypeOrSelf(op.getOutput());
-    if (shouldUseFieldAOTRuntime(op, fieldType, mode)) {
+    if (shouldUseFieldAOTRuntime(op, fieldType, aotConfig.mode,
+                                 aotConfig.inlineConstOps)) {
       auto funcName =
           static_cast<const Derived *>(this)->getAOTFuncName(fieldType);
       if (funcName) {
@@ -401,7 +404,7 @@ struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
   }
 
 protected:
-  LoweringMode mode;
+  AOTConfig aotConfig;
 };
 
 /// Lowers field.inverse for both scalar and tensor types.
@@ -890,7 +893,7 @@ void FieldToModArith::runOnOperation() {
       ConvertSquare,
       ConvertSub
       // clang-format on
-      >(typeConverter, context, mode);
+      >(typeConverter, context, AOTConfig{mode, inlineConstantOps});
 
   patterns.add<
       // clang-format off
