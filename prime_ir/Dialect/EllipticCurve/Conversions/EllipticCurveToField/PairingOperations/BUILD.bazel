@@ -13,13 +13,13 @@
 # limitations under the License.
 # ==============================================================================
 
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PairingOutliner",
     hdrs = ["PairingOutliner.h"],
     deps = [
@@ -31,7 +31,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PairingFieldCodeGen",
     srcs = [
         "PairingFieldCodeGen.cpp",
@@ -56,7 +56,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PairingCodeGen",
     srcs = ["PairingCodeGen.cpp"],
     hdrs = ["PairingCodeGen.h"],

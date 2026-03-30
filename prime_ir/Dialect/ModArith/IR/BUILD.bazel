@@ -14,13 +14,13 @@
 # ==============================================================================
 
 load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ModArithHdrs",
     hdrs = [
         "ModArithAttributes.h",
@@ -40,7 +40,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ModArith",
     srcs = [
         "ModArithAttributes.cpp",

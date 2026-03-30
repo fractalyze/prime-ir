@@ -13,26 +13,28 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
+"""RISC-V Witness C++ build macros with project-wide compiler settings."""
 
-package(
-    default_visibility = ["//visibility:public"],
-)
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 
-prime_ir_cc_library(
-    name = "CAPI",
-    srcs = [
-        "EllipticCurveAttributes.cpp",
-        "EllipticCurveDialect.cpp",
-        "EllipticCurveTypes.cpp",
-    ],
-    hdrs = [
-        "EllipticCurveAttributes.h",
-        "EllipticCurveDialect.h",
-        "EllipticCurveTypes.h",
-    ],
-    deps = [
-        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
-        "@llvm-project//mlir:CAPIIR",
-    ],
-)
+_PRIME_IR_COPTS = [
+    "-Werror=all",
+]
+
+def prime_ir_cc_library(copts = [], **kwargs):
+    cc_library(
+        copts = _PRIME_IR_COPTS + copts,
+        **kwargs
+    )
+
+def prime_ir_cc_binary(copts = [], **kwargs):
+    cc_binary(
+        copts = _PRIME_IR_COPTS + copts,
+        **kwargs
+    )
+
+def prime_ir_cc_test(copts = [], **kwargs):
+    cc_test(
+        copts = _PRIME_IR_COPTS + copts,
+        **kwargs
+    )

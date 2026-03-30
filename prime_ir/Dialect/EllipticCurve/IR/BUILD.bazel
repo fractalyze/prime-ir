@@ -14,13 +14,13 @@
 # ==============================================================================
 
 load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library", "td_library")
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "EllipticCurveHdrs",
     hdrs = [
         "EllipticCurveAttributes.h",
@@ -38,7 +38,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "EllipticCurve",
     srcs = [
         "EllipticCurveAttributes.cpp",
@@ -87,19 +87,19 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PointKind",
     hdrs = ["PointKind.h"],
     deps = ["@zk_dtypes//zk_dtypes:point_declarations"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PointOperationBaseForward",
     hdrs = ["PointOperationBaseForward.h"],
     deps = [":PointKind"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PointOperationSelector",
     hdrs = ["PointOperationSelector.h"],
     deps = [

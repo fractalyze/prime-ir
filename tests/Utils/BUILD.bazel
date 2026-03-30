@@ -1,6 +1,6 @@
-load("@rules_cc//cc:defs.bzl", "cc_test")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_test")
 
-cc_test(
+prime_ir_cc_test(
     name = "BitSerialAlgorithmTest",
     srcs = ["BitSerialAlgorithmTest.cpp"],
     deps = [

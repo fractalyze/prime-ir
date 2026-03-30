@@ -14,13 +14,13 @@
 # ==============================================================================
 
 load("@llvm-project//mlir:tblgen.bzl", "gentbl_cc_library")
-load("@rules_cc//cc:defs.bzl", "cc_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ConversionUtils",
     srcs = ["ConversionUtils.cpp"],
     hdrs = ["ConversionUtils.h"],
@@ -33,7 +33,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "ExtensionFieldCodeGen",
     srcs = ["ExtensionFieldCodeGen.cpp"],
     hdrs = [
@@ -52,7 +52,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "FieldCodeGen",
     srcs = ["FieldCodeGen.cpp"],
     hdrs = ["FieldCodeGen.h"],
@@ -67,7 +67,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "IntrinsicFunctionGenerator",
     srcs = ["IntrinsicFunctionGenerator.cpp"],
     hdrs = ["IntrinsicFunctionGenerator.h"],
@@ -81,7 +81,7 @@ cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "FieldToModArith",
     srcs = ["FieldToModArith.cpp"],
     hdrs = [
@@ -141,7 +141,7 @@ gentbl_cc_library(
     ],
 )
 
-cc_library(
+prime_ir_cc_library(
     name = "PrimeFieldCodeGen",
     srcs = ["PrimeFieldCodeGen.cpp"],
     hdrs = ["PrimeFieldCodeGen.h"],
