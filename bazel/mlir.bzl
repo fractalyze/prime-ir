@@ -157,7 +157,6 @@ def prime_ir_mlir_cc_import(name, mlir_src, prime_ir_opt_flags = [], llc_flags =
     cc_import(
         name = name,
         objects = [generated_obj_name],
-        data = [generated_obj_name],
         tags = tags,
         alwayslink = True,
         **kwargs

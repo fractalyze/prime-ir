@@ -97,6 +97,12 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
                                      RewritePatternSet &patterns,
                                      ConversionTarget &target);
 
+// Emit a func.call to an AOT-compiled function, declaring it as
+// func.func private if not already present. Returns the call result.
+// Used by both EllipticCurveToField and FieldToModArith AOT paths.
+Value emitAOTFuncCall(Operation *op, StringRef funcName, Type resultType,
+                      ValueRange operands, ConversionPatternRewriter &rewriter);
+
 } // namespace mlir::prime_ir
 
 #endif // PRIME_IR_UTILS_CONVERSIONUTILS_H_

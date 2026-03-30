@@ -25,6 +25,7 @@ limitations under the License.
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/SCF/Transforms/Patterns.h"
+#include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/PatternMatch.h"
@@ -212,6 +213,24 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
 
   scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
                                                        target);
+}
+
+Value emitAOTFuncCall(Operation *op, StringRef funcName, Type resultType,
+                      ValueRange operands,
+                      ConversionPatternRewriter &rewriter) {
+  auto moduleOp = op->getParentOfType<ModuleOp>();
+  auto funcType =
+      FunctionType::get(op->getContext(), operands.getTypes(), {resultType});
+  if (!moduleOp.lookupSymbol<func::FuncOp>(funcName)) {
+    OpBuilder::InsertionGuard guard(rewriter);
+    rewriter.setInsertionPointToStart(moduleOp.getBody());
+    auto funcDecl =
+        rewriter.create<func::FuncOp>(op->getLoc(), funcName, funcType);
+    funcDecl.setPrivate();
+  }
+  auto callOp = rewriter.create<func::CallOp>(op->getLoc(), funcName,
+                                              resultType, operands);
+  return callOp.getResult(0);
 }
 
 } // namespace mlir::prime_ir

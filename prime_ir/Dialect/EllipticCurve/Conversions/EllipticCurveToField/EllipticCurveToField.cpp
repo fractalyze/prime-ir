@@ -112,26 +112,6 @@ static bool shouldUseAOTRuntime(Operation *op, Type pointType,
   return isa<field::ExtensionFieldType>(pti.getBaseFieldType());
 }
 
-// Emit a func.call to an AOT-compiled function, declaring it as
-// func.func private if not already present. Returns the call result.
-static Value emitAOTFuncCall(Operation *op, StringRef funcName, Type resultType,
-                             ValueRange operands,
-                             ConversionPatternRewriter &rewriter) {
-  auto moduleOp = op->getParentOfType<ModuleOp>();
-  auto funcType =
-      FunctionType::get(op->getContext(), operands.getTypes(), {resultType});
-  if (!moduleOp.lookupSymbol<func::FuncOp>(funcName)) {
-    OpBuilder::InsertionGuard guard(rewriter);
-    rewriter.setInsertionPointToStart(moduleOp.getBody());
-    auto funcDecl =
-        rewriter.create<func::FuncOp>(op->getLoc(), funcName, funcType);
-    funcDecl.setPrivate();
-  }
-  auto callOp = rewriter.create<func::CallOp>(op->getLoc(), funcName,
-                                              resultType, operands);
-  return callOp.getResult(0);
-}
-
 struct ConvertConstant : public OpConversionPattern<ConstantOp> {
   explicit ConvertConstant(MLIRContext *context)
       : OpConversionPattern<ConstantOp>(context) {}
@@ -289,8 +269,8 @@ struct ConvertConvertPointType
       auto outputPti = cast<PointTypeInterface>(outputType);
       auto funcName = getConvertFuncName(inputPti, outputPti);
       if (funcName) {
-        rewriter.replaceOp(op, emitAOTFuncCall(
-            op, *funcName, op.getType(), {op.getInput()}, rewriter));
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
+                                               {op.getInput()}, rewriter));
         return success();
       }
     }
@@ -331,8 +311,9 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
         opName = "mixed_add";
       auto funcName = getAOTRuntimeFuncName(opName, outputType);
       if (funcName) {
-        rewriter.replaceOp(op, emitAOTFuncCall(
-            op, *funcName, op.getType(), {op.getLhs(), op.getRhs()}, rewriter));
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
+                                               {op.getLhs(), op.getRhs()},
+                                               rewriter));
         return success();
       }
     }
@@ -365,8 +346,8 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
     if (shouldUseAOTRuntime(op, outputType, mode)) {
       auto funcName = getAOTRuntimeFuncName("double", outputType);
       if (funcName) {
-        rewriter.replaceOp(op, emitAOTFuncCall(
-            op, *funcName, op.getType(), {op.getInput()}, rewriter));
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
+                                               {op.getInput()}, rewriter));
         return success();
       }
     }
@@ -519,8 +500,8 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
           isa<AffineType>(pointType) ? "scalar_mul" : "scalar_mul_jac";
       auto funcName = getAOTRuntimeFuncName(opName, outputType);
       if (funcName) {
-        rewriter.replaceOp(op, emitAOTFuncCall(
-            op, *funcName, op.getType(), {scalarPF, point}, rewriter));
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
+                                               {scalarPF, point}, rewriter));
         return success();
       }
     }

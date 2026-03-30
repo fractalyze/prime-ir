@@ -378,24 +378,15 @@ struct ConvertFieldOpBase : public OpConversionPattern<OpT> {
         isa<ExtensionFieldType>(getElementTypeOrSelf(op.getOutput())))
       return failure();
 
-    // AOT runtime path: emit direct func.call to pre-compiled function.
+    // AOT runtime path: emit func.call to pre-compiled function.
     Type fieldType = getElementTypeOrSelf(op.getOutput());
     if (shouldUseFieldAOTRuntime(op, fieldType, mode)) {
       auto funcName =
           static_cast<const Derived *>(this)->getAOTFuncName(fieldType);
       if (funcName) {
-        auto moduleOp = op->template getParentOfType<ModuleOp>();
-        auto funcType = FunctionType::get(
-            op->getContext(), op->getOperandTypes(), op->getResultTypes());
-        if (!moduleOp.template lookupSymbol<func::FuncOp>(*funcName)) {
-          OpBuilder::InsertionGuard guard(rewriter);
-          rewriter.setInsertionPointToStart(moduleOp.getBody());
-          auto funcDecl =
-              rewriter.create<func::FuncOp>(op->getLoc(), *funcName, funcType);
-          funcDecl.setPrivate();
-        }
-        rewriter.replaceOpWithNewOp<func::CallOp>(
-            op, *funcName, op->getResultTypes(), op->getOperands());
+        rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName,
+                                               op.getOutput().getType(),
+                                               op->getOperands(), rewriter));
         return success();
       }
     }
