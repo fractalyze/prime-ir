@@ -13,41 +13,41 @@
 // limitations under the License.
 // ==============================================================================
 
-func.func @printG1AffineMont(%affine: !affine) {
+func.func @printG1AffineMont(%affine: !affinem) {
   %c0 = arith.constant 0 : index
-  %affine_memref = memref.alloca() : memref<1x!affine>
-  memref.store %affine, %affine_memref[%c0] : memref<1x!affine>
-  %affine_memref_cast = memref.cast %affine_memref : memref<1x!affine> to memref<*x!affine>
-  func.call @printMemrefG1AffineMont(%affine_memref_cast) : (memref<*x!affine>) -> ()
+  %affine_memref = memref.alloca() : memref<1x!affinem>
+  memref.store %affine, %affine_memref[%c0] : memref<1x!affinem>
+  %affine_memref_cast = memref.cast %affine_memref : memref<1x!affinem> to memref<*x!affinem>
+  func.call @printMemrefG1AffineMont(%affine_memref_cast) : (memref<*x!affinem>) -> ()
   return
 }
 
-func.func @printG1JacobianMont(%jacobian: !jacobian) {
+func.func @printG1JacobianMont(%jacobian: !jacobianm) {
   %c0 = arith.constant 0 : index
-  %jacobian_memref = memref.alloca() : memref<1x!jacobian>
-  memref.store %jacobian, %jacobian_memref[%c0] : memref<1x!jacobian>
-  %jacobian_memref_cast = memref.cast %jacobian_memref : memref<1x!jacobian> to memref<*x!jacobian>
-  func.call @printMemrefG1JacobianMont(%jacobian_memref_cast) : (memref<*x!jacobian>) -> ()
+  %jacobian_memref = memref.alloca() : memref<1x!jacobianm>
+  memref.store %jacobian, %jacobian_memref[%c0] : memref<1x!jacobianm>
+  %jacobian_memref_cast = memref.cast %jacobian_memref : memref<1x!jacobianm> to memref<*x!jacobianm>
+  func.call @printMemrefG1JacobianMont(%jacobian_memref_cast) : (memref<*x!jacobianm>) -> ()
   return
 }
 
-func.func @printG1XyzzMont(%xyzz: !xyzz) {
+func.func @printG1XyzzMont(%xyzz: !xyzzm) {
   %c0 = arith.constant 0 : index
-  %xyzz_memref = memref.alloca() : memref<1x!xyzz>
-  memref.store %xyzz, %xyzz_memref[%c0] : memref<1x!xyzz>
-  %xyzz_memref_cast = memref.cast %xyzz_memref : memref<1x!xyzz> to memref<*x!xyzz>
-  func.call @printMemrefG1XyzzMont(%xyzz_memref_cast) : (memref<*x!xyzz>) -> ()
+  %xyzz_memref = memref.alloca() : memref<1x!xyzzm>
+  memref.store %xyzz, %xyzz_memref[%c0] : memref<1x!xyzzm>
+  %xyzz_memref_cast = memref.cast %xyzz_memref : memref<1x!xyzzm> to memref<*x!xyzzm>
+  func.call @printMemrefG1XyzzMont(%xyzz_memref_cast) : (memref<*x!xyzzm>) -> ()
   return
 }
 
-func.func @printG1AffineFromJacobianMont(%jacobian: !jacobian) {
-  %affine = elliptic_curve.convert_point_type %jacobian : !jacobian -> !affine
-  func.call @printG1AffineMont(%affine) : (!affine) -> ()
+func.func @printG1AffineFromJacobianMont(%jacobian: !jacobianm) {
+  %affine = elliptic_curve.convert_point_type %jacobian : !jacobianm -> !affinem
+  func.call @printG1AffineMont(%affine) : (!affinem) -> ()
   return
 }
 
-func.func @printG1AffineFromXyzzMont(%xyzz: !xyzz) {
-  %affine = elliptic_curve.convert_point_type %xyzz : !xyzz -> !affine
-  func.call @printG1AffineMont(%affine) : (!affine) -> ()
+func.func @printG1AffineFromXyzzMont(%xyzz: !xyzzm) {
+  %affine = elliptic_curve.convert_point_type %xyzz : !xyzzm -> !affinem
+  func.call @printG1AffineMont(%affine) : (!affinem) -> ()
   return
 }

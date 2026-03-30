@@ -13,14 +13,14 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_defs.mlir %S/../../bn254_ec_mont_helpers.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | prime-ir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_bitcast -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_BITCAST < %t
 
 // Test elliptic_curve.constant and elliptic_curve.bitcast operations
-// Uses Montgomery form field types from bn254_ec_mont_defs.mlir
+// Uses Montgomery form field types from bn254_ec_mont_helpers.mlir
 
 func.func @test_bitcast() {
   // Index constants for tensor element extraction
@@ -39,10 +39,10 @@ func.func @test_bitcast() {
 
   // ============================================================
   // Test 1: G1 jacobian tensor constant -> field tensor bitcast
-  // tensor<2x!jacobian> with points (1,2,1) and (3,4,1)
+  // tensor<2x!jacobianm> with points (1,2,1) and (3,4,1)
   // ============================================================
-  %g1_jacobian = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobian>
-  %g1_fields = elliptic_curve.bitcast %g1_jacobian : tensor<2x!jacobian> -> tensor<6x!PFm>
+  %g1_jacobian = elliptic_curve.constant dense<[[1, 2, 1], [3, 4, 1]]> : tensor<2x!jacobianm>
+  %g1_fields = elliptic_curve.bitcast %g1_jacobian : tensor<2x!jacobianm> -> tensor<6x!PFm>
 
   // Extract all 6 field elements and print as i256
   %f0 = tensor.extract %g1_fields[%c0] : tensor<6x!PFm>
@@ -66,10 +66,10 @@ func.func @test_bitcast() {
 
   // ============================================================
   // Test 2: G1 affine tensor constant -> field tensor bitcast
-  // tensor<2x!affine> with points (1,2) and (3,4)
+  // tensor<2x!affinem> with points (1,2) and (3,4)
   // ============================================================
-  %g1_affine = elliptic_curve.constant dense<[[1, 2], [3, 4]]> : tensor<2x!affine>
-  %g1_affine_fields = elliptic_curve.bitcast %g1_affine : tensor<2x!affine> -> tensor<4x!PFm>
+  %g1_affine = elliptic_curve.constant dense<[[1, 2], [3, 4]]> : tensor<2x!affinem>
+  %g1_affine_fields = elliptic_curve.bitcast %g1_affine : tensor<2x!affinem> -> tensor<4x!PFm>
 
   %af0 = tensor.extract %g1_affine_fields[%c0] : tensor<4x!PFm>
   %af1 = tensor.extract %g1_affine_fields[%c1] : tensor<4x!PFm>
@@ -89,12 +89,12 @@ func.func @test_bitcast() {
 
   // ============================================================
   // Test 3: G2 jacobian tensor constant -> field tensor bitcast
-  // tensor<2x!g2jacobian> with points ((1+2i, 3+4i, 1+0i), (5+6i, 7+8i, 1+0i))
+  // tensor<2x!g2jacobianm> with points ((1+2i, 3+4i, 1+0i), (5+6i, 7+8i, 1+0i))
   // G2 jacobian: 3 coords * 2 degree = 6 prime field elements per point
   // Total: 2 points * 6 = 12 prime field elements
   // ============================================================
-  %g2_jacobian = elliptic_curve.constant dense<[[[1, 2], [3, 4], [1, 0]], [[5, 6], [7, 8], [1, 0]]]> : tensor<2x!g2jacobian>
-  %g2_fields = elliptic_curve.bitcast %g2_jacobian : tensor<2x!g2jacobian> -> tensor<12x!PFm>
+  %g2_jacobian = elliptic_curve.constant dense<[[[1, 2], [3, 4], [1, 0]], [[5, 6], [7, 8], [1, 0]]]> : tensor<2x!g2jacobianm>
+  %g2_fields = elliptic_curve.bitcast %g2_jacobian : tensor<2x!g2jacobianm> -> tensor<12x!PFm>
 
   %g2f0 = tensor.extract %g2_fields[%c0] : tensor<12x!PFm>
   %g2f1 = tensor.extract %g2_fields[%c1] : tensor<12x!PFm>

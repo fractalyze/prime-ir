@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_defs.mlir %S/../../bn254_ec_mont_helpers.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | prime-ir-opt -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_msm -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t
@@ -28,28 +28,28 @@ func.func @test_msm() {
   %scalar5 = field.constant 5 : !SFm
   %scalar7 = field.constant 7 : !SFm
 
-  %jacobian1 = elliptic_curve.from_coords %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobian
-  %jacobian2 = elliptic_curve.double %jacobian1 : !jacobian -> !jacobian
-  %jacobian3 = elliptic_curve.double %jacobian2 : !jacobian -> !jacobian
-  %jacobian4 = elliptic_curve.double %jacobian3 : !jacobian -> !jacobian
+  %jacobian1 = elliptic_curve.from_coords %var1, %var2, %var1 : (!PFm, !PFm, !PFm) -> !jacobianm
+  %jacobian2 = elliptic_curve.double %jacobian1 : !jacobianm -> !jacobianm
+  %jacobian3 = elliptic_curve.double %jacobian2 : !jacobianm -> !jacobianm
+  %jacobian4 = elliptic_curve.double %jacobian3 : !jacobianm -> !jacobianm
 
 
   // CALCULATING TRUE VALUE OF MSM
-  %scalar_mul1 = elliptic_curve.scalar_mul %scalar3, %jacobian1 : !SFm, !jacobian -> !jacobian
-  %scalar_mul2 = elliptic_curve.scalar_mul %scalar3, %jacobian2 : !SFm, !jacobian -> !jacobian
-  %scalar_mul3 = elliptic_curve.scalar_mul %scalar5, %jacobian3 : !SFm, !jacobian -> !jacobian
-  %scalar_mul4 = elliptic_curve.scalar_mul %scalar7, %jacobian4 : !SFm, !jacobian -> !jacobian
+  %scalar_mul1 = elliptic_curve.scalar_mul %scalar3, %jacobian1 : !SFm, !jacobianm -> !jacobianm
+  %scalar_mul2 = elliptic_curve.scalar_mul %scalar3, %jacobian2 : !SFm, !jacobianm -> !jacobianm
+  %scalar_mul3 = elliptic_curve.scalar_mul %scalar5, %jacobian3 : !SFm, !jacobianm -> !jacobianm
+  %scalar_mul4 = elliptic_curve.scalar_mul %scalar7, %jacobian4 : !SFm, !jacobianm -> !jacobianm
 
-  %add1 = elliptic_curve.add %scalar_mul1, %scalar_mul2 : !jacobian, !jacobian -> !jacobian
-  %add2 = elliptic_curve.add %scalar_mul3, %scalar_mul4 : !jacobian, !jacobian -> !jacobian
-  %msm_true = elliptic_curve.add %add1, %add2 : !jacobian, !jacobian -> !jacobian
-  func.call @printG1AffineFromJacobianMont(%msm_true) : (!jacobian) -> ()
+  %add1 = elliptic_curve.add %scalar_mul1, %scalar_mul2 : !jacobianm, !jacobianm -> !jacobianm
+  %add2 = elliptic_curve.add %scalar_mul3, %scalar_mul4 : !jacobianm, !jacobianm -> !jacobianm
+  %msm_true = elliptic_curve.add %add1, %add2 : !jacobianm, !jacobianm -> !jacobianm
+  func.call @printG1AffineFromJacobianMont(%msm_true) : (!jacobianm) -> ()
 
   // RUNNING MSM
   %scalars = tensor.from_elements %scalar3, %scalar3, %scalar5, %scalar7 : tensor<4x!SFm>
-  %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobian>
-  %msm_test = elliptic_curve.msm %scalars, %points degree=2 parallel : tensor<4x!SFm>, tensor<4x!jacobian> -> !jacobian
-  func.call @printG1AffineFromJacobianMont(%msm_test) : (!jacobian) -> ()
+  %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3, %jacobian4 : tensor<4x!jacobianm>
+  %msm_test = elliptic_curve.msm %scalars, %points degree=2 parallel : tensor<4x!SFm>, tensor<4x!jacobianm> -> !jacobianm
+  func.call @printG1AffineFromJacobianMont(%msm_test) : (!jacobianm) -> ()
 
   return
 }

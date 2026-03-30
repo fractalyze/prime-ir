@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_field_defs.mlir %S/../../bn254_ec_mont_defs.mlir %S/../../bn254_ec_utils.mlir %s \
+// RUN: cat %S/../../default_print_utils.mlir %S/../../bn254_defs.mlir %S/../../bn254_ec_mont_helpers.mlir %S/../../bn254_ec_utils.mlir %s \
 // RUN:   | prime-ir-opt -convert-elementwise-to-linalg -sparsification-and-bufferization -elliptic-curve-to-field -field-to-llvm \
 // RUN:   | mlir-runner -e test_bucket_acc_csr -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext,%S/../../libruntime_functions%shlibext" > %t > %t
@@ -47,25 +47,25 @@ func.func @test_bucket_acc_csr() {
   %k2 = field.constant 2 : !SF
   %k3 = field.constant 3 : !SF
 
-  %affine1 = func.call @getG1GeneratorMultiple(%k1) : (!SF) -> (!affine)
-  %affine2 = func.call @getG1GeneratorMultiple(%k2) : (!SF) -> (!affine)
-  %affine3 = func.call @getG1GeneratorMultiple(%k3) : (!SF) -> (!affine)
+  %affine1 = func.call @getG1GeneratorMultipleMont(%k1) : (!SF) -> (!affinem)
+  %affine2 = func.call @getG1GeneratorMultipleMont(%k2) : (!SF) -> (!affinem)
+  %affine3 = func.call @getG1GeneratorMultipleMont(%k3) : (!SF) -> (!affinem)
 
 
-  %jacobian_sum_13 = elliptic_curve.add %affine1, %affine3 : !affine, !affine -> !jacobian
-  func.call @printG1AffineFromJacobianMont(%jacobian_sum_13) : (!jacobian) -> ()
+  %jacobian_sum_13 = elliptic_curve.add %affine1, %affine3 : !affinem, !affinem -> !jacobianm
+  func.call @printG1AffineFromJacobianMont(%jacobian_sum_13) : (!jacobianm) -> ()
 
-  %jacobian_sum_12 = elliptic_curve.add %affine1, %affine2 : !affine, !affine -> !jacobian
-  func.call @printG1AffineFromJacobianMont(%jacobian_sum_12) : (!jacobian) -> ()
+  %jacobian_sum_12 = elliptic_curve.add %affine1, %affine2 : !affinem, !affinem -> !jacobianm
+  func.call @printG1AffineFromJacobianMont(%jacobian_sum_12) : (!jacobianm) -> ()
 
-  func.call @printG1AffineMont(%affine2) : (!affine) -> ()
-  func.call @printG1AffineMont(%affine3) : (!affine) -> ()
+  func.call @printG1AffineMont(%affine2) : (!affinem) -> ()
+  func.call @printG1AffineMont(%affine3) : (!affinem) -> ()
 
   // Convert all affine points to jacobian before creating sparse matrix
-  %jacobian1 = elliptic_curve.convert_point_type %affine1 : !affine -> !jacobian
-  %jacobian2 = elliptic_curve.convert_point_type %affine2 : !affine -> !jacobian
-  %jacobian3 = elliptic_curve.convert_point_type %affine3 : !affine -> !jacobian
-  %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3 : tensor<3x!jacobian>
+  %jacobian1 = elliptic_curve.convert_point_type %affine1 : !affinem -> !jacobianm
+  %jacobian2 = elliptic_curve.convert_point_type %affine2 : !affinem -> !jacobianm
+  %jacobian3 = elliptic_curve.convert_point_type %affine3 : !affinem -> !jacobianm
+  %points = tensor.from_elements %jacobian1, %jacobian2, %jacobian3 : tensor<3x!jacobianm>
 
   // Create sparse CSR matrix representation
   // Bucket 1: points [0,2]
@@ -74,7 +74,7 @@ func.func @test_bucket_acc_csr() {
   // Bucket 7: points [2]
 
   // CSR values: points in each bucket
-  %csr_values = tensor.from_elements %jacobian1, %jacobian3, %jacobian2, %jacobian1, %jacobian2, %jacobian3 : tensor<6x!jacobian>
+  %csr_values = tensor.from_elements %jacobian1, %jacobian3, %jacobian2, %jacobian1, %jacobian2, %jacobian3 : tensor<6x!jacobianm>
   // CSR row pointers: 8 buckets + 1 = 9 elements
   %csr_pos = arith.constant dense<[0, 0, 2, 3, 3, 3, 5, 5, 6]> : tensor<9xindex>
   // CSR column indices: which points go into each bucket (doesn't matter)
@@ -82,36 +82,36 @@ func.func @test_bucket_acc_csr() {
 
   // Assemble sparse CSR matrix: buckets x points (now all jacobian)
   %sparse_matrix = sparse_tensor.assemble (%csr_pos, %csr_indices), %csr_values
-    : (tensor<9xindex>, tensor<6xindex>), tensor<6x!jacobian> to tensor<8x3x!jacobian, #CSR>
+    : (tensor<9xindex>, tensor<6xindex>), tensor<6x!jacobianm> to tensor<8x3x!jacobianm, #CSR>
 
   // Create zero point for jacobian accumulation
   %zeroPF = field.constant 0 : !PFm
   %onePF = field.constant 1 : !PFm
-  %zero_jacobian = elliptic_curve.from_coords %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobian
+  %zero_jacobian = elliptic_curve.from_coords %onePF, %onePF, %zeroPF : (!PFm, !PFm, !PFm) -> !jacobianm
 
   // Fill tensor with zero points
-  %bucket_results = tensor.empty() : tensor<8x!jacobian>
-  %filled_buckets = linalg.fill ins(%zero_jacobian : !jacobian) outs(%bucket_results : tensor<8x!jacobian>) -> tensor<8x!jacobian>
+  %bucket_results = tensor.empty() : tensor<8x!jacobianm>
+  %filled_buckets = linalg.fill ins(%zero_jacobian : !jacobianm) outs(%bucket_results : tensor<8x!jacobianm>) -> tensor<8x!jacobianm>
 
   // Use linalg.generic with sparse_tensor.reduce for proper EC reduction
   %result = linalg.generic #attrs
-    ins(%sparse_matrix : tensor<8x3x!jacobian, #CSR>)
-    outs(%filled_buckets : tensor<8x!jacobian>) {
-  ^bb0(%point: !jacobian, %accumulator: !jacobian):
+    ins(%sparse_matrix : tensor<8x3x!jacobianm, #CSR>)
+    outs(%filled_buckets : tensor<8x!jacobianm>) {
+  ^bb0(%point: !jacobianm, %accumulator: !jacobianm):
     // Use sparse_tensor.reduce with same types (jacobian + jacobian -> jacobian)
     %result = sparse_tensor.reduce %point, %accumulator, %zero_jacobian
- : !jacobian {
-      ^bb0(%p: !jacobian, %acc: !jacobian):
-        %sum = elliptic_curve.add %acc, %p : !jacobian, !jacobian -> !jacobian
-        sparse_tensor.yield %sum : !jacobian
+ : !jacobianm {
+      ^bb0(%p: !jacobianm, %acc: !jacobianm):
+        %sum = elliptic_curve.add %acc, %p : !jacobianm, !jacobianm -> !jacobianm
+        sparse_tensor.yield %sum : !jacobianm
     }
-    linalg.yield %result : !jacobian
-  } -> tensor<8x!jacobian>
+    linalg.yield %result : !jacobianm
+  } -> tensor<8x!jacobianm>
 
   // Print results for comparison with bucket_acc
   scf.for %i = %c0 to %c8 step %c1 {
-    %bucket_point = tensor.extract %result[%i] : tensor<8x!jacobian>
-    func.call @printG1AffineFromJacobianMont(%bucket_point) : (!jacobian) -> ()
+    %bucket_point = tensor.extract %result[%i] : tensor<8x!jacobianm>
+    func.call @printG1AffineFromJacobianMont(%bucket_point) : (!jacobianm) -> ()
     scf.yield
   }
   return
