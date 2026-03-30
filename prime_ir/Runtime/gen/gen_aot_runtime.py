@@ -135,6 +135,12 @@ func.func @ec_double_{base}_jacobian{ms}(%a: !{t['jacobian']}) -> !{t['jacobian'
   return %r : !{t['jacobian']}
 }}
 
+func.func @ec_mixed_add_{base}_jacobian{ms}(%a: !{t['jacobian']}, %b: !{t['affine']}) -> !{t['jacobian']}
+    attributes {{ llvm.emit_c_interface }} {{
+  %r = elliptic_curve.add %a, %b : !{t['jacobian']}, !{t['affine']} -> !{t['jacobian']}
+  return %r : !{t['jacobian']}
+}}
+
 // --- Scalar multiply ({form}) ---
 
 func.func @ec_scalar_mul_{base}_jacobian{ms}(%k: !{sf}, %p: !{t['affine']}) -> !{t['jacobian']}

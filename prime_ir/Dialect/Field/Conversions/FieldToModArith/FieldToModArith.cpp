@@ -107,6 +107,12 @@ static std::optional<std::string> getFieldAOTFuncName(llvm::StringRef op,
   if (!efType)
     return std::nullopt;
 
+  // Tower extensions (base field is itself an extension, e.g.,
+  // !field.ef<3x !field.ef<2x !PF, ...>, ...>) are not yet AOT-compiled.
+  // Only direct extensions over prime fields (e.g., !field.ef<2x !PF, ...>).
+  if (efType.isTower())
+    return std::nullopt;
+
   auto baseAlias =
       getKnownModulusAlias(efType.getBasePrimeField().getModulus().getValue());
   if (!baseAlias)
