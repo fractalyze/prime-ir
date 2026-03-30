@@ -6,6 +6,6 @@ on:
 
 jobs:
   sync:
-    uses: fractalyze/.github-private/.github/workflows/sync-project-fields.yml@main
+    uses: fractalyze/.github/.github/workflows/sync-project-fields.yml@main
     secrets:
       PROJECT_TRACKER_GH_PAT: ${{ secrets.PROJECT_TRACKER_GH_PAT }}
