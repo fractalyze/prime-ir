@@ -755,7 +755,14 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
         cmpResults.push_back(compareOnStdDomain(
             b, basePF, predicate, lhsPrimeCoeffs[i], rhsPrimeCoeffs[i]));
       }
-      Value result = cmpResults[0];
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+#endif
+      Value result = cmpResults.front();
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
       if (predicate == arith::CmpIPredicate::eq) {
         for (unsigned i = 1; i < n; ++i) {
           result = b.create<arith::AndIOp>(result, cmpResults[i]);

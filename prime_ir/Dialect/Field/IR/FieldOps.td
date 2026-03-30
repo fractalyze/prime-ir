@@ -101,8 +101,7 @@ def Field_ConstantOp : Field_Op_Base<"constant", [ConstantLike]> {
       return build($_builder, $_state, ty, DenseIntElementsAttr::get(tensorType, coeffs));
     }]>,
     OpBuilder<(ins "ExtensionFieldType":$ty, "llvm::ArrayRef<uint64_t>":$coeffs), [{
-      unsigned degreeOverPrime = ty.getDegreeOverPrime();
-      assert(coeffs.size() == degreeOverPrime && "coefficient count must match total degree over prime");
+      assert(coeffs.size() == ty.getDegreeOverPrime() && "coefficient count must match total degree over prime");
       auto primeField = ty.getBasePrimeField();
       unsigned bitWidth = primeField.getStorageBitWidth();
       SmallVector<APInt> coeffInts;

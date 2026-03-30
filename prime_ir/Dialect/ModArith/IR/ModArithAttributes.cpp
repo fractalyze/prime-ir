@@ -41,7 +41,7 @@ unsigned MontgomeryAttr::getLimbWidth() const {
 unsigned MontgomeryAttr::getNumLimbs() const {
   unsigned lw = getLimbWidth();
   APInt modulus = getModulus().getValue();
-  unsigned storageBits = storageBits = modulus.getBitWidth();
+  unsigned storageBits = modulus.getBitWidth();
   if (modulus.isPowerOf2()) {
     // Binary field: 2ⁿ needs n bits for storage (not n + 1)
     --storageBits;
