@@ -1,0 +1,59 @@
+# Copyright 2026 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+package(default_visibility = ["//prime_ir/Runtime:__subpackages__"])
+
+# Step 1: C++ emitter lists all registered curve/field types from zk_dtypes.
+cc_binary(
+    name = "emit_aot_types",
+    srcs = ["emit_aot_types.cc"],
+    deps = ["@zk_dtypes//zk_dtypes:all_types"],
+)
+
+# Step 2: Run emitter → type list text file.
+genrule(
+    name = "aot_types_list",
+    outs = ["aot_types.txt"],
+    cmd = "$(execpath :emit_aot_types) > $@",
+    tools = [":emit_aot_types"],
+)
+
+# Step 3: Python generator → MLIR operation files.
+genrule(
+    name = "gen_ec_ops",
+    srcs = [":aot_types.txt"],
+    outs = [
+        "ec_ops_bn254_g1.mlir",
+        "ec_ops_bn254_g2.mlir",
+    ],
+    cmd = "python3 $(execpath :gen_aot_runtime.py) --types $(location :aot_types.txt) --ec-outdir $(@D) --field-outdir /tmp/unused_field",
+    tools = [":gen_aot_runtime.py"],
+)
+
+genrule(
+    name = "gen_field_ops",
+    srcs = [":aot_types.txt"],
+    outs = [
+        "field_ops_babybearx4.mlir",
+        "field_ops_bn254_bfx2.mlir",
+        "field_ops_koalabearx4.mlir",
+    ],
+    cmd = "python3 $(execpath :gen_aot_runtime.py) --types $(location :aot_types.txt) --ec-outdir /tmp/unused_ec --field-outdir $(@D)",
+    tools = [":gen_aot_runtime.py"],
+)
+
+exports_files(["gen_aot_runtime.py"])
