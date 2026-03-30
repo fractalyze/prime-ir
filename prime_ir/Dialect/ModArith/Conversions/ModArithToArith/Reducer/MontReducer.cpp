@@ -130,7 +130,6 @@ bool MontReducer::isFromSignedMul(Value input) {
 
 Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh, bool lazy) {
   TypedAttr nInvAttr = montAttr.getNInv();
-  Type limbType = nInvAttr.getType();
   Value nInvConst;
   if (auto shapedType = dyn_cast<ShapedType>(tLow.getType())) {
     auto nInvShaped = shapedType.cloneWith(std::nullopt, nInvAttr.getType());
