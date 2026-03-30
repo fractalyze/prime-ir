@@ -161,7 +161,7 @@ LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
     // The rank should be increased by 1 in the type conversion.
     // i.e. memref<1x2x!QF> -> memref<1x2x2x!F>
     // This dimension should be used to extract the result.
-    Operation *newOp;
+    Operation *newOp = nullptr;
     for (size_t i = 0; i < valueToInsert.size(); ++i) {
       SmallVector<Value> newOperands(indices.size() + 3);
       newOperands[0] = valueToInsert[i];
