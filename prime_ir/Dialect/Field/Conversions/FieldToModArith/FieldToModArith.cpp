@@ -456,19 +456,17 @@ private:
   LogicalResult emitBatchInverse(InverseOp op,
                                  ConversionPatternRewriter &rewriter,
                                  RankedTensorType tensorType) const {
-    if (!tensorType.hasStaticShape())
-      return rewriter.notifyMatchFailure(op, "dynamic shape not yet supported");
-    int64_t n = tensorType.getNumElements();
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     Value input = op.getInput();
     Type elemType = tensorType.getElementType();
 
-    if (n == 0) {
+    // Static zero-element tensor: no-op.
+    if (tensorType.hasStaticShape() && tensorType.getNumElements() == 0) {
       rewriter.replaceOp(op, input);
       return success();
     }
 
-    // Scalar: extract, invert, wrap back.
+    // Scalar (rank-0): extract, invert, wrap back.
     if (tensorType.getRank() == 0) {
       Value elem = b.create<tensor::ExtractOp>(input, ValueRange{});
       Value inv = b.create<InverseOp>(elem);
@@ -478,84 +476,80 @@ private:
     }
 
     // Collapse multi-dimensional tensors to 1-D for linear indexing.
-    auto flatType = RankedTensorType::get({n}, elemType);
+    // For dynamic shapes, collapse is only valid for rank > 1 with a
+    // single dynamic dim (or all static except one).
     bool needsReshape = tensorType.getRank() != 1;
     if (needsReshape) {
+      int64_t n = tensorType.hasStaticShape() ? tensorType.getNumElements()
+                                              : ShapedType::kDynamic;
+      auto flatType = RankedTensorType::get({n}, elemType);
       SmallVector<ReassociationIndices> reassoc = {
           llvm::to_vector(llvm::seq<int64_t>(0, tensorType.getRank()))};
       input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
     }
 
+    // Get the dimension size (static or dynamic).
     Value c0 = b.create<arith::ConstantIndexOp>(0);
-    Value result;
+    Value c1 = b.create<arith::ConstantIndexOp>(1);
+    Value cN = b.create<tensor::DimOp>(input, c0);
 
-    if (n == 1) {
-      Value elem = b.create<tensor::ExtractOp>(input, ValueRange{c0});
-      Value inv = b.create<InverseOp>(elem);
-      result = b.create<tensor::EmptyOp>(flatType.getShape(), elemType);
-      result = b.create<tensor::InsertOp>(inv, result, ValueRange{c0});
-    } else {
-      // n >= 2: Montgomery's batch inversion.
-      Value c1 = b.create<arith::ConstantIndexOp>(1);
-      Value cN = b.create<arith::ConstantIndexOp>(n);
-      Value cNm1 = b.create<arith::ConstantIndexOp>(n - 1);
+    // Montgomery's batch inversion (works for any n >= 1).
+    // Forward pass: build prefix products.
+    // prefix[0] = a[0]; prefix[i] = prefix[i-1] * a[i]
+    Value a0 = b.create<tensor::ExtractOp>(input, ValueRange{c0});
+    Value prefixInit = b.create<tensor::EmptyOp>(
+        tensor::getMixedSizes(b, b.getLoc(), input), elemType);
+    prefixInit = b.create<tensor::InsertOp>(a0, prefixInit, ValueRange{c0});
 
-      // Forward pass: build prefix products.
-      // prefix[0] = a[0]; prefix[i] = prefix[i-1] * a[i]
-      Value a0 = b.create<tensor::ExtractOp>(input, ValueRange{c0});
-      Value prefixInit =
-          b.create<tensor::EmptyOp>(flatType.getShape(), elemType);
-      prefixInit = b.create<tensor::InsertOp>(a0, prefixInit, ValueRange{c0});
+    auto fwdLoop = b.create<scf::ForOp>(
+        c1, cN, c1, ValueRange{prefixInit, a0},
+        [&](OpBuilder &nb, Location loc, Value iv, ValueRange iterArgs) {
+          ImplicitLocOpBuilder lb(loc, nb);
+          Value prefixTensor = iterArgs[0];
+          Value runningProduct = iterArgs[1];
+          Value elem = lb.create<tensor::ExtractOp>(input, ValueRange{iv});
+          Value product = lb.create<MulOp>(runningProduct, elem);
+          Value updated = lb.create<tensor::InsertOp>(product, prefixTensor,
+                                                      ValueRange{iv});
+          lb.create<scf::YieldOp>(ValueRange{updated, product});
+        });
+    Value prefixTensor = fwdLoop.getResult(0);
+    Value totalProduct = fwdLoop.getResult(1);
 
-      auto fwdLoop = b.create<scf::ForOp>(
-          c1, cN, c1, ValueRange{prefixInit, a0},
-          [&](OpBuilder &nb, Location loc, Value iv, ValueRange iterArgs) {
-            ImplicitLocOpBuilder lb(loc, nb);
-            Value prefixTensor = iterArgs[0];
-            Value runningProduct = iterArgs[1];
-            Value elem = lb.create<tensor::ExtractOp>(input, ValueRange{iv});
-            Value product = lb.create<MulOp>(runningProduct, elem);
-            Value updated = lb.create<tensor::InsertOp>(product, prefixTensor,
-                                                        ValueRange{iv});
-            lb.create<scf::YieldOp>(ValueRange{updated, product});
-          });
-      Value prefixTensor = fwdLoop.getResult(0);
-      Value totalProduct = fwdLoop.getResult(1);
+    // Single scalar inverse.
+    Value inv = b.create<InverseOp>(totalProduct);
 
-      // Single scalar inverse.
-      Value inv = b.create<InverseOp>(totalProduct);
+    // Backward pass: recover individual inverses.
+    // for i in [n-1, n-2, ..., 1]:
+    //   result[i] = inv * prefix[i-1]; inv = inv * a[i]
+    Value cNm1 = b.create<arith::SubIOp>(cN, c1);
+    Value resultInit = b.create<tensor::EmptyOp>(
+        tensor::getMixedSizes(b, b.getLoc(), input), elemType);
 
-      // Backward pass: recover individual inverses.
-      // for i in [n-1, n-2, ..., 1]:
-      //   result[i] = inv * prefix[i-1]; inv = inv * a[i]
-      Value resultInit =
-          b.create<tensor::EmptyOp>(flatType.getShape(), elemType);
+    auto bwdLoop = b.create<scf::ForOp>(
+        c0, cNm1, c1, ValueRange{resultInit, inv},
+        [&](OpBuilder &nb, Location loc, Value iv, ValueRange iterArgs) {
+          ImplicitLocOpBuilder lb(loc, nb);
+          Value resultTensor = iterArgs[0];
+          Value curInv = iterArgs[1];
+          // Map forward index iv to reverse index: currIdx = n-1-iv
+          Value currIdx = lb.create<arith::SubIOp>(cNm1, iv);
+          Value prevIdx = lb.create<arith::SubIOp>(currIdx, c1);
+          Value prevPrefix =
+              lb.create<tensor::ExtractOp>(prefixTensor, ValueRange{prevIdx});
+          Value elemInv = lb.create<MulOp>(curInv, prevPrefix);
+          Value updated = lb.create<tensor::InsertOp>(elemInv, resultTensor,
+                                                      ValueRange{currIdx});
+          Value origElem =
+              lb.create<tensor::ExtractOp>(input, ValueRange{currIdx});
+          Value newInv = lb.create<MulOp>(curInv, origElem);
+          lb.create<scf::YieldOp>(ValueRange{updated, newInv});
+        });
 
-      auto bwdLoop = b.create<scf::ForOp>(
-          c0, cNm1, c1, ValueRange{resultInit, inv},
-          [&](OpBuilder &nb, Location loc, Value iv, ValueRange iterArgs) {
-            ImplicitLocOpBuilder lb(loc, nb);
-            Value resultTensor = iterArgs[0];
-            Value curInv = iterArgs[1];
-            // Map forward index iv to reverse index: currIdx = n-1-iv
-            Value currIdx = lb.create<arith::SubIOp>(cNm1, iv);
-            Value prevIdx = lb.create<arith::SubIOp>(currIdx, c1);
-            Value prevPrefix =
-                lb.create<tensor::ExtractOp>(prefixTensor, ValueRange{prevIdx});
-            Value elemInv = lb.create<MulOp>(curInv, prevPrefix);
-            Value updated = lb.create<tensor::InsertOp>(elemInv, resultTensor,
-                                                        ValueRange{currIdx});
-            Value origElem =
-                lb.create<tensor::ExtractOp>(input, ValueRange{currIdx});
-            Value newInv = lb.create<MulOp>(curInv, origElem);
-            lb.create<scf::YieldOp>(ValueRange{updated, newInv});
-          });
-
-      // result[0] = final inv (= a₀⁻¹).
-      result = bwdLoop.getResult(0);
-      inv = bwdLoop.getResult(1);
-      result = b.create<tensor::InsertOp>(inv, result, ValueRange{c0});
-    }
+    // result[0] = final inv (= a₀⁻¹).
+    Value result = bwdLoop.getResult(0);
+    inv = bwdLoop.getResult(1);
+    result = b.create<tensor::InsertOp>(inv, result, ValueRange{c0});
 
     if (needsReshape) {
       SmallVector<ReassociationIndices> reassoc = {

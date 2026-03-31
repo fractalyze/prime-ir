@@ -339,10 +339,9 @@ private:
   ///   y = Y * z_inv³
   ///
   /// XYZZ (X, Y, ZZ, ZZZ) → Affine (X / ZZ, Y / ZZZ):
-  ///   zz_inv = field.inverse(ZZ)        ← batch on tensor<N x !F>
-  ///   zzz_inv = field.inverse(ZZZ)      ← batch on tensor<N x !F>
-  ///   x = X * zz_inv
-  ///   y = Y * zzz_inv
+  ///   z_inv³ = field.inverse(ZZZ)       ← batch on tensor<N x !F>
+  ///   per-element: z_inv = z_inv³ * ZZ, z_inv² = z_inv²
+  ///   x = X * z_inv², y = Y * z_inv³
   LogicalResult rewriteTensorToAffine(ConvertPointTypeOp op, OpAdaptor adaptor,
                                       ConversionPatternRewriter &rewriter,
                                       RankedTensorType tensorType,
@@ -363,7 +362,10 @@ private:
         isDynamic
             ? b.create<tensor::DimOp>(adaptor.getInput(), c0val).getResult()
             : b.create<arith::ConstantIndexOp>(n).getResult();
-    ValueRange dynExtents = isDynamic ? ValueRange{dimNval} : ValueRange{};
+    SmallVector<Value, 1> dynExtentsStorage;
+    if (isDynamic)
+      dynExtentsStorage.push_back(dimNval);
+    ValueRange dynExtents = dynExtentsStorage;
     auto colType = RankedTensorType::get({n}, fieldType);
 
     PointKind inKind = inputPti.getPointKind();
@@ -389,83 +391,55 @@ private:
           .getResult();
     };
 
-    Value affX, affY;
+    // Fused output: batch inverse → single tensor.generate that computes
+    // affine coordinates and assembles the output point in one pass.
+    auto outputTensorType = RankedTensorType::get({n}, cast<Type>(outputPti));
+    Value result;
     if (inKind == PointKind::kJacobian) {
       Value colZ = makeCol(2);
       Value zInv = b.create<field::InverseOp>(colType, colZ);
       Value zInv2 = b.create<field::MulOp>(colType, zInv, zInv);
       Value zInv3 = b.create<field::MulOp>(colType, zInv2, zInv);
-      // Per-element: x = X * zInv², y = Y * zInv³.
-      // Use tensor.generate to read X/Y directly from input (no aliasing).
-      affX = b.create<tensor::GenerateOp>(
-                  colType, dynExtents,
-                  [&](OpBuilder &nb, Location loc, ValueRange ivs) {
-                    ImplicitLocOpBuilder lb(loc, nb);
-                    Value pt =
-                        lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
-                    auto coords = toCoords(lb, pt);
-                    Value zi2 = lb.create<tensor::ExtractOp>(zInv2, ivs);
-                    Value r = lb.create<field::MulOp>(coords[0], zi2);
-                    lb.create<tensor::YieldOp>(r);
-                  })
-                 .getResult();
-      affY = b.create<tensor::GenerateOp>(
-                  colType, dynExtents,
-                  [&](OpBuilder &nb, Location loc, ValueRange ivs) {
-                    ImplicitLocOpBuilder lb(loc, nb);
-                    Value pt =
-                        lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
-                    auto coords = toCoords(lb, pt);
-                    Value zi3 = lb.create<tensor::ExtractOp>(zInv3, ivs);
-                    Value r = lb.create<field::MulOp>(coords[1], zi3);
-                    lb.create<tensor::YieldOp>(r);
-                  })
-                 .getResult();
+      result = b.create<tensor::GenerateOp>(
+                    outputTensorType, dynExtents,
+                    [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                      ImplicitLocOpBuilder lb(loc, nb);
+                      Value pt =
+                          lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
+                      auto coords = toCoords(lb, pt);
+                      Value zi2 = lb.create<tensor::ExtractOp>(zInv2, ivs);
+                      Value zi3 = lb.create<tensor::ExtractOp>(zInv3, ivs);
+                      Value x = lb.create<field::MulOp>(coords[0], zi2);
+                      Value y = lb.create<field::MulOp>(coords[1], zi3);
+                      Value resPt = fromCoords(lb, outputPti, ValueRange{x, y});
+                      lb.create<tensor::YieldOp>(resPt);
+                    })
+                   .getResult();
     } else {
-      // XYZZ
-      Value colZZ = makeCol(2);
+      // XYZZ→Affine: single BatchInverse on ZZZ only.
+      // zInvCubic = BatchInverse(ZZZ) = Z⁻³
+      // Per-element: zInv = zInvCubic * ZZ, zInvSq = zInv²,
+      //              x = X * zInvSq, y = Y * zInvCubic.
       Value colZZZ = makeCol(3);
-      Value zzInv = b.create<field::InverseOp>(colType, colZZ);
-      Value zzzInv = b.create<field::InverseOp>(colType, colZZZ);
-      affX = b.create<tensor::GenerateOp>(
-                  colType, dynExtents,
-                  [&](OpBuilder &nb, Location loc, ValueRange ivs) {
-                    ImplicitLocOpBuilder lb(loc, nb);
-                    Value pt =
-                        lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
-                    auto coords = toCoords(lb, pt);
-                    Value zi = lb.create<tensor::ExtractOp>(zzInv, ivs);
-                    Value r = lb.create<field::MulOp>(coords[0], zi);
-                    lb.create<tensor::YieldOp>(r);
-                  })
-                 .getResult();
-      affY = b.create<tensor::GenerateOp>(
-                  colType, dynExtents,
-                  [&](OpBuilder &nb, Location loc, ValueRange ivs) {
-                    ImplicitLocOpBuilder lb(loc, nb);
-                    Value pt =
-                        lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
-                    auto coords = toCoords(lb, pt);
-                    Value zi = lb.create<tensor::ExtractOp>(zzzInv, ivs);
-                    Value r = lb.create<field::MulOp>(coords[1], zi);
-                    lb.create<tensor::YieldOp>(r);
-                  })
-                 .getResult();
+      Value zInvCubic = b.create<field::InverseOp>(colType, colZZZ);
+      result = b.create<tensor::GenerateOp>(
+                    outputTensorType, dynExtents,
+                    [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                      ImplicitLocOpBuilder lb(loc, nb);
+                      Value pt =
+                          lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
+                      auto coords = toCoords(lb, pt);
+                      Value zi3 = lb.create<tensor::ExtractOp>(zInvCubic, ivs);
+                      // Z⁻¹ = Z⁻³ * Z² = zInvCubic * ZZ
+                      Value zInv = lb.create<field::MulOp>(zi3, coords[2]);
+                      Value zInvSq = lb.create<field::MulOp>(zInv, zInv);
+                      Value x = lb.create<field::MulOp>(coords[0], zInvSq);
+                      Value y = lb.create<field::MulOp>(coords[1], zi3);
+                      Value resPt = fromCoords(lb, outputPti, ValueRange{x, y});
+                      lb.create<tensor::YieldOp>(resPt);
+                    })
+                   .getResult();
     }
-
-    // Assemble output tensor<N x !ec.affine> via from_coords.
-    auto outputTensorType = RankedTensorType::get({n}, cast<Type>(outputPti));
-    Value result = b.create<tensor::GenerateOp>(
-                        outputTensorType, dynExtents,
-                        [&](OpBuilder &nb, Location loc, ValueRange ivs) {
-                          ImplicitLocOpBuilder lb(loc, nb);
-                          Value x = lb.create<tensor::ExtractOp>(affX, ivs);
-                          Value y = lb.create<tensor::ExtractOp>(affY, ivs);
-                          Value pt =
-                              fromCoords(lb, outputPti, ValueRange{x, y});
-                          lb.create<tensor::YieldOp>(pt);
-                        })
-                       .getResult();
 
     rewriter.replaceOp(op, result);
     return success();
