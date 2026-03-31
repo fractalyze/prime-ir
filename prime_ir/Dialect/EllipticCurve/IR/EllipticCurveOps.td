@@ -401,7 +401,11 @@ def EllipticCurve_PairingCheckOp : EllipticCurve_Op_Base<"pairing_check"> {
 
 ////////////// POINT CONVERSIONS //////////////
 
-def EllipticCurve_ConvertPointTypeOp : EllipticCurve_UnaryOp<"convert_point_type"> {
+// Non-elementwise: tensor convert_point_type is lowered directly
+// (with batch field.inverse) rather than element-by-element via linalg.map.
+def EllipticCurve_ConvertPointTypeOp : EllipticCurve_Op_Base<"convert_point_type"> {
+  let arguments = (ins PointLike:$input);
+  let results = (outs PointLike:$output);
   let summary = "Convert a point from one form to another.";
   let description = [{
     Converts a point on an elliptic curve from one form to another.

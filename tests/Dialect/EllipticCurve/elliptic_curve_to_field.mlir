@@ -188,3 +188,31 @@ func.func @test_memref(%arg0: memref<3x!affinem>, %arg1: memref<3x!affinem>) {
   memref.store %affine, %arg0[%c0] : memref<3x!affinem>
   return
 }
+
+// Batch tensor convert_point_type: Jacobian → Affine uses batch field.inverse.
+// CHECK-LABEL: @test_batch_jacobian_to_affine
+func.func @test_batch_jacobian_to_affine(%arg0: tensor<4x!jacobianm>) -> tensor<4x!affinem> {
+  // CHECK-NOT: elliptic_curve.convert_point_type
+  // CHECK: tensor.generate
+  // CHECK: elliptic_curve.to_coords
+  // CHECK: field.inverse
+  // CHECK: tensor.generate
+  // CHECK: field.mul
+  // CHECK: elliptic_curve.from_coords
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<4x!jacobianm> -> tensor<4x!affinem>
+  return %result : tensor<4x!affinem>
+}
+
+// Batch tensor convert_point_type: XYZZ → Affine uses batch field.inverse.
+// CHECK-LABEL: @test_batch_xyzz_to_affine
+func.func @test_batch_xyzz_to_affine(%arg0: tensor<4x!xyzzm>) -> tensor<4x!affinem> {
+  // CHECK-NOT: elliptic_curve.convert_point_type
+  // CHECK: tensor.generate
+  // CHECK: elliptic_curve.to_coords
+  // CHECK: field.inverse
+  // CHECK: tensor.generate
+  // CHECK: field.mul
+  // CHECK: elliptic_curve.from_coords
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<4x!xyzzm> -> tensor<4x!affinem>
+  return %result : tensor<4x!affinem>
+}
