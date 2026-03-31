@@ -396,21 +396,30 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     return false;
   }
 
-  // Verify shapes are static
-  if (!fieldTensor.hasStaticShape() || !pointTensor.hasStaticShape())
+  // Both must be 1-D tensors.
+  if (fieldTensor.getRank() != 1 || pointTensor.getRank() != 1)
     return false;
 
-  // Verify element counts match: N*K field elements = N points with K coords
   unsigned numCoords = pointType.getNumCoords();
-  int64_t fieldCount = fieldTensor.getNumElements();
-  int64_t pointCount = pointTensor.getNumElements();
-
-  // Account for extension field degree
   Type baseFieldType = pointType.getBaseFieldType();
   unsigned extDegree = field::getExtensionDegree(baseFieldType);
+  unsigned K = numCoords * extDegree;
 
-  // Total field elements = numPoints * numCoords * extDegree
-  return fieldCount == pointCount * numCoords * extDegree;
+  int64_t fieldDim = fieldTensor.getDimSize(0);
+  int64_t pointDim = pointTensor.getDimSize(0);
+
+  // If both static: verify fieldDim == pointDim * K.
+  if (fieldDim != ShapedType::kDynamic && pointDim != ShapedType::kDynamic)
+    return fieldDim == pointDim * K;
+
+  // If one is static and the other dynamic: check static side is divisible.
+  if (fieldDim != ShapedType::kDynamic && pointDim == ShapedType::kDynamic)
+    return fieldDim % K == 0;
+  if (fieldDim == ShapedType::kDynamic && pointDim != ShapedType::kDynamic)
+    return true; // dynamic field dim, any static point dim is fine
+
+  // Both dynamic: trust the user.
+  return true;
 }
 
 LogicalResult BitcastOp::verify() {

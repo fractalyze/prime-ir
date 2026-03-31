@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <utility>
 
-#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Linalg/Transforms/Transforms.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/PatternMatch.h"
@@ -292,6 +291,19 @@ struct ConvertConvertPointType
     Type inputType = op.getInput().getType();
     Type outputType = getElementTypeOrSelf(op.getType());
 
+    // Tensor batch path: Jacobian/XYZZ → Affine with batch field.inverse.
+    // The batch inverse avoids per-element scalar inverse, enabling
+    // Montgomery's trick (3(N-1) muls + 1 inverse instead of N inverses).
+    if (auto tensorType = dyn_cast<RankedTensorType>(op.getInput().getType())) {
+      auto inputPti = cast<PointTypeInterface>(tensorType.getElementType());
+      auto outputPti = cast<PointTypeInterface>(outputType);
+      if (outputPti.getPointKind() == PointKind::kAffine &&
+          inputPti.getPointKind() != PointKind::kAffine) {
+        return rewriteTensorToAffine(op, adaptor, rewriter, tensorType,
+                                     inputPti, outputPti);
+      }
+    }
+
     // AOT runtime path for point type conversions.
     if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
                             aotConfig.inlineConstOps)) {
@@ -305,13 +317,131 @@ struct ConvertConvertPointType
       }
     }
 
-    // Inline path.
+    // Inline scalar path.
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ScopedBuilderContext scopedBuilderContext(&b);
 
     PointCodeGen inputCodeGen(inputType, adaptor.getInput());
     PointKind outKind = cast<PointTypeInterface>(outputType).getPointKind();
     rewriter.replaceOp(op, {inputCodeGen.convert(outKind)});
+    return success();
+  }
+
+private:
+  /// Lower tensor<N x !ec.jacobian> → tensor<N x !ec.affine> using batch
+  /// field.inverse on the Z coordinates.
+  ///
+  /// Jacobian (X, Y, Z) → Affine (X / Z², Y / Z³):
+  ///   z_inv = field.inverse(Z)          ← batch on tensor<N x !F>
+  ///   z_inv² = z_inv * z_inv
+  ///   z_inv³ = z_inv² * z_inv
+  ///   x = X * z_inv²
+  ///   y = Y * z_inv³
+  ///
+  /// XYZZ (X, Y, ZZ, ZZZ) → Affine (X / ZZ, Y / ZZZ):
+  ///   z_inv³ = field.inverse(ZZZ)       ← batch on tensor<N x !F>
+  ///   per-element: z_inv = z_inv³ * ZZ, z_inv² = z_inv²
+  ///   x = X * z_inv², y = Y * z_inv³
+  LogicalResult rewriteTensorToAffine(ConvertPointTypeOp op, OpAdaptor adaptor,
+                                      ConversionPatternRewriter &rewriter,
+                                      RankedTensorType tensorType,
+                                      PointTypeInterface inputPti,
+                                      PointTypeInterface outputPti) const {
+    if (tensorType.getRank() != 1)
+      return rewriter.notifyMatchFailure(
+          op, "batch convert_point_type requires 1-D tensor");
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    Type fieldType = inputPti.getBaseFieldType();
+    int64_t n = tensorType.getDimSize(0); // may be kDynamic
+    bool isDynamic = n == ShapedType::kDynamic;
+
+    // Get N as Value.
+    Value c0val = b.create<arith::ConstantIndexOp>(0);
+    Value dimNval =
+        isDynamic
+            ? b.create<tensor::DimOp>(adaptor.getInput(), c0val).getResult()
+            : b.create<arith::ConstantIndexOp>(n).getResult();
+    SmallVector<Value, 1> dynExtentsStorage;
+    if (isDynamic)
+      dynExtentsStorage.push_back(dimNval);
+    ValueRange dynExtents = dynExtentsStorage;
+    auto colType = RankedTensorType::get({n}, fieldType);
+
+    PointKind inKind = inputPti.getPointKind();
+    if (inKind != PointKind::kJacobian && inKind != PointKind::kXYZZ) {
+      return rewriter.notifyMatchFailure(
+          op, "unsupported input point kind for batch conversion");
+    }
+
+    // Extract coordinate columns via tensor.generate + to_coords.
+    // No bitcast/expand_shape/extract_slice — avoids buffer aliasing
+    // issues that cause use-after-free during bufferization.
+    auto makeCol = [&](unsigned coordIdx) -> Value {
+      return b
+          .create<tensor::GenerateOp>(
+              colType, dynExtents,
+              [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                ImplicitLocOpBuilder lb(loc, nb);
+                Value pt =
+                    lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
+                auto coords = toCoords(lb, pt);
+                lb.create<tensor::YieldOp>(coords[coordIdx]);
+              })
+          .getResult();
+    };
+
+    // Fused output: batch inverse → single tensor.generate that computes
+    // affine coordinates and assembles the output point in one pass.
+    auto outputTensorType = RankedTensorType::get({n}, cast<Type>(outputPti));
+    Value result;
+    if (inKind == PointKind::kJacobian) {
+      Value colZ = makeCol(2);
+      Value zInv = b.create<field::InverseOp>(colType, colZ);
+      Value zInv2 = b.create<field::MulOp>(colType, zInv, zInv);
+      Value zInv3 = b.create<field::MulOp>(colType, zInv2, zInv);
+      result = b.create<tensor::GenerateOp>(
+                    outputTensorType, dynExtents,
+                    [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                      ImplicitLocOpBuilder lb(loc, nb);
+                      Value pt =
+                          lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
+                      auto coords = toCoords(lb, pt);
+                      Value zi2 = lb.create<tensor::ExtractOp>(zInv2, ivs);
+                      Value zi3 = lb.create<tensor::ExtractOp>(zInv3, ivs);
+                      Value x = lb.create<field::MulOp>(coords[0], zi2);
+                      Value y = lb.create<field::MulOp>(coords[1], zi3);
+                      Value resPt = fromCoords(lb, outputPti, ValueRange{x, y});
+                      lb.create<tensor::YieldOp>(resPt);
+                    })
+                   .getResult();
+    } else {
+      // XYZZ→Affine: single BatchInverse on ZZZ only.
+      // zInvCubic = BatchInverse(ZZZ) = Z⁻³
+      // Per-element: zInv = zInvCubic * ZZ, zInvSq = zInv²,
+      //              x = X * zInvSq, y = Y * zInvCubic.
+      Value colZZZ = makeCol(3);
+      Value zInvCubic = b.create<field::InverseOp>(colType, colZZZ);
+      result = b.create<tensor::GenerateOp>(
+                    outputTensorType, dynExtents,
+                    [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                      ImplicitLocOpBuilder lb(loc, nb);
+                      Value pt =
+                          lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
+                      auto coords = toCoords(lb, pt);
+                      Value zi3 = lb.create<tensor::ExtractOp>(zInvCubic, ivs);
+                      // Z⁻¹ = Z⁻³ * Z² = zInvCubic * ZZ
+                      Value zInv = lb.create<field::MulOp>(zi3, coords[2]);
+                      Value zInvSq = lb.create<field::MulOp>(zInv, zInv);
+                      Value x = lb.create<field::MulOp>(coords[0], zInvSq);
+                      Value y = lb.create<field::MulOp>(coords[1], zi3);
+                      Value resPt = fromCoords(lb, outputPti, ValueRange{x, y});
+                      lb.create<tensor::YieldOp>(resPt);
+                    })
+                   .getResult();
+    }
+
+    rewriter.replaceOp(op, result);
     return success();
   }
 
