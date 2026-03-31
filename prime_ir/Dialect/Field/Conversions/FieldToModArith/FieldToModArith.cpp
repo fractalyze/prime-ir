@@ -423,16 +423,28 @@ protected:
 /// Lowers field.inverse for both scalar and tensor types.
 ///
 /// Scalar: delegates to ConvertFieldOpBase (AOT or inline codegen).
-/// Tensor EF: Montgomery's batch inversion trick.
+///
+/// Tensor (batch, default): Montgomery's batch inversion trick.
 ///   Given a₀, a₁, ..., aₙ₋₁:
 ///     Forward:  prefix[0] = a₀; prefix[i] = prefix[i-1] * a[i]
 ///     Inverse:  inv = prefix[n-1]⁻¹
 ///     Backward: result[i] = inv * prefix[i-1]; inv = inv * a[i]  (i = n-1..1)
 ///               result[0] = inv
 ///   Uses O(3(n-1)) field multiplications + 1 field inversion instead of n
-///   independent inversions.
+///   independent inversions. Optimal for CPU (sequential, fewer total muls).
+///
+/// Tensor (elementwise, opt-in): per-element scalar inverse via linalg.generic.
+///   Each element is independently inverted (Fermat's little theorem: a^(p-2)).
+///   Preferred for GPU where embarrassingly parallel per-element inverse
+///   outperforms sequential batch inverse.
 struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
-  using Base::Base;
+  using Base = ConvertFieldOpBase<InverseOp, ConvertInverse>;
+
+  ConvertInverse(const TypeConverter &converter, MLIRContext *context,
+                 AOTConfig aotConfig, bool useElementwiseInverse)
+      : Base(converter, context, aotConfig),
+        useElementwiseInverse(useElementwiseInverse) {}
+
   std::optional<std::string> getAOTFuncName(Type fieldType) const {
     return getFieldAOTFuncName("inverse", fieldType);
   }
@@ -449,6 +461,8 @@ struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
     if (!tensorType)
       return Base::matchAndRewrite(op, adaptor, rewriter);
 
+    if (useElementwiseInverse)
+      return emitElementwiseInverse(op, adaptor, rewriter, tensorType);
     return emitBatchInverse(op, rewriter, tensorType);
   }
 
@@ -566,6 +580,58 @@ private:
     rewriter.replaceOp(op, result);
     return success();
   }
+
+  /// Per-element scalar inverse via linalg.generic.
+  /// Each element is independently inverted, enabling GPU parallelization.
+  /// Uses FieldCodeGen directly to emit mod_arith ops in the body,
+  /// avoiding recursive conversion issues with linalg.yield terminator.
+  LogicalResult emitElementwiseInverse(InverseOp op, OpAdaptor adaptor,
+                                       ConversionPatternRewriter &rewriter,
+                                       RankedTensorType tensorType) const {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    Type fieldType = tensorType.getElementType();
+    Value input = adaptor.getInput();
+    int64_t rank = tensorType.getRank();
+    auto convertedTensorType =
+        cast<RankedTensorType>(this->typeConverter->convertType(tensorType));
+    Type convertedElemType = convertedTensorType.getElementType();
+
+    // Rank-0 tensor: extract, invert, wrap back.
+    if (rank == 0) {
+      Value elem = b.create<tensor::ExtractOp>(input, ValueRange{});
+      ScopedBuilderContext scopedCtx(&b);
+      Value inv = FieldCodeGen(fieldType, elem, this->typeConverter).inverse();
+      Value result = b.create<tensor::FromElementsOp>(convertedTensorType, inv);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    // Build identity indexing maps and parallel iterator types.
+    SmallVector<AffineMap> indexingMaps(
+        2, AffineMap::getMultiDimIdentityMap(rank, rewriter.getContext()));
+    SmallVector<utils::IteratorType> iteratorTypes(
+        rank, utils::IteratorType::parallel);
+
+    // Use getMixedSizes to support both static and dynamic shapes.
+    SmallVector<OpFoldResult> mixedSizes =
+        tensor::getMixedSizes(b, b.getLoc(), input);
+    Value init = b.create<tensor::EmptyOp>(mixedSizes, convertedElemType);
+    auto genericOp = b.create<linalg::GenericOp>(
+        /*resultTensorTypes=*/TypeRange{convertedTensorType},
+        /*inputs=*/ValueRange{input},
+        /*outputs=*/ValueRange{init}, indexingMaps, iteratorTypes,
+        [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
+          ImplicitLocOpBuilder lb(nestedLoc, nestedBuilder);
+          ScopedBuilderContext scopedCtx(&lb);
+          Value inv =
+              FieldCodeGen(fieldType, args[0], this->typeConverter).inverse();
+          lb.create<linalg::YieldOp>(ValueRange{inv});
+        });
+    rewriter.replaceOp(op, genericOp.getResults());
+    return success();
+  }
+
+  bool useElementwiseInverse;
 };
 
 struct ConvertNegate : ConvertFieldOpBase<NegateOp, ConvertNegate> {
@@ -903,17 +969,19 @@ void FieldToModArith::runOnOperation() {
   RewritePatternSet patterns(context);
   rewrites::populateWithGenerated(patterns);
 
+  AOTConfig aotConfig{mode, inlineConstantOps};
   patterns.add<
       // clang-format off
       ConvertAdd,
       ConvertDouble,
       ConvertMul,
-      ConvertInverse,
       ConvertNegate,
       ConvertSquare,
       ConvertSub
       // clang-format on
-      >(typeConverter, context, AOTConfig{mode, inlineConstantOps});
+      >(typeConverter, context, aotConfig);
+  patterns.add<ConvertInverse>(typeConverter, context, aotConfig,
+                               useElementwiseInverse);
 
   patterns.add<
       // clang-format off
