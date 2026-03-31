@@ -592,10 +592,8 @@ private:
     Type fieldType = tensorType.getElementType();
     Value input = adaptor.getInput();
     int64_t rank = tensorType.getRank();
-    auto convertedTensorType = dyn_cast_or_null<RankedTensorType>(
-        this->typeConverter->convertType(tensorType));
-    if (!convertedTensorType)
-      return rewriter.notifyMatchFailure(op, "failed to convert tensor type");
+    auto convertedTensorType =
+        cast<RankedTensorType>(this->typeConverter->convertType(tensorType));
     Type convertedElemType = convertedTensorType.getElementType();
 
     // Rank-0 tensor: extract, invert, wrap back.
