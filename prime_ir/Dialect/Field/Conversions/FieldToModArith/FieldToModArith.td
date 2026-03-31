@@ -35,6 +35,7 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
   let dependentDialects = [
     "arith::ArithDialect",
     "func::FuncDialect",
+    "linalg::LinalgDialect",
     "scf::SCFDialect",
     "tensor::TensorDialect",
     "ub::UBDialect",
@@ -49,6 +50,12 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
            /*default=*/"true",
            "When true, ops with 2+ operands where at least one is constant "
            "skip AOT and are inlined for constant folding/strength reduction.">,
+    Option<"useElementwiseInverse", "use-elementwise-inverse", "bool",
+           /*default=*/"false",
+           "When true, tensor field.inverse is lowered as per-element "
+           "scalar inverse instead of Montgomery batch inverse. "
+           "Preferred for GPU targets where parallel per-element inverse "
+           "is faster than sequential batch inverse.">,
   ];
 }
 
