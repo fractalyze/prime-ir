@@ -81,6 +81,30 @@ static std::optional<std::string> getAOTRuntimeFuncName(llvm::StringRef op,
       .str();
 }
 
+// Build cross-type AOT function name:
+// ec_{op}_{curve}_{inputKind}_to_{outputKind}{mont} Example:
+// "ec_add_bn254_g1_affine_to_jacobian_mont"
+static std::optional<std::string>
+getCrossTypeAOTFuncName(llvm::StringRef op, Type inputType, Type outputType) {
+  auto inputPti = dyn_cast<PointTypeInterface>(inputType);
+  auto outputPti = dyn_cast<PointTypeInterface>(outputType);
+  if (!inputPti || !outputPti)
+    return std::nullopt;
+
+  auto curveAttr = dyn_cast<ShortWeierstrassAttr>(outputPti.getCurveAttr());
+  if (!curveAttr)
+    return std::nullopt;
+  auto alias = getKnownCurveAlias(curveAttr);
+  if (!alias)
+    return std::nullopt;
+
+  return ("ec_" + op + "_" + *alias + "_" +
+          pointKindToString(inputPti.getPointKind()) + "_to_" +
+          pointKindToString(outputPti.getPointKind()) +
+          getMontSuffix(outputPti.getBaseFieldType()))
+      .str();
+}
+
 // Build AOT runtime name for point type conversions.
 // Example: "ec_jacobian_to_affine_bn254_g1", "ec_xyzz_to_affine_bn254_g2_mont"
 static std::optional<std::string>
@@ -310,13 +334,15 @@ struct ConvertAdd : public OpConversionPattern<AddOp> {
                             aotConfig.inlineConstOps)) {
       Type lhsType = getElementTypeOrSelf(op->getOperandTypes()[0]);
       Type rhsType = getElementTypeOrSelf(op->getOperandTypes()[1]);
-      // Determine function name based on types.
-      std::string opName;
-      if (lhsType == rhsType)
-        opName = "add";
-      else
-        opName = "mixed_add";
-      auto funcName = getAOTRuntimeFuncName(opName, outputType);
+      std::optional<std::string> funcName;
+      if (lhsType == rhsType) {
+        if (lhsType == outputType)
+          funcName = getAOTRuntimeFuncName("add", outputType);
+        else
+          funcName = getCrossTypeAOTFuncName("add", lhsType, outputType);
+      } else {
+        funcName = getAOTRuntimeFuncName("mixed_add", outputType);
+      }
       if (funcName) {
         rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
                                                {op.getLhs(), op.getRhs()},
@@ -352,7 +378,12 @@ struct ConvertDouble : public OpConversionPattern<DoubleOp> {
 
     if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
                             aotConfig.inlineConstOps)) {
-      auto funcName = getAOTRuntimeFuncName("double", outputType);
+      Type inputType = getElementTypeOrSelf(op.getInput().getType());
+      std::optional<std::string> funcName;
+      if (inputType == outputType)
+        funcName = getAOTRuntimeFuncName("double", outputType);
+      else
+        funcName = getCrossTypeAOTFuncName("double", inputType, outputType);
       if (funcName) {
         rewriter.replaceOp(op, emitAOTFuncCall(op, *funcName, op.getType(),
                                                {op.getInput()}, rewriter));
