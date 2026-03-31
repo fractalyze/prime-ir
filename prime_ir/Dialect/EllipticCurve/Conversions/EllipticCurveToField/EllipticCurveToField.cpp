@@ -294,7 +294,10 @@ struct ConvertConvertPointType
     // Tensor batch path: Jacobian/XYZZ → Affine with batch field.inverse.
     // The batch inverse avoids per-element scalar inverse, enabling
     // Montgomery's trick (3(N-1) muls + 1 inverse instead of N inverses).
-    if (auto tensorType = dyn_cast<RankedTensorType>(op.getInput().getType())) {
+    // Skip rank-0 tensors — they are scalars wrapped in tensor<T> and should
+    // use the scalar AOT/inline path below.
+    if (auto tensorType = dyn_cast<RankedTensorType>(inputType);
+        tensorType && tensorType.getRank() > 0) {
       auto inputPti = cast<PointTypeInterface>(tensorType.getElementType());
       auto outputPti = cast<PointTypeInterface>(outputType);
       if (outputPti.getPointKind() == PointKind::kAffine &&
@@ -305,9 +308,11 @@ struct ConvertConvertPointType
     }
 
     // AOT runtime path for point type conversions.
+    // Use getElementTypeOrSelf for inputType since it is a rank-0 tensor
+    // when the batch path above is skipped (rank>0 tensors are handled there).
     if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
                             aotConfig.inlineConstOps)) {
-      auto inputPti = cast<PointTypeInterface>(inputType);
+      auto inputPti = cast<PointTypeInterface>(getElementTypeOrSelf(inputType));
       auto outputPti = cast<PointTypeInterface>(outputType);
       auto funcName = getConvertFuncName(inputPti, outputPti);
       if (funcName) {
