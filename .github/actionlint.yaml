@@ -2,4 +2,6 @@
 
 self-hosted-runner:
   labels:
-    - prime_ir
+    - cpu
+    - gpu
+    - bench
