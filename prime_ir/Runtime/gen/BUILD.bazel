@@ -40,7 +40,7 @@ genrule(
         "ec_ops_bn254_g1.mlir",
         "ec_ops_bn254_g2.mlir",
     ],
-    cmd = "python3 $(execpath :gen_aot_runtime.py) --types $(location :aot_types.txt) --ec-outdir $(@D) --field-outdir /tmp/unused_field",
+    cmd = "python3 $(execpath :gen_aot_runtime.py) --types $(location :aot_types.txt) --ec-outdir $(@D) --field-outdir unused_field",
     tools = [":gen_aot_runtime.py"],
 )
 
@@ -52,7 +52,7 @@ genrule(
         "field_ops_bn254_bfx2.mlir",
         "field_ops_koalabearx4.mlir",
     ],
-    cmd = "python3 $(execpath :gen_aot_runtime.py) --types $(location :aot_types.txt) --ec-outdir /tmp/unused_ec --field-outdir $(@D)",
+    cmd = "python3 $(execpath :gen_aot_runtime.py) --types $(location :aot_types.txt) --ec-outdir unused_ec --field-outdir $(@D)",
     tools = [":gen_aot_runtime.py"],
 )
 
