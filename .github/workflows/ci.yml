@@ -34,6 +34,10 @@ jobs:
       - name: Checkout PrimeIR
         uses: actions/checkout@v4
 
+      - name: Fetch base commit for pre-commit diff
+        if: github.event_name == 'pull_request'
+        run: git fetch origin ${{ github.event.pull_request.base.sha }} --depth=1
+
       - name: Checkout Setup Python
         uses: actions/setup-python@v4.7.0
         with:
