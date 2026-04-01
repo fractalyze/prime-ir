@@ -33,6 +33,8 @@ jobs:
     steps:
       - name: Checkout PrimeIR
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
 
       - name: Fetch base commit for pre-commit diff
         if: github.event_name == 'pull_request'
