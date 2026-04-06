@@ -250,13 +250,32 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   tHigh = b.create<arith::SelectOp>(carry, tHighPlusOne, tHigh);
   // Shift right `T` by `limbWidth` to discard the zeroed limb.
   tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
+
+  // When 2p > 2^w (modulus uses all w bits), the REDC result can land in
+  // [2^w, 2p) which overflows w-bit storage. Detect this BEFORE the left
+  // shift discards the evidence: tHigh bits above the lowest limb mean the
+  // combined result would exceed 2^w.
+  APInt mod = cast<IntegerAttr>(modAttr).getValue();
+  Value overflow;
+  if (mod.isSignBitSet()) {
+    Value tHighUpper = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
+    TypedAttr zeroAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), 0);
+    Value zero;
+    if (auto shapedType = dyn_cast<ShapedType>(tLow.getType()))
+      zero = createSplatConst(b, zeroAttr, shapedType, tLow);
+    else
+      zero = b.create<arith::ConstantOp>(zeroAttr);
+    overflow = b.create<arith::CmpIOp>(arith::CmpIPredicate::ne, tHighUpper,
+                                       zero);
+  }
+
   tHigh = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
   tLow = b.create<arith::OrIOp>(tLow, tHigh);
 
   if (lazy)
     return tLow;
-  // Final conditional subtraction: if (`tLow` >= `modulus`) then subtract
-  // `modulus`.
+  if (overflow)
+    return getCanonicalFromExtended(tLow, overflow);
   return getCanonicalFromExtended(tLow);
 }
 
