@@ -114,7 +114,7 @@ Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
   auto add = b.create<arith::AddIOp>(sub, cmod);
   APInt mod = cast<IntegerAttr>(modAttr).getValue();
   if (mod.isSignBitSet()) {
-    // When p > 2^(w-1), diff + p can overflow, so minui gives wrong results.
+    // When p > 2ʷ⁻¹, diff + p can overflow, so minui gives wrong results.
     // Fall back to cmpi + select.
     auto underflowed =
         b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, lhs, rhs);
@@ -250,6 +250,37 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   tHigh = b.create<arith::SelectOp>(carry, tHighPlusOne, tHigh);
   // Shift right `T` by `limbWidth` to discard the zeroed limb.
   tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
+
+  // When p > 2ʷ⁻¹ (modulus uses all w bits), the REDC result can exceed
+  // 2ʷ because 2p > 2ʷ. The upper bits of tHigh (above the lowest limb)
+  // represent the overflow: real_value = tLow_combined + tHighUpper * 2ʷ.
+  // Since 2ʷ ≡ R (mod p) where R = 2ʷ mod p, we recover the correct value
+  // by adding tHighUpper * R to tLow, then conditionally subtracting p.
+  APInt mod = cast<IntegerAttr>(modAttr).getValue();
+  if (mod.isSignBitSet()) {
+    Value tHighUpper = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
+    // Mask tHigh to only the lowest limb before the left-shift.
+    tHigh = b.create<arith::AndIOp>(tHigh, limbMaskConst);
+    tHigh = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
+    tLow = b.create<arith::OrIOp>(tLow, tHigh);
+
+    // Add overflow * R to recover the truncated value mod p.
+    // R = 2ʷ mod p is small, so tHighUpper * R fits in w bits.
+    // R = 2ʷ mod p = 2ʷ - p. Compute without overflow: -p in w-bit wraps
+    // to 2ʷ - p since p < 2ʷ.
+    APInt rVal = -mod; // R = 2ʷ - p (unsigned wrap in w bits)
+    TypedAttr rAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), rVal);
+    Value rConst;
+    if (auto shapedType = dyn_cast<ShapedType>(tLow.getType()))
+      rConst = createSplatConst(b, rAttr, shapedType, tLow);
+    else
+      rConst = b.create<arith::ConstantOp>(rAttr);
+    Value correction = b.create<arith::MulIOp>(tHighUpper, rConst);
+    tLow = b.create<arith::AddIOp>(tLow, correction);
+
+    return getCanonicalFromExtended(tLow);
+  }
+
   tHigh = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
   tLow = b.create<arith::OrIOp>(tLow, tHigh);
 
@@ -261,6 +292,15 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
 }
 
 Value MontReducer::reduce(Value tLow, Value tHigh, bool lazy) {
+  // Lazy REDC returns [0, 2p), which requires 2p ≤ 2ʷ. When the modulus
+  // uses all w bits (p > 2ʷ⁻¹), 2p > 2ʷ and lazy is not representable.
+  APInt mod = cast<IntegerAttr>(modAttr).getValue();
+  if (mod.isSignBitSet()) {
+    // Lazy is not possible when 2p > 2ʷ because [0, 2p) does not fit in
+    // w bits. Always reduce to [0, p).
+    assert(!lazy &&
+           "lazy REDC not supported for primes using all w bits (2p > 2ʷ)");
+  }
   const unsigned numLimbs = montAttr.getNumLimbs();
   return numLimbs == 1 ? reduceSingleLimb(tLow, tHigh, lazy)
                        : reduceMultiLimb(tLow, tHigh, lazy);
