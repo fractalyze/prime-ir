@@ -39,7 +39,7 @@ BYInverter::BYInverter(ImplicitLocOpBuilder &b, Type inputType)
   unsigned extModBitWidth = byAttr.getNewBitWidth().getValue().getZExtValue();
   unsigned modBitWidth = modulus.getValue().getBitWidth();
   unsigned n = byAttr.getDivsteps().getValue().getZExtValue();
-  unsigned limbBitWidth = n > 64 ? n : 64;
+  unsigned limbBitWidth = byAttr.getLimbBitWidth();
 
   intType = IntegerType::get(b.getContext(), modBitWidth);
   extIntType = IntegerType::get(b.getContext(), extModBitWidth);
