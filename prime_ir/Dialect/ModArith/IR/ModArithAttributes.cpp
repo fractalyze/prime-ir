@@ -165,15 +165,15 @@ BYAttrStorage *BYAttrStorage::construct(AttributeStorageAllocator &allocator,
     divsteps++;
   }
 
-  // The BY inverter codegen (BYInverter.cpp) selects a "limb" type sized to
-  // hold a signed value of magnitude up to 2^(divsteps+1) (the bound on the
-  // intermediate `md = t00*isNegD + t01*isNegE`), rounded up to the next
-  // power of two and never smaller than 64. The extended modulus type used
+  // The BY inverter codegen needs a "limb" type sized to hold a signed value
+  // of magnitude up to 2^(divsteps+1) (the bound on the intermediate
+  // `md = t00*isNegD + t01*isNegE`), rounded up to the next power of two and
+  // never smaller than a single APInt word. The extended modulus type used
   // for `d, e` updates needs at least `limbBitWidth` headroom over the
   // modulus bit width because the update step computes
   // `m * sext_extInt(md)` whose product can occupy up to
-  // `modBitWidth + limbBitWidth` bits. Keep the formula here in sync with
-  // BYInverter.cpp.
+  // `modBitWidth + limbBitWidth` bits. The computed value is stored on the
+  // attribute and consumed by BYInverter via `BYAttr::getLimbBitWidth()`.
   unsigned limbBitWidth = std::max<unsigned>(APInt::APINT_BITS_PER_WORD,
                                              llvm::PowerOf2Ceil(divsteps + 2));
   bitWidth += limbBitWidth;
