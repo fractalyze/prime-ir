@@ -63,6 +63,12 @@ def ModArith_BYAttr : ModArith_Attr<"BY", "by"> {
     IntegerAttr getDivsteps() const;
     IntegerAttr getMInv() const;
     IntegerAttr getNewBitWidth() const;
+    // Bit width of the "limb" type used by the BY inverter codegen for the
+    // matrix entries `t.t00, t.t01, t.t10, t.t11` and intermediates such as
+    // `md`. Sized to hold a signed value of magnitude up to 2^(divsteps+1)
+    // (the bound on `md = t00*isNegD + t01*isNegE`), rounded up to the next
+    // power of two with a floor of 64.
+    unsigned getLimbBitWidth() const;
   }];
   let assemblyFormat = "`<`$modulus`>`";
   let genStorageClass = 0;

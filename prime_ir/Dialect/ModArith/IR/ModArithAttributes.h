@@ -61,9 +61,10 @@ struct BYAttrStorage : public AttributeStorage {
   using KeyTy = IntegerAttr;
 
   BYAttrStorage(IntegerAttr modulus, IntegerAttr divsteps, IntegerAttr mInv,
-                IntegerAttr newBitWidth)
+                IntegerAttr newBitWidth, unsigned limbBitWidth)
       : modulus(std::move(modulus)), divsteps(std::move(divsteps)),
-        mInv(std::move(mInv)), newBitWidth(std::move(newBitWidth)) {}
+        mInv(std::move(mInv)), newBitWidth(std::move(newBitWidth)),
+        limbBitWidth(limbBitWidth) {}
 
   KeyTy getAsKey() const { return KeyTy(modulus); }
 
@@ -80,6 +81,7 @@ struct BYAttrStorage : public AttributeStorage {
   IntegerAttr divsteps;
   IntegerAttr mInv;
   IntegerAttr newBitWidth;
+  unsigned limbBitWidth;
 };
 
 } // namespace mlir::prime_ir::mod_arith::detail
