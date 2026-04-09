@@ -19,6 +19,7 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveDialect.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/g1.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/g2.h"
+#include "zk_dtypes/include/elliptic_curve/curve25519/ed25519/g1.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 namespace {
@@ -169,6 +170,70 @@ TYPED_TEST(PointOperationTest, Convert) {
         [](const PointType &a) { return a.ToXyzz(); },
         [](const auto &a) { return a.template convert<PointKind::kXYZZ>(); });
   }
+}
+
+//===----------------------------------------------------------------------===//
+// Ed25519 ExtendedPoint operations
+//===----------------------------------------------------------------------===//
+
+class Ed25519PointOperationTest : public testing::Test {
+public:
+  using Point = zk_dtypes::ed25519::G1ExtendedPoint;
+  static constexpr PointKind Kind = PointKind::kEdExtended;
+  using PointOp = PointOperationBase<Kind>;
+
+  static void SetUpTestSuite() { context.loadDialect<EllipticCurveDialect>(); }
+
+  static MLIRContext context;
+};
+
+MLIRContext Ed25519PointOperationTest::context;
+
+TEST_F(Ed25519PointOperationTest, FromZkDtypeRoundTrip) {
+  auto gen = Point::Generator();
+  auto ptGen = PointOp::fromZkDtype(&context, gen);
+  auto ptGen2 = PointOp::fromZkDtype(&context, gen);
+  EXPECT_EQ(ptGen, ptGen2);
+}
+
+TEST_F(Ed25519PointOperationTest, Add) {
+  auto a = Point::Generator();
+  auto b = Point::Generator();
+  auto ptA = PointOp::fromZkDtype(&context, a);
+  auto ptB = PointOp::fromZkDtype(&context, b);
+  auto result = ptA + ptB;
+  auto expected = PointOp::fromZkDtype(&context, a + b);
+  EXPECT_EQ(result, expected);
+}
+
+TEST_F(Ed25519PointOperationTest, Negate) {
+  auto a = Point::Generator();
+  auto ptA = PointOp::fromZkDtype(&context, a);
+  auto result = -ptA;
+  auto expected = PointOp::fromZkDtype(&context, -a);
+  EXPECT_EQ(result, expected);
+}
+
+TEST_F(Ed25519PointOperationTest, Double) {
+  auto a = Point::Generator();
+  auto ptA = PointOp::fromZkDtype(&context, a);
+  auto result = ptA.dbl();
+  auto expected = PointOp::fromZkDtype(&context, a.Double());
+  EXPECT_EQ(result, expected);
+}
+
+TEST_F(Ed25519PointOperationTest, AddEqualsDouble) {
+  // Edwards unified addition and dedicated doubling produce different
+  // projective representations of the same point. Verify they both match
+  // zk_dtypes' outputs (which are also projectively different).
+  auto g = Point::Generator();
+  auto ptG = PointOp::fromZkDtype(&context, g);
+  auto sum = ptG + ptG;
+  auto dbl = ptG.dbl();
+  auto expectedSum = PointOp::fromZkDtype(&context, g + g);
+  auto expectedDbl = PointOp::fromZkDtype(&context, g.Double());
+  EXPECT_EQ(sum, expectedSum);
+  EXPECT_EQ(dbl, expectedDbl);
 }
 
 } // namespace

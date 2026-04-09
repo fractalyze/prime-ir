@@ -20,11 +20,35 @@
 
 namespace mlir::prime_ir::elliptic_curve {
 
+// TODO(chokobole): Rename kAffine→kSwAffine, kJacobian→kSwJacobian,
+// kXYZZ→kSwXYZZ (and corresponding MLIR types AffineType→SwAffineType, etc.)
+// for naming consistency with the Ed-prefixed variants. Separate refactor PR.
 enum class PointKind {
   kAffine,
   kJacobian,
   kXYZZ,
+  kEdAffine,
+  kEdExtended,
 };
+
+constexpr bool isEdwards(PointKind kind) {
+  return kind == PointKind::kEdAffine || kind == PointKind::kEdExtended;
+}
+
+constexpr size_t getNumCoords(PointKind kind) {
+  switch (kind) {
+  case PointKind::kAffine:
+    return 2;
+  case PointKind::kJacobian:
+    return 3;
+  case PointKind::kXYZZ:
+    return 4;
+  case PointKind::kEdAffine:
+    return 2;
+  case PointKind::kEdExtended:
+    return 4;
+  }
+}
 
 template <typename Point>
 constexpr PointKind getPointKind() {
@@ -32,9 +56,12 @@ constexpr PointKind getPointKind() {
     return PointKind::kAffine;
   } else if constexpr (zk_dtypes::IsJacobianPoint<Point>) {
     return PointKind::kJacobian;
-  } else {
-    static_assert(zk_dtypes::IsPointXyzz<Point>, "Point must be an xyzz point");
+  } else if constexpr (zk_dtypes::IsPointXyzz<Point>) {
     return PointKind::kXYZZ;
+  } else {
+    static_assert(zk_dtypes::IsExtendedPoint<Point>,
+                  "Point must be an extended point");
+    return PointKind::kEdExtended;
   }
 }
 

@@ -159,6 +159,8 @@ private:
   friend class zk_dtypes::JacobianPointOperation;
   template <typename, typename>
   friend class zk_dtypes::PointXyzzOperation;
+  template <typename, typename>
+  friend class zk_dtypes::ExtendedPointOperation;
   friend raw_ostream &operator<<(raw_ostream &os, const FieldOperation &op);
 
   FieldOperation Double() const { return dbl(); }

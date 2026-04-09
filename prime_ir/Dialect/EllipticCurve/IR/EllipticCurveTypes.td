@@ -113,9 +113,51 @@ def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [
   let assemblyFormat = "`<` $curve `>`";
 }
 
+def EllipticCurve_EdAffineType : EllipticCurve_Type<"EdAffine", "ed_affine", [
+  MemRefElementTypeInterface,
+  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  ]> {
+  let summary = "An affine point on a twisted Edwards curve";
+  let description = [{
+    An affine point (x, y) on a twisted Edwards curve a*x² + y² = 1 + d*x²*y².
+    It must be instantiated with a twisted Edwards curve attribute.
+
+    Example:
+    ```
+    #ed25519 = #elliptic_curve.te<-1:i256, d:i256, (Gx:i256, Gy:i256)> : !curve25519_bf
+    !ed_affine = !elliptic_curve.ed_affine<#ed25519>
+    ```
+  }];
+  let parameters = (ins EllipticCurve_TwistedEdwardsAttr:$curve);
+  let assemblyFormat = "`<` $curve `>`";
+}
+
+def EllipticCurve_EdExtendedType : EllipticCurve_Type<"EdExtended", "ed_extended", [
+  MemRefElementTypeInterface,
+  DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>,
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  ]> {
+  let summary = "An extended point on a twisted Edwards curve";
+  let description = [{
+    An extended point on a twisted Edwards curve in the form (X:Y:Z:T) where
+    x = X/Z, y = Y/Z, T = X*Y/Z (Hisil-Wong-Carter-Dawson 2008). It must be
+    instantiated with a twisted Edwards curve attribute `#elliptic_curve.te`.
+
+    Example:
+    ```
+    #ed25519 = #elliptic_curve.te<-1:i256, d:i256, (Gx:i256, Gy:i256)> : !curve25519_bf
+    !extended = !elliptic_curve.ed_extended<#ed25519>
+    ```
+  }];
+  let parameters = (ins EllipticCurve_TwistedEdwardsAttr:$curve);
+  let assemblyFormat = "`<` $curve `>`";
+}
+
 def PointType : AnyTypeOf<[
     EllipticCurve_AffineType, EllipticCurve_JacobianType,
-    EllipticCurve_XYZZType]>;
+    EllipticCurve_XYZZType, EllipticCurve_EdAffineType,
+    EllipticCurve_EdExtendedType]>;
 
 def AffineLike : TypeOrValueSemanticsContainer<
     EllipticCurve_AffineType, "affine-like">;
@@ -126,7 +168,14 @@ def JacobianLike : TypeOrValueSemanticsContainer<
 def XYZZLike : TypeOrValueSemanticsContainer<
     EllipticCurve_XYZZType, "xyzz-like">;
 
+def EdAffineLike : TypeOrValueSemanticsContainer<
+    EllipticCurve_EdAffineType, "ed-affine-like">;
+
+def EdExtendedLike : TypeOrValueSemanticsContainer<
+    EllipticCurve_EdExtendedType, "ed-extended-like">;
+
 def PointLike : TypeConstraint<Or<[
-    AffineLike.predicate, JacobianLike.predicate, XYZZLike.predicate]>,
-    "affine-like or jacobian-like or xyzz-like">;
+    AffineLike.predicate, JacobianLike.predicate, XYZZLike.predicate,
+    EdAffineLike.predicate, EdExtendedLike.predicate]>,
+    "affine-like or jacobian-like or xyzz-like or ed-affine-like or ed-extended-like">;
 #endif  // PRIME_IR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVETYPES_TD_

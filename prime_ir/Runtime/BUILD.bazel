@@ -19,5 +19,6 @@ package(default_visibility = ["//visibility:public"])
 exports_files([
     "babybear_defs.mlir",
     "bn254_defs.mlir",
+    "ed25519_defs.mlir",
     "koalabear_defs.mlir",
 ])

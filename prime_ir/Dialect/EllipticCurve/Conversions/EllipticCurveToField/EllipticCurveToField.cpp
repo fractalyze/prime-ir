@@ -50,6 +50,10 @@ static llvm::StringRef pointKindToString(PointKind kind) {
     return "jacobian";
   case PointKind::kXYZZ:
     return "xyzz";
+  case PointKind::kEdAffine:
+    return "ed_affine";
+  case PointKind::kEdExtended:
+    return "ed_extended";
   }
   llvm_unreachable("unknown PointKind");
 }
@@ -153,9 +157,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     Type resultType = op.getType();
     Type pointType = getElementTypeOrSelf(resultType);
     auto pointTypeInterface = cast<PointTypeInterface>(pointType);
-    Type baseFieldType =
-        cast<ShortWeierstrassAttr>(pointTypeInterface.getCurveAttr())
-            .getBaseField();
+    Type baseFieldType = pointTypeInterface.getBaseFieldType();
 
     // Convert coordinate attributes to field constants
     // Unified structure: ArrayAttr<ArrayAttr<Attr>> where outer array contains
@@ -551,10 +553,20 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Operation::result_range coords = toCoords(b, op.getInput());
-
-    auto negatedY = b.create<field::NegateOp>(coords[1]);
     SmallVector<Value> outputCoords(coords);
-    outputCoords[1] = negatedY;
+
+    Type elementType = getElementTypeOrSelf(op.getType());
+    if (isa<EdAffineType>(elementType)) {
+      // Twisted Edwards affine: -(x, y) = (-x, y)
+      outputCoords[0] = b.create<field::NegateOp>(coords[0]);
+    } else if (isa<EdExtendedType>(elementType)) {
+      // Twisted Edwards extended: -(X, Y, Z, T) = (-X, Y, Z, -T)
+      outputCoords[0] = b.create<field::NegateOp>(coords[0]);
+      outputCoords[3] = b.create<field::NegateOp>(coords[3]);
+    } else {
+      // Short Weierstrass: negate Y coordinate.
+      outputCoords[1] = b.create<field::NegateOp>(coords[1]);
+    }
 
     rewriter.replaceOp(op, fromCoords(b, op.getType(), outputCoords));
     return success();

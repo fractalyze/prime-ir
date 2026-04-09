@@ -37,7 +37,9 @@ limitations under the License.
 namespace zk_dtypes {
 
 template <mlir::prime_ir::elliptic_curve::PointKind Kind>
-class PointTraits<mlir::prime_ir::elliptic_curve::PointCodeGenBase<Kind>> {
+class PointTraits<
+    mlir::prime_ir::elliptic_curve::PointCodeGenBase<Kind>,
+    std::enable_if_t<!mlir::prime_ir::elliptic_curve::isEdwards(Kind)>> {
 public:
   constexpr static CurveType kType = CurveType::kShortWeierstrass;
 
@@ -50,6 +52,20 @@ public:
   using BaseField = mlir::prime_ir::elliptic_curve::FieldCodeGen;
 };
 
+template <mlir::prime_ir::elliptic_curve::PointKind Kind>
+class PointTraits<
+    mlir::prime_ir::elliptic_curve::PointCodeGenBase<Kind>,
+    std::enable_if_t<mlir::prime_ir::elliptic_curve::isEdwards(Kind)>> {
+public:
+  constexpr static CurveType kType = CurveType::kTwistedEdwards;
+
+  using AffinePoint = mlir::prime_ir::elliptic_curve::PointCodeGenBase<
+      mlir::prime_ir::elliptic_curve::PointKind::kEdAffine>;
+  using ExtendedPoint = mlir::prime_ir::elliptic_curve::PointCodeGenBase<
+      mlir::prime_ir::elliptic_curve::PointKind::kEdExtended>;
+  using BaseField = mlir::prime_ir::elliptic_curve::FieldCodeGen;
+};
+
 } // namespace zk_dtypes
 
 namespace mlir::prime_ir::elliptic_curve {
@@ -58,7 +74,7 @@ template <PointKind Kind>
 class PointCodeGenBase : public PointOperationSelector<Kind>::template Type<
                              PointCodeGenBase<Kind>> {
 public:
-  static constexpr size_t kNumCoords = static_cast<size_t>(Kind) + 2;
+  static constexpr size_t kNumCoords = getNumCoords(Kind);
 
   PointCodeGenBase() = default;
   explicit PointCodeGenBase(Value value) : value(value) {}
@@ -70,6 +86,17 @@ public:
   PointCodeGenBase<Kind2> convert() const {
     if constexpr (Kind == Kind2) {
       return *this;
+    } else if constexpr (isEdwards(Kind) != isEdwards(Kind2)) {
+      llvm_unreachable("Cross-family conversion not supported");
+      return PointCodeGenBase<Kind2>();
+      // NOLINTNEXTLINE(readability/braces)
+    } else if constexpr (Kind == PointKind::kEdExtended &&
+                         Kind2 == PointKind::kEdAffine) {
+      return this->ToAffine();
+      // NOLINTNEXTLINE(readability/braces)
+    } else if constexpr (Kind == PointKind::kEdAffine &&
+                         Kind2 == PointKind::kEdExtended) {
+      return this->ToExtended();
     } else if constexpr (Kind2 == PointKind::kAffine) {
       return this->ToAffine();
     } else if constexpr (Kind2 == PointKind::kJacobian) {
@@ -87,6 +114,8 @@ protected:
   friend class zk_dtypes::JacobianPointOperation;
   template <typename, typename>
   friend class zk_dtypes::PointXyzzOperation;
+  template <typename, typename>
+  friend class zk_dtypes::ExtendedPointOperation;
 
   std::array<FieldCodeGen, kNumCoords> ToCoords() const {
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
@@ -106,9 +135,12 @@ protected:
     return PointCodeGenBase(fromCoords(*b, value.getType(), coords));
   }
 
-  PointCodeGenBase<PointKind::kAffine>
-  CreateAffinePoint(const std::array<FieldCodeGen, 2> &coords) const {
-    return createPoint<PointKind::kAffine, 2>(coords);
+  auto CreateAffinePoint(const std::array<FieldCodeGen, 2> &coords) const {
+    if constexpr (isEdwards(Kind)) {
+      return createPoint<PointKind::kEdAffine, 2>(coords);
+    } else {
+      return createPoint<PointKind::kAffine, 2>(coords);
+    }
   }
 
   PointCodeGenBase<PointKind::kJacobian>
@@ -121,9 +153,22 @@ protected:
     return createPoint<PointKind::kXYZZ, 4>(coords);
   }
 
-  PointCodeGenBase<PointKind::kAffine>
-  MaybeConvertToAffine(mlir::ValueRange values) const {
-    return PointCodeGenBase<PointKind::kAffine>(values[0]);
+  PointCodeGenBase<PointKind::kEdExtended>
+  CreateExtendedPoint(const std::array<FieldCodeGen, 4> &coords) const {
+    return createPoint<PointKind::kEdExtended, 4>(coords);
+  }
+
+  auto MaybeConvertToAffine(mlir::ValueRange values) const {
+    if constexpr (isEdwards(Kind)) {
+      return PointCodeGenBase<PointKind::kEdAffine>(values[0]);
+    } else {
+      return PointCodeGenBase<PointKind::kAffine>(values[0]);
+    }
+  }
+
+  PointCodeGenBase<PointKind::kEdAffine> &&
+  MaybeConvertToAffine(PointCodeGenBase<PointKind::kEdAffine> &&point) const {
+    return std::move(point);
   }
 
   PointCodeGenBase<PointKind::kJacobian>
@@ -136,6 +181,16 @@ protected:
     return PointCodeGenBase<PointKind::kXYZZ>(values[0]);
   }
 
+  PointCodeGenBase<PointKind::kEdExtended>
+  MaybeConvertToExtended(mlir::ValueRange values) const {
+    return PointCodeGenBase<PointKind::kEdExtended>(values[0]);
+  }
+
+  PointCodeGenBase<PointKind::kEdExtended> &&MaybeConvertToExtended(
+      PointCodeGenBase<PointKind::kEdExtended> &&point) const {
+    return std::move(point);
+  }
+
   Value IsAZero() const {
     Type baseFieldType =
         cast<PointTypeInterface>(value.getType()).getBaseFieldType();
@@ -146,10 +201,22 @@ protected:
 
   FieldCodeGen GetA() const {
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    auto swAttr = cast<ShortWeierstrassAttr>(
+    auto curveAttr = cast<PointTypeInterface>(value.getType()).getCurveAttr();
+    if (auto swAttr = dyn_cast<ShortWeierstrassAttr>(curveAttr)) {
+      return FieldCodeGen(
+          b->create<field::ConstantOp>(swAttr.getBaseField(), swAttr.getA()));
+    }
+    auto teAttr = cast<TwistedEdwardsAttr>(curveAttr);
+    return FieldCodeGen(
+        b->create<field::ConstantOp>(teAttr.getBaseField(), teAttr.getA()));
+  }
+
+  FieldCodeGen GetD() const {
+    ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
+    auto teAttr = cast<TwistedEdwardsAttr>(
         cast<PointTypeInterface>(value.getType()).getCurveAttr());
     return FieldCodeGen(
-        b->create<field::ConstantOp>(swAttr.getBaseField(), swAttr.getA()));
+        b->create<field::ConstantOp>(teAttr.getBaseField(), teAttr.getD()));
   }
 
   zk_dtypes::ControlFlowOperation<Value> GetCFOperation() const { return {}; }
@@ -164,14 +231,22 @@ protected:
   template <PointKind Kind2>
   PointCodeGenBase<Kind2> createPoint(mlir::ValueRange coords) const {
     Type type;
-    auto curve = cast<ShortWeierstrassAttr>(
-        cast<PointTypeInterface>(value.getType()).getCurveAttr());
-    if constexpr (Kind2 == PointKind::kAffine) {
-      type = AffineType::get(value.getContext(), curve);
-    } else if constexpr (Kind2 == PointKind::kJacobian) {
-      type = JacobianType::get(value.getContext(), curve);
-    } else if constexpr (Kind2 == PointKind::kXYZZ) {
-      type = XYZZType::get(value.getContext(), curve);
+    auto curveAttr = cast<PointTypeInterface>(value.getType()).getCurveAttr();
+    if constexpr (Kind2 == PointKind::kEdAffine) {
+      auto teCurve = cast<TwistedEdwardsAttr>(curveAttr);
+      type = EdAffineType::get(value.getContext(), teCurve);
+    } else if constexpr (Kind2 == PointKind::kEdExtended) {
+      auto teCurve = cast<TwistedEdwardsAttr>(curveAttr);
+      type = EdExtendedType::get(value.getContext(), teCurve);
+    } else {
+      auto swCurve = cast<ShortWeierstrassAttr>(curveAttr);
+      if constexpr (Kind2 == PointKind::kAffine) {
+        type = AffineType::get(value.getContext(), swCurve);
+      } else if constexpr (Kind2 == PointKind::kJacobian) {
+        type = JacobianType::get(value.getContext(), swCurve);
+      } else if constexpr (Kind2 == PointKind::kXYZZ) {
+        type = XYZZType::get(value.getContext(), swCurve);
+      }
     }
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
     return PointCodeGenBase<Kind2>(fromCoords(*b, type, coords));
@@ -183,15 +258,20 @@ protected:
 extern template class PointCodeGenBase<PointKind::kAffine>;
 extern template class PointCodeGenBase<PointKind::kJacobian>;
 extern template class PointCodeGenBase<PointKind::kXYZZ>;
+extern template class PointCodeGenBase<PointKind::kEdAffine>;
+extern template class PointCodeGenBase<PointKind::kEdExtended>;
 
 using AffinePointCodeGen = PointCodeGenBase<PointKind::kAffine>;
 using JacobianPointCodeGen = PointCodeGenBase<PointKind::kJacobian>;
 using XYZZPointCodeGen = PointCodeGenBase<PointKind::kXYZZ>;
+using EdAffinePointCodeGen = PointCodeGenBase<PointKind::kEdAffine>;
+using EdExtendedPointCodeGen = PointCodeGenBase<PointKind::kEdExtended>;
 
 class PointCodeGen {
 public:
   using CodeGenType =
-      std::variant<AffinePointCodeGen, JacobianPointCodeGen, XYZZPointCodeGen>;
+      std::variant<AffinePointCodeGen, JacobianPointCodeGen, XYZZPointCodeGen,
+                   EdAffinePointCodeGen, EdExtendedPointCodeGen>;
 
   template <typename T, typename = std::enable_if_t<
                             !std::is_same_v<std::decay_t<T>, FieldCodeGen> &&

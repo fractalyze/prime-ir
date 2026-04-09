@@ -22,6 +22,8 @@
 #include "zk_dtypes/include/elliptic_curve/short_weierstrass/affine_point_operation.h"
 #include "zk_dtypes/include/elliptic_curve/short_weierstrass/jacobian_point_operation.h"
 #include "zk_dtypes/include/elliptic_curve/short_weierstrass/point_xyzz_operation.h"
+#include "zk_dtypes/include/elliptic_curve/twisted_edwards/affine_point_operation.h"
+#include "zk_dtypes/include/elliptic_curve/twisted_edwards/extended_point_operation.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
@@ -46,6 +48,18 @@ template <>
 struct PointOperationSelector<PointKind::kXYZZ> {
   template <typename Derived>
   using Type = zk_dtypes::PointXyzzOperation<Derived>;
+};
+
+template <>
+struct PointOperationSelector<PointKind::kEdAffine> {
+  template <typename Derived>
+  using Type = zk_dtypes::AffinePointOperation<Derived>;
+};
+
+template <>
+struct PointOperationSelector<PointKind::kEdExtended> {
+  template <typename Derived>
+  using Type = zk_dtypes::ExtendedPointOperation<Derived>;
 };
 
 } // namespace mlir::prime_ir::elliptic_curve
