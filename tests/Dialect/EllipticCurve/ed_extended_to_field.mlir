@@ -36,15 +36,14 @@ func.func @test_ed_extended_double(%p1: !ed_extended) -> !ed_extended {
   return %result : !ed_extended
 }
 
-// Test: Edwards negation negates X and T (coords 0 and 3), not Y (coord 1).
+// Test: Edwards negation negates X (coord 0) and T (coord 3), preserving Y and Z.
 // CHECK-LABEL: @test_ed_extended_negate
 func.func @test_ed_extended_negate(%p1: !ed_extended) -> !ed_extended {
   // CHECK-NOT: elliptic_curve.negate
-  // CHECK: elliptic_curve.to_coords
-  // Two negate ops (for X and T)
-  // CHECK: field.negate
-  // CHECK: field.negate
-  // CHECK: elliptic_curve.from_coords
+  // CHECK: [[COORDS:%.*]]:4 = elliptic_curve.to_coords
+  // CHECK: [[NEG_X:%.*]] = field.negate [[COORDS]]#0
+  // CHECK: [[NEG_T:%.*]] = field.negate [[COORDS]]#3
+  // CHECK: elliptic_curve.from_coords [[NEG_X]], [[COORDS]]#1, [[COORDS]]#2, [[NEG_T]]
   %result = elliptic_curve.negate %p1 : !ed_extended
   return %result : !ed_extended
 }
@@ -62,6 +61,7 @@ func.func @test_ed_extended_sub(%p1: !ed_extended, %p2: !ed_extended) -> !ed_ext
 func.func @test_ed_extended_constant() {
   // CHECK-NOT: elliptic_curve.constant
   // CHECK: field.constant
-  %gen = elliptic_curve.constant dense<[15112221349535400772501151409588531511454012693041857206046113283949847762202, 46316835694926478169428394003475163141307993866256225615783033603165251855960, 1, 0]> : !ed_extended
+  // T = Gx * Gy mod p (extended coordinate invariant when Z = 1).
+  %gen = elliptic_curve.constant dense<[15112221349535400772501151409588531511454012693041857206046113283949847762202, 46316835694926478169428394003475163141307993866256225615783033603165251855960, 1, 46827403850823179245072216630277197565144205554125654976674165829533817101731]> : !ed_extended
   return
 }

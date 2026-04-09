@@ -380,6 +380,9 @@ protected:
     }
   }
 
+  // NOTE: Prime-field-only. Extension-field Edwards curves would need the
+  // same DenseIntElementsAttr path as getShortWeierstrassAttr's else-branch.
+  // Not needed until such a curve is added to zk_dtypes.
   template <typename T>
   static TwistedEdwardsAttr getTwistedEdwardsAttr(MLIRContext *context) {
     using BaseField = typename T::BaseField;

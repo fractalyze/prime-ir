@@ -265,13 +265,32 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
     Value zeroBF = field::createFieldZero(baseFieldType, b);
 
     Value isZero;
-    if (isa<AffineType>(op.getInput().getType())) {
+    Type inputType = op.getInput().getType();
+    if (isa<AffineType>(inputType)) {
+      // SW affine identity: (0, 0)
       Value xIsZero =
           b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[0], zeroBF);
       Value yIsZero =
           b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[1], zeroBF);
       isZero = b.create<arith::AndIOp>(xIsZero, yIsZero);
+    } else if (isa<EdAffineType>(inputType)) {
+      // Edwards affine identity: (0, 1)
+      Value oneBF = field::createFieldOne(baseFieldType, b);
+      Value xIsZero =
+          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[0], zeroBF);
+      Value yIsOne =
+          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[1], oneBF);
+      isZero = b.create<arith::AndIOp>(xIsZero, yIsOne);
+    } else if (isa<EdExtendedType>(inputType)) {
+      // Edwards extended identity: (0, c, c, 0) for any c != 0.
+      // Check X == 0 and Y == Z (projective equivalence to (0, 1, 1, 0)).
+      Value xIsZero =
+          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[0], zeroBF);
+      Value yEqZ = b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[1],
+                                          coords[2]);
+      isZero = b.create<arith::AndIOp>(xIsZero, yEqZ);
     } else {
+      // SW projective: identity has Z == 0
       isZero =
           b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zeroBF);
     }

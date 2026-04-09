@@ -52,7 +52,10 @@ constexpr size_t getNumCoords(PointKind kind) {
 
 template <typename Point>
 constexpr PointKind getPointKind() {
-  if constexpr (zk_dtypes::IsAffinePoint<Point>) {
+  if constexpr (zk_dtypes::IsAffinePoint<Point> &&
+                Point::Curve::kType == zk_dtypes::CurveType::kTwistedEdwards) {
+    return PointKind::kEdAffine;
+  } else if constexpr (zk_dtypes::IsAffinePoint<Point>) {
     return PointKind::kAffine;
   } else if constexpr (zk_dtypes::IsJacobianPoint<Point>) {
     return PointKind::kJacobian;

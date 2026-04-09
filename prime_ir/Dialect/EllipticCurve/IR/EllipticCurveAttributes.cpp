@@ -126,6 +126,14 @@ TwistedEdwardsAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
   auto dOp = field::FieldOperation::fromUnchecked(d, baseField);
   auto gXOp = field::FieldOperation::fromUnchecked(gX, baseField);
   auto gYOp = field::FieldOperation::fromUnchecked(gY, baseField);
+  if (aOp.isZero()) {
+    emitError() << "twisted Edwards parameter 'a' must be non-zero";
+    return failure();
+  }
+  if (dOp.isZero()) {
+    emitError() << "twisted Edwards parameter 'd' must be non-zero";
+    return failure();
+  }
   // Verify: a * Gx² + Gy² == 1 + d * Gx² * Gy²
   auto gx2 = gXOp.square();
   auto gy2 = gYOp.square();
