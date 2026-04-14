@@ -49,6 +49,14 @@ genrule(
     cmd = "cp $< $@",
 )
 
+# Copy shared Ed25519 type defs into tests/ so LIT %S-relative paths work.
+genrule(
+    name = "ed25519_defs_copy",
+    srcs = ["//prime_ir/Runtime:ed25519_defs.mlir"],
+    outs = ["ed25519_defs.mlir"],
+    cmd = "cp $< $@",
+)
+
 # Bundle together all of the test utilities that are used by tests.
 filegroup(
     name = "test_utilities",
@@ -59,6 +67,7 @@ filegroup(
         "bn254_ec_utils.mlir",
         "default_print_utils.mlir",
         ":bn254_defs.mlir",
+        ":ed25519_defs.mlir",
         ":libruntime_functions.so",
         ":lit.cfg.py",
         "//tools:prime-ir-opt",

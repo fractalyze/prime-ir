@@ -1,0 +1,7 @@
+[codespell]
+skip =
+  MODULE.bazel.lock
+
+ignore-words-list =
+  te,
+  TE,

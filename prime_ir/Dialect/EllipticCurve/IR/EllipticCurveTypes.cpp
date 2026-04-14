@@ -34,6 +34,8 @@ namespace mlir::prime_ir::elliptic_curve {
 DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS(Affine, 2);
 DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS(Jacobian, 3);
 DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS(XYZZ, 4);
+DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS(EdAffine, 2);
+DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS(EdExtended, 4);
 
 #undef DEFINE_ELLIPTIC_CURVE_TYPE_INTERFACE_METHODS
 
@@ -82,5 +84,31 @@ TypedAttr XYZZType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
 }
 
 ShapedType XYZZType::overrideShapedType(ShapedType type) const { return type; }
+
+TypedAttr EdAffineType::createConstantAttr(int64_t c) const { return {}; }
+
+TypedAttr
+EdAffineType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  return {};
+}
+
+ShapedType EdAffineType::overrideShapedType(ShapedType type) const {
+  return type;
+}
+
+TypedAttr EdExtendedType::createConstantAttr(int64_t c) const {
+  // TODO(chokobole): Implement this.
+  return {};
+}
+
+TypedAttr
+EdExtendedType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
+  // TODO(chokobole): Implement this.
+  return {};
+}
+
+ShapedType EdExtendedType::overrideShapedType(ShapedType type) const {
+  return type;
+}
 
 } // namespace mlir::prime_ir::elliptic_curve

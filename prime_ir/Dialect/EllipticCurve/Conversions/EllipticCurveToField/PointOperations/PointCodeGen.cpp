@@ -22,6 +22,8 @@ namespace mlir::prime_ir::elliptic_curve {
 template class PointCodeGenBase<PointKind::kAffine>;
 template class PointCodeGenBase<PointKind::kJacobian>;
 template class PointCodeGenBase<PointKind::kXYZZ>;
+template class PointCodeGenBase<PointKind::kEdAffine>;
+template class PointCodeGenBase<PointKind::kEdExtended>;
 
 PointCodeGen::PointCodeGen(Type type, Value value) {
   if (isa<AffineType>(type)) {
@@ -30,8 +32,12 @@ PointCodeGen::PointCodeGen(Type type, Value value) {
     codeGen = JacobianPointCodeGen(value);
   } else if (isa<XYZZType>(type)) {
     codeGen = XYZZPointCodeGen(value);
+  } else if (isa<EdAffineType>(type)) {
+    codeGen = EdAffinePointCodeGen(value);
+  } else if (isa<EdExtendedType>(type)) {
+    codeGen = EdExtendedPointCodeGen(value);
   } else {
-    llvm_unreachable("Unsupported extension field type");
+    llvm_unreachable("Unsupported point type");
   }
 }
 
@@ -58,14 +64,19 @@ PointCodeGen applyBinaryOp(const PointCodeGen::CodeGenType &a,
                            const PointCodeGen::CodeGenType &b, F op) {
   return std::visit(
       [&](const auto &lhs, const auto &rhs) -> PointCodeGen {
-        if constexpr (std::is_same_v<std::decay_t<decltype(lhs)>,
-                                     std::decay_t<decltype(rhs)>>) {
+        using LHS = std::decay_t<decltype(lhs)>;
+        using RHS = std::decay_t<decltype(rhs)>;
+        constexpr bool lhsIsEd = std::is_same_v<LHS, EdAffinePointCodeGen> ||
+                                 std::is_same_v<LHS, EdExtendedPointCodeGen>;
+        constexpr bool rhsIsEd = std::is_same_v<RHS, EdAffinePointCodeGen> ||
+                                 std::is_same_v<RHS, EdExtendedPointCodeGen>;
+        if constexpr (lhsIsEd != rhsIsEd) {
+          llvm_unreachable("Cross-family binary op not supported");
+        } else if constexpr (std::is_same_v<LHS, RHS>) {
           return op(lhs, rhs);
           // NOLINTNEXTLINE(readability/braces)
-        } else if constexpr (std::is_same_v<std::decay_t<decltype(lhs)>,
-                                            AffinePointCodeGen> ||
-                             std::is_same_v<std::decay_t<decltype(rhs)>,
-                                            AffinePointCodeGen>) {
+        } else if constexpr (std::is_same_v<LHS, AffinePointCodeGen> ||
+                             std::is_same_v<RHS, AffinePointCodeGen>) {
           return op(lhs, rhs);
         }
         llvm_unreachable("Unsupported field type in binary operator");
@@ -123,6 +134,10 @@ PointCodeGen PointCodeGen::convert(PointKind outputKind) const {
     return convertImpl<PointKind::kJacobian>(codeGen);
   case PointKind::kXYZZ:
     return convertImpl<PointKind::kXYZZ>(codeGen);
+  case PointKind::kEdAffine:
+    return convertImpl<PointKind::kEdAffine>(codeGen);
+  case PointKind::kEdExtended:
+    return convertImpl<PointKind::kEdExtended>(codeGen);
   }
   llvm_unreachable("Unsupported point kind");
 }

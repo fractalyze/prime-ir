@@ -53,6 +53,7 @@ prime_ir_cc_test(
         "@com_google_googletest//:gtest_main",
         "@zk_dtypes//zk_dtypes:bn254_g1",
         "@zk_dtypes//zk_dtypes:bn254_g2",
+        "@zk_dtypes//zk_dtypes:ed25519_g1",
     ],
 )
 

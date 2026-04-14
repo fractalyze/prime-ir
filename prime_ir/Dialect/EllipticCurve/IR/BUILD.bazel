@@ -84,6 +84,7 @@ prime_ir_cc_library(
         "@zk_dtypes//zk_dtypes:bn254_g1",
         "@zk_dtypes//zk_dtypes:bn254_g2",
         "@zk_dtypes//zk_dtypes:control_flow_operation",
+        "@zk_dtypes//zk_dtypes:ed25519_g1",
     ],
 )
 
@@ -107,6 +108,8 @@ prime_ir_cc_library(
         "@zk_dtypes//zk_dtypes:sw_affine_point_operation",
         "@zk_dtypes//zk_dtypes:sw_jacobian_point_operation",
         "@zk_dtypes//zk_dtypes:sw_point_xyzz_operation",
+        "@zk_dtypes//zk_dtypes:te_affine_point_operation",
+        "@zk_dtypes//zk_dtypes:te_extended_point_operation",
     ],
 )
 

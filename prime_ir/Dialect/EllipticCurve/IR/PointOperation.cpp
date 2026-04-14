@@ -20,6 +20,8 @@ namespace mlir::prime_ir::elliptic_curve {
 template class PointOperationBase<PointKind::kAffine>;
 template class PointOperationBase<PointKind::kJacobian>;
 template class PointOperationBase<PointKind::kXYZZ>;
+template class PointOperationBase<PointKind::kEdAffine>;
+template class PointOperationBase<PointKind::kEdExtended>;
 
 PointKind PointOperation::getKind() const {
   return std::visit([](const auto &v) -> PointKind { return v.getKind(); },
@@ -45,14 +47,20 @@ PointOperation applyBinaryOp(const PointOperation::OperationType &a,
                              const PointOperation::OperationType &b, F op) {
   return std::visit(
       [&](const auto &lhs, const auto &rhs) -> PointOperation {
-        if constexpr (std::is_same_v<std::decay_t<decltype(lhs)>,
-                                     std::decay_t<decltype(rhs)>>) {
+        using LHS = std::decay_t<decltype(lhs)>;
+        using RHS = std::decay_t<decltype(rhs)>;
+        constexpr bool lhsIsEd = std::is_same_v<LHS, EdAffinePointOperation> ||
+                                 std::is_same_v<LHS, EdExtendedPointOperation>;
+        constexpr bool rhsIsEd = std::is_same_v<RHS, EdAffinePointOperation> ||
+                                 std::is_same_v<RHS, EdExtendedPointOperation>;
+        if constexpr (lhsIsEd != rhsIsEd) {
+          // Cross-family (SW ↔ TE) binary ops are not supported.
+          llvm_unreachable("Cross-family binary op not supported");
+        } else if constexpr (std::is_same_v<LHS, RHS>) {
           return op(lhs, rhs);
           // NOLINTNEXTLINE(readability/braces)
-        } else if constexpr (std::is_same_v<std::decay_t<decltype(lhs)>,
-                                            AffinePointOperation> ||
-                             std::is_same_v<std::decay_t<decltype(rhs)>,
-                                            AffinePointOperation>) {
+        } else if constexpr (std::is_same_v<LHS, AffinePointOperation> ||
+                             std::is_same_v<RHS, AffinePointOperation>) {
           return op(lhs, rhs);
         }
         llvm_unreachable("Unsupported field type in binary operator");
@@ -124,6 +132,10 @@ PointOperation PointOperation::convert(PointKind outputKind) const {
     return convertImpl<PointKind::kJacobian>(operation);
   case PointKind::kXYZZ:
     return convertImpl<PointKind::kXYZZ>(operation);
+  case PointKind::kEdAffine:
+    return convertImpl<PointKind::kEdAffine>(operation);
+  case PointKind::kEdExtended:
+    return convertImpl<PointKind::kEdExtended>(operation);
   }
   llvm_unreachable("Unsupported point kind");
 }

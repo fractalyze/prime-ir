@@ -41,4 +41,22 @@ def EllipticCurve_ShortWeierstrassAttr : EllipticCurve_Attr<"ShortWeierstrass", 
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
 }
+def EllipticCurve_TwistedEdwardsAttr : EllipticCurve_Attr<"TwistedEdwards", "te", [SameTypeOperands]> {
+  let summary = "An attribute representing a twisted Edwards elliptic curve";
+  let description = [{
+    A twisted Edwards curve is defined by the equation a * x² + y² = 1 + d * x² * y²
+    (where a and d are non-zero finite field elements, d is non-square) and a generator
+    point G in the form (x, y). The standard Ed25519 curve uses a = -1.
+
+    Example:
+    ```
+    // a = -1, d = ..., G = (Gx, Gy)
+    #curve = #elliptic_curve.te<-1:i256, d:i256, (Gx:i256, Gy:i256)> : !curve25519_bf
+    ```
+  }];
+  let parameters = (ins Field_AnyFieldType:$baseField, Field_AnyFieldAttr:$a, Field_AnyFieldAttr:$d, Field_AnyFieldAttr:$Gx, Field_AnyFieldAttr:$Gy);
+  let hasCustomAssemblyFormat = 1;
+  let genVerifyDecl = 1;
+}
+
 #endif  // PRIME_IR_DIALECT_ELLIPTICCURVE_IR_ELLIPTICCURVEATTRIBUTES_TD_

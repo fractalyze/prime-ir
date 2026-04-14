@@ -19,6 +19,7 @@
 #include <array>
 #include <cassert>
 
+#include "llvm/ADT/TypeSwitch.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointKind.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointOperationBaseForward.h"
@@ -35,8 +36,11 @@ class PointOperationBase;
 
 namespace zk_dtypes {
 
+// SW PointTraits for kAffine, kJacobian, kXYZZ.
 template <mlir::prime_ir::elliptic_curve::PointKind Kind>
-class PointTraits<mlir::prime_ir::elliptic_curve::PointOperationBase<Kind>> {
+class PointTraits<
+    mlir::prime_ir::elliptic_curve::PointOperationBase<Kind>,
+    std::enable_if_t<!mlir::prime_ir::elliptic_curve::isEdwards(Kind)>> {
 public:
   constexpr static CurveType kType = CurveType::kShortWeierstrass;
 
@@ -49,6 +53,21 @@ public:
   using BaseField = mlir::prime_ir::field::FieldOperation;
 };
 
+// TE PointTraits for kEdAffine, kEdExtended.
+template <mlir::prime_ir::elliptic_curve::PointKind Kind>
+class PointTraits<
+    mlir::prime_ir::elliptic_curve::PointOperationBase<Kind>,
+    std::enable_if_t<mlir::prime_ir::elliptic_curve::isEdwards(Kind)>> {
+public:
+  constexpr static CurveType kType = CurveType::kTwistedEdwards;
+
+  using AffinePoint = mlir::prime_ir::elliptic_curve::PointOperationBase<
+      mlir::prime_ir::elliptic_curve::PointKind::kEdAffine>;
+  using ExtendedPoint = mlir::prime_ir::elliptic_curve::PointOperationBase<
+      mlir::prime_ir::elliptic_curve::PointKind::kEdExtended>;
+  using BaseField = mlir::prime_ir::field::FieldOperation;
+};
+
 } // namespace zk_dtypes
 
 namespace mlir::prime_ir::elliptic_curve {
@@ -57,7 +76,7 @@ template <PointKind Kind>
 class PointOperationBase : public PointOperationSelector<Kind>::template Type<
                                PointOperationBase<Kind>> {
 public:
-  static constexpr size_t kNumCoords = static_cast<size_t>(Kind) + 2;
+  static constexpr size_t kNumCoords = getNumCoords(Kind);
 
   PointOperationBase() = default;
 
@@ -100,11 +119,18 @@ public:
   template <typename T>
   static Type getPointType(MLIRContext *context) {
     if constexpr (zk_dtypes::IsAffinePoint<T>) {
-      return createSpecificPointType<AffineType, T>(context);
+      if constexpr (T::Curve::kType == zk_dtypes::CurveType::kTwistedEdwards) {
+        return createEdPointType<EdAffineType, T>(context);
+      } else {
+        return createSpecificPointType<AffineType, T>(context);
+      }
     } else if constexpr (zk_dtypes::IsJacobianPoint<T>) {
       return createSpecificPointType<JacobianType, T>(context);
-    } else {
+    } else if constexpr (zk_dtypes::IsPointXyzz<T>) {
       return createSpecificPointType<XYZZType, T>(context);
+    } else {
+      static_assert(zk_dtypes::IsExtendedPoint<T>);
+      return createEdPointType<EdExtendedType, T>(context);
     }
   }
 
@@ -161,6 +187,18 @@ public:
   PointOperationBase<Kind2> convert() const {
     if constexpr (Kind == Kind2) {
       return *this;
+    } else if constexpr (isEdwards(Kind) != isEdwards(Kind2)) {
+      // Cross-family conversion (SW ↔ TE) not supported.
+      llvm_unreachable("Cross-family conversion not supported");
+      return PointOperationBase<Kind2>();
+      // NOLINTNEXTLINE(readability/braces)
+    } else if constexpr (Kind == PointKind::kEdExtended &&
+                         Kind2 == PointKind::kEdAffine) {
+      return this->ToAffine();
+      // NOLINTNEXTLINE(readability/braces)
+    } else if constexpr (Kind == PointKind::kEdAffine &&
+                         Kind2 == PointKind::kEdExtended) {
+      return this->ToExtended();
     } else if constexpr (Kind2 == PointKind::kAffine) {
       return this->ToAffine();
     } else if constexpr (Kind2 == PointKind::kJacobian) {
@@ -179,6 +217,8 @@ protected:
   friend class zk_dtypes::JacobianPointOperation;
   template <typename, typename>
   friend class zk_dtypes::PointXyzzOperation;
+  template <typename, typename>
+  friend class zk_dtypes::ExtendedPointOperation;
 
   template <PointKind Kind2>
   friend raw_ostream &operator<<(raw_ostream &os,
@@ -193,11 +233,17 @@ protected:
     return PointOperationBase(c, pointType);
   }
 
-  PointOperationBase<PointKind::kAffine>
+  auto
   CreateAffinePoint(const std::array<field::FieldOperation, 2> &coords) const {
-    auto attr = cast<ShortWeierstrassAttr>(pointType.getCurveAttr());
-    return PointOperationBase<PointKind::kAffine>(
-        coords, AffineType::get(attr.getContext(), attr));
+    if constexpr (isEdwards(Kind)) {
+      auto attr = cast<TwistedEdwardsAttr>(pointType.getCurveAttr());
+      return PointOperationBase<PointKind::kEdAffine>(
+          coords, EdAffineType::get(attr.getContext(), attr));
+    } else {
+      auto attr = cast<ShortWeierstrassAttr>(pointType.getCurveAttr());
+      return PointOperationBase<PointKind::kAffine>(
+          coords, AffineType::get(attr.getContext(), attr));
+    }
   }
 
   PointOperationBase<PointKind::kJacobian> CreateJacobianPoint(
@@ -214,8 +260,20 @@ protected:
         coords, XYZZType::get(attr.getContext(), attr));
   }
 
+  PointOperationBase<PointKind::kEdExtended> CreateExtendedPoint(
+      const std::array<field::FieldOperation, 4> &coords) const {
+    auto attr = cast<TwistedEdwardsAttr>(pointType.getCurveAttr());
+    return PointOperationBase<PointKind::kEdExtended>(
+        coords, EdExtendedType::get(attr.getContext(), attr));
+  }
+
   PointOperationBase<PointKind::kAffine> &&
   MaybeConvertToAffine(PointOperationBase<PointKind::kAffine> &&point) const {
+    return std::move(point);
+  }
+
+  PointOperationBase<PointKind::kEdAffine> &&
+  MaybeConvertToAffine(PointOperationBase<PointKind::kEdAffine> &&point) const {
     return std::move(point);
   }
 
@@ -229,12 +287,43 @@ protected:
     return std::move(point);
   }
 
+  PointOperationBase<PointKind::kEdExtended> &&MaybeConvertToExtended(
+      PointOperationBase<PointKind::kEdExtended> &&point) const {
+    return std::move(point);
+  }
+
   bool IsAZero() const { return GetA().isZero(); }
 
+  field::FieldOperation
+  getCurveParam(llvm::function_ref<TypedAttr(ShortWeierstrassAttr)> swFn,
+                llvm::function_ref<TypedAttr(TwistedEdwardsAttr)> teFn) const {
+    TypedAttr attr =
+        llvm::TypeSwitch<Attribute, TypedAttr>(pointType.getCurveAttr())
+            .Case<ShortWeierstrassAttr>(swFn)
+            .Case<TwistedEdwardsAttr>(teFn);
+    return field::FieldOperation::fromUnchecked(attr,
+                                                pointType.getBaseFieldType());
+  }
+
   field::FieldOperation GetA() const {
-    return field::FieldOperation::fromUnchecked(
-        cast<ShortWeierstrassAttr>(pointType.getCurveAttr()).getA(),
-        pointType.getBaseFieldType());
+    return getCurveParam([](ShortWeierstrassAttr sw) { return sw.getA(); },
+                         [](TwistedEdwardsAttr te) { return te.getA(); });
+  }
+
+  field::FieldOperation GetD() const {
+    auto teAttr = cast<TwistedEdwardsAttr>(pointType.getCurveAttr());
+    return field::FieldOperation::fromUnchecked(teAttr.getD(),
+                                                pointType.getBaseFieldType());
+  }
+
+  field::FieldOperation GetX() const {
+    return getCurveParam([](ShortWeierstrassAttr sw) { return sw.getGx(); },
+                         [](TwistedEdwardsAttr te) { return te.getGx(); });
+  }
+
+  field::FieldOperation GetY() const {
+    return getCurveParam([](ShortWeierstrassAttr sw) { return sw.getGy(); },
+                         [](TwistedEdwardsAttr te) { return te.getGy(); });
   }
 
   zk_dtypes::ControlFlowOperation<bool> GetCFOperation() const { return {}; }
@@ -285,9 +374,36 @@ protected:
     }
   }
 
+  // NOTE: Prime-field-only. Extension-field Edwards curves would need the
+  // same DenseIntElementsAttr path as getShortWeierstrassAttr's else-branch.
+  // Not needed until such a curve is added to zk_dtypes.
+  template <typename T>
+  static TwistedEdwardsAttr getTwistedEdwardsAttr(MLIRContext *context) {
+    using BaseField = typename T::BaseField;
+    using UnderlyingType = typename BaseField::UnderlyingType;
+
+    auto getParam = [&](auto config_val) {
+      return convertToIntegerAttr(context,
+                                  static_cast<UnderlyingType>(config_val));
+    };
+
+    return TwistedEdwardsAttr::get(
+        context,
+        field::PrimeFieldOperation::getPrimeFieldType<BaseField>(context),
+        getParam(T::Curve::Config::kA.value()),
+        getParam(T::Curve::Config::kD.value()),
+        getParam(T::Curve::Config::kX.value()),
+        getParam(T::Curve::Config::kY.value()));
+  }
+
   template <typename MLIRPointType, typename T>
   static MLIRPointType createSpecificPointType(MLIRContext *context) {
     return MLIRPointType::get(context, getShortWeierstrassAttr<T>(context));
+  }
+
+  template <typename MLIRPointType, typename T>
+  static MLIRPointType createEdPointType(MLIRContext *context) {
+    return MLIRPointType::get(context, getTwistedEdwardsAttr<T>(context));
   }
 
   std::array<field::FieldOperation, kNumCoords> coords;
@@ -304,6 +420,8 @@ raw_ostream &operator<<(raw_ostream &os, const PointOperationBase<Kind> &op) {
 extern template class PointOperationBase<PointKind::kAffine>;
 extern template class PointOperationBase<PointKind::kJacobian>;
 extern template class PointOperationBase<PointKind::kXYZZ>;
+extern template class PointOperationBase<PointKind::kEdAffine>;
+extern template class PointOperationBase<PointKind::kEdExtended>;
 
 extern template raw_ostream &
 operator<<(raw_ostream &os, const PointOperationBase<PointKind::kAffine> &op);
@@ -311,16 +429,24 @@ extern template raw_ostream &
 operator<<(raw_ostream &os, const PointOperationBase<PointKind::kJacobian> &op);
 extern template raw_ostream &
 operator<<(raw_ostream &os, const PointOperationBase<PointKind::kXYZZ> &op);
+extern template raw_ostream &
+operator<<(raw_ostream &os, const PointOperationBase<PointKind::kEdAffine> &op);
+extern template raw_ostream &
+operator<<(raw_ostream &os,
+           const PointOperationBase<PointKind::kEdExtended> &op);
 
 using AffinePointOperation = PointOperationBase<PointKind::kAffine>;
 using JacobianPointOperation = PointOperationBase<PointKind::kJacobian>;
 using XYZZPointOperation = PointOperationBase<PointKind::kXYZZ>;
+using EdAffinePointOperation = PointOperationBase<PointKind::kEdAffine>;
+using EdExtendedPointOperation = PointOperationBase<PointKind::kEdExtended>;
 
 class PointOperation {
 public:
   using OperationType =
       std::variant<AffinePointOperation, JacobianPointOperation,
-                   XYZZPointOperation>;
+                   XYZZPointOperation, EdAffinePointOperation,
+                   EdExtendedPointOperation>;
 
   template <typename T, typename = std::enable_if_t<
                             !std::is_same_v<std::decay_t<T>, PointOperation> &&
