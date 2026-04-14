@@ -19,6 +19,7 @@
 #include <array>
 #include <cassert>
 
+#include "llvm/ADT/TypeSwitch.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointKind.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/PointOperationBaseForward.h"
@@ -293,15 +294,20 @@ protected:
 
   bool IsAZero() const { return GetA().isZero(); }
 
-  field::FieldOperation GetA() const {
-    auto curveAttr = pointType.getCurveAttr();
-    if (auto swAttr = dyn_cast<ShortWeierstrassAttr>(curveAttr)) {
-      return field::FieldOperation::fromUnchecked(swAttr.getA(),
-                                                  pointType.getBaseFieldType());
-    }
-    auto teAttr = cast<TwistedEdwardsAttr>(curveAttr);
-    return field::FieldOperation::fromUnchecked(teAttr.getA(),
+  field::FieldOperation
+  getCurveParam(llvm::function_ref<TypedAttr(ShortWeierstrassAttr)> swFn,
+                llvm::function_ref<TypedAttr(TwistedEdwardsAttr)> teFn) const {
+    TypedAttr attr =
+        llvm::TypeSwitch<Attribute, TypedAttr>(pointType.getCurveAttr())
+            .Case<ShortWeierstrassAttr>(swFn)
+            .Case<TwistedEdwardsAttr>(teFn);
+    return field::FieldOperation::fromUnchecked(attr,
                                                 pointType.getBaseFieldType());
+  }
+
+  field::FieldOperation GetA() const {
+    return getCurveParam([](ShortWeierstrassAttr sw) { return sw.getA(); },
+                         [](TwistedEdwardsAttr te) { return te.getA(); });
   }
 
   field::FieldOperation GetD() const {
@@ -311,25 +317,13 @@ protected:
   }
 
   field::FieldOperation GetX() const {
-    auto curveAttr = pointType.getCurveAttr();
-    if (auto swAttr = dyn_cast<ShortWeierstrassAttr>(curveAttr)) {
-      return field::FieldOperation::fromUnchecked(swAttr.getGx(),
-                                                  pointType.getBaseFieldType());
-    }
-    auto teAttr = cast<TwistedEdwardsAttr>(curveAttr);
-    return field::FieldOperation::fromUnchecked(teAttr.getGx(),
-                                                pointType.getBaseFieldType());
+    return getCurveParam([](ShortWeierstrassAttr sw) { return sw.getGx(); },
+                         [](TwistedEdwardsAttr te) { return te.getGx(); });
   }
 
   field::FieldOperation GetY() const {
-    auto curveAttr = pointType.getCurveAttr();
-    if (auto swAttr = dyn_cast<ShortWeierstrassAttr>(curveAttr)) {
-      return field::FieldOperation::fromUnchecked(swAttr.getGy(),
-                                                  pointType.getBaseFieldType());
-    }
-    auto teAttr = cast<TwistedEdwardsAttr>(curveAttr);
-    return field::FieldOperation::fromUnchecked(teAttr.getGy(),
-                                                pointType.getBaseFieldType());
+    return getCurveParam([](ShortWeierstrassAttr sw) { return sw.getGy(); },
+                         [](TwistedEdwardsAttr te) { return te.getGy(); });
   }
 
   zk_dtypes::ControlFlowOperation<bool> GetCFOperation() const { return {}; }

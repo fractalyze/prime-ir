@@ -19,6 +19,7 @@ limitations under the License.
 #include <array>
 
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Support/LLVM.h"
@@ -199,16 +200,22 @@ protected:
     return b->create<field::CmpOp>(arith::CmpIPredicate::eq, GetA(), zero);
   }
 
-  FieldCodeGen GetA() const {
+  FieldCodeGen getCurveParamCodeGen(
+      llvm::function_ref<TypedAttr(ShortWeierstrassAttr)> swFn,
+      llvm::function_ref<TypedAttr(TwistedEdwardsAttr)> teFn) const {
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    auto curveAttr = cast<PointTypeInterface>(value.getType()).getCurveAttr();
-    if (auto swAttr = dyn_cast<ShortWeierstrassAttr>(curveAttr)) {
-      return FieldCodeGen(
-          b->create<field::ConstantOp>(swAttr.getBaseField(), swAttr.getA()));
-    }
-    auto teAttr = cast<TwistedEdwardsAttr>(curveAttr);
+    auto pti = cast<PointTypeInterface>(value.getType());
+    TypedAttr attr = llvm::TypeSwitch<Attribute, TypedAttr>(pti.getCurveAttr())
+                         .Case<ShortWeierstrassAttr>(swFn)
+                         .Case<TwistedEdwardsAttr>(teFn);
     return FieldCodeGen(
-        b->create<field::ConstantOp>(teAttr.getBaseField(), teAttr.getA()));
+        b->create<field::ConstantOp>(pti.getBaseFieldType(), attr));
+  }
+
+  FieldCodeGen GetA() const {
+    return getCurveParamCodeGen(
+        [](ShortWeierstrassAttr sw) { return sw.getA(); },
+        [](TwistedEdwardsAttr te) { return te.getA(); });
   }
 
   FieldCodeGen GetD() const {
