@@ -1944,11 +1944,9 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
   // Bail out if the offset exceeds the prime modulus (e.g., IsNine with mod 7
   // would crash the FieldOperation constructor).
   auto pfType = dyn_cast<PrimeFieldType>(stdType);
-  if (!pfType) {
-    if (auto efType = dyn_cast<ExtensionFieldType>(stdType))
-      pfType = cast<PrimeFieldType>(efType.getBaseField());
-  }
-  if (pfType && offset >= pfType.getModulus().getValue().getZExtValue())
+  if (auto efType = dyn_cast<ExtensionFieldType>(stdType))
+    pfType = efType.getBasePrimeField();
+  if (pfType && pfType.getModulus().getValue().ule(offset))
     return false;
   FieldOperation offsetOp(static_cast<uint64_t>(offset), stdType);
   return pred(valueOp, offsetOp);
