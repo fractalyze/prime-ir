@@ -1277,11 +1277,14 @@ func.func @test_add_of_to_mont_tensor(%arg0: tensor<2x!PF17>, %arg1: tensor<2x!P
 
 // Both to_mont ops have an extra use; folding would net +1 op.
 // CHECK-LABEL: @test_add_of_to_mont_multi_use_no_fold
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^,]*]], %[[ARG1:.*]]: [[T]])
 func.func @test_add_of_to_mont_multi_use_no_fold(%arg0: !PF17, %arg1: !PF17)
     -> (!PF17m, !PF17m, !PF17m) {
-  // CHECK: field.to_mont
-  // CHECK: field.to_mont
-  // CHECK: field.add
+  // CHECK: %[[TM0:.*]] = field.to_mont %[[ARG0]]
+  // CHECK: %[[TM1:.*]] = field.to_mont %[[ARG1]]
+  // CHECK: %[[ADD:.*]] = field.add %[[TM0]], %[[TM1]]
+  // CHECK-NOT: field.to_mont
+  // CHECK: return %[[ADD]], %[[TM0]], %[[TM1]]
   %0 = field.to_mont %arg0 : !PF17m
   %1 = field.to_mont %arg1 : !PF17m
   %2 = field.add %0, %1 : !PF17m
