@@ -1234,3 +1234,83 @@ func.func @test_to_mont_from_mont_tensor_cancel(%arg0: tensor<2x!PF17m>) -> tens
   %1 = field.to_mont %0 : tensor<2x!PF17m>
   return %1 : tensor<2x!PF17m>
 }
+
+//===----------------------------------------------------------------------===//
+// ToMont additive distributivity
+//===----------------------------------------------------------------------===//
+
+// CHECK-LABEL: @test_add_of_to_mont
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^,]*]], %[[ARG1:.*]]: [[T]]) -> [[TM:.*]] {
+func.func @test_add_of_to_mont(%arg0: !PF17, %arg1: !PF17) -> !PF17m {
+  // CHECK: %[[ADD:.*]] = field.add %[[ARG0]], %[[ARG1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.to_mont %[[ADD]] : [[TM]]
+  // CHECK: return %[[RES]] : [[TM]]
+  %0 = field.to_mont %arg0 : !PF17m
+  %1 = field.to_mont %arg1 : !PF17m
+  %2 = field.add %0, %1 : !PF17m
+  return %2 : !PF17m
+}
+
+// CHECK-LABEL: @test_sub_of_to_mont
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^,]*]], %[[ARG1:.*]]: [[T]]) -> [[TM:.*]] {
+func.func @test_sub_of_to_mont(%arg0: !PF17, %arg1: !PF17) -> !PF17m {
+  // CHECK: %[[SUB:.*]] = field.sub %[[ARG0]], %[[ARG1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.to_mont %[[SUB]] : [[TM]]
+  // CHECK: return %[[RES]] : [[TM]]
+  %0 = field.to_mont %arg0 : !PF17m
+  %1 = field.to_mont %arg1 : !PF17m
+  %2 = field.sub %0, %1 : !PF17m
+  return %2 : !PF17m
+}
+
+// CHECK-LABEL: @test_add_of_to_mont_tensor
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^,]*]], %[[ARG1:.*]]: [[T]]) -> [[TM:.*]] {
+func.func @test_add_of_to_mont_tensor(%arg0: tensor<2x!PF17>, %arg1: tensor<2x!PF17>) -> tensor<2x!PF17m> {
+  // CHECK: %[[ADD:.*]] = field.add %[[ARG0]], %[[ARG1]] : [[T]]
+  // CHECK: %[[RES:.*]] = field.to_mont %[[ADD]] : [[TM]]
+  // CHECK: return %[[RES]] : [[TM]]
+  %0 = field.to_mont %arg0 : tensor<2x!PF17m>
+  %1 = field.to_mont %arg1 : tensor<2x!PF17m>
+  %2 = field.add %0, %1 : tensor<2x!PF17m>
+  return %2 : tensor<2x!PF17m>
+}
+
+// Both to_mont ops have an extra use; folding would net +1 op.
+// CHECK-LABEL: @test_add_of_to_mont_multi_use_no_fold
+func.func @test_add_of_to_mont_multi_use_no_fold(%arg0: !PF17, %arg1: !PF17)
+    -> (!PF17m, !PF17m, !PF17m) {
+  // CHECK: field.to_mont
+  // CHECK: field.to_mont
+  // CHECK: field.add
+  %0 = field.to_mont %arg0 : !PF17m
+  %1 = field.to_mont %arg1 : !PF17m
+  %2 = field.add %0, %1 : !PF17m
+  return %2, %0, %1 : !PF17m, !PF17m, !PF17m
+}
+
+// Only one to_mont has an extra use; the other is dead after the fold.
+// CHECK-LABEL: @test_add_of_to_mont_one_extra_use_folds
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^,]*]], %[[ARG1:.*]]: [[T]])
+func.func @test_add_of_to_mont_one_extra_use_folds(%arg0: !PF17, %arg1: !PF17)
+    -> (!PF17m, !PF17m) {
+  // CHECK-DAG: %[[TM0:.*]] = field.to_mont %[[ARG0]] : [[TM:.*]]
+  // CHECK-DAG: %[[ADD:.*]] = field.add %[[ARG0]], %[[ARG1]] : [[T]]
+  // CHECK-DAG: %[[RES:.*]] = field.to_mont %[[ADD]] : [[TM]]
+  // CHECK: return %[[RES]], %[[TM0]]
+  %0 = field.to_mont %arg0 : !PF17m
+  %1 = field.to_mont %arg1 : !PF17m
+  %2 = field.add %0, %1 : !PF17m
+  return %2, %0 : !PF17m, !PF17m
+}
+
+// Mixed: only one operand is to_mont. The pattern must NOT fire.
+// CHECK-LABEL: @test_add_of_to_mont_mixed_no_fold
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^,]*]], %[[ARG1:.*]]: [[TM:[^)]*]]) -> [[TM]] {
+func.func @test_add_of_to_mont_mixed_no_fold(%arg0: !PF17, %arg1: !PF17m) -> !PF17m {
+  // CHECK: %[[TM0:.*]] = field.to_mont %[[ARG0]] : [[TM]]
+  // CHECK: %[[RES:.*]] = field.add %[[TM0]], %[[ARG1]] : [[TM]]
+  // CHECK: return %[[RES]] : [[TM]]
+  %0 = field.to_mont %arg0 : !PF17m
+  %1 = field.add %0, %arg1 : !PF17m
+  return %1 : !PF17m
+}
