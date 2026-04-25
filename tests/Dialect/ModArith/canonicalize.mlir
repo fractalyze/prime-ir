@@ -1593,3 +1593,74 @@ func.func @test_bitcast_transitive(%arg0: !Zp) -> !Zq {
   // CHECK: return %[[RES]] : [[Tq]]
   return %1 : !Zq
 }
+
+//===----------------------------------------------------------------------===//
+// Mul of constant and to_mont: collapse into mont_mul with precomputed
+// double-Mont constant.
+//===----------------------------------------------------------------------===//
+
+// mul(constant c, to_mont(%arg0)) on Mont type
+//   -> mont_mul(constant (c * R² mod p), bitcast(%arg0))
+//
+// For p = 37, R = 2³² mod 37 = 7, R² mod 37 = 12. With logical c = 10:
+//   c_stored = 10 * 7 mod 37 = 33
+//   k_stored = c_stored * R mod 37 = 33 * 7 mod 37 = 9
+//   k_logical (printed) = k_stored * R⁻¹ mod 37 = 9 * 16 mod 37 = 33
+// CHECK-LABEL: @test_mul_of_const_and_to_mont
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^)]*]]) -> [[Tm:[^ ]*]]
+func.func @test_mul_of_const_and_to_mont(%arg0: !Zp) -> !Zpm {
+  // CHECK-DAG: %[[K:.*]] = mod_arith.constant 33 : [[Tm]]
+  // CHECK-DAG: %[[BC:.*]] = mod_arith.bitcast %[[ARG0]] : [[T]] -> [[Tm]]
+  // CHECK: %[[R:.*]] = mod_arith.mont_mul %[[BC]], %[[K]] : [[Tm]]
+  // CHECK-NOT: mod_arith.to_mont
+  // CHECK: return %[[R]] : [[Tm]]
+  %c = mod_arith.constant 10 : !Zpm
+  %b_mont = mod_arith.to_mont %arg0 : !Zpm
+  %r = mod_arith.mul %c, %b_mont : !Zpm
+  return %r : !Zpm
+}
+
+// Commutative case: constant on the right.
+// CHECK-LABEL: @test_mul_of_to_mont_and_const
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^)]*]]) -> [[Tm:[^ ]*]]
+func.func @test_mul_of_to_mont_and_const(%arg0: !Zp) -> !Zpm {
+  // CHECK-DAG: %[[K:.*]] = mod_arith.constant 33 : [[Tm]]
+  // CHECK-DAG: %[[BC:.*]] = mod_arith.bitcast %[[ARG0]] : [[T]] -> [[Tm]]
+  // CHECK: %[[R:.*]] = mod_arith.mont_mul %[[BC]], %[[K]] : [[Tm]]
+  // CHECK-NOT: mod_arith.to_mont
+  // CHECK: return %[[R]] : [[Tm]]
+  %c = mod_arith.constant 10 : !Zpm
+  %b_mont = mod_arith.to_mont %arg0 : !Zpm
+  %r = mod_arith.mul %b_mont, %c : !Zpm
+  return %r : !Zpm
+}
+
+// Single-use guard: to_mont has an extra use, so rewriting would leave
+// the original MontMul(b, R²) alive. The pattern must NOT fire.
+// CHECK-LABEL: @test_mul_of_const_and_to_mont_multi_use_no_fold
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:[^)]*]])
+func.func @test_mul_of_const_and_to_mont_multi_use_no_fold(%arg0: !Zp)
+    -> (!Zpm, !Zpm) {
+  // CHECK: %[[C:.*]] = mod_arith.constant 10 : [[Tm:[^ ]*]]
+  // CHECK: %[[TM:.*]] = mod_arith.to_mont %[[ARG0]] : [[Tm]]
+  // CHECK: %[[R:.*]] = mod_arith.mul %[[TM]], %[[C]] : [[Tm]]
+  // CHECK-NOT: mod_arith.mont_mul
+  // CHECK: return %[[R]], %[[TM]]
+  %c = mod_arith.constant 10 : !Zpm
+  %b_mont = mod_arith.to_mont %arg0 : !Zpm
+  %r = mod_arith.mul %c, %b_mont : !Zpm
+  return %r, %b_mont : !Zpm, !Zpm
+}
+
+// Non-matching: neither operand is a to_mont, so the pattern must NOT fire.
+// CHECK-LABEL: @test_mul_of_const_and_non_to_mont_no_fold
+// CHECK-SAME: (%[[ARG0:.*]]: [[Tm:[^)]*]]) -> [[Tm]]
+func.func @test_mul_of_const_and_non_to_mont_no_fold(%arg0: !Zpm) -> !Zpm {
+  // CHECK: %[[C:.*]] = mod_arith.constant 10 : [[Tm]]
+  // CHECK: %[[R:.*]] = mod_arith.mul %[[ARG0]], %[[C]] : [[Tm]]
+  // CHECK-NOT: mod_arith.mont_mul
+  // CHECK: return %[[R]] : [[Tm]]
+  %c = mod_arith.constant 10 : !Zpm
+  %r = mod_arith.mul %c, %arg0 : !Zpm
+  return %r : !Zpm
+}

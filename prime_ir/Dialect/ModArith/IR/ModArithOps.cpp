@@ -21,6 +21,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "prime_ir/Utils/APIntUtils.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 #include "prime_ir/Utils/BitcastOpUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
@@ -766,6 +767,69 @@ namespace {
 #include "prime_ir/Dialect/ModArith/IR/ModArithCanonicalization.cpp.inc"
 }
 
+namespace {
+
+// mod_arith.mul (mod_arith.constant C : !Fpm), (mod_arith.to_mont %b : !Fp)
+//   : !Fpm
+//     -> mod_arith.mont_mul (mod_arith.constant (C_stored * R mod p) : !Fpm),
+//                           (mod_arith.bitcast %b : !Fp -> !Fpm) : !Fpm
+//
+// The mul on a Mont type lowers to a MontMul, and the to_mont on the other
+// operand lowers to a second MontMul (with R² as the other operand). By
+// absorbing the `* R²` into the constant at compile time, we collapse the
+// two MontMuls into one, saving a full modular multiplication at the arith
+// lowering layer.
+//
+// Correctness: given C_stored = c * R mod p (Mont encoding of logical c),
+// the rewritten constant stores k = C_stored * R = c * R² mod p. Then
+//   mont_mul(k, b_bitcast) = k * b * R⁻¹ = c * R² * b * R⁻¹ = c * b * R
+// which is the Mont encoding of c * b — identical to the semantics of
+// mul(C_mont, to_mont(b)) on !Fpm.
+//
+// Single-use guard on the to_mont: otherwise it remains alive for other
+// users and the rewrite is neutral (we add a bitcast and a new constant
+// without killing the to_mont-derived MontMul).
+struct MulOfConstantAndToMont : public OpRewritePattern<MulOp> {
+  using OpRewritePattern::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MulOp op,
+                                PatternRewriter &rewriter) const override {
+    auto modType = dyn_cast<ModArithType>(op.getType());
+    if (!modType || !modType.isMontgomery())
+      return failure();
+
+    ConstantOp constOp = op.getLhs().getDefiningOp<ConstantOp>();
+    ToMontOp toMontOp = op.getRhs().getDefiningOp<ToMontOp>();
+    if (!constOp || !toMontOp) {
+      constOp = op.getRhs().getDefiningOp<ConstantOp>();
+      toMontOp = op.getLhs().getDefiningOp<ToMontOp>();
+      if (!constOp || !toMontOp)
+        return failure();
+    }
+
+    if (!toMontOp->hasOneUse())
+      return failure();
+
+    auto intAttr = dyn_cast<IntegerAttr>(constOp.getValue());
+    if (!intAttr)
+      return failure();
+
+    MontgomeryAttr montAttr = modType.getMontgomeryAttr();
+    APInt k = mulMod(intAttr.getValue(), montAttr.getR().getValue(),
+                     montAttr.getModulus().getValue());
+
+    Location loc = op.getLoc();
+    auto kAttr = IntegerAttr::get(modType.getStorageType(), k);
+    Value kConst = rewriter.create<ConstantOp>(loc, modType, kAttr);
+    Value bBitcast =
+        rewriter.create<BitcastOp>(loc, modType, toMontOp.getInput());
+    rewriter.replaceOpWithNewOp<MontMulOp>(op, modType, bBitcast, kConst);
+    return success();
+  }
+};
+
+} // namespace
+
 #include "prime_ir/Utils/CanonicalizationPatterns.inc"
 
 void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
@@ -787,6 +851,7 @@ void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
 #define PRIME_IR_MUL_PATTERN(Name) patterns.add<ModArith##Name>(context);
   PRIME_IR_FIELD_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
 #undef PRIME_IR_MUL_PATTERN
+  patterns.add<MulOfConstantAndToMont>(context);
 }
 
 } // namespace mlir::prime_ir::mod_arith

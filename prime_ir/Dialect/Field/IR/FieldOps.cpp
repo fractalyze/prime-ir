@@ -1975,6 +1975,53 @@ namespace {
 namespace {
 
 //===----------------------------------------------------------------------===//
+// ToMont additive distributivity patterns
+//===----------------------------------------------------------------------===//
+//
+// to_mont is an additive homomorphism: R*(a ± b) = R*a ± R*b. When both
+// operands of an add/sub are produced by `to_mont`, we can sink the conversion
+// past the arithmetic op:
+//
+//   field.add (field.to_mont %a), (field.to_mont %b)
+//     -> field.to_mont (field.add %a, %b)
+//
+// Single-use guard: we only rewrite when at least one of the two `to_mont` ops
+// is dead after the fold. Without the guard, duplicating the std-form op while
+// keeping both original `to_mont`s alive strictly increases op count.
+//
+// Non-termination: no reverse pattern (to_mont(add) -> add(to_mont, to_mont))
+// exists in this dialect, so the rewrite is monotone.
+
+template <typename BinaryOp>
+struct AdditiveOfToMontDistributivity : public OpRewritePattern<BinaryOp> {
+  using OpRewritePattern<BinaryOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(BinaryOp op,
+                                PatternRewriter &rewriter) const override {
+    auto lhsToMont = op.getLhs().template getDefiningOp<ToMontOp>();
+    auto rhsToMont = op.getRhs().template getDefiningOp<ToMontOp>();
+    if (!lhsToMont || !rhsToMont)
+      return failure();
+
+    // Mixed-type add/sub can pair to_monts of different input types; bail so
+    // ExpandMixedAdditiveOp runs first and splits the operands.
+    if (lhsToMont.getInput().getType() != rhsToMont.getInput().getType())
+      return failure();
+
+    if (!lhsToMont->hasOneUse() && !rhsToMont->hasOneUse())
+      return failure();
+
+    Value newBinary = rewriter.create<BinaryOp>(
+        op.getLoc(), lhsToMont.getInput(), rhsToMont.getInput());
+    rewriter.replaceOpWithNewOp<ToMontOp>(op, op.getType(), newBinary);
+    return success();
+  }
+};
+
+using FieldAddOfToMont = AdditiveOfToMontDistributivity<AddOp>;
+using FieldSubOfToMont = AdditiveOfToMontDistributivity<SubOp>;
+
+//===----------------------------------------------------------------------===//
 // Mixed-type expansion patterns
 //===----------------------------------------------------------------------===//
 
@@ -2077,6 +2124,7 @@ void AddOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   PRIME_IR_FIELD_ADD_PATTERN_LIST(PRIME_IR_ADD_PATTERN)
 #undef PRIME_IR_ADD_PATTERN
   patterns.add<ExpandMixedAdditiveOp<AddOp>>(context);
+  patterns.add<FieldAddOfToMont>(context);
 }
 
 void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
@@ -2085,6 +2133,7 @@ void SubOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   PRIME_IR_FIELD_SUB_PATTERN_LIST(PRIME_IR_SUB_PATTERN)
 #undef PRIME_IR_SUB_PATTERN
   patterns.add<ExpandMixedAdditiveOp<SubOp>>(context);
+  patterns.add<FieldSubOfToMont>(context);
 }
 
 void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
