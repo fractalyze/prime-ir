@@ -50,16 +50,12 @@ patch_dir="$repo_root/third_party/llvm-project"
 shopt -s nullglob
 # List of patches in the order specified in workspace.bzl (lines 23-37)
 patches=(
-    "$patch_dir/owning_memref_free.patch"
-    "$patch_dir/owning_memref_memset.patch"
     "$patch_dir/linalg_type_support.patch"
     "$patch_dir/tensor_type_support.patch"
     "$patch_dir/vector_type_support.patch"
-    "$patch_dir/memref_folding.patch"
     "$patch_dir/lazy_linking.patch"
     "$patch_dir/elementwise_op_fusion_constant_support.patch"
     "$patch_dir/constant_like_interface.patch"
-    "$patch_dir/expose_py_integer_attribute.patch"
 )
 shopt -u nullglob
 
