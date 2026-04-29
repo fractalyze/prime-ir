@@ -52,7 +52,7 @@ inline bool isInsideOutlinedFunction(Operation *op) {
 ///         [&](func::FuncOp func) {
 ///           OpBuilder builder(func.getContext());
 ///           auto args = setupFunctionBody(func, builder);
-///           Value result = builder.create<MyOp>(func.getLoc(), args[0]);
+///           Value result = MyOp::create(builder, func.getLoc(), args[0]);
 ///           emitReturn(builder, func.getLoc(), result);
 ///         });
 ///   }
@@ -82,7 +82,7 @@ protected:
     OpBuilder builder(module_.getContext());
     builder.setInsertionPointToEnd(module_.getBody());
     auto func =
-        builder.create<func::FuncOp>(module_.getLoc(), funcName, funcType);
+        func::FuncOp::create(builder, module_.getLoc(), funcName, funcType);
     func.setPrivate();
 
     bodyGenerator(func);
@@ -93,7 +93,7 @@ protected:
   /// Emit a function call and return the single result.
   static Value emitCall(OpBuilder &builder, Location loc, func::FuncOp func,
                         ValueRange operands) {
-    auto callOp = builder.create<func::CallOp>(loc, func, operands);
+    auto callOp = func::CallOp::create(builder, loc, func, operands);
     return callOp.getResult(0);
   }
 
@@ -112,7 +112,7 @@ protected:
 
   /// Emit return op with the given result.
   static void emitReturn(OpBuilder &builder, Location loc, Value result) {
-    builder.create<func::ReturnOp>(loc, result);
+    func::ReturnOp::create(builder, loc, result);
   }
 
   /// Access derived class (CRTP pattern).

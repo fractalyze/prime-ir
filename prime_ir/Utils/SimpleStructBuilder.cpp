@@ -27,7 +27,7 @@ template <size_t kNumFields>
 SimpleStructBuilder<kNumFields>
 SimpleStructBuilder<kNumFields>::poison(OpBuilder &builder, Location loc,
                                         Type type) {
-  Value poisonValue = builder.create<LLVM::PoisonOp>(loc, type);
+  Value poisonValue = LLVM::PoisonOp::create(builder, loc, type);
   return SimpleStructBuilder<kNumFields>(poisonValue);
 }
 

@@ -47,8 +47,8 @@ SmallVector<PairingG1AffineCodeGen> extractG1Points(ImplicitLocOpBuilder &b,
 
   SmallVector<PairingG1AffineCodeGen> points;
   for (int64_t i = 0; i < numPoints; ++i) {
-    Value idx = b.create<arith::ConstantIndexOp>(i);
-    Value point = b.create<tensor::ExtractOp>(g1Tensor, ValueRange{idx});
+    Value idx = arith::ConstantIndexOp::create(b, i);
+    Value point = tensor::ExtractOp::create(b, g1Tensor, ValueRange{idx});
     // Decompose point into (x, y) coordinates.
     Operation::result_range coords = toCoords(b, point);
     points.push_back(
@@ -64,8 +64,8 @@ SmallVector<PairingG2AffineCodeGen> extractG2Points(ImplicitLocOpBuilder &b,
 
   SmallVector<PairingG2AffineCodeGen> points;
   for (int64_t i = 0; i < numPoints; ++i) {
-    Value idx = b.create<arith::ConstantIndexOp>(i);
-    Value point = b.create<tensor::ExtractOp>(g2Tensor, ValueRange{idx});
+    Value idx = arith::ConstantIndexOp::create(b, i);
+    Value point = tensor::ExtractOp::create(b, g2Tensor, ValueRange{idx});
     Operation::result_range coords = toCoords(b, point);
     points.push_back(
         {PairingFp2CodeGen(coords[0]), PairingFp2CodeGen(coords[1])});
@@ -82,12 +82,12 @@ PairingFp2CodeGen getG2CurveB(ShortWeierstrassAttr g2Attr) {
   auto bAttr = cast<DenseIntElementsAttr>(g2Attr.getB());
   auto bVals = bAttr.getValues<APInt>();
   auto pfType = cast<field::PrimeFieldType>(ctx.fp2Type.getBaseField());
-  Value b0 = b->create<field::ConstantOp>(
-      pfType, IntegerAttr::get(pfType.getStorageType(), bVals[0]));
-  Value b1 = b->create<field::ConstantOp>(
-      pfType, IntegerAttr::get(pfType.getStorageType(), bVals[1]));
+  Value b0 = field::ConstantOp::create(
+      *b, pfType, IntegerAttr::get(pfType.getStorageType(), bVals[0]));
+  Value b1 = field::ConstantOp::create(
+      *b, pfType, IntegerAttr::get(pfType.getStorageType(), bVals[1]));
   return PairingFp2CodeGen(
-      b->create<field::ExtFromCoeffsOp>(ctx.fp2Type, ValueRange{b0, b1}));
+      field::ExtFromCoeffsOp::create(*b, ctx.fp2Type, ValueRange{b0, b1}));
 }
 
 // Dispatch FusedMultiMillerLoop by number of pairs (known at compile time).
@@ -178,8 +178,8 @@ Value emitBN254PairingCheck(ImplicitLocOpBuilder &builder,
 
   // Compare to Fp12 identity (1).
   PairingFp12CodeGen one = PairingFp12CodeGen::One();
-  Value result = builder.create<field::CmpOp>(arith::CmpIPredicate::eq,
-                                              (Value)pairingResult, (Value)one);
+  Value result = field::CmpOp::create(builder, arith::CmpIPredicate::eq,
+                                      (Value)pairingResult, (Value)one);
   return result;
 }
 

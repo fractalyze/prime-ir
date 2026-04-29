@@ -116,14 +116,14 @@ Value createZeroPoint(ImplicitLocOpBuilder &b, Type pointType) {
   Value zeroBF = field::createFieldZero(baseFieldType, b);
   Value oneBF = field::createFieldOne(baseFieldType, b);
   if (isa<AffineType>(pointType)) {
-    return b.create<FromCoordsOp>(pointType, ValueRange{zeroBF, zeroBF});
+    return FromCoordsOp::create(b, pointType, ValueRange{zeroBF, zeroBF});
   }
   if (isa<JacobianType>(pointType)) {
-    return b.create<FromCoordsOp>(pointType, ValueRange{oneBF, oneBF, zeroBF});
+    return FromCoordsOp::create(b, pointType, ValueRange{oneBF, oneBF, zeroBF});
   }
   if (isa<XYZZType>(pointType)) {
-    return b.create<FromCoordsOp>(pointType,
-                                  ValueRange{oneBF, oneBF, zeroBF, zeroBF});
+    return FromCoordsOp::create(b, pointType,
+                                ValueRange{oneBF, oneBF, zeroBF, zeroBF});
   }
   llvm_unreachable("Unsupported point type for createZeroPoint");
 }
@@ -719,7 +719,7 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
   }
 
   if (auto arrayAttr = dyn_cast<ArrayAttr>(value)) {
-    return builder.create<ConstantOp>(loc, type, arrayAttr);
+    return ConstantOp::create(builder, loc, type, arrayAttr);
   }
   return nullptr;
 }

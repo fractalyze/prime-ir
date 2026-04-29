@@ -85,8 +85,8 @@ struct BitcastOpBufferizableInterface
         inputMemRefType.getMemorySpace());
 
     // Create a new bitcast with memref types.
-    auto memrefBitcast = rewriter.create<BitcastOpT>(
-        op->getLoc(), outputMemRefType, *inputBuffer);
+    auto memrefBitcast = BitcastOpT::create(rewriter, op->getLoc(),
+                                            outputMemRefType, *inputBuffer);
 
     bufferization::replaceOpWithBufferizedValues(rewriter, op,
                                                  memrefBitcast.getResult());
@@ -194,8 +194,8 @@ struct ConstantOpBufferizableInterface
     OpBuilder::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToStart(moduleOp.getBody());
 
-    auto globalOp = rewriter.create<memref::GlobalOp>(
-        op->getLoc(), globalName,
+    auto globalOp = memref::GlobalOp::create(
+        rewriter, op->getLoc(), globalName,
         /*sym_visibility=*/rewriter.getStringAttr("private"),
         /*type=*/storageMemrefType,
         /*initial_value=*/storageDenseAttr,
@@ -204,12 +204,12 @@ struct ConstantOpBufferizableInterface
 
     // Replace the constant with a get_global + bitcast operation.
     rewriter.setInsertionPoint(op);
-    auto getGlobalOp = rewriter.create<memref::GetGlobalOp>(
-        op->getLoc(), storageMemrefType, globalOp.getSymName());
+    auto getGlobalOp = memref::GetGlobalOp::create(
+        rewriter, op->getLoc(), storageMemrefType, globalOp.getSymName());
 
     // Bitcast from storage memref to target memref.
-    auto bitcastOp = rewriter.create<BitcastOpT>(op->getLoc(), targetMemrefType,
-                                                 getGlobalOp.getResult());
+    auto bitcastOp = BitcastOpT::create(
+        rewriter, op->getLoc(), targetMemrefType, getGlobalOp.getResult());
 
     bufferization::replaceOpWithBufferizedValues(rewriter, op,
                                                  bitcastOp.getResult());

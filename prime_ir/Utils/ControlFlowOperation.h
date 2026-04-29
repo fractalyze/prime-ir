@@ -59,17 +59,17 @@ public:
   static llvm::SmallVector<mlir::Value>
   For(int64_t count, mlir::ValueRange initArgs, BodyFn &&body) {
     auto *b = mlir::prime_ir::BuilderContext::GetInstance().Top();
-    auto c0 = b->create<mlir::arith::ConstantIndexOp>(0);
-    auto cN = b->create<mlir::arith::ConstantIndexOp>(count);
-    auto c1 = b->create<mlir::arith::ConstantIndexOp>(1);
-    auto forOp = b->create<mlir::scf::ForOp>(
-        c0, cN, c1, initArgs,
+    auto c0 = mlir::arith::ConstantIndexOp::create(*b, 0);
+    auto cN = mlir::arith::ConstantIndexOp::create(*b, count);
+    auto c1 = mlir::arith::ConstantIndexOp::create(*b, 1);
+    auto forOp = mlir::scf::ForOp::create(
+        *b, c0, cN, c1, initArgs,
         [&body](mlir::OpBuilder &builder, mlir::Location loc, mlir::Value iv,
                 mlir::ValueRange args) {
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
           auto results = body(iv, args);
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange(results));
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange(results));
         });
     return llvm::SmallVector<mlir::Value>(forOp.getResults());
   }
@@ -96,8 +96,9 @@ public:
   template <typename T>
   static T Select(mlir::Value condition, const T &a, const T &b) {
     auto *builder = mlir::prime_ir::BuilderContext::GetInstance().Top();
-    return T(builder->create<mlir::arith::SelectOp>(
-        condition, static_cast<mlir::Value>(a), static_cast<mlir::Value>(b)));
+    return T(mlir::arith::SelectOp::create(*builder, condition,
+                                           static_cast<mlir::Value>(a),
+                                           static_cast<mlir::Value>(b)));
   }
 
   mlir::Value Equal(mlir::Value x, mlir::Value y);
@@ -114,17 +115,17 @@ private:
   template <typename F1, typename F2>
   static mlir::Value IfBasic(mlir::Value condition, F1 &&then, F2 &&otherwise) {
     auto *b = mlir::prime_ir::BuilderContext::GetInstance().Top();
-    auto ifOp = b->create<mlir::scf::IfOp>(
-        condition,
+    auto ifOp = mlir::scf::IfOp::create(
+        *b, condition,
         [&then](mlir::OpBuilder &builder, mlir::Location loc) {
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange{then()});
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange{then()});
         },
         [&otherwise](mlir::OpBuilder &builder, mlir::Location loc) {
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange{otherwise()});
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange{otherwise()});
         });
     return ifOp.getResult(0);
   }
@@ -133,21 +134,21 @@ private:
   template <typename State, typename F1, typename F2>
   static State IfState(mlir::Value condition, F1 &&then, F2 &&otherwise) {
     auto *b = mlir::prime_ir::BuilderContext::GetInstance().Top();
-    auto ifOp = b->create<mlir::scf::IfOp>(
-        condition,
+    auto ifOp = mlir::scf::IfOp::create(
+        *b, condition,
         [&then](mlir::OpBuilder &builder, mlir::Location loc) {
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
           State result = then();
           auto vals = result.toValues();
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange(vals));
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange(vals));
         },
         [&otherwise](mlir::OpBuilder &builder, mlir::Location loc) {
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
           State result = otherwise();
           auto vals = result.toValues();
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange(vals));
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange(vals));
         });
     return State::fromValues(ifOp.getResults());
   }

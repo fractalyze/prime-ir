@@ -33,39 +33,39 @@ public:
   Derived operator+(const Derived &o) const {
     auto *b = BuilderContext::GetInstance().Top();
     return Derived(
-        b->create<field::AddOp>(self().getValue(), o.getValue()).getOutput());
+        field::AddOp::create(*b, self().getValue(), o.getValue()).getOutput());
   }
 
   Derived operator-(const Derived &o) const {
     auto *b = BuilderContext::GetInstance().Top();
     return Derived(
-        b->create<field::SubOp>(self().getValue(), o.getValue()).getOutput());
+        field::SubOp::create(*b, self().getValue(), o.getValue()).getOutput());
   }
 
   Derived operator*(const Derived &o) const {
     auto *b = BuilderContext::GetInstance().Top();
     return Derived(
-        b->create<field::MulOp>(self().getValue(), o.getValue()).getOutput());
+        field::MulOp::create(*b, self().getValue(), o.getValue()).getOutput());
   }
 
   Derived operator-() const {
     auto *b = BuilderContext::GetInstance().Top();
-    return Derived(b->create<field::NegateOp>(self().getValue()).getOutput());
+    return Derived(field::NegateOp::create(*b, self().getValue()).getOutput());
   }
 
   Derived Double() const {
     auto *b = BuilderContext::GetInstance().Top();
-    return Derived(b->create<field::DoubleOp>(self().getValue()).getOutput());
+    return Derived(field::DoubleOp::create(*b, self().getValue()).getOutput());
   }
 
   Derived Square() const {
     auto *b = BuilderContext::GetInstance().Top();
-    return Derived(b->create<field::SquareOp>(self().getValue()).getOutput());
+    return Derived(field::SquareOp::create(*b, self().getValue()).getOutput());
   }
 
   Derived Inverse() const {
     auto *b = BuilderContext::GetInstance().Top();
-    return Derived(b->create<field::InverseOp>(self().getValue()).getOutput());
+    return Derived(field::InverseOp::create(*b, self().getValue()).getOutput());
   }
 
   Derived &operator+=(const Derived &o) {

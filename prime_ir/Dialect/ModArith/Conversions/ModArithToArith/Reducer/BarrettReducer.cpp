@@ -33,21 +33,21 @@ namespace {
 Value createSplatConst(ImplicitLocOpBuilder &b, TypedAttr scalarAttr,
                        ShapedType shapedType, Value shapeRef) {
   if (shapedType.hasStaticShape()) {
-    return b.create<arith::ConstantOp>(
-        SplatElementsAttr::get(shapedType, scalarAttr));
+    return arith::ConstantOp::create(
+        b, SplatElementsAttr::get(shapedType, scalarAttr));
   }
   assert(shapeRef &&
          "A shape reference value must be provided for dynamic shapes.");
-  Value scalar = b.create<arith::ConstantOp>(scalarAttr);
+  Value scalar = arith::ConstantOp::create(b, scalarAttr);
   SmallVector<Value> dynamicDims;
   for (int64_t i = 0; i < shapedType.getRank(); ++i) {
     if (shapedType.isDynamicDim(i)) {
-      auto idx = b.create<arith::ConstantIndexOp>(i);
-      dynamicDims.push_back(b.create<tensor::DimOp>(shapeRef, idx));
+      auto idx = arith::ConstantIndexOp::create(b, i);
+      dynamicDims.push_back(tensor::DimOp::create(b, shapeRef, idx));
     }
   }
-  Value empty = b.create<tensor::EmptyOp>(shapedType, dynamicDims);
-  return b.create<linalg::FillOp>(scalar, empty).getResult(0);
+  Value empty = tensor::EmptyOp::create(b, shapedType, dynamicDims);
+  return linalg::FillOp::create(b, scalar, empty).getResult(0);
 }
 
 } // namespace
@@ -70,7 +70,7 @@ Value BarrettReducer::createExtModulusConst(Type inputType, Value inputValue) {
         cast<ShapedType>(shapedType.cloneWith(std::nullopt, extScalar));
     return createSplatConst(b, extModAttr, shapedExt, inputValue);
   }
-  return b.create<arith::ConstantOp>(extModAttr);
+  return arith::ConstantOp::create(b, extModAttr);
 }
 
 Value BarrettReducer::createExtMuConst(Type inputType, Value inputValue) {
@@ -80,7 +80,7 @@ Value BarrettReducer::createExtMuConst(Type inputType, Value inputValue) {
         cast<ShapedType>(shapedType.cloneWith(std::nullopt, muAttr.getType()));
     return createSplatConst(b, muAttr, shapedExt, inputValue);
   }
-  return b.create<arith::ConstantOp>(muAttr);
+  return arith::ConstantOp::create(b, muAttr);
 }
 
 Value BarrettReducer::reduce(Value lhs, Value rhs) {
@@ -97,30 +97,30 @@ Value BarrettReducer::reduce(Value lhs, Value rhs) {
     extType = shapedType.cloneWith(std::nullopt, extScalar);
 
   // Lift inputs to 2k bits and multiply: prod = a * b < p² ≤ 2^(2k).
-  Value lhsExt = b.create<arith::ExtUIOp>(extType, lhs);
-  Value rhsExt = b.create<arith::ExtUIOp>(extType, rhs);
-  Value prod = b.create<arith::MulIOp>(lhsExt, rhsExt);
+  Value lhsExt = arith::ExtUIOp::create(b, extType, lhs);
+  Value rhsExt = arith::ExtUIOp::create(b, extType, rhs);
+  Value prod = arith::MulIOp::create(b, lhsExt, rhsExt);
 
   // q' = high_half(prod * mu), i.e. (prod * mu) >> 2k.
   // Using arith.mului_extended avoids materializing a 4k-bit intermediate;
   // we keep all arithmetic at 2k bits.
   Value muConst = createExtMuConst(lhs.getType(), lhs);
-  auto prodMu = b.create<arith::MulUIExtendedOp>(prod, muConst);
+  auto prodMu = arith::MulUIExtendedOp::create(b, prod, muConst);
   Value qPrime = prodMu.getHigh();
 
   // r = prod - q' * p. q' ≤ floor(prod/p), so q' * p < 2^(2k); the narrow
   // (low-half) multiply suffices. r is in [0, 2p).
   Value pExt = createExtModulusConst(lhs.getType(), lhs);
-  Value qp = b.create<arith::MulIOp>(qPrime, pExt);
-  Value r = b.create<arith::SubIOp>(prod, qp);
+  Value qp = arith::MulIOp::create(b, qPrime, pExt);
+  Value r = arith::SubIOp::create(b, prod, qp);
 
   // Single conditional subtraction: if (r >= p) r -= p.
-  Value cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, r, pExt);
-  Value rSub = b.create<arith::SubIOp>(r, pExt);
-  Value rCanon = b.create<arith::SelectOp>(cmp, rSub, r);
+  Value cmp = arith::CmpIOp::create(b, arith::CmpIPredicate::uge, r, pExt);
+  Value rSub = arith::SubIOp::create(b, r, pExt);
+  Value rCanon = arith::SelectOp::create(b, cmp, rSub, r);
 
   // Truncate back to k bits — rCanon is in [0, p) ⊂ [0, 2^k).
-  return b.create<arith::TruncIOp>(lhs.getType(), rCanon);
+  return arith::TruncIOp::create(b, lhs.getType(), rCanon);
 }
 
 } // namespace mlir::prime_ir::mod_arith

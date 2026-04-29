@@ -26,7 +26,7 @@ namespace mlir::prime_ir::elliptic_curve {
 Value FieldCodeGen::IsZero() const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   Value zero = field::createFieldZero(value.getType(), *b);
-  return b->create<field::CmpOp>(arith::CmpIPredicate::eq, value, zero);
+  return field::CmpOp::create(*b, arith::CmpIPredicate::eq, value, zero);
 }
 
 FieldCodeGen FieldCodeGen::CreateConst(int64_t constant) const {

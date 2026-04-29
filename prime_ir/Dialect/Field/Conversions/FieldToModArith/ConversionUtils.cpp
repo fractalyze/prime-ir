@@ -41,9 +41,8 @@ SmallVector<Type> coeffsTypeRange(Type type) {
 
 Operation::result_range toModArithCoeffs(ImplicitLocOpBuilder &b,
                                          Value extFieldElement) {
-  return b
-      .create<ExtToCoeffsOp>(coeffsTypeRange(extFieldElement.getType()),
-                             extFieldElement)
+  return ExtToCoeffsOp::create(b, coeffsTypeRange(extFieldElement.getType()),
+                               extFieldElement)
       .getResults();
 }
 
@@ -53,8 +52,8 @@ Value createPrimeConst(ImplicitLocOpBuilder &b, PrimeFieldType baseField,
   if (denominator != 1) {
     result = result / PrimeFieldOperation(denominator, baseField);
   }
-  return b.create<mod_arith::ConstantOp>(convertPrimeFieldType(baseField),
-                                         result.getIntegerAttr());
+  return mod_arith::ConstantOp::create(b, convertPrimeFieldType(baseField),
+                                       result.getIntegerAttr());
 }
 
 } // namespace mlir::prime_ir::field
