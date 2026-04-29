@@ -29,7 +29,7 @@ BinaryFieldCodeGen::BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
 BinaryFieldCodeGen
 BinaryFieldCodeGen::operator+(const BinaryFieldCodeGen &other) const {
   // In characteristic 2, addition is XOR
-  Value result = builder_.create<arith::XOrIOp>(value_, other.value_);
+  Value result = arith::XOrIOp::create(builder_, value_, other.value_);
   return BinaryFieldCodeGen(bfType_, result, builder_);
 }
 
@@ -106,7 +106,7 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
   // which will be lowered to an efficient jump table
 
   auto indexValue =
-      builder_.create<arith::IndexCastUIOp>(builder_.getIndexType(), value_);
+      arith::IndexCastUIOp::create(builder_, builder_.getIndexType(), value_);
 
   // Create switch with all 256 cases
   SmallVector<int64_t> caseValues;
@@ -116,26 +116,26 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
   }
 
   // Generate scf.index_switch
-  auto switchOp = builder_.create<scf::IndexSwitchOp>(
-      TypeRange{builder_.getI8Type()}, indexValue, caseValues,
-      caseValues.size());
+  auto switchOp =
+      scf::IndexSwitchOp::create(builder_, TypeRange{builder_.getI8Type()},
+                                 indexValue, caseValues, caseValues.size());
 
   // Generate case regions
   for (int i = 0; i < 256; ++i) {
     Region &caseRegion = switchOp.getCaseRegions()[i];
     Block *caseBlock = builder_.createBlock(&caseRegion);
     builder_.setInsertionPointToStart(caseBlock);
-    Value inverseVal =
-        builder_.create<arith::ConstantIntOp>(kBinaryTower8bInverseTable[i], 8);
-    builder_.create<scf::YieldOp>(inverseVal);
+    Value inverseVal = arith::ConstantIntOp::create(
+        builder_, kBinaryTower8bInverseTable[i], 8);
+    scf::YieldOp::create(builder_, inverseVal);
   }
 
   // Generate default region (return 0 for safety, should never be reached)
   Region &defaultRegion = switchOp.getDefaultRegion();
   Block *defaultBlock = builder_.createBlock(&defaultRegion);
   builder_.setInsertionPointToStart(defaultBlock);
-  Value defaultVal = builder_.create<arith::ConstantIntOp>(0, 8);
-  builder_.create<scf::YieldOp>(defaultVal);
+  Value defaultVal = arith::ConstantIntOp::create(builder_, 0, 8);
+  scf::YieldOp::create(builder_, defaultVal);
 
   // Move insertion point back after switch
   builder_.setInsertionPointAfter(switchOp);
@@ -147,8 +147,8 @@ BinaryFieldCodeGen BinaryFieldCodeGen::constant(BinaryFieldType bfType,
                                                 uint64_t val,
                                                 ImplicitLocOpBuilder &builder) {
   IntegerType intType = bfType.getStorageType();
-  Value c = builder.create<arith::ConstantIntOp>(static_cast<int64_t>(val),
-                                                 intType.getWidth());
+  Value c = arith::ConstantIntOp::create(builder, static_cast<int64_t>(val),
+                                         intType.getWidth());
   return BinaryFieldCodeGen(bfType, c, builder);
 }
 
@@ -174,7 +174,7 @@ Value BinaryFieldCodeGen::mulTower(Value a, Value b,
                                    unsigned towerLevel) const {
   // Base case: tower level 0 is GF(2), multiplication is AND
   if (towerLevel == 0) {
-    return builder_.create<arith::AndIOp>(a, b);
+    return arith::AndIOp::create(builder_, a, b);
   }
 
   // Recursive case: use Karatsuba-style multiplication
@@ -195,43 +195,43 @@ Value BinaryFieldCodeGen::mulTower(Value a, Value b,
   IntegerType fullType = IntegerType::get(builder_.getContext(), halfBits * 2);
 
   // Extract lower and upper halves
-  Value a0 = builder_.create<arith::TruncIOp>(halfType, a);
-  Value b0 = builder_.create<arith::TruncIOp>(halfType, b);
+  Value a0 = arith::TruncIOp::create(builder_, halfType, a);
+  Value b0 = arith::TruncIOp::create(builder_, halfType, b);
 
-  Value halfBitsConst = builder_.create<arith::ConstantIntOp>(
-      static_cast<int64_t>(halfBits), fullType.getWidth());
-  Value a1 = builder_.create<arith::TruncIOp>(
-      halfType, builder_.create<arith::ShRUIOp>(a, halfBitsConst));
-  Value b1 = builder_.create<arith::TruncIOp>(
-      halfType, builder_.create<arith::ShRUIOp>(b, halfBitsConst));
+  Value halfBitsConst = arith::ConstantIntOp::create(
+      builder_, static_cast<int64_t>(halfBits), fullType.getWidth());
+  Value a1 = arith::TruncIOp::create(
+      builder_, halfType, arith::ShRUIOp::create(builder_, a, halfBitsConst));
+  Value b1 = arith::TruncIOp::create(
+      builder_, halfType, arith::ShRUIOp::create(builder_, b, halfBitsConst));
 
   // Karatsuba products
   Value m0 = mulTower(a0, b0, towerLevel - 1);
   Value m1 = mulTower(a1, b1, towerLevel - 1);
-  Value a0Xa1 = builder_.create<arith::XOrIOp>(a0, a1);
-  Value b0Xb1 = builder_.create<arith::XOrIOp>(b0, b1);
+  Value a0Xa1 = arith::XOrIOp::create(builder_, a0, a1);
+  Value b0Xb1 = arith::XOrIOp::create(builder_, b0, b1);
   Value m2 = mulTower(a0Xa1, b0Xb1, towerLevel - 1);
 
   // Get α for this tower level
   // TowerAlpha<k> is the α used in GF(2^(2ᵏ))
   uint64_t alpha = getTowerAlpha(towerLevel);
-  Value alphaConst = builder_.create<arith::ConstantIntOp>(
-      static_cast<int64_t>(alpha), halfType.getWidth());
+  Value alphaConst = arith::ConstantIntOp::create(
+      builder_, static_cast<int64_t>(alpha), halfType.getWidth());
 
   // result_lo = m₀ + m₁*α
   Value m1Alpha = mulTower(m1, alphaConst, towerLevel - 1);
-  Value resultLo = builder_.create<arith::XOrIOp>(m0, m1Alpha);
+  Value resultLo = arith::XOrIOp::create(builder_, m0, m1Alpha);
 
   // result_hi = m₂ + m₀ + m₁
-  Value m2Xm0 = builder_.create<arith::XOrIOp>(m2, m0);
-  Value resultHi = builder_.create<arith::XOrIOp>(m2Xm0, m1);
+  Value m2Xm0 = arith::XOrIOp::create(builder_, m2, m0);
+  Value resultHi = arith::XOrIOp::create(builder_, m2Xm0, m1);
 
   // Combine: result = result_lo | (result_hi << halfBits)
-  Value resultLoExt = builder_.create<arith::ExtUIOp>(fullType, resultLo);
-  Value resultHiExt = builder_.create<arith::ExtUIOp>(fullType, resultHi);
+  Value resultLoExt = arith::ExtUIOp::create(builder_, fullType, resultLo);
+  Value resultHiExt = arith::ExtUIOp::create(builder_, fullType, resultHi);
   Value resultHiShifted =
-      builder_.create<arith::ShLIOp>(resultHiExt, halfBitsConst);
-  return builder_.create<arith::OrIOp>(resultLoExt, resultHiShifted);
+      arith::ShLIOp::create(builder_, resultHiExt, halfBitsConst);
+  return arith::OrIOp::create(builder_, resultLoExt, resultHiShifted);
 }
 
 Value BinaryFieldCodeGen::squareTower(Value a, unsigned towerLevel) const {
@@ -249,11 +249,11 @@ Value BinaryFieldCodeGen::squareTower(Value a, unsigned towerLevel) const {
   IntegerType fullType = IntegerType::get(builder_.getContext(), halfBits * 2);
 
   // Extract lower and upper halves
-  Value a0 = builder_.create<arith::TruncIOp>(halfType, a);
-  Value halfBitsConst = builder_.create<arith::ConstantIntOp>(
-      static_cast<int64_t>(halfBits), fullType.getWidth());
-  Value a1 = builder_.create<arith::TruncIOp>(
-      halfType, builder_.create<arith::ShRUIOp>(a, halfBitsConst));
+  Value a0 = arith::TruncIOp::create(builder_, halfType, a);
+  Value halfBitsConst = arith::ConstantIntOp::create(
+      builder_, static_cast<int64_t>(halfBits), fullType.getWidth());
+  Value a1 = arith::TruncIOp::create(
+      builder_, halfType, arith::ShRUIOp::create(builder_, a, halfBitsConst));
 
   // Recursive squaring
   Value a0Sq = squareTower(a0, towerLevel - 1);
@@ -262,22 +262,22 @@ Value BinaryFieldCodeGen::squareTower(Value a, unsigned towerLevel) const {
   // Get α for this tower level
   // TowerAlpha<k> is the α used in GF(2^(2ᵏ))
   uint64_t alpha = getTowerAlpha(towerLevel);
-  Value alphaConst = builder_.create<arith::ConstantIntOp>(
-      static_cast<int64_t>(alpha), halfType.getWidth());
+  Value alphaConst = arith::ConstantIntOp::create(
+      builder_, static_cast<int64_t>(alpha), halfType.getWidth());
 
   // result_lo = a₀² + a1²*α
   Value a1SqAlpha = mulTower(a1Sq, alphaConst, towerLevel - 1);
-  Value resultLo = builder_.create<arith::XOrIOp>(a0Sq, a1SqAlpha);
+  Value resultLo = arith::XOrIOp::create(builder_, a0Sq, a1SqAlpha);
 
   // result_hi = a1²
   Value resultHi = a1Sq;
 
   // Combine: result = result_lo | (result_hi << halfBits)
-  Value resultLoExt = builder_.create<arith::ExtUIOp>(fullType, resultLo);
-  Value resultHiExt = builder_.create<arith::ExtUIOp>(fullType, resultHi);
+  Value resultLoExt = arith::ExtUIOp::create(builder_, fullType, resultLo);
+  Value resultHiExt = arith::ExtUIOp::create(builder_, fullType, resultHi);
   Value resultHiShifted =
-      builder_.create<arith::ShLIOp>(resultHiExt, halfBitsConst);
-  return builder_.create<arith::OrIOp>(resultLoExt, resultHiShifted);
+      arith::ShLIOp::create(builder_, resultHiExt, halfBitsConst);
+  return arith::OrIOp::create(builder_, resultLoExt, resultHiShifted);
 }
 
 } // namespace mlir::prime_ir::field

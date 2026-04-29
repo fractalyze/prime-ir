@@ -105,7 +105,7 @@ Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
                           uint64_t value) {
   auto constantLike = cast<ConstantLikeInterface>(fieldType);
   TypedAttr attr = constantLike.createConstantAttr(static_cast<int64_t>(value));
-  return builder.create<ConstantOp>(fieldType, attr)->getResult(0);
+  return ConstantOp::create(builder, fieldType, attr)->getResult(0);
 }
 
 Attribute maybeToStandard(Type type, Attribute attr) {
@@ -597,8 +597,8 @@ Value ExtensionFieldType::createNonResidueValue(
   // Montgomery), so we use it directly without conversion.
   if (auto pfType = dyn_cast<PrimeFieldType>(baseFieldType)) {
     auto intAttr = cast<IntegerAttr>(nonResidueAttr);
-    return builder.create<mod_arith::ConstantOp>(convertPrimeFieldType(pfType),
-                                                 intAttr);
+    return mod_arith::ConstantOp::create(builder, convertPrimeFieldType(pfType),
+                                         intAttr);
   }
 
   // Extension field base: use ConstantLikeInterface for proper embedding
@@ -636,12 +636,12 @@ ExtensionFieldType::extractCoeffsFromStruct(ImplicitLocOpBuilder &builder,
 Operation::result_range ExtensionFieldType::toCoeffs(ImplicitLocOpBuilder &b,
                                                      Value val) const {
   SmallVector<Type> resultTypes(getDegree(), getBaseField());
-  return b.create<ExtToCoeffsOp>(resultTypes, val).getResults();
+  return ExtToCoeffsOp::create(b, resultTypes, val).getResults();
 }
 
 Value ExtensionFieldType::fromCoeffs(ImplicitLocOpBuilder &b,
                                      ValueRange coeffs) const {
-  return b.create<ExtFromCoeffsOp>(*this, coeffs);
+  return ExtFromCoeffsOp::create(b, *this, coeffs);
 }
 
 Value ExtensionFieldType::fromPrimeCoeffs(ImplicitLocOpBuilder &b,
@@ -681,7 +681,7 @@ Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
 Value createFieldConstant(PrimeFieldType pfType, ImplicitLocOpBuilder &builder,
                           const APInt &value) {
   auto attr = IntegerAttr::get(pfType.getStorageType(), value);
-  return builder.create<ConstantOp>(pfType, attr);
+  return ConstantOp::create(builder, pfType, attr);
 }
 
 } // namespace mlir::prime_ir::field

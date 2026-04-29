@@ -172,10 +172,10 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
         Value coordValue;
         if (auto intAttr = dyn_cast<IntegerAttr>(coordAttr)) {
           // Prime field coordinate
-          coordValue = b.create<field::ConstantOp>(baseFieldType, intAttr);
+          coordValue = field::ConstantOp::create(b, baseFieldType, intAttr);
         } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(coordAttr)) {
           // Extension field coordinate
-          coordValue = b.create<field::ConstantOp>(baseFieldType, denseAttr);
+          coordValue = field::ConstantOp::create(b, baseFieldType, denseAttr);
         } else {
           return failure();
         }
@@ -221,19 +221,19 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
           RankedTensorType::get({flatSize}, primeFieldType.getStorageType());
       auto flatDenseAttr = DenseIntElementsAttr::get(intTensorType, flatValues);
       auto intConstant =
-          b.create<arith::ConstantOp>(intTensorType, flatDenseAttr);
+          arith::ConstantOp::create(b, intTensorType, flatDenseAttr);
 
       // Bitcast integer tensor to prime field tensor
       auto pfTensorType = RankedTensorType::get({flatSize}, primeFieldType);
       auto pfTensor =
-          b.create<field::BitcastOp>(pfTensorType, intConstant.getResult());
+          field::BitcastOp::create(b, pfTensorType, intConstant.getResult());
 
       // Use elliptic_curve.bitcast to convert prime field tensor to point
       // tensor. This can be properly bufferized unlike
       // UnrealizedConversionCastOp.
       Value fieldTensor = pfTensor.getResult();
       Value tensorResult =
-          b.create<BitcastOp>(shapedType, fieldTensor).getResult();
+          BitcastOp::create(b, shapedType, fieldTensor).getResult();
       rewriter.replaceOp(op, tensorResult);
     } else {
       // Scalar constant: create single point
@@ -269,30 +269,30 @@ struct ConvertIsZero : public OpConversionPattern<IsZeroOp> {
     if (isa<AffineType>(inputType)) {
       // SW affine identity: (0, 0)
       Value xIsZero =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[0], zeroBF);
+          field::CmpOp::create(b, arith::CmpIPredicate::eq, coords[0], zeroBF);
       Value yIsZero =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[1], zeroBF);
-      isZero = b.create<arith::AndIOp>(xIsZero, yIsZero);
+          field::CmpOp::create(b, arith::CmpIPredicate::eq, coords[1], zeroBF);
+      isZero = arith::AndIOp::create(b, xIsZero, yIsZero);
     } else if (isa<EdAffineType>(inputType)) {
       // Edwards affine identity: (0, 1)
       Value oneBF = field::createFieldOne(baseFieldType, b);
       Value xIsZero =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[0], zeroBF);
+          field::CmpOp::create(b, arith::CmpIPredicate::eq, coords[0], zeroBF);
       Value yIsOne =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[1], oneBF);
-      isZero = b.create<arith::AndIOp>(xIsZero, yIsOne);
+          field::CmpOp::create(b, arith::CmpIPredicate::eq, coords[1], oneBF);
+      isZero = arith::AndIOp::create(b, xIsZero, yIsOne);
     } else if (isa<EdExtendedType>(inputType)) {
       // Edwards extended identity: (0, c, c, 0) for any c != 0.
       // Check X == 0 and Y == Z (projective equivalence to (0, 1, 1, 0)).
       Value xIsZero =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[0], zeroBF);
-      Value yEqZ = b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[1],
-                                          coords[2]);
-      isZero = b.create<arith::AndIOp>(xIsZero, yEqZ);
+          field::CmpOp::create(b, arith::CmpIPredicate::eq, coords[0], zeroBF);
+      Value yEqZ = field::CmpOp::create(b, arith::CmpIPredicate::eq, coords[1],
+                                        coords[2]);
+      isZero = arith::AndIOp::create(b, xIsZero, yEqZ);
     } else {
       // SW projective: identity has Z == 0
       isZero =
-          b.create<field::CmpOp>(arith::CmpIPredicate::eq, coords[2], zeroBF);
+          field::CmpOp::create(b, arith::CmpIPredicate::eq, coords[2], zeroBF);
     }
     rewriter.replaceOp(op, isZero);
     return success();
@@ -383,11 +383,11 @@ private:
     bool isDynamic = n == ShapedType::kDynamic;
 
     // Get N as Value.
-    Value c0val = b.create<arith::ConstantIndexOp>(0);
+    Value c0val = arith::ConstantIndexOp::create(b, 0);
     Value dimNval =
         isDynamic
-            ? b.create<tensor::DimOp>(adaptor.getInput(), c0val).getResult()
-            : b.create<arith::ConstantIndexOp>(n).getResult();
+            ? tensor::DimOp::create(b, adaptor.getInput(), c0val).getResult()
+            : arith::ConstantIndexOp::create(b, n).getResult();
     SmallVector<Value, 1> dynExtentsStorage;
     if (isDynamic)
       dynExtentsStorage.push_back(dimNval);
@@ -404,16 +404,15 @@ private:
     // No bitcast/expand_shape/extract_slice — avoids buffer aliasing
     // issues that cause use-after-free during bufferization.
     auto makeCol = [&](unsigned coordIdx) -> Value {
-      return b
-          .create<tensor::GenerateOp>(
-              colType, dynExtents,
-              [&](OpBuilder &nb, Location loc, ValueRange ivs) {
-                ImplicitLocOpBuilder lb(loc, nb);
-                Value pt =
-                    lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
-                auto coords = toCoords(lb, pt);
-                lb.create<tensor::YieldOp>(coords[coordIdx]);
-              })
+      return tensor::GenerateOp::create(
+                 b, colType, dynExtents,
+                 [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                   ImplicitLocOpBuilder lb(loc, nb);
+                   Value pt =
+                       tensor::ExtractOp::create(lb, adaptor.getInput(), ivs);
+                   auto coords = toCoords(lb, pt);
+                   tensor::YieldOp::create(lb, coords[coordIdx]);
+                 })
           .getResult();
     };
 
@@ -423,23 +422,23 @@ private:
     Value result;
     if (inKind == PointKind::kJacobian) {
       Value colZ = makeCol(2);
-      Value zInv = b.create<field::InverseOp>(colType, colZ);
-      Value zInv2 = b.create<field::MulOp>(colType, zInv, zInv);
-      Value zInv3 = b.create<field::MulOp>(colType, zInv2, zInv);
-      result = b.create<tensor::GenerateOp>(
-                    outputTensorType, dynExtents,
-                    [&](OpBuilder &nb, Location loc, ValueRange ivs) {
-                      ImplicitLocOpBuilder lb(loc, nb);
-                      Value pt =
-                          lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
-                      auto coords = toCoords(lb, pt);
-                      Value zi2 = lb.create<tensor::ExtractOp>(zInv2, ivs);
-                      Value zi3 = lb.create<tensor::ExtractOp>(zInv3, ivs);
-                      Value x = lb.create<field::MulOp>(coords[0], zi2);
-                      Value y = lb.create<field::MulOp>(coords[1], zi3);
-                      Value resPt = fromCoords(lb, outputPti, ValueRange{x, y});
-                      lb.create<tensor::YieldOp>(resPt);
-                    })
+      Value zInv = field::InverseOp::create(b, colType, colZ);
+      Value zInv2 = field::MulOp::create(b, colType, zInv, zInv);
+      Value zInv3 = field::MulOp::create(b, colType, zInv2, zInv);
+      result = tensor::GenerateOp::create(
+                   b, outputTensorType, dynExtents,
+                   [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                     ImplicitLocOpBuilder lb(loc, nb);
+                     Value pt =
+                         tensor::ExtractOp::create(lb, adaptor.getInput(), ivs);
+                     auto coords = toCoords(lb, pt);
+                     Value zi2 = tensor::ExtractOp::create(lb, zInv2, ivs);
+                     Value zi3 = tensor::ExtractOp::create(lb, zInv3, ivs);
+                     Value x = field::MulOp::create(lb, coords[0], zi2);
+                     Value y = field::MulOp::create(lb, coords[1], zi3);
+                     Value resPt = fromCoords(lb, outputPti, ValueRange{x, y});
+                     tensor::YieldOp::create(lb, resPt);
+                   })
                    .getResult();
     } else {
       // XYZZ→Affine: single BatchInverse on ZZZ only.
@@ -447,23 +446,23 @@ private:
       // Per-element: zInv = zInvCubic * ZZ, zInvSq = zInv²,
       //              x = X * zInvSq, y = Y * zInvCubic.
       Value colZZZ = makeCol(3);
-      Value zInvCubic = b.create<field::InverseOp>(colType, colZZZ);
-      result = b.create<tensor::GenerateOp>(
-                    outputTensorType, dynExtents,
-                    [&](OpBuilder &nb, Location loc, ValueRange ivs) {
-                      ImplicitLocOpBuilder lb(loc, nb);
-                      Value pt =
-                          lb.create<tensor::ExtractOp>(adaptor.getInput(), ivs);
-                      auto coords = toCoords(lb, pt);
-                      Value zi3 = lb.create<tensor::ExtractOp>(zInvCubic, ivs);
-                      // Z⁻¹ = Z⁻³ * Z² = zInvCubic * ZZ
-                      Value zInv = lb.create<field::MulOp>(zi3, coords[2]);
-                      Value zInvSq = lb.create<field::MulOp>(zInv, zInv);
-                      Value x = lb.create<field::MulOp>(coords[0], zInvSq);
-                      Value y = lb.create<field::MulOp>(coords[1], zi3);
-                      Value resPt = fromCoords(lb, outputPti, ValueRange{x, y});
-                      lb.create<tensor::YieldOp>(resPt);
-                    })
+      Value zInvCubic = field::InverseOp::create(b, colType, colZZZ);
+      result = tensor::GenerateOp::create(
+                   b, outputTensorType, dynExtents,
+                   [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                     ImplicitLocOpBuilder lb(loc, nb);
+                     Value pt =
+                         tensor::ExtractOp::create(lb, adaptor.getInput(), ivs);
+                     auto coords = toCoords(lb, pt);
+                     Value zi3 = tensor::ExtractOp::create(lb, zInvCubic, ivs);
+                     // Z⁻¹ = Z⁻³ * Z² = zInvCubic * ZZ
+                     Value zInv = field::MulOp::create(lb, zi3, coords[2]);
+                     Value zInvSq = field::MulOp::create(lb, zInv, zInv);
+                     Value x = field::MulOp::create(lb, coords[0], zInvSq);
+                     Value y = field::MulOp::create(lb, coords[1], zi3);
+                     Value resPt = fromCoords(lb, outputPti, ValueRange{x, y});
+                     tensor::YieldOp::create(lb, resPt);
+                   })
                    .getResult();
     }
 
@@ -577,14 +576,14 @@ struct ConvertNegate : public OpConversionPattern<NegateOp> {
     Type elementType = getElementTypeOrSelf(op.getType());
     if (isa<EdAffineType>(elementType)) {
       // Twisted Edwards affine: -(x, y) = (-x, y)
-      outputCoords[0] = b.create<field::NegateOp>(coords[0]);
+      outputCoords[0] = field::NegateOp::create(b, coords[0]);
     } else if (isa<EdExtendedType>(elementType)) {
       // Twisted Edwards extended: -(X, Y, Z, T) = (-X, Y, Z, -T)
-      outputCoords[0] = b.create<field::NegateOp>(coords[0]);
-      outputCoords[3] = b.create<field::NegateOp>(coords[3]);
+      outputCoords[0] = field::NegateOp::create(b, coords[0]);
+      outputCoords[3] = field::NegateOp::create(b, coords[3]);
     } else {
       // Short Weierstrass: negate Y coordinate.
-      outputCoords[1] = b.create<field::NegateOp>(coords[1]);
+      outputCoords[1] = field::NegateOp::create(b, coords[1]);
     }
 
     rewriter.replaceOp(op, fromCoords(b, op.getType(), outputCoords));
@@ -603,8 +602,8 @@ struct ConvertSub : public OpConversionPattern<SubOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    Value negP2 = b.create<NegateOp>(op.getRhs());
-    Value result = b.create<AddOp>(op.getType(), op.getLhs(), negP2);
+    Value negP2 = NegateOp::create(b, op.getRhs());
+    Value result = AddOp::create(b, op.getType(), op.getLhs(), negP2);
 
     rewriter.replaceOp(op, result);
     return success();
@@ -629,7 +628,7 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
     llvm::SmallVector<Value, 4> cmps;
     for (auto [lhsCoord, rhsCoord] : llvm::zip(lhsCoords, rhsCoords)) {
       cmps.push_back(
-          b.create<field::CmpOp>(op.getPredicate(), lhsCoord, rhsCoord));
+          field::CmpOp::create(b, op.getPredicate(), lhsCoord, rhsCoord));
     }
     Value result;
     if (op.getPredicate() == arith::CmpIPredicate::eq) {
@@ -646,12 +645,12 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
 
   template <typename Op>
   Value combineCmps(ImplicitLocOpBuilder &b, ValueRange cmps) const {
-    Op result = b.create<Op>(cmps[0], cmps[1]);
+    Op result = Op::create(b, cmps[0], cmps[1]);
     if (cmps.size() == 3) {
-      result = b.create<Op>(result, cmps[2]);
+      result = Op::create(b, result, cmps[2]);
     } else if (cmps.size() == 4) {
-      Op result2 = b.create<Op>(cmps[2], cmps[3]);
-      result = b.create<Op>(result, result2);
+      Op result2 = Op::create(b, cmps[2], cmps[3]);
+      result = Op::create(b, result, result2);
     }
     return result;
   }
@@ -668,15 +667,15 @@ Value fieldPrimeToInteger(ImplicitLocOpBuilder &b, Value fieldVal) {
   if (auto constOp = fieldVal.getDefiningOp<field::ConstantOp>()) {
     Attribute stdAttr =
         field::maybeToStandard(constOp.getType(), constOp.getValue());
-    return b.create<arith::ConstantIntOp>(
-        intType, cast<IntegerAttr>(stdAttr).getValue());
+    return arith::ConstantIntOp::create(b, intType,
+                                        cast<IntegerAttr>(stdAttr).getValue());
   }
 
   Value std = pfType.isMontgomery()
-                  ? b.create<field::FromMontOp>(
-                        field::getStandardFormType(pfType), fieldVal)
+                  ? field::FromMontOp::create(
+                        b, field::getStandardFormType(pfType), fieldVal)
                   : fieldVal;
-  return b.create<field::BitcastOp>(TypeRange{intType}, std);
+  return field::BitcastOp::create(b, TypeRange{intType}, std);
 }
 } // namespace
 
@@ -714,17 +713,17 @@ struct ConvertScalarMul : public OpConversionPattern<ScalarMulOp> {
     // Inline implementation: Double-and-Add algorithm
     Value zeroPoint = createZeroPoint(b, outputType);
     Value initialPoint = isa<AffineType>(pointType)
-                             ? b.create<ConvertPointTypeOp>(outputType, point)
+                             ? ConvertPointTypeOp::create(b, outputType, point)
                              : point;
 
     Value scalarInt = fieldPrimeToInteger(b, scalarPF);
     Value result = generateBitSerialLoop(
         b, scalarInt, initialPoint, zeroPoint,
         [outputType](ImplicitLocOpBuilder &b, Value v) {
-          return b.create<DoubleOp>(outputType, v);
+          return DoubleOp::create(b, outputType, v);
         },
         [outputType](ImplicitLocOpBuilder &b, Value acc, Value v) {
-          return b.create<AddOp>(outputType, acc, v);
+          return AddOp::create(b, outputType, acc, v);
         });
     rewriter.replaceOp(op, result);
     return success();

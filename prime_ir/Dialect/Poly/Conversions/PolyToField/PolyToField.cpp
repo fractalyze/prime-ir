@@ -124,9 +124,9 @@ struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
       high.push_back(rewriter.getIndexAttr(resultShape - inputShape));
 
       Value padValue = field::createFieldZero(typeInfo.coefficientType, b);
-      coeffValue = b.create<tensor::PadOp>(typeInfo.tensorType, coeffValue, low,
-                                           high, padValue,
-                                           /*nofold=*/false);
+      coeffValue = tensor::PadOp::create(b, typeInfo.tensorType, coeffValue,
+                                         low, high, padValue,
+                                         /*nofold=*/false);
     }
 
     rewriter.replaceOp(op, coeffValue);
@@ -137,18 +137,18 @@ struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
 // Butterfly : Cooley-Tukey
 static std::pair<Value, Value> bflyCT(ImplicitLocOpBuilder &b, Value A, Value B,
                                       Value root) {
-  Value rootB = b.create<field::MulOp>(B, root);
-  auto ctPlus = b.create<field::AddOp>(A, rootB);
-  auto ctMinus = b.create<field::SubOp>(A, rootB);
+  Value rootB = field::MulOp::create(b, B, root);
+  auto ctPlus = field::AddOp::create(b, A, rootB);
+  auto ctMinus = field::SubOp::create(b, A, rootB);
   return {std::move(ctPlus), std::move(ctMinus)};
 }
 
 // Butterfly : Gentleman-Sande
 static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
                                       Value root) {
-  auto gsPlus = b.create<field::AddOp>(A, B);
-  auto gsMinus = b.create<field::SubOp>(A, B);
-  Value gsMinusRoot = b.create<field::MulOp>(gsMinus, root);
+  auto gsPlus = field::AddOp::create(b, A, B);
+  auto gsMinus = field::SubOp::create(b, A, B);
+  Value gsMinusRoot = field::MulOp::create(b, gsMinus, root);
   return {std::move(gsPlus), std::move(gsMinusRoot)};
 }
 
@@ -198,14 +198,13 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
     // Create a tensor constant of precomputed roots for fast access during the
     // NTT.
     auto rootsType = intTensorType.clone({degree});
-    roots = !kInverse
-                ? b.create<arith::ConstantOp>(rootsType,
-                                              primitiveRootsAttr.getRoots())
-                : b.create<arith::ConstantOp>(rootsType,
-                                              primitiveRootsAttr.getInvRoots());
+    roots = !kInverse ? arith::ConstantOp::create(b, rootsType,
+                                                  primitiveRootsAttr.getRoots())
+                      : arith::ConstantOp::create(
+                            b, rootsType, primitiveRootsAttr.getInvRoots());
 
     // Wrap the roots in a field encapsulation for further field operations.
-    roots = b.create<field::BitcastOp>(tensorType, roots);
+    roots = field::BitcastOp::create(b, tensorType, roots);
   }
 
   // -------------------------------------------------------------------------
@@ -243,29 +242,29 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
   // - For the inverse NTT, we start with a `batchSize` equal to the full
   // `degree` and `rootExp` of 1.
   Value initialBatchSize =
-      b.create<arith::ConstantIndexOp>(kInverse ? degree : 2);
+      arith::ConstantIndexOp::create(b, kInverse ? degree : 2);
   Value initialRootExp =
-      b.create<arith::ConstantIndexOp>(kInverse ? 1 : degree / 2);
+      arith::ConstantIndexOp::create(b, kInverse ? 1 : degree / 2);
 
   // Define constants for index calculations.
-  auto c0 = b.create<arith::ConstantIndexOp>(0);
-  auto c1 = b.create<arith::ConstantIndexOp>(1);
-  auto c2 = b.create<arith::ConstantIndexOp>(2);
-  auto cDegree = b.create<arith::ConstantIndexOp>(degree);
-  auto cStages = b.create<arith::ConstantIndexOp>(stages);
+  auto c0 = arith::ConstantIndexOp::create(b, 0);
+  auto c1 = arith::ConstantIndexOp::create(b, 1);
+  auto c2 = arith::ConstantIndexOp::create(b, 2);
+  auto cDegree = arith::ConstantIndexOp::create(b, degree);
+  auto cStages = arith::ConstantIndexOp::create(b, stages);
 
   // Create a memref buffer for in-place updates
   auto memrefType = MemRefType::get(intTensorType.getShape(), coeffType);
-  Value srcMemref = b.create<bufferization::ToBufferOp>(memrefType, source,
-                                                        /*read_only=*/true);
-  Value destMemref = b.create<bufferization::ToBufferOp>(memrefType, dest);
+  Value srcMemref = bufferization::ToBufferOp::create(b, memrefType, source,
+                                                      /*read_only=*/true);
+  Value destMemref = bufferization::ToBufferOp::create(b, memrefType, dest);
 
   // Begin the outer loop over the stages of the NTT.
   // The iterative loop carries three values:
   //   - The current batchSize,
   //   - The current root exponent (rootExp).
-  b.create<scf::ForOp>(
-      /*lowerBound=*/c0, /* upperBound=*/cStages,
+  scf::ForOp::create(
+      b, /*lowerBound=*/c0, /* upperBound=*/cStages,
       /*step=*/c1,
       /*initArgs=*/ValueRange{initialBatchSize, initialRootExp, srcMemref},
       /*bodyBuilder=*/
@@ -276,37 +275,38 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
         Value rootExp = args[1];
         Value stageMemref = args[2];
 
-        Value batchNum = b.create<arith::DivUIOp>(cDegree, batchSize);
-        Value bflyNum = b.create<arith::DivUIOp>(batchSize, c2);
+        Value batchNum = arith::DivUIOp::create(b, cDegree, batchSize);
+        Value bflyNum = arith::DivUIOp::create(b, batchSize, c2);
 
         Value tileX, tileY;
         // Adaptive tiling if `tileCap` is provided. Otherwise, don't tile.
         if (adaptor.getTileX()) {
-          Value cTileXCap = b.create<arith::ConstantIndexOp>(
-              adaptor.getTileX().value().getValue().getSExtValue());
+          Value cTileXCap = arith::ConstantIndexOp::create(
+              b, adaptor.getTileX().value().getValue().getSExtValue());
           Value cGridSize =
               adaptor.getGridSize()
-                  ? b.create<arith::ConstantIndexOp>(
+                  ? arith::ConstantIndexOp::create(
+                        b,
                         adaptor.getGridSize().value().getValue().getSExtValue())
-                  : b.create<arith::ConstantIndexOp>(1024);
+                  : arith::ConstantIndexOp::create(b, 1024);
 
           // Adaptive tiles.
-          tileX = b.create<arith::MinUIOp>(bflyNum, cTileXCap);
-          Value tileYCap = b.create<arith::DivUIOp>(cGridSize, tileX);
-          tileY = b.create<arith::MinUIOp>(batchNum, tileYCap);
+          tileX = arith::MinUIOp::create(b, bflyNum, cTileXCap);
+          Value tileYCap = arith::DivUIOp::create(b, cGridSize, tileX);
+          tileY = arith::MinUIOp::create(b, batchNum, tileYCap);
         } else {
           tileX = bflyNum;
           tileY = batchNum;
         }
 
         // Grid sizes.
-        Value gridX = b.create<arith::CeilDivUIOp>(batchNum, tileY);
-        Value gridY = b.create<arith::CeilDivUIOp>(bflyNum, tileX);
+        Value gridX = arith::CeilDivUIOp::create(b, batchNum, tileY);
+        Value gridY = arith::CeilDivUIOp::create(b, bflyNum, tileX);
 
         // The inner loop processes groups of coefficients defined by the
         // current batchSize with a tile size of (tileX, tileY).
-        auto parallelLoop = b.create<scf::ParallelOp>(
-            /*lowerBounds=*/ValueRange{c0, c0, c0, c0},
+        auto parallelLoop = scf::ParallelOp::create(
+            b, /*lowerBounds=*/ValueRange{c0, c0, c0, c0},
             /*upperBounds=*/ValueRange{gridX, gridY, tileX, tileY},
             /*steps=*/ValueRange{c1, c1, c1, c1});
 
@@ -325,27 +325,27 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
           // Global indices:
           //   indexK = bx*tileY + ty
           //   indexJ = by*tileX + tx
-          Value kOuter = pb.create<arith::MulIOp>(bx, tileY);
-          Value jOuter = pb.create<arith::MulIOp>(by, tileX);
-          Value indexK = pb.create<arith::AddIOp>(kOuter, ty);
-          Value indexJ = pb.create<arith::AddIOp>(jOuter, tx);
+          Value kOuter = arith::MulIOp::create(pb, bx, tileY);
+          Value jOuter = arith::MulIOp::create(pb, by, tileX);
+          Value indexK = arith::AddIOp::create(pb, kOuter, ty);
+          Value indexJ = arith::AddIOp::create(pb, jOuter, tx);
 
           // Tail guards for partial tiles.
-          Value kOk = pb.create<arith::CmpIOp>(arith::CmpIPredicate::ult,
-                                               indexK, batchNum);
-          Value jOk = pb.create<arith::CmpIOp>(arith::CmpIPredicate::ult,
-                                               indexJ, bflyNum);
-          Value ok = pb.create<arith::AndIOp>(kOk, jOk);
+          Value kOk = arith::CmpIOp::create(pb, arith::CmpIPredicate::ult,
+                                            indexK, batchNum);
+          Value jOk = arith::CmpIOp::create(pb, arith::CmpIPredicate::ult,
+                                            indexJ, bflyNum);
+          Value ok = arith::AndIOp::create(pb, kOk, jOk);
 
-          pb.create<scf::IfOp>(
-              ok,
+          scf::IfOp::create(
+              pb, ok,
               /*thenBuilder=*/
               [&](OpBuilder &thenB, Location thenLoc) {
                 ImplicitLocOpBuilder t(thenLoc, thenB);
 
                 // `indexBfly` calculates the starting index of the current
                 // butterfly group.
-                Value indexBfly = t.create<arith::MulIOp>(batchSize, indexK);
+                Value indexBfly = arith::MulIOp::create(t, batchSize, indexK);
 
                 // Compute the indices for the butterfly pair:
                 //   - `A` is the coefficient from the upper half of the
@@ -355,17 +355,17 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
 
                 // `indexA` is computed by combining the local index
                 // `indexJ` with the base `indexBfly`.
-                Value indexA = t.create<arith::AddIOp>(indexJ, indexBfly);
+                Value indexA = arith::AddIOp::create(t, indexJ, indexBfly);
                 // `indexB` is calculated by shifting `indexA` by half the
                 // batch size.
-                Value halfBatch = t.create<arith::DivUIOp>(batchSize, c2);
-                Value indexB = t.create<arith::AddIOp>(indexA, halfBatch);
+                Value halfBatch = arith::DivUIOp::create(t, batchSize, c2);
+                Value indexB = arith::AddIOp::create(t, indexA, halfBatch);
 
                 // Load values from previous stage output.
                 Value A =
-                    t.create<memref::LoadOp>(stageMemref, ValueRange{indexA});
+                    memref::LoadOp::create(t, stageMemref, ValueRange{indexA});
                 Value B =
-                    t.create<memref::LoadOp>(stageMemref, ValueRange{indexB});
+                    memref::LoadOp::create(t, stageMemref, ValueRange{indexB});
 
                 // ---------------------------------------------------------
                 // Compute the twiddle factor for the butterfly.
@@ -374,8 +374,8 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
                 // affine map using the current butterfly index `indexJ` and
                 // the current `rootExp` value
                 // ---------------------------------------------------------
-                Value rootIndex = t.create<arith::MulIOp>(indexJ, rootExp);
-                Value root = t.create<tensor::ExtractOp>(roots, rootIndex);
+                Value rootIndex = arith::MulIOp::create(t, indexJ, rootExp);
+                Value root = tensor::ExtractOp::create(t, roots, rootIndex);
 
                 // ---------------------------------------------------------
                 // Apply the butterfly operation.
@@ -386,12 +386,12 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
                 auto bflyResult =
                     kInverse ? bflyGS(t, A, B, root) : bflyCT(t, A, B, root);
 
-                t.create<memref::StoreOp>(bflyResult.first, destMemref,
-                                          ValueRange{indexA});
-                t.create<memref::StoreOp>(bflyResult.second, destMemref,
-                                          ValueRange{indexB});
+                memref::StoreOp::create(t, bflyResult.first, destMemref,
+                                        ValueRange{indexA});
+                memref::StoreOp::create(t, bflyResult.second, destMemref,
+                                        ValueRange{indexB});
 
-                t.create<scf::YieldOp>(ValueRange{});
+                scf::YieldOp::create(t, ValueRange{});
               });
         }
 
@@ -405,15 +405,15 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
         //    - Increase the root exponent by multiplying by 2.
         // ---------------------------------------------------------------------
         batchSize = kInverse
-                        ? b.create<arith::DivUIOp>(batchSize, c2).getResult()
-                        : b.create<arith::MulIOp>(batchSize, c2).getResult();
+                        ? arith::DivUIOp::create(b, batchSize, c2).getResult()
+                        : arith::MulIOp::create(b, batchSize, c2).getResult();
 
-        rootExp = kInverse ? b.create<arith::MulIOp>(rootExp, c2).getResult()
-                           : b.create<arith::DivUIOp>(rootExp, c2).getResult();
+        rootExp = kInverse ? arith::MulIOp::create(b, rootExp, c2).getResult()
+                           : arith::DivUIOp::create(b, rootExp, c2).getResult();
 
         // Yield the updated `batchSize`, and `rootExp` for the next
         // stage.
-        b.create<scf::YieldOp>(ValueRange{batchSize, rootExp, destMemref});
+        scf::YieldOp::create(b, ValueRange{batchSize, rootExp, destMemref});
       });
 
   // For the inverse NTT, we must scale the output by the multiplicative inverse
@@ -424,21 +424,22 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
         APInt(modulus.getBitWidth(), degree), coeffType);
     IntegerAttr invDegreeAttr = degreeOp.inverse().getIntegerAttr();
     // TODO(batzor): Use scalar multiplication directly when it's available.
-    auto invDegreeConst = b.create<field::ConstantOp>(coeffType, invDegreeAttr);
-    b.create<linalg::MapOp>(
-        /*inputs=*/ValueRange{destMemref},
+    auto invDegreeConst =
+        field::ConstantOp::create(b, coeffType, invDegreeAttr);
+    linalg::MapOp::create(
+        b, /*inputs=*/ValueRange{destMemref},
         /*outputs=*/destMemref,
         /*bodyBuilder=*/
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
           ImplicitLocOpBuilder b(nestedLoc, nestedBuilder);
-          Value prod = b.create<field::MulOp>(args[0], invDegreeConst);
-          b.create<linalg::YieldOp>(ValueRange{prod});
+          Value prod = field::MulOp::create(b, args[0], invDegreeConst);
+          linalg::YieldOp::create(b, ValueRange{prod});
         });
   }
 
   // The final result is the coefficient tensor after all stages.
-  Value result = b.create<bufferization::ToTensorOp>(
-      intTensorType.cloneWith(std::nullopt, coeffType), destMemref,
+  Value result = bufferization::ToTensorOp::create(
+      b, intTensorType.cloneWith(std::nullopt, coeffType), destMemref,
       /*restrict=*/true, /*writable=*/true);
 
   return result;
@@ -460,8 +461,8 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     // Transform the input tensor to bit-reversed order at first if performing
     // forward NTT.
     if (!adaptor.getInverse() && adaptor.getBitReverse()) {
-      auto bitReversed = b.create<tensor_ext::BitReverseOp>(
-          adaptor.getSource(), adaptor.getDest(), /*dimension=*/0);
+      auto bitReversed = tensor_ext::BitReverseOp::create(
+          b, adaptor.getSource(), adaptor.getDest(), /*dimension=*/0);
 
       // NOTE(batzor): We should not use `dest` operand for the destination
       // here. Otherwise, writable `ToBufferOp` will be called twice on the same
@@ -475,8 +476,8 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     // Transform the input tensor to bit-reversed order at last if performing
     // inverse NTT.
     if (adaptor.getInverse() && adaptor.getBitReverse()) {
-      auto nttResultBitReversed = b.create<tensor_ext::BitReverseOp>(
-          nttResult, nttResult, /*dimension=*/0);
+      auto nttResultBitReversed = tensor_ext::BitReverseOp::create(
+          b, nttResult, nttResult, /*dimension=*/0);
 
       rewriter.replaceOp(op, nttResultBitReversed);
     } else {

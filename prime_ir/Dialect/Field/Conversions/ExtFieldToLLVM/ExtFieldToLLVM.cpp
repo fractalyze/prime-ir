@@ -170,12 +170,12 @@ private:
     auto structType = cast<LLVM::LLVMStructType>(input.getType());
     auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
 
-    Value one = rewriter.create<LLVM::ConstantOp>(
-        loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
+    Value one = LLVM::ConstantOp::create(rewriter, loc, rewriter.getI64Type(),
+                                         rewriter.getI64IntegerAttr(1));
     Value alloca =
-        rewriter.create<LLVM::AllocaOp>(loc, ptrType, structType, one);
-    rewriter.create<LLVM::StoreOp>(loc, input, alloca);
-    Value result = rewriter.create<LLVM::LoadOp>(loc, intType, alloca);
+        LLVM::AllocaOp::create(rewriter, loc, ptrType, structType, one);
+    LLVM::StoreOp::create(rewriter, loc, input, alloca);
+    Value result = LLVM::LoadOp::create(rewriter, loc, intType, alloca);
 
     rewriter.replaceOp(op, result);
     return success();
@@ -193,11 +193,11 @@ private:
     auto structType = cast<LLVM::LLVMStructType>(convertedEFType);
     auto ptrType = LLVM::LLVMPointerType::get(rewriter.getContext());
 
-    Value one = rewriter.create<LLVM::ConstantOp>(
-        loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
-    Value alloca = rewriter.create<LLVM::AllocaOp>(loc, ptrType, intType, one);
-    rewriter.create<LLVM::StoreOp>(loc, input, alloca);
-    Value result = rewriter.create<LLVM::LoadOp>(loc, structType, alloca);
+    Value one = LLVM::ConstantOp::create(rewriter, loc, rewriter.getI64Type(),
+                                         rewriter.getI64IntegerAttr(1));
+    Value alloca = LLVM::AllocaOp::create(rewriter, loc, ptrType, intType, one);
+    LLVM::StoreOp::create(rewriter, loc, input, alloca);
+    Value result = LLVM::LoadOp::create(rewriter, loc, structType, alloca);
 
     rewriter.replaceOp(op, result);
     return success();
@@ -246,12 +246,12 @@ private:
         // PF → EF: divide offset.
         Value ratio =
             createIndexAttrConstant(rewriter, loc, idxTy, degOut / degIn);
-        offset = rewriter.create<LLVM::SDivOp>(loc, offset, ratio);
+        offset = LLVM::SDivOp::create(rewriter, loc, offset, ratio);
       } else {
         // EF → PF: multiply offset.
         Value ratio =
             createIndexAttrConstant(rewriter, loc, idxTy, degIn / degOut);
-        offset = rewriter.create<LLVM::MulOp>(loc, offset, ratio);
+        offset = LLVM::MulOp::create(rewriter, loc, offset, ratio);
       }
     }
     outputDesc.setOffset(rewriter, loc, offset);

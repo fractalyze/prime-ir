@@ -197,7 +197,7 @@ protected:
         cast<PointTypeInterface>(value.getType()).getBaseFieldType();
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
     Value zero = field::createFieldZero(baseFieldType, *b);
-    return b->create<field::CmpOp>(arith::CmpIPredicate::eq, GetA(), zero);
+    return field::CmpOp::create(*b, arith::CmpIPredicate::eq, GetA(), zero);
   }
 
   FieldCodeGen getCurveParamCodeGen(
@@ -209,7 +209,7 @@ protected:
                          .Case<ShortWeierstrassAttr>(swFn)
                          .Case<TwistedEdwardsAttr>(teFn);
     return FieldCodeGen(
-        b->create<field::ConstantOp>(pti.getBaseFieldType(), attr));
+        field::ConstantOp::create(*b, pti.getBaseFieldType(), attr));
   }
 
   FieldCodeGen GetA() const {
@@ -223,7 +223,7 @@ protected:
     auto teAttr = cast<TwistedEdwardsAttr>(
         cast<PointTypeInterface>(value.getType()).getCurveAttr());
     return FieldCodeGen(
-        b->create<field::ConstantOp>(teAttr.getBaseField(), teAttr.getD()));
+        field::ConstantOp::create(*b, teAttr.getBaseField(), teAttr.getD()));
   }
 
   zk_dtypes::ControlFlowOperation<Value> GetCFOperation() const { return {}; }
