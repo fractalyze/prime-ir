@@ -31,12 +31,12 @@ SmallVector<Type> coordsTypeRange(Type type) {
 } // namespace
 
 Operation::result_range toCoords(ImplicitLocOpBuilder &b, Value point) {
-  return b.create<ToCoordsOp>(coordsTypeRange(point.getType()), point)
+  return ToCoordsOp::create(b, coordsTypeRange(point.getType()), point)
       .getResults();
 }
 
 Value fromCoords(ImplicitLocOpBuilder &b, Type type, ValueRange coords) {
-  return b.create<FromCoordsOp>(type, coords);
+  return FromCoordsOp::create(b, type, coords);
 }
 
 } // namespace mlir::prime_ir::elliptic_curve

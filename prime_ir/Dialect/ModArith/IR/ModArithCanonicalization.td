@@ -45,7 +45,7 @@ def IsNegativeEight : Constraint<CPred<"isNegativeOf($0, $1, 8)">>;
 def IsNegativeNine : Constraint<CPred<"isNegativeOf($0, $1, 9)">>;
 
 // Constant materialization
-def GetAsConstant : NativeCodeCall<"$_builder.create<ConstantOp>(odsLoc, $0.getType(), cast<TypedAttr>($1))">;
+def GetAsConstant : NativeCodeCall<"ConstantOp::create($_builder, odsLoc, $0.getType(), cast<TypedAttr>($1))">;
 def GetZeroAttr : NativeCodeCall<"cast<ConstantLikeInterface>(getElementTypeOrSelf($0.getType())).createConstantAttr(0)">;
 
 //===----------------------------------------------------------------------===//

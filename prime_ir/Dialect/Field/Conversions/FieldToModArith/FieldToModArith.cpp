@@ -177,8 +177,8 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     // Case 1: Prime field constants (scalar or tensor)
     if (auto pfType =
             dyn_cast<PrimeFieldType>(getElementTypeOrSelf(op.getType()))) {
-      auto cval = b.create<mod_arith::ConstantOp>(
-          typeConverter->convertType(op.getType()), op.getValueAttr());
+      auto cval = mod_arith::ConstantOp::create(
+          b, typeConverter->convertType(op.getType()), op.getValueAttr());
       rewriter.replaceOp(op, cval);
       return success();
     }
@@ -217,11 +217,11 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
       auto flatDenseAttr = DenseIntElementsAttr::get(
           flatTensorType.clone(modType.getStorageType()), flatCoeffs);
       auto flatConstant =
-          b.create<mod_arith::ConstantOp>(flatTensorType, flatDenseAttr);
+          mod_arith::ConstantOp::create(b, flatTensorType, flatDenseAttr);
 
       // Bitcast the flattened prime field tensor to extension field tensor
       auto efTensorType = RankedTensorType::get(shapedType.getShape(), efType);
-      auto bitcast = b.create<BitcastOp>(efTensorType, flatConstant);
+      auto bitcast = BitcastOp::create(b, efTensorType, flatConstant);
       rewriter.replaceOp(op, bitcast);
       return success();
     }
@@ -242,7 +242,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
     for (auto coeff : denseAttr.getValues<APInt>()) {
       auto coeffAttr = IntegerAttr::get(modType.getStorageType(), coeff);
       primeCoeffs.push_back(
-          b.create<mod_arith::ConstantOp>(modType, coeffAttr));
+          mod_arith::ConstantOp::create(b, modType, coeffAttr));
     }
     // Use fromPrimeCoeffs to properly handle tower extension fields
     rewriter.replaceOp(op, fromPrimeCoeffs(b, efType, primeCoeffs));
@@ -272,8 +272,8 @@ struct ConvertBitcast : public OpConversionPattern<BitcastOp> {
     }
 
     // Scalar bitcast: just convert to mod_arith.bitcast
-    auto bitcast = b.create<mod_arith::BitcastOp>(
-        typeConverter->convertType(op.getType()), adaptor.getInput());
+    auto bitcast = mod_arith::BitcastOp::create(
+        b, typeConverter->convertType(op.getType()), adaptor.getInput());
     rewriter.replaceOp(op, bitcast);
     return success();
   }
@@ -316,7 +316,7 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
     if (isa<PrimeFieldType>(fieldType)) {
       Type modArithType = typeConverter->convertType(op.getType());
       auto extracted =
-          b.create<mod_arith::ToMontOp>(modArithType, adaptor.getInput());
+          mod_arith::ToMontOp::create(b, modArithType, adaptor.getInput());
       rewriter.replaceOp(op, extracted);
       return success();
     }
@@ -329,7 +329,7 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
       SmallVector<Value> montCoeffs;
       for (auto coeff : coeffs) {
         montCoeffs.push_back(
-            b.create<mod_arith::ToMontOp>(baseModArithType, coeff));
+            mod_arith::ToMontOp::create(b, baseModArithType, coeff));
       }
       rewriter.replaceOp(op, fromCoeffs(b, fieldType, montCoeffs));
       return success();
@@ -353,7 +353,7 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
     if (isa<PrimeFieldType>(fieldType)) {
       Type resultType = typeConverter->convertType(op.getType());
       auto extracted =
-          b.create<mod_arith::FromMontOp>(resultType, adaptor.getInput());
+          mod_arith::FromMontOp::create(b, resultType, adaptor.getInput());
       rewriter.replaceOp(op, extracted);
       return success();
     }
@@ -366,7 +366,7 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
       SmallVector<Value> stdCoeffs;
       for (auto coeff : coeffs) {
         stdCoeffs.push_back(
-            b.create<mod_arith::FromMontOp>(baseModArithType, coeff));
+            mod_arith::FromMontOp::create(b, baseModArithType, coeff));
       }
       rewriter.replaceOp(op, fromCoeffs(b, fieldType, stdCoeffs));
       return success();
@@ -482,9 +482,9 @@ private:
 
     // Scalar (rank-0): extract, invert, wrap back.
     if (tensorType.getRank() == 0) {
-      Value elem = b.create<tensor::ExtractOp>(input, ValueRange{});
-      Value inv = b.create<InverseOp>(elem);
-      Value result = b.create<tensor::FromElementsOp>(tensorType, inv);
+      Value elem = tensor::ExtractOp::create(b, input, ValueRange{});
+      Value inv = InverseOp::create(b, elem);
+      Value result = tensor::FromElementsOp::create(b, tensorType, inv);
       rewriter.replaceOp(op, result);
       return success();
     }
@@ -499,76 +499,76 @@ private:
       auto flatType = RankedTensorType::get({n}, elemType);
       SmallVector<ReassociationIndices> reassoc = {
           llvm::to_vector(llvm::seq<int64_t>(0, tensorType.getRank()))};
-      input = b.create<tensor::CollapseShapeOp>(flatType, input, reassoc);
+      input = tensor::CollapseShapeOp::create(b, flatType, input, reassoc);
     }
 
     // Get the dimension size (static or dynamic).
-    Value c0 = b.create<arith::ConstantIndexOp>(0);
-    Value c1 = b.create<arith::ConstantIndexOp>(1);
-    Value cN = b.create<tensor::DimOp>(input, c0);
+    Value c0 = arith::ConstantIndexOp::create(b, 0);
+    Value c1 = arith::ConstantIndexOp::create(b, 1);
+    Value cN = tensor::DimOp::create(b, input, c0);
 
     // Montgomery's batch inversion (works for any n >= 1).
     // Forward pass: build prefix products.
     // prefix[0] = a[0]; prefix[i] = prefix[i-1] * a[i]
-    Value a0 = b.create<tensor::ExtractOp>(input, ValueRange{c0});
-    Value prefixInit = b.create<tensor::EmptyOp>(
-        tensor::getMixedSizes(b, b.getLoc(), input), elemType);
-    prefixInit = b.create<tensor::InsertOp>(a0, prefixInit, ValueRange{c0});
+    Value a0 = tensor::ExtractOp::create(b, input, ValueRange{c0});
+    Value prefixInit = tensor::EmptyOp::create(
+        b, tensor::getMixedSizes(b, b.getLoc(), input), elemType);
+    prefixInit = tensor::InsertOp::create(b, a0, prefixInit, ValueRange{c0});
 
-    auto fwdLoop = b.create<scf::ForOp>(
-        c1, cN, c1, ValueRange{prefixInit, a0},
+    auto fwdLoop = scf::ForOp::create(
+        b, c1, cN, c1, ValueRange{prefixInit, a0},
         [&](OpBuilder &nb, Location loc, Value iv, ValueRange iterArgs) {
           ImplicitLocOpBuilder lb(loc, nb);
           Value prefixTensor = iterArgs[0];
           Value runningProduct = iterArgs[1];
-          Value elem = lb.create<tensor::ExtractOp>(input, ValueRange{iv});
-          Value product = lb.create<MulOp>(runningProduct, elem);
-          Value updated = lb.create<tensor::InsertOp>(product, prefixTensor,
-                                                      ValueRange{iv});
-          lb.create<scf::YieldOp>(ValueRange{updated, product});
+          Value elem = tensor::ExtractOp::create(lb, input, ValueRange{iv});
+          Value product = MulOp::create(lb, runningProduct, elem);
+          Value updated = tensor::InsertOp::create(lb, product, prefixTensor,
+                                                   ValueRange{iv});
+          scf::YieldOp::create(lb, ValueRange{updated, product});
         });
     Value prefixTensor = fwdLoop.getResult(0);
     Value totalProduct = fwdLoop.getResult(1);
 
     // Single scalar inverse.
-    Value inv = b.create<InverseOp>(totalProduct);
+    Value inv = InverseOp::create(b, totalProduct);
 
     // Backward pass: recover individual inverses.
     // for i in [n-1, n-2, ..., 1]:
     //   result[i] = inv * prefix[i-1]; inv = inv * a[i]
-    Value cNm1 = b.create<arith::SubIOp>(cN, c1);
-    Value resultInit = b.create<tensor::EmptyOp>(
-        tensor::getMixedSizes(b, b.getLoc(), input), elemType);
+    Value cNm1 = arith::SubIOp::create(b, cN, c1);
+    Value resultInit = tensor::EmptyOp::create(
+        b, tensor::getMixedSizes(b, b.getLoc(), input), elemType);
 
-    auto bwdLoop = b.create<scf::ForOp>(
-        c0, cNm1, c1, ValueRange{resultInit, inv},
+    auto bwdLoop = scf::ForOp::create(
+        b, c0, cNm1, c1, ValueRange{resultInit, inv},
         [&](OpBuilder &nb, Location loc, Value iv, ValueRange iterArgs) {
           ImplicitLocOpBuilder lb(loc, nb);
           Value resultTensor = iterArgs[0];
           Value curInv = iterArgs[1];
           // Map forward index iv to reverse index: currIdx = n-1-iv
-          Value currIdx = lb.create<arith::SubIOp>(cNm1, iv);
-          Value prevIdx = lb.create<arith::SubIOp>(currIdx, c1);
+          Value currIdx = arith::SubIOp::create(lb, cNm1, iv);
+          Value prevIdx = arith::SubIOp::create(lb, currIdx, c1);
           Value prevPrefix =
-              lb.create<tensor::ExtractOp>(prefixTensor, ValueRange{prevIdx});
-          Value elemInv = lb.create<MulOp>(curInv, prevPrefix);
-          Value updated = lb.create<tensor::InsertOp>(elemInv, resultTensor,
-                                                      ValueRange{currIdx});
+              tensor::ExtractOp::create(lb, prefixTensor, ValueRange{prevIdx});
+          Value elemInv = MulOp::create(lb, curInv, prevPrefix);
+          Value updated = tensor::InsertOp::create(lb, elemInv, resultTensor,
+                                                   ValueRange{currIdx});
           Value origElem =
-              lb.create<tensor::ExtractOp>(input, ValueRange{currIdx});
-          Value newInv = lb.create<MulOp>(curInv, origElem);
-          lb.create<scf::YieldOp>(ValueRange{updated, newInv});
+              tensor::ExtractOp::create(lb, input, ValueRange{currIdx});
+          Value newInv = MulOp::create(lb, curInv, origElem);
+          scf::YieldOp::create(lb, ValueRange{updated, newInv});
         });
 
     // result[0] = final inv (= a₀⁻¹).
     Value result = bwdLoop.getResult(0);
     inv = bwdLoop.getResult(1);
-    result = b.create<tensor::InsertOp>(inv, result, ValueRange{c0});
+    result = tensor::InsertOp::create(b, inv, result, ValueRange{c0});
 
     if (needsReshape) {
       SmallVector<ReassociationIndices> reassoc = {
           llvm::to_vector(llvm::seq<int64_t>(0, tensorType.getRank()))};
-      result = b.create<tensor::ExpandShapeOp>(tensorType, result, reassoc);
+      result = tensor::ExpandShapeOp::create(b, tensorType, result, reassoc);
     }
 
     rewriter.replaceOp(op, result);
@@ -592,10 +592,11 @@ private:
 
     // Rank-0 tensor: extract, invert, wrap back.
     if (rank == 0) {
-      Value elem = b.create<tensor::ExtractOp>(input, ValueRange{});
+      Value elem = tensor::ExtractOp::create(b, input, ValueRange{});
       ScopedBuilderContext scopedCtx(&b);
       Value inv = FieldCodeGen(fieldType, elem, this->typeConverter).inverse();
-      Value result = b.create<tensor::FromElementsOp>(convertedTensorType, inv);
+      Value result =
+          tensor::FromElementsOp::create(b, convertedTensorType, inv);
       rewriter.replaceOp(op, result);
       return success();
     }
@@ -609,9 +610,9 @@ private:
     // Use getMixedSizes to support both static and dynamic shapes.
     SmallVector<OpFoldResult> mixedSizes =
         tensor::getMixedSizes(b, b.getLoc(), input);
-    Value init = b.create<tensor::EmptyOp>(mixedSizes, convertedElemType);
-    auto genericOp = b.create<linalg::GenericOp>(
-        /*resultTensorTypes=*/TypeRange{convertedTensorType},
+    Value init = tensor::EmptyOp::create(b, mixedSizes, convertedElemType);
+    auto genericOp = linalg::GenericOp::create(
+        b, /*resultTensorTypes=*/TypeRange{convertedTensorType},
         /*inputs=*/ValueRange{input},
         /*outputs=*/ValueRange{init}, indexingMaps, iteratorTypes,
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
@@ -619,7 +620,7 @@ private:
           ScopedBuilderContext scopedCtx(&lb);
           Value inv =
               FieldCodeGen(fieldType, args[0], this->typeConverter).inverse();
-          lb.create<linalg::YieldOp>(ValueRange{inv});
+          linalg::YieldOp::create(lb, ValueRange{inv});
         });
     rewriter.replaceOp(op, genericOp.getResults());
     return success();
@@ -730,9 +731,9 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
         montType = vecType.cloneWith(vecType.getShape(), montType);
       }
       init = createScalarOrSplatConstant(b, b.getLoc(), intType, 1);
-      init = b.create<BitcastOp>(stdType, init);
+      init = BitcastOp::create(b, stdType, init);
       if (pfType.isMontgomery()) {
-        init = b.create<ToMontOp>(montType, init);
+        init = ToMontOp::create(b, montType, init);
       }
     } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
       modulus = efType.getBasePrimeField().getModulus().getValue();
@@ -745,8 +746,8 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
     unsigned expBitWidth = cast<IntegerType>(exp.getType()).getWidth();
     unsigned modBitWidth = modulus.getBitWidth();
     if (modBitWidth > expBitWidth) {
-      exp = b.create<arith::ExtUIOp>(
-          IntegerType::get(exp.getContext(), modBitWidth), exp);
+      exp = arith::ExtUIOp::create(
+          b, IntegerType::get(exp.getContext(), modBitWidth), exp);
     } else {
       modulus = modulus.zext(expBitWidth);
       modBitWidth = expBitWidth;
@@ -757,10 +758,10 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       return generateBitSerialLoop(
           b, exp, base, init,
           [](ImplicitLocOpBuilder &b, Value v) {
-            return b.create<SquareOp>(v);
+            return SquareOp::create(b, v);
           },
           [](ImplicitLocOpBuilder &b, Value acc, Value v) {
-            return b.create<MulOp>(acc, v);
+            return MulOp::create(b, acc, v);
           });
     };
 
@@ -783,14 +784,14 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
       cExp = cExp.zext(order.getBitWidth());
       cExp = cExp.urem(order);
       intType = IntegerType::get(exp.getContext(), order.getBitWidth());
-      exp = b.create<arith::ConstantIntOp>(intType, cExp);
+      exp = arith::ConstantIntOp::create(b, intType, cExp);
     } else {
       if (order.getBitWidth() > intType.getWidth()) {
         intType = IntegerType::get(exp.getContext(), order.getBitWidth());
-        exp = b.create<arith::ExtUIOp>(intType, exp);
+        exp = arith::ExtUIOp::create(b, intType, exp);
       }
-      exp = b.create<arith::RemUIOp>(
-          exp, b.create<arith::ConstantIntOp>(intType, order));
+      exp = arith::RemUIOp::create(
+          b, exp, arith::ConstantIntOp::create(b, intType, order));
     }
 
     rewriter.replaceOp(op, emitBitSerialLoop(exp));
@@ -838,11 +839,11 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
 #endif
       if (predicate == arith::CmpIPredicate::eq) {
         for (unsigned i = 1; i < n; ++i) {
-          result = b.create<arith::AndIOp>(result, cmpResults[i]);
+          result = arith::AndIOp::create(b, result, cmpResults[i]);
         }
       } else if (predicate == arith::CmpIPredicate::ne) {
         for (unsigned i = 1; i < n; ++i) {
-          result = b.create<arith::OrIOp>(result, cmpResults[i]);
+          result = arith::OrIOp::create(b, result, cmpResults[i]);
         }
       } else {
         llvm_unreachable(
@@ -879,12 +880,14 @@ struct ConvertCmp : public OpConversionPattern<CmpOp> {
           modArithLhsType.getContext(), modArithLhsType.getModulus(),
           /*isMontgomery=*/false);
 
-      Value standardLhs = b.create<mod_arith::FromMontOp>(stdModArithType, lhs);
-      Value standardRhs = b.create<mod_arith::FromMontOp>(stdModArithType, rhs);
+      Value standardLhs =
+          mod_arith::FromMontOp::create(b, stdModArithType, lhs);
+      Value standardRhs =
+          mod_arith::FromMontOp::create(b, stdModArithType, rhs);
 
-      return b.create<mod_arith::CmpOp>(predicate, standardLhs, standardRhs);
+      return mod_arith::CmpOp::create(b, predicate, standardLhs, standardRhs);
     } else {
-      return b.create<mod_arith::CmpOp>(predicate, lhs, rhs);
+      return mod_arith::CmpOp::create(b, predicate, lhs, rhs);
     }
   }
 };

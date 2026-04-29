@@ -152,14 +152,15 @@ struct BitReverseMulBitReversePattern : public OpRewritePattern<BitReverseOp> {
     // Create new bit_reverse for the other operand
     // Use the inner bit_reverse's dest as a temporary buffer for the new
     // bit_reverse
-    auto newBitReverse = rewriter.create<BitReverseOp>(
-        outerBitReverse.getLoc(), outerBitReverse.getType(), otherOperand,
-        innerBitReverse.getDest(), outerBitReverse.getDimensionAttr());
+    auto newBitReverse = BitReverseOp::create(
+        rewriter, outerBitReverse.getLoc(), outerBitReverse.getType(),
+        otherOperand, innerBitReverse.getDest(),
+        outerBitReverse.getDimensionAttr());
 
     // Create new mul: x * bit_reverse(y)
-    auto newMul = rewriter.create<field::MulOp>(outerBitReverse.getLoc(),
-                                                innerBitReverse.getSource(),
-                                                newBitReverse.getResult());
+    auto newMul = field::MulOp::create(rewriter, outerBitReverse.getLoc(),
+                                       innerBitReverse.getSource(),
+                                       newBitReverse.getResult());
 
     rewriter.replaceOp(outerBitReverse, newMul.getResult());
     return success();

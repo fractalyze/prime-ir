@@ -69,7 +69,7 @@ public:
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
           auto results = body(iv, args);
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange(results));
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange(results));
         });
     return llvm::SmallVector<mlir::Value>(forOp.getResults());
   }
@@ -119,12 +119,12 @@ private:
         [&then](mlir::OpBuilder &builder, mlir::Location loc) {
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange{then()});
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange{then()});
         },
         [&otherwise](mlir::OpBuilder &builder, mlir::Location loc) {
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange{otherwise()});
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange{otherwise()});
         });
     return ifOp.getResult(0);
   }
@@ -140,14 +140,14 @@ private:
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
           State result = then();
           auto vals = result.toValues();
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange(vals));
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange(vals));
         },
         [&otherwise](mlir::OpBuilder &builder, mlir::Location loc) {
           mlir::ImplicitLocOpBuilder ib(loc, builder);
           mlir::prime_ir::ScopedBuilderContext scb(&ib);
           State result = otherwise();
           auto vals = result.toValues();
-          ib.create<mlir::scf::YieldOp>(mlir::ValueRange(vals));
+          mlir::scf::YieldOp::create(ib, mlir::ValueRange(vals));
         });
     return State::fromValues(ifOp.getResults());
   }

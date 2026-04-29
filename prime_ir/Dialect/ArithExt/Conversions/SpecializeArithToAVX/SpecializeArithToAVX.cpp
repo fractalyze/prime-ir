@@ -56,29 +56,29 @@ std::pair<Value, Value> mulExtendedByOddEven(ImplicitLocOpBuilder &b,
       isSigned ? "vpmuldq $0, $1, $2" : "vpmuludq $0, $1, $2";
   auto vecI32Type = VectorType::get(16, b.getI32Type());
   auto vecI64Type = VectorType::get(8, b.getI64Type());
-  Value prodEven64 = b.create<LLVM::InlineAsmOp>(
-                          vecI64Type, ValueRange{lhsEven, rhsEven},
-                          asmMulString, "=x,x,x", /*has_side_effects=*/false,
-                          /*is_align_stack=*/true, LLVM::TailCallKind::None,
-                          /*asm_dialect=*/
-                          LLVM::AsmDialectAttr::get(b.getContext(),
-                                                    LLVM::AsmDialect::AD_Intel),
-                          /*operand_attrs=*/ArrayAttr())
-                         .getResult(0);
-  Value prodOdd64 = b.create<LLVM::InlineAsmOp>(
-                         vecI64Type, ValueRange{lhsOdd, rhsOdd}, asmMulString,
-                         "=x,x,x", /*has_side_effects=*/false,
-                         /*is_align_stack=*/true, LLVM::TailCallKind::None,
-                         /*asm_dialect=*/
-                         LLVM::AsmDialectAttr::get(b.getContext(),
-                                                   LLVM::AsmDialect::AD_Intel),
-                         /*operand_attrs=*/ArrayAttr())
-                        .getResult(0);
+  Value prodEven64 =
+      LLVM::InlineAsmOp::create(
+          b, vecI64Type, ValueRange{lhsEven, rhsEven}, asmMulString, "=x,x,x",
+          /*has_side_effects=*/false,
+          /*is_align_stack=*/true, LLVM::TailCallKind::None,
+          /*asm_dialect=*/
+          LLVM::AsmDialectAttr::get(b.getContext(), LLVM::AsmDialect::AD_Intel),
+          /*operand_attrs=*/ArrayAttr())
+          .getResult(0);
+  Value prodOdd64 =
+      LLVM::InlineAsmOp::create(
+          b, vecI64Type, ValueRange{lhsOdd, rhsOdd}, asmMulString, "=x,x,x",
+          /*has_side_effects=*/false,
+          /*is_align_stack=*/true, LLVM::TailCallKind::None,
+          /*asm_dialect=*/
+          LLVM::AsmDialectAttr::get(b.getContext(), LLVM::AsmDialect::AD_Intel),
+          /*operand_attrs=*/ArrayAttr())
+          .getResult(0);
 
   // cast them to vector<16xi32> so even lanes are the low parts and odd
   // lanes are the high parts
-  auto prodEven32 = b.create<vector::BitCastOp>(vecI32Type, prodEven64);
-  auto prodOdd32 = b.create<vector::BitCastOp>(vecI32Type, prodOdd64);
+  auto prodEven32 = vector::BitCastOp::create(b, vecI32Type, prodEven64);
+  auto prodOdd32 = vector::BitCastOp::create(b, vecI32Type, prodOdd64);
   return {prodEven32, prodOdd32};
 }
 
@@ -97,25 +97,24 @@ std::pair<Value, Value> addSubByOddEven(ImplicitLocOpBuilder &b, Value lhsEven,
   }
 
   Value resEven =
-      b.create<LLVM::InlineAsmOp>(
-           vecType, ValueRange{lhsEven, rhsEven}, asmString, "=x,x,x",
-           /*has_side_effects=*/false,
-           /*is_align_stack=*/true, LLVM::TailCallKind::None,
-           /*asm_dialect=*/
-           LLVM::AsmDialectAttr::get(b.getContext(),
-                                     LLVM::AsmDialect::AD_Intel),
-           /*operand_attrs=*/ArrayAttr())
+      LLVM::InlineAsmOp::create(
+          b, vecType, ValueRange{lhsEven, rhsEven}, asmString, "=x,x,x",
+          /*has_side_effects=*/false,
+          /*is_align_stack=*/true, LLVM::TailCallKind::None,
+          /*asm_dialect=*/
+          LLVM::AsmDialectAttr::get(b.getContext(), LLVM::AsmDialect::AD_Intel),
+          /*operand_attrs=*/ArrayAttr())
           .getResult(0);
 
-  Value resOdd = b.create<LLVM::InlineAsmOp>(
-                      vecType, ValueRange{lhsOdd, rhsOdd}, asmString, "=x,x,x",
-                      /*has_side_effects=*/false,
-                      /*is_align_stack=*/true, LLVM::TailCallKind::None,
-                      /*asm_dialect=*/
-                      LLVM::AsmDialectAttr::get(b.getContext(),
-                                                LLVM::AsmDialect::AD_Intel),
-                      /*operand_attrs=*/ArrayAttr())
-                     .getResult(0);
+  Value resOdd =
+      LLVM::InlineAsmOp::create(
+          b, vecType, ValueRange{lhsOdd, rhsOdd}, asmString, "=x,x,x",
+          /*has_side_effects=*/false,
+          /*is_align_stack=*/true, LLVM::TailCallKind::None,
+          /*asm_dialect=*/
+          LLVM::AsmDialectAttr::get(b.getContext(), LLVM::AsmDialect::AD_Intel),
+          /*operand_attrs=*/ArrayAttr())
+          .getResult(0);
 
   return {resEven, resOdd};
 }
@@ -126,7 +125,7 @@ std::pair<Value, Value> addSubByOddEven(ImplicitLocOpBuilder &b, Value lhsEven,
 // => [a₀, b₀, a₂, b₂, a₄, b₄, a₆, b₆, a₈, b₈, a₁₀, b₁₀, a₁₂, b₁₂, a₁₄, b₁₄]
 Value gatherLowsInterleaved(ImplicitLocOpBuilder &b, Value even, Value odd) {
   // 0b1010101010101010 = 0xAAAA
-  Value constOddMask = b.create<LLVM::ConstantOp>(b.getI16Type(), 0xAAAA);
+  Value constOddMask = LLVM::ConstantOp::create(b, b.getI16Type(), 0xAAAA);
   auto vecI32Type = VectorType::get(16, b.getI32Type());
 
   // Construct vector<16xi32> with the low parts
@@ -155,7 +154,7 @@ inline bool isGatherLowsResult(Value value) {
 // => [a₁, b₁, a₃, b₃, a₅, b₅, a₇, b₇, a₉, b₉, a₁₁, b₁₁, a₁₃, b₁₃, a₁₅, b₁₅]
 Value gatherHighsInterleaved(ImplicitLocOpBuilder &b, Value even, Value odd) {
   // 0b0101010101010101 = 0x5555
-  Value constEvenMask = b.create<LLVM::ConstantOp>(b.getI16Type(), 0x5555);
+  Value constEvenMask = LLVM::ConstantOp::create(b, b.getI16Type(), 0x5555);
   auto vecI32Type = VectorType::get(16, b.getI32Type());
 
   // Construct vector<16xi32> with the low parts
@@ -183,8 +182,8 @@ inline bool isGatherHighsResult(Value value) {
 // => [a₁, a₁, a₃, a₃, a₅, a₅, a₇, a₇, a₉, a₉, a₁₁, a₁₁, a₁₃, a₁₃, a₁₅, a₁₅]
 Value duplicateOddLanesToEven(ImplicitLocOpBuilder &b, Value vec) {
   auto vecI32Type = VectorType::get(16, b.getI32Type());
-  return b.create<vector::ShuffleOp>(
-      vecI32Type, vec, vec,
+  return vector::ShuffleOp::create(
+      b, vecI32Type, vec, vec,
       b.getDenseI64ArrayAttr(
           {1, 1, 3, 3, 5, 5, 7, 7, 9, 9, 11, 11, 13, 13, 15, 15}));
 }
