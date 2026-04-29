@@ -15,6 +15,32 @@
 
 workspace(name = "prime_ir")
 
+load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# rules_cc must be declared here, before zk_dtypes()' python_init_rules() —
+# Bazel http_archive resolution is first-wins.
+http_archive(
+    name = "bazel_features",
+    sha256 = "9390b391a68d3b24aef7966bce8556d28003fe3f022a5008efc7807e8acaaf1a",
+    strip_prefix = "bazel_features-1.36.0",
+    urls = ["https://github.com/bazel-contrib/bazel_features/archive/refs/tags/v1.36.0.tar.gz"],
+)
+
+load("@bazel_features//:deps.bzl", "bazel_features_deps")
+
+bazel_features_deps()
+
+http_archive(
+    name = "rules_cc",
+    sha256 = "472ddca8cec1e64ad78e4f0cabbec55936a3baddbe7bef072764ca91504bd523",
+    strip_prefix = "rules_cc-0.2.13",
+    urls = ["https://github.com/bazelbuild/rules_cc/archive/refs/tags/0.2.13.tar.gz"],
+)
+
+load("@rules_cc//cc:extensions.bzl", "compatibility_proxy_repo")
+
+compatibility_proxy_repo()
+
 load("//third_party/zk_dtypes:workspace.bzl", zk_dtypes = "repo")
 
 zk_dtypes()
@@ -60,7 +86,6 @@ load("//bazel:prime_ir_deps.bzl", "prime_ir_deps")
 
 prime_ir_deps()
 
-load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 load("//third_party/llvm-project:workspace.bzl", "LLVM_COMMIT", "LLVM_PATCHES", "LLVM_SHA256")
 
 http_archive(
