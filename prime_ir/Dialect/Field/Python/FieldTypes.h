@@ -16,17 +16,16 @@ limitations under the License.
 #ifndef PRIME_IR_DIALECT_FIELD_PYTHON_FIELDTYPES_H_
 #define PRIME_IR_DIALECT_FIELD_PYTHON_FIELDTYPES_H_
 
-// clang-format off
-// This should be included before mlir/Bindings/Python/IRAttributes.h
-#include "mlir/lib/Bindings/Python/IRModule.h"
-// clang-format on
 #include "mlir/Bindings/Python/IRAttributes.h"
+#include "mlir/Bindings/Python/IRCore.h"
 #include "mlir/Bindings/Python/Nanobind.h"
 #include "prime_ir/Dialect/Field/C/FieldTypes.h"
 
 namespace mlir::prime_ir::field::python {
 
-class PyPrimeFieldType : public mlir::python::PyConcreteType<PyPrimeFieldType> {
+class PyPrimeFieldType
+    : public mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<
+          PyPrimeFieldType> {
 public:
   static constexpr IsAFunctionTy isaFunction = primeIRTypeIsAPrimeField;
   static constexpr GetTypeIDFunctionTy getTypeIdFunction =
@@ -38,7 +37,8 @@ public:
 };
 
 class PyExtensionFieldType
-    : public mlir::python::PyConcreteType<PyExtensionFieldType> {
+    : public mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<
+          PyExtensionFieldType> {
 public:
   static constexpr IsAFunctionTy isaFunction = primeIRTypeIsAnExtensionField;
   static constexpr GetTypeIDFunctionTy getTypeIdFunction =
