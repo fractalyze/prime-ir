@@ -16,13 +16,15 @@ limitations under the License.
 #ifndef PRIME_IR_DIALECT_ELLIPTICCURVE_PYTHON_ELLIPTICCURVETYPES_H_
 #define PRIME_IR_DIALECT_ELLIPTICCURVE_PYTHON_ELLIPTICCURVETYPES_H_
 
+#include "mlir/Bindings/Python/IRCore.h"
 #include "mlir/Bindings/Python/Nanobind.h"
-#include "mlir/lib/Bindings/Python/IRModule.h"
 #include "prime_ir/Dialect/EllipticCurve/C/EllipticCurveTypes.h"
 
 namespace mlir::prime_ir::elliptic_curve::python {
 
-class PyAffineType : public mlir::python::PyConcreteType<PyAffineType> {
+class PyAffineType
+    : public mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<
+          PyAffineType> {
 public:
   static constexpr IsAFunctionTy isaFunction = primeIRTypeIsAnAffine;
   static constexpr GetTypeIDFunctionTy getTypeIdFunction =
@@ -33,7 +35,9 @@ public:
   static void bindDerived(ClassTy &c);
 };
 
-class PyJacobianType : public mlir::python::PyConcreteType<PyJacobianType> {
+class PyJacobianType
+    : public mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<
+          PyJacobianType> {
 public:
   static constexpr IsAFunctionTy isaFunction = primeIRTypeIsAJacobian;
   static constexpr GetTypeIDFunctionTy getTypeIdFunction =
@@ -44,7 +48,9 @@ public:
   static void bindDerived(ClassTy &c);
 };
 
-class PyXYZZType : public mlir::python::PyConcreteType<PyXYZZType> {
+class PyXYZZType
+    : public mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<
+          PyXYZZType> {
 public:
   static constexpr IsAFunctionTy isaFunction = primeIRTypeIsAnXYZZ;
   static constexpr GetTypeIDFunctionTy getTypeIdFunction =
