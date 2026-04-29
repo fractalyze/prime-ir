@@ -16,7 +16,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/Python/FieldTypes.h"
 
 namespace nb = nanobind;
-using namespace mlir::python;
+using namespace mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN;
 
 namespace mlir::prime_ir::field::python {
 

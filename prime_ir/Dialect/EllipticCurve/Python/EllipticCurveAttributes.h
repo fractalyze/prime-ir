@@ -16,14 +16,15 @@ limitations under the License.
 #ifndef PRIME_IR_DIALECT_ELLIPTICCURVE_PYTHON_ELLIPTICCURVEATTRIBUTES_H_
 #define PRIME_IR_DIALECT_ELLIPTICCURVE_PYTHON_ELLIPTICCURVEATTRIBUTES_H_
 
+#include "mlir/Bindings/Python/IRCore.h"
 #include "mlir/Bindings/Python/Nanobind.h"
-#include "mlir/lib/Bindings/Python/IRModule.h"
 #include "prime_ir/Dialect/EllipticCurve/C/EllipticCurveAttributes.h"
 
 namespace mlir::prime_ir::elliptic_curve::python {
 
 class PyShortWeierstrassAttr
-    : public mlir::python::PyConcreteAttribute<PyShortWeierstrassAttr> {
+    : public mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteAttribute<
+          PyShortWeierstrassAttr> {
 public:
   static constexpr IsAFunctionTy isaFunction =
       primeIRAttributeIsAShortWeierstrass;
