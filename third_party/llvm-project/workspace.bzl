@@ -13,21 +13,15 @@
 # limitations under the License.
 
 # buildifier: disable=module-docstring
-LLVM_COMMIT = "5ed852f7f72855710eeff53179e6a6f2271a3c2a"
+LLVM_COMMIT = "815edc3ff646392bfee2b381d37dd35e4b04f9c5"
 
-LLVM_SHA256 = "95792e50d5f84847721545b645a6ca2c2b3b7610d02e3de07d65a6148e68508c"
+LLVM_SHA256 = "bbc6fa4993162bdc7dd39b53927906a455940b87c782d0a37e00127f8bf8c696"
 
 # TODO(chokobole): We must review the applied patches below and remove any that
 # are not strictly necessary for this project.
 # NOTE(chokobole): The order of the patches is important. If you update this,
 # please update the order in the tools/setup_llvm_clone.sh script.
 LLVM_PATCHES = [
-    # TODO(chokobole): Remove owning_memref_free.patch once we upgrade the version of LLVM.
-    # See https://github.com/llvm/llvm-project/pull/153133
-    "@prime_ir//third_party/llvm-project:owning_memref_free.patch",
-    # TODO(chokobole): Remove owning_memref_memset.patch once we upgrade the version of LLVM.
-    # See https://github.com/llvm/llvm-project/pull/158200
-    "@prime_ir//third_party/llvm-project:owning_memref_memset.patch",
     # Add visited set to MemRefDependenceGraph::hasDependencePath. Without it
     # the DFS path search enumerates every path through the MDG, which is
     # exponential when many memref ops touch the same buffer (e.g. fully
@@ -44,10 +38,7 @@ LLVM_PATCHES = [
     "@prime_ir//third_party/llvm-project:linalg_type_support.patch",
     "@prime_ir//third_party/llvm-project:tensor_type_support.patch",
     "@prime_ir//third_party/llvm-project:vector_type_support.patch",
-    "@prime_ir//third_party/llvm-project:memref_folding.patch",
     "@prime_ir//third_party/llvm-project:lazy_linking.patch",
     "@prime_ir//third_party/llvm-project:elementwise_op_fusion_constant_support.patch",
     "@prime_ir//third_party/llvm-project:constant_like_interface.patch",
-    "@prime_ir//third_party/llvm-project:expose_py_integer_attribute.patch",
-    "@prime_ir//third_party/llvm-project:large_integer_attribute.patch",
 ]

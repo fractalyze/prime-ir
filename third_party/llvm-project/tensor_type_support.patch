@@ -1,18 +1,19 @@
 diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
+index d33b8d32a1d8..a8386aefa02b 100644
 --- a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 +++ b/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp
 @@ -41,6 +41,10 @@
+ #include "llvm/Support/MathExtras.h"
  #include <optional>
- #include <vector>
-
+ 
 +#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 +#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 +#include "prime_ir/IR/Attributes.h"
 +
  using namespace mlir;
  using namespace mlir::tensor;
-
-@@ -53,6 +57,11 @@ using llvm::mod;
+ 
+@@ -49,6 +53,11 @@ using namespace mlir::tensor;
  Operation *TensorDialect::materializeConstant(OpBuilder &builder,
                                                Attribute value, Type type,
                                                Location loc) {
@@ -24,11 +25,11 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
    if (auto op = arith::ConstantOp::materialize(builder, value, type, loc))
      return op;
    if (complex::ConstantOp::isBuildableWith(value, type))
-@@ -1398,4 +1407,18 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+@@ -1378,8 +1387,22 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+   if (Attribute tensor = adaptor.getTensor()) {
      // If this is a splat elements attribute, simply return the value.
      // All of the elements of a splat attribute are the same.
 -    if (auto splatTensor = llvm::dyn_cast<SplatElementsAttr>(tensor))
--      return splatTensor.getSplatValue<Attribute>();
 +    if (auto splatTensor = llvm::dyn_cast<SplatElementsAttr>(tensor)) {
 +      // For element types with multi-value storage (e.g., extension fields),
 +      // the attr has extra trailing coefficient dims beyond the tensor rank.
@@ -43,9 +44,12 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
 +        SmallVector<APInt> coeffs(valuesPerElement, splatValue);
 +        return cli.createConstantAttrFromValues(coeffs);
 +      }
-+      return splatTensor.getSplatValue<Attribute>();
+       return splatTensor.getSplatValue<Attribute>();
 +    }
-@@ -1421,6 +1444,29 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
+ 
+     // If this is a dense resource elements attribute, return.
+     if (isa<DenseResourceElementsAttr>(tensor))
+@@ -1419,6 +1442,29 @@ OpFoldResult ExtractOp::fold(FoldAdaptor adaptor) {
      auto elementsAttr = llvm::dyn_cast<ElementsAttr>(tensor);
      if (elementsAttr && elementsAttr.isValidIndex(indices))
        return elementsAttr.getValues<Attribute>()[indices];
@@ -73,12 +77,22 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
 +      }
 +    }
    }
-
+ 
    if (Value result = foldExtractAfterInsert(*this))
-@@ -1465,8 +1502,21 @@ void FromElementsOp::build(OpBuilder &builder, OperationState &result,
- }
-
- OpFoldResult FromElementsOp::fold(FoldAdaptor adaptor) {
+@@ -1458,12 +1504,29 @@ OpFoldResult FromElementsOp::fold(FoldAdaptor adaptor) {
+   // DenseElementsAttr::get requires StringAttr for element types that are not
+   // integer, index, float, or complex (e.g. vector types), but folded constants
+   // won't be StringAttr instances. Only fold for element types directly
+-  // supported by DenseElementsAttr.
++  // supported by DenseElementsAttr — plus PrimeIR field/mod_arith types, which
++  // are converted to their built-in storage type below.
+   Type eltType = getType().getElementType();
+-  if (!eltType.isIntOrIndexOrFloat() && !isa<ComplexType>(eltType))
++  if (!eltType.isIntOrIndexOrFloat() && !isa<ComplexType>(eltType) &&
++      !isa<prime_ir::field::PrimeFieldType,
++           prime_ir::mod_arith::ModArithType,
++           prime_ir::field::ExtensionFieldType>(eltType))
+     return {};
 -  if (!llvm::is_contained(adaptor.getElements(), nullptr))
 -    return DenseElementsAttr::get(getType(), adaptor.getElements());
 +  if (!llvm::is_contained(adaptor.getElements(), nullptr)) {
@@ -98,10 +112,10 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
 +  }
    return {};
  }
-
-@@ -1601,9 +1651,12 @@
+ 
+@@ -1609,9 +1672,12 @@ LogicalResult GatherOp::verify() {
  }
-
+ 
  OpFoldResult GatherOp::fold(FoldAdaptor adaptor) {
 +  auto resultType = cast<TensorType>(
 +      prime_ir::maybeConvertPrimeIRToBuiltinType(
@@ -114,9 +128,9 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
      return reshapedSource;
    return {};
  }
-@@ -1842,9 +1895,12 @@
+@@ -1850,9 +1916,12 @@ LogicalResult ReshapeOp::verify() {
  }
-
+ 
  OpFoldResult ReshapeOp::fold(FoldAdaptor adaptor) {
 +  auto resultType = cast<TensorType>(
 +      prime_ir::maybeConvertPrimeIRToBuiltinType(
@@ -127,9 +141,11 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
 +          dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
 +          resultType))
      return reshapedSource;
-
+ 
    // If the producer of operand 'source' is another 'tensor.reshape' op, use the
-@@ -2314,9 +2370,27 @@ void CollapseShapeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+@@ -2311,11 +2380,29 @@ void CollapseShapeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+ }
+ 
  OpFoldResult ExpandShapeOp::fold(FoldAdaptor adaptor) {
 +  // Handle multi-value element types (e.g., extension fields) where
 +  // DenseElementsAttr has extra coefficient dimensions.
@@ -143,7 +159,7 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
    return foldReshapeOp<ExpandShapeOp, CollapseShapeOp>(*this,
                                                         adaptor.getOperands());
  }
-
+ 
  OpFoldResult CollapseShapeOp::fold(FoldAdaptor adaptor) {
 +  // Handle multi-value element types (e.g., extension fields) where
 +  // DenseElementsAttr has extra coefficient dimensions.
@@ -157,9 +173,9 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
    return foldReshapeOp<CollapseShapeOp, ExpandShapeOp>(*this,
                                                         adaptor.getOperands());
  }
-@@ -2733,9 +2807,12 @@
+@@ -2806,9 +2893,12 @@ static Value foldExtractAfterInsertSlice(ExtractSliceOp extractOp) {
  }
-
+ 
  OpFoldResult ExtractSliceOp::fold(FoldAdaptor adaptor) {
 +  auto resultType = cast<TensorType>(
 +      prime_ir::maybeConvertPrimeIRToBuiltinType(
@@ -172,18 +188,18 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
      return reshapedSource;
    if (getSourceType() == getType() &&
        succeeded(foldIdentityOffsetSizeAndStrideOpInterface(*this, getType())))
-@@ -4045,15 +4122,28 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+@@ -4096,7 +4186,8 @@ SplatOp::reifyResultShapes(OpBuilder &builder,
+ 
  OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
    auto constOperand = adaptor.getInput();
 -  if (!isa_and_nonnull<IntegerAttr, FloatAttr>(constOperand))
 +  if (!isa_and_nonnull<IntegerAttr, FloatAttr, DenseIntElementsAttr>(
 +          constOperand))
      return {};
-
+ 
    // Do not fold if the splat is not statically shaped
-   if (!getType().hasStaticShape())
-     return {};
-
+@@ -4105,7 +4196,19 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+ 
    // SplatElementsAttr::get treats single value for second arg as being a
    // splat.
 -  return SplatElementsAttr::get(getType(), {constOperand});
@@ -201,12 +217,13 @@ diff --git a/mlir/lib/Dialect/Tensor/IR/TensorOps.cpp b/mlir/lib/Dialect/Tensor/
 +  }
 +  return SplatElementsAttr::get(destType, {constOperand});
  }
-
+ 
  //===----------------------------------------------------------------------===//
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
+index 78af34cb7d1c..d4606f77f5c0 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -7134,6 +7134,9 @@ cc_library(
+@@ -7548,6 +7548,9 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",
@@ -215,4 +232,4 @@ diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llv
 +        "@prime_ir//prime_ir/IR:Attributes",
      ],
  )
-
+ 
