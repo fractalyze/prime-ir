@@ -115,7 +115,7 @@ index 000000000000..5e044b79f5b2
 +
 +#endif // MLIR_IR_CONSTANTLIKEINTERFACE_TD_
 diff --git a/mlir/lib/IR/Builders.cpp b/mlir/lib/IR/Builders.cpp
-index 5f7bc50afc41..be75f7aa866b 100644
+index cf64954751d5..f8b632efcd3c 100644
 --- a/mlir/lib/IR/Builders.cpp
 +++ b/mlir/lib/IR/Builders.cpp
 @@ -10,6 +10,7 @@
@@ -125,8 +125,8 @@ index 5f7bc50afc41..be75f7aa866b 100644
 +#include "mlir/IR/ConstantLikeInterface.h"
  #include "mlir/IR/Dialect.h"
  #include "mlir/IR/IRMapping.h"
- #include "mlir/IR/IntegerSet.h"
-@@ -320,6 +321,14 @@ ArrayAttr Builder::getAffineMapArrayAttr(ArrayRef<AffineMap> values) {
+ #include "mlir/IR/Matchers.h"
+@@ -326,6 +327,14 @@ ArrayAttr Builder::getAffineMapArrayAttr(ArrayRef<AffineMap> values) {
  }
  
  TypedAttr Builder::getZeroAttr(Type type) {
@@ -141,7 +141,7 @@ index 5f7bc50afc41..be75f7aa866b 100644
    if (llvm::isa<FloatType>(type))
      return getFloatAttr(type, 0.0);
    if (llvm::isa<IndexType>(type))
-@@ -329,15 +338,30 @@ TypedAttr Builder::getZeroAttr(Type type) {
+@@ -335,15 +344,30 @@ TypedAttr Builder::getZeroAttr(Type type) {
                            APInt(llvm::cast<IntegerType>(type).getWidth(), 0));
    if (llvm::isa<RankedTensorType, VectorType>(type)) {
      auto vtType = llvm::cast<ShapedType>(type);
@@ -173,7 +173,7 @@ index 5f7bc50afc41..be75f7aa866b 100644
    if (llvm::isa<FloatType>(type))
      return getFloatAttr(type, 1.0);
    if (llvm::isa<IndexType>(type))
-@@ -347,9 +371,16 @@ TypedAttr Builder::getOneAttr(Type type) {
+@@ -353,9 +377,16 @@ TypedAttr Builder::getOneAttr(Type type) {
                            APInt(llvm::cast<IntegerType>(type).getWidth(), 1));
    if (llvm::isa<RankedTensorType, VectorType>(type)) {
      auto vtType = llvm::cast<ShapedType>(type);
@@ -213,10 +213,10 @@ index 000000000000..028434eea577
 +
 +} // namespace mlir
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 94b0ec4eb878..4e7f826e1842 100644
+index 78af34cb7d1c..942e08ae4272 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -107,6 +107,17 @@ gentbl_cc_library(
+@@ -120,6 +120,17 @@ gentbl_cc_library(
      deps = [":OpBaseTdFiles"],
  )
  
@@ -234,7 +234,7 @@ index 94b0ec4eb878..4e7f826e1842 100644
  gentbl_cc_library(
      name = "TensorEncodingIncGen",
      tbl_outs = {
-@@ -244,6 +255,13 @@ gentbl_cc_library(
+@@ -269,6 +280,13 @@ gentbl_cc_library(
      ],
  )
  
@@ -248,11 +248,11 @@ index 94b0ec4eb878..4e7f826e1842 100644
  td_library(
      name = "FunctionInterfacesTdFiles",
      srcs = ["include/mlir/Interfaces/FunctionInterfaces.td"],
-@@ -387,6 +405,7 @@ cc_library(
-         ":BuiltinTypesIncGen",
+@@ -448,6 +466,7 @@ cc_library(
+         ":BytecodeDialectInterfaceIncGen",
          ":BytecodeOpInterfaceIncGen",
          ":CallOpInterfacesIncGen",
 +        ":ConstantLikeInterfaceIncGen",
          ":DataLayoutInterfacesIncGen",
+         ":DialectFoldInterfaceIncGen",
          ":InferIntRangeInterfaceIncGen",
-         ":OpAsmInterfaceIncGen",
