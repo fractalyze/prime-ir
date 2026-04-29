@@ -1654,7 +1654,7 @@ namespace {
 LogicalResult
 inferBinaryOpReturnTypes(MLIRContext *context, std::optional<Location> location,
                          ValueRange operands, DictionaryAttr attributes,
-                         OpaqueProperties properties, RegionRange regions,
+                         PropertyRef properties, RegionRange regions,
                          SmallVectorImpl<Type> &inferredReturnTypes) {
   Type lhsType = operands[0].getType();
   Type rhsType = operands[1].getType();
@@ -1785,7 +1785,7 @@ ParseResult parseBinaryOp(OpAsmParser &parser, OperationState &result) {
 LogicalResult
 AddOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
-                        OpaqueProperties properties, RegionRange regions,
+                        PropertyRef properties, RegionRange regions,
                         SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferBinaryOpReturnTypes(context, location, operands, attributes,
                                   properties, regions, inferredReturnTypes);
@@ -1794,7 +1794,7 @@ AddOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
 LogicalResult
 SubOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
-                        OpaqueProperties properties, RegionRange regions,
+                        PropertyRef properties, RegionRange regions,
                         SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferBinaryOpReturnTypes(context, location, operands, attributes,
                                   properties, regions, inferredReturnTypes);
@@ -1803,7 +1803,7 @@ SubOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
 LogicalResult
 MulOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
-                        OpaqueProperties properties, RegionRange regions,
+                        PropertyRef properties, RegionRange regions,
                         SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferBinaryOpReturnTypes(context, location, operands, attributes,
                                   properties, regions, inferredReturnTypes);
