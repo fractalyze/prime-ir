@@ -1351,8 +1351,11 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
     MulExtendedResult result = squareExtended(b, op, adaptor.getInput());
     Value lowExt = arith::ExtUIOp::create(b, intExtType, result.lo);
     Value highExt = arith::ExtUIOp::create(b, intExtType, result.hi);
-    Value shift = arith::ConstantIntOp::create(b, intExtType,
-                                               modType.getStorageBitWidth());
+    // intExtType may be a tensor when the input was tensor-typed; use
+    // createScalarOrSplatConstant so the right ConstantOp gets emitted
+    // (ConstantIntOp::create requires a scalar IntegerType).
+    Value shift = createScalarOrSplatConstant(b, b.getLoc(), intExtType,
+                                              modType.getStorageBitWidth());
     highExt = arith::ShLIOp::create(b, highExt, shift);
     Value squared = arith::OrIOp::create(b, lowExt, highExt);
 
