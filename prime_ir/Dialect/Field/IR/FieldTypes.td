@@ -63,7 +63,8 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "Prime field element type";
   let description = [{
@@ -108,7 +109,8 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "Binary tower field element type";
   let description = [{
@@ -167,7 +169,8 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "Extension field element type";
   let description = [{
