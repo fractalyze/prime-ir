@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 
+#include <cstring>
+
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldOperation.h"
@@ -176,6 +178,39 @@ ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
   return type.clone(getStorageType());
 }
 
+// DenseElementTypeInterface: lets DenseElementsAttr store field-typed
+// elements. Storage is the underlying integer width; conversion to/from
+// Attribute uses IntegerAttr typed as the field's storage IntegerType.
+size_t PrimeFieldType::getDenseElementBitSize() const {
+  return getStorageBitWidth();
+}
+
+Attribute
+PrimeFieldType::convertToAttribute(::llvm::ArrayRef<char> rawData) const {
+  unsigned bitWidth = getStorageBitWidth();
+  unsigned byteWidth = (bitWidth + 7) / 8;
+  assert(rawData.size() == byteWidth);
+  // Pack raw bytes into a uint64_t buffer for APInt construction.
+  unsigned numWords = (byteWidth + 7) / 8;
+  llvm::SmallVector<uint64_t, 4> words(numWords, 0);
+  std::memcpy(words.data(), rawData.data(), byteWidth);
+  return IntegerAttr::get(getStorageType(), APInt(bitWidth, words));
+}
+
+::llvm::LogicalResult PrimeFieldType::convertFromAttribute(
+    Attribute attr, ::llvm::SmallVectorImpl<char>& result) const {
+  auto intAttr = dyn_cast<IntegerAttr>(attr);
+  if (!intAttr) return failure();
+  APInt value = intAttr.getValue();
+  unsigned byteWidth = (getStorageBitWidth() + 7) / 8;
+  size_t prevSize = result.size();
+  result.resize(prevSize + byteWidth);
+  // APInt::getRawData returns 64-bit-word buffer; copy `byteWidth` low
+  // bytes (sufficient since `byteWidth` <= numWords * 8).
+  std::memcpy(result.data() + prevSize, value.getRawData(), byteWidth);
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // BinaryFieldType
 //===----------------------------------------------------------------------===//
@@ -246,6 +281,36 @@ BinaryFieldType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
 
 ShapedType BinaryFieldType::overrideShapedType(ShapedType type) const {
   return type.clone(getStorageType());
+}
+
+size_t BinaryFieldType::getDenseElementBitSize() const {
+  return getStorageBitWidth();
+}
+
+Attribute
+BinaryFieldType::convertToAttribute(::llvm::ArrayRef<char> rawData) const {
+  unsigned bitWidth = getStorageBitWidth();
+  unsigned byteWidth = (bitWidth + 7) / 8;
+  assert(rawData.size() == byteWidth);
+  // Pack raw bytes into a uint64_t buffer for APInt construction.
+  unsigned numWords = (byteWidth + 7) / 8;
+  llvm::SmallVector<uint64_t, 4> words(numWords, 0);
+  std::memcpy(words.data(), rawData.data(), byteWidth);
+  return IntegerAttr::get(getStorageType(), APInt(bitWidth, words));
+}
+
+::llvm::LogicalResult BinaryFieldType::convertFromAttribute(
+    Attribute attr, ::llvm::SmallVectorImpl<char>& result) const {
+  auto intAttr = dyn_cast<IntegerAttr>(attr);
+  if (!intAttr) return failure();
+  APInt value = intAttr.getValue();
+  unsigned byteWidth = (getStorageBitWidth() + 7) / 8;
+  size_t prevSize = result.size();
+  result.resize(prevSize + byteWidth);
+  // APInt::getRawData returns 64-bit-word buffer; copy `byteWidth` low
+  // bytes (sufficient since `byteWidth` <= numWords * 8).
+  std::memcpy(result.data() + prevSize, value.getRawData(), byteWidth);
+  return success();
 }
 
 //===----------------------------------------------------------------------===//
@@ -547,6 +612,26 @@ ExtensionFieldType::createConstantAttrFromValues(ArrayRef<APInt> coeffs) const {
 
 ShapedType ExtensionFieldType::overrideShapedType(ShapedType type) const {
   return type;
+}
+
+size_t ExtensionFieldType::getDenseElementBitSize() const {
+  return getStorageBitWidth();
+}
+
+Attribute
+ExtensionFieldType::convertToAttribute(::llvm::ArrayRef<char> rawData) const {
+  // Extension fields don't have a single integer storage; opt out by
+  // returning a null Attribute. Currently no flow round-trips extension
+  // fields through DenseElementsAttr.
+  (void)rawData;
+  return Attribute{};
+}
+
+::llvm::LogicalResult ExtensionFieldType::convertFromAttribute(
+    Attribute attr, ::llvm::SmallVectorImpl<char>& result) const {
+  (void)attr;
+  (void)result;
+  return failure();
 }
 
 unsigned ExtensionFieldType::getDegreeOverPrime() const {
