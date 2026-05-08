@@ -294,22 +294,34 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
                           "unsupported element type for dense constant");
 }
 
-ParseResult tryParseFieldConstant(OpAsmParser &parser, OperationState &result) {
-  // Capture diagnostics emitted by parseFieldConstant. On failure they are
-  // discarded so the caller's pre-existing error stays surfaced; on success
-  // no diagnostics are emitted to begin with, so the captured buffer is
-  // empty and dropping it is a no-op. This is the right contract for use as
-  // a fallback parser — the trade-off is that legitimate field-typed
-  // errors during fallback (e.g. value-out-of-range) are also dropped, but
-  // those are unreachable in practice because the caller has already
-  // committed to a specific, non-field input shape.
+ParseResult parseOptionalFieldConstant(OpAsmParser &parser,
+                                       OperationState &result) {
+  // Mirrors the MLIR `parseOptional*` contract: try to parse, restore
+  // parser + `result` state on failure so the caller can try an
+  // alternative cleanly.
+  const char *startPtr = parser.getCurrentLocation().getPointer();
+  llvm::SmallVector<mlir::NamedAttribute> attrsSnapshot(
+      result.attributes.getAttrs());
+  size_t typesBefore = result.types.size();
+
+  // Capture parseFieldConstant's diagnostics; drop them on failure so the
+  // caller's pre-existing error stays surfaced. On success, parseFieldConstant
+  // emits no diagnostics, so the buffer is empty and dropping is a no-op.
   llvm::SmallVector<mlir::Diagnostic, 2> captured;
   mlir::ScopedDiagnosticHandler scope(
       parser.getContext(), [&](mlir::Diagnostic &diag) {
         captured.emplace_back(std::move(diag));
         return mlir::success();
       });
-  return parseFieldConstant(parser, result);
+
+  if (succeeded(parseFieldConstant(parser, result))) return success();
+
+  // Restore: rewind the token stream and roll back any attributes / result
+  // types parseFieldConstant added before failing.
+  parser.resetToken(startPtr);
+  result.attributes.assign(attrsSnapshot);
+  result.types.resize(typesBefore);
+  return failure();
 }
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {

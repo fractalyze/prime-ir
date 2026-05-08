@@ -29,4 +29,10 @@ LLVM_PATCHES = [
     "@prime_ir//third_party/llvm-project:lazy_linking.patch",
     "@prime_ir//third_party/llvm-project:elementwise_op_fusion_constant_support.patch",
     "@prime_ir//third_party/llvm-project:constant_like_interface.patch",
+    # Adds OpAsmParser::resetToken — used by parseOptionalFieldConstant for
+    # the speculative-parse-then-rewind pattern that disambiguates
+    # field-typed dense literals from f32/i32 ones (the first token is the
+    # same `dense` keyword in both cases, so MLIR's first-token-dispatch
+    # convention can't be applied).
+    "@prime_ir//third_party/llvm-project:asm_parser_rewind.patch",
 ]

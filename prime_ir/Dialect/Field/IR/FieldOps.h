@@ -52,13 +52,21 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
 
 ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result);
 
-// Like parseFieldConstant, but discards any diagnostics it would emit on
-// failure. For use by other dialects' op parsers that try parseFieldConstant
-// as a fallback after their standard parser has already reported a more
-// useful error — without suppression, parseFieldConstant's "expected field
-// type" / "expected static shape" messages would shadow the caller's. On
-// success, no diagnostics are emitted anyway, so this is a no-op there.
-ParseResult tryParseFieldConstant(OpAsmParser &parser, OperationState &result);
+// Optional variant: try to parse a field constant; on failure restore the
+// parser's token stream and `result` to the state at entry, so the caller
+// can attempt a different parser cleanly. Diagnostics emitted by the
+// underlying parseFieldConstant are captured and dropped on failure (the
+// caller's pre-existing error stays surfaced; on success no diagnostics
+// were emitted anyway).
+//
+// Mirrors the `parseOptional*` contract (succeed-and-consume, or
+// fail-without-consuming). Multi-token speculative parsing is required
+// because the first token (`dense`) is the same for field-typed and
+// non-field-typed dense literals — first-token dispatch can't
+// disambiguate. Rewind is via OpAsmParser::resetToken (provided by
+// asm_parser_rewind.patch).
+ParseResult parseOptionalFieldConstant(OpAsmParser &parser,
+                                       OperationState &result);
 
 } // namespace mlir::prime_ir::field
 
