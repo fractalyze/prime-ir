@@ -1,0 +1,31 @@
+diff --git a/mlir/include/mlir/IR/OpImplementation.h b/mlir/include/mlir/IR/OpImplementation.h
+index 8710b970e8d7..ae05bf9af988 100644
+--- a/mlir/include/mlir/IR/OpImplementation.h
++++ b/mlir/include/mlir/IR/OpImplementation.h
+@@ -580,6 +580,13 @@ public:
+   /// Return the location of the original name token.
+   virtual SMLoc getNameLoc() const = 0;
+ 
++  //===--------------------------------------------------------------------===//
++  // Token Position
++  //===--------------------------------------------------------------------===//
++
++  /// Reset the token position to the given position.
++  virtual void resetToken(const char *tokPos) = 0;
++
+   //===--------------------------------------------------------------------===//
+   // Utilities
+   //===--------------------------------------------------------------------===//
+diff --git a/mlir/lib/AsmParser/AsmParserImpl.h b/mlir/lib/AsmParser/AsmParserImpl.h
+index eec2702cba34..fe2640d160bf 100644
+--- a/mlir/lib/AsmParser/AsmParserImpl.h
++++ b/mlir/lib/AsmParser/AsmParserImpl.h
+@@ -602,6 +602,8 @@ public:
+       (void)parser.codeCompleteExpectedTokens(tokens);
+   }
+ 
++  void resetToken(const char *tokPos) override { parser.resetToken(tokPos); }
++
+ protected:
+   /// The source location of the dialect symbol.
+   SMLoc nameLoc;

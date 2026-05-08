@@ -16,6 +16,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
@@ -291,6 +292,36 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
   }
   return parser.emitError(parser.getCurrentLocation(),
                           "unsupported element type for dense constant");
+}
+
+ParseResult parseOptionalFieldConstant(OpAsmParser &parser,
+                                       OperationState &result) {
+  // Mirrors the MLIR `parseOptional*` contract: try to parse, restore
+  // parser + `result` state on failure so the caller can try an
+  // alternative cleanly.
+  const char *startPtr = parser.getCurrentLocation().getPointer();
+  llvm::SmallVector<mlir::NamedAttribute> attrsSnapshot(
+      result.attributes.getAttrs());
+  size_t typesBefore = result.types.size();
+
+  // Capture parseFieldConstant's diagnostics; drop them on failure so the
+  // caller's pre-existing error stays surfaced. On success, parseFieldConstant
+  // emits no diagnostics, so the buffer is empty and dropping is a no-op.
+  llvm::SmallVector<mlir::Diagnostic, 2> captured;
+  mlir::ScopedDiagnosticHandler scope(
+      parser.getContext(), [&](mlir::Diagnostic &diag) {
+        captured.emplace_back(std::move(diag));
+        return mlir::success();
+      });
+
+  if (succeeded(parseFieldConstant(parser, result))) return success();
+
+  // Restore: rewind the token stream and roll back any attributes / result
+  // types parseFieldConstant added before failing.
+  parser.resetToken(startPtr);
+  result.attributes.assign(attrsSnapshot);
+  result.types.resize(typesBefore);
+  return failure();
 }
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
