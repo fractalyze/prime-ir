@@ -52,6 +52,14 @@ FailureOr<Attribute> validateAndCreateFieldAttribute(OpAsmParser &parser,
 
 ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result);
 
+// Like parseFieldConstant, but discards any diagnostics it would emit on
+// failure. For use by other dialects' op parsers that try parseFieldConstant
+// as a fallback after their standard parser has already reported a more
+// useful error — without suppression, parseFieldConstant's "expected field
+// type" / "expected static shape" messages would shadow the caller's. On
+// success, no diagnostics are emitted anyway, so this is a no-op there.
+ParseResult tryParseFieldConstant(OpAsmParser &parser, OperationState &result);
+
 } // namespace mlir::prime_ir::field
 
 #endif // PRIME_IR_DIALECT_FIELD_IR_FIELDOPS_H_

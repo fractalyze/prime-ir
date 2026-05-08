@@ -16,6 +16,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
@@ -291,6 +292,24 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
   }
   return parser.emitError(parser.getCurrentLocation(),
                           "unsupported element type for dense constant");
+}
+
+ParseResult tryParseFieldConstant(OpAsmParser &parser, OperationState &result) {
+  // Capture diagnostics emitted by parseFieldConstant. On failure they are
+  // discarded so the caller's pre-existing error stays surfaced; on success
+  // no diagnostics are emitted to begin with, so the captured buffer is
+  // empty and dropping it is a no-op. This is the right contract for use as
+  // a fallback parser — the trade-off is that legitimate field-typed
+  // errors during fallback (e.g. value-out-of-range) are also dropped, but
+  // those are unreachable in practice because the caller has already
+  // committed to a specific, non-field input shape.
+  llvm::SmallVector<mlir::Diagnostic, 2> captured;
+  mlir::ScopedDiagnosticHandler scope(
+      parser.getContext(), [&](mlir::Diagnostic &diag) {
+        captured.emplace_back(std::move(diag));
+        return mlir::success();
+      });
+  return parseFieldConstant(parser, result);
 }
 
 OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
