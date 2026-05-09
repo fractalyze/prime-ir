@@ -818,19 +818,29 @@ void EllipticCurveToField::runOnOperation() {
   ConversionTarget target(*context);
   target.addIllegalOp<
       // clang-format off
-      AddOp,
       ConstantOp,
       CmpOp,
       ConvertPointTypeOp,
-      DoubleOp,
       IsZeroOp,
       MSMOp,
-      NegateOp,
-      PairingCheckOp,
-      ScalarMulOp,
-      SubOp
+      PairingCheckOp
       // clang-format on
       >();
+  // Elementwise EC ops on shaped tensors are intentionally legal in this
+  // pass: PointCodeGen is scalar-only (its constructor unreachables on
+  // RankedTensorType). The CPU pipeline runs `convert-elementwise-to-linalg`
+  // after this pass, which scalarizes shaped EC ops into `linalg.generic`
+  // bodies with scalar `elliptic_curve.* : !ec.point` ops; a SECOND
+  // EllipticCurveToField pass then handles them. Mirrors the
+  // FieldToModArith two-pass pattern for ExtensionField.
+  target.addDynamicallyLegalOp<
+      AddOp, DoubleOp, NegateOp, SubOp, ScalarMulOp>(
+      [](Operation *op) {
+        return llvm::any_of(op->getResultTypes(), [](Type t) {
+          return isa<ShapedType>(t) &&
+                 isa<PointTypeInterface>(getElementTypeOrSelf(t));
+        });
+      });
 
   target.addLegalDialect<
       // clang-format off
