@@ -1218,8 +1218,19 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
     return {results[0], results[1]};
   }
 
-  Type limbType = IntegerType::get(b.getContext(), limbWidth);
-  Value zeroLimb = arith::ConstantIntOp::create(b, limbType, 0);
+  // When `input` is tensor-typed (xtile elementwise emitter feeds shaped
+  // operands), every value in this multi-limb decomposition must carry
+  // the same shape. Build shape-aware Type aliases up-front so trunci /
+  // extui / constants stay coherent with the operand.
+  auto shapedInput = dyn_cast<ShapedType>(input.getType());
+  auto withShape = [&](Type elem) -> Type {
+    if (shapedInput) return shapedInput.cloneWith(std::nullopt, elem);
+    return elem;
+  };
+  Type intTy = withShape(intType);
+  Type intExtTy = withShape(intExtType);
+  Type limbType = withShape(IntegerType::get(b.getContext(), limbWidth));
+  Value zeroLimb = createScalarOrSplatConstant(b, b.getLoc(), limbType, 0);
 
   auto decomposeToLimbs = [&b, limbType, limbWidth,
                            numLimbs](SmallVector<Value> &limbs, Value input,
@@ -1230,7 +1241,7 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
     }
     limbs[0] = arith::TruncIOp::create(b, limbType, input);
     Value remaining = input;
-    Value shift = arith::ConstantIntOp::create(b, type, limbWidth);
+    Value shift = createScalarOrSplatConstant(b, b.getLoc(), type, limbWidth);
     for (unsigned i = 1; i < limbs.size(); ++i) {
       remaining = arith::ShRUIOp::create(b, remaining, shift);
       limbs[i] = arith::TruncIOp::create(b, limbType, remaining);
@@ -1238,7 +1249,7 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
     return limbs;
   };
   SmallVector<Value> limbs(numLimbs);
-  decomposeToLimbs(limbs, input, intType);
+  decomposeToLimbs(limbs, input, intTy);
   SmallVector<Value> resultVec(2 * numLimbs, zeroLimb);
   Value carry = zeroLimb;
 
@@ -1276,19 +1287,21 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   }
 
   // Reconstruct a single integer value by combining all limbs
-  Value result = arith::ConstantIntOp::create(b, intExtType, 0);
+  Value result = createScalarOrSplatConstant(b, b.getLoc(), intExtTy, 0);
   for (unsigned i = 0; i < 2 * numLimbs; ++i) {
-    Value rAtI = arith::ExtUIOp::create(b, intExtType, resultVec[i]);
+    Value rAtI = arith::ExtUIOp::create(b, intExtTy, resultVec[i]);
     Value shifted = arith::ShLIOp::create(
-        b, rAtI, arith::ConstantIntOp::create(b, intExtType, i * limbWidth));
+        b, rAtI,
+        createScalarOrSplatConstant(b, b.getLoc(), intExtTy, i * limbWidth));
     result = arith::OrIOp::create(b, result, shifted);
   }
 
   // Multiply result by 2. It's safe to assume no overflow
   result = arith::ShLIOp::create(
-      b, result, arith::ConstantIntOp::create(b, intExtType, 1), noOverflow);
+      b, result, createScalarOrSplatConstant(b, b.getLoc(), intExtTy, 1),
+      noOverflow);
 
-  decomposeToLimbs(resultVec, result, intExtType);
+  decomposeToLimbs(resultVec, result, intExtTy);
 
   // Add diagonal entries to result buffer
   for (unsigned i = 0; i < numLimbs; ++i) {
@@ -1306,21 +1319,23 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   }
 
   // Reconstruct `lo` and `hi` values by composing individual limbs
-  Value zero = arith::ConstantIntOp::create(b, intType, 0);
+  Value zero = createScalarOrSplatConstant(b, b.getLoc(), intTy, 0);
   Value resultLow = zero;
   Value resultHigh = zero;
   for (unsigned i = 0; i < 2 * numLimbs; ++i) {
     Value rAtI = numLimbs == 1
                      ? resultVec[i]
-                     : arith::ExtUIOp::create(b, intType, resultVec[i]);
+                     : arith::ExtUIOp::create(b, intTy, resultVec[i]);
     if (i < numLimbs) {
       auto shifted = arith::ShLIOp::create(
-          b, rAtI, arith::ConstantIntOp::create(b, intType, i * limbWidth));
+          b, rAtI,
+          createScalarOrSplatConstant(b, b.getLoc(), intTy, i * limbWidth));
       resultLow = arith::OrIOp::create(b, resultLow, shifted);
     } else {
       auto shifted = arith::ShLIOp::create(
           b, rAtI,
-          arith::ConstantIntOp::create(b, intType, (i - numLimbs) * limbWidth));
+          createScalarOrSplatConstant(b, b.getLoc(), intTy,
+                                      (i - numLimbs) * limbWidth));
       resultHigh = arith::OrIOp::create(b, resultHigh, shifted);
     }
   }
