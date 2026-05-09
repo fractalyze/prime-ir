@@ -306,11 +306,24 @@ OpFoldResult ConstantOp::fold(FoldAdaptor adaptor) {
 // static
 ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
                                    Type type, Location loc) {
-  if (!isa<ModArithType>(getElementTypeOrSelf(type))) {
+  auto modArithType = dyn_cast<ModArithType>(getElementTypeOrSelf(type));
+  if (!modArithType) {
     return nullptr;
   }
 
   if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
+    // A scalar IntegerAttr on a shaped result type carries implicit-splat
+    // semantics. Lift it to a DenseElementsAttr matching the result shape
+    // so the op's value attribute is consistent with its result type
+    // (round-trippable through the parser/printer, no scalar attribute
+    // stranded behind downstream type-converted consumers).
+    if (auto shapedTy = dyn_cast<ShapedType>(type)) {
+      auto storageTensorTy =
+          shapedTy.clone(modArithType.getStorageType());
+      auto splatAttr =
+          DenseIntElementsAttr::get(storageTensorTy, intAttr.getValue());
+      return ConstantOp::create(builder, loc, type, splatAttr);
+    }
     return ConstantOp::create(builder, loc, type, intAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
     return ConstantOp::create(builder, loc, type, denseElementsAttr);
