@@ -850,6 +850,19 @@ func.func @test_sub_self_is_zero(%arg0: !Zp) -> !Zp {
   return %0 : !Zp
 }
 
+// Regression: the tensor variant must produce a properly-typed dense
+// splat, not a scalar IntegerAttr stranded behind the shaped result type
+// (which is non-round-trippable through the parser and strands a stale
+// `i32 → tensor<Nxi32>` materialization at downstream consumers).
+// CHECK-LABEL: @test_sub_self_is_zero_tensor
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_sub_self_is_zero_tensor(%arg0: tensor<4x!Zp>) -> tensor<4x!Zp> {
+  %0 = mod_arith.sub %arg0, %arg0 : tensor<4x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<0> : [[T]]
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : tensor<4x!Zp>
+}
+
 // CHECK-LABEL: @test_sub_lhs_after_add
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]]
 func.func @test_sub_lhs_after_add(%arg0: !Zp, %arg1: !Zp) -> !Zp {

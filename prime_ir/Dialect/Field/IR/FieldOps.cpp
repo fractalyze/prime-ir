@@ -351,6 +351,20 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
       auto scalarAttr = DenseIntElementsAttr::get(tensorType, coeffs);
       return ConstantOp::create(builder, loc, type, scalarAttr);
     }
+    // PF / BF on a shaped result type: a scalar IntegerAttr carries
+    // implicit-splat semantics. Lift it to a DenseElementsAttr matching
+    // the result shape so the op's value attribute is consistent with
+    // its result type (round-trippable, no stranded scalar reaching
+    // downstream type-converted consumers).
+    if (auto shapedTy = dyn_cast<ShapedType>(type)) {
+      auto storageType = isa<PrimeFieldType>(elementType)
+                             ? cast<PrimeFieldType>(elementType).getStorageType()
+                             : cast<BinaryFieldType>(elementType).getStorageType();
+      auto storageTensorTy = shapedTy.clone(storageType);
+      auto splatAttr =
+          DenseIntElementsAttr::get(storageTensorTy, intAttr.getValue());
+      return ConstantOp::create(builder, loc, type, splatAttr);
+    }
     return ConstantOp::create(builder, loc, type, intAttr);
   }
   return ConstantOp::create(builder, loc, type,
