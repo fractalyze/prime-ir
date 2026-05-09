@@ -1018,8 +1018,14 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
       return success();
     }
 
-    // Barrett path for wide non-Mersenne primes. The Mersenne branch below
-    // (p = 2^k - 1) keeps precedence — its shift+add is faster than Barrett.
+    // Goldilocks (p = 2^64 - 2^32 + 1) matches the wide non-Mersenne shape
+    // but has a faster Solinas fast-path below, so it takes precedence over
+    // Barrett — same as the Mersenne branch.
+    bool isGoldilocks = modulus.getBitWidth() == 64 &&
+                        modulus == APInt(64, 0xFFFFFFFF00000001ULL);
+
+    // Barrett path for wide non-Mersenne primes. The Mersenne and Goldilocks
+    // branches below keep precedence — their shift+add is faster than Barrett.
     // Below 64 bits, hardware urem is a single instruction and wins anyway.
     // The `!modulus.isPowerOf2()` guard is defensive: the type parser rejects
     // power-of-two moduli today, but if the dialect ever supports binary
@@ -1027,7 +1033,7 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
     // `modulus.getBitWidth()` — which would break the reducer's
     // `2k == extBitWidth` precondition.
     if (modulus.getBitWidth() >= 64 && !(modulus + 1).isPowerOf2() &&
-        !modulus.isPowerOf2()) {
+        !modulus.isPowerOf2() && !isGoldilocks) {
       auto result =
           BarrettMulOp::create(b, op.getType(), op.getLhs(), op.getRhs());
       rewriter.replaceOp(op, result);
@@ -1069,6 +1075,47 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
       rewriter.replaceOp(op,
                          arith::TruncIOp::create(b, modulusType(op), reduced));
       return success();
+    }
+
+    // Goldilocks Solinas reduction for `p = 2^64 - 2^32 + 1`. The generic
+    // `arith.remui i128, i128` fallback below lowers to libgcc's `__umodti3`,
+    // which the CPU JIT runtime doesn't link. Use the field's special form:
+    //   2^64 ≡ 2^32 - 1 (mod p), so for x = hi*2^64 + lo (each i64):
+    //     x ≡ hi*(2^32 - 1) + lo  =  (hi << 32) - hi + lo  (mod p)
+    // Two rounds + final correction keep the result strictly under p without
+    // any 128-bit mod or polyfill calls.
+    {
+      if (isGoldilocks) {
+        // wideType is i128 (or tensor<... x i128> when shaped). Use the
+        // splat-aware constant helper.
+        Value k64 = createScalarOrSplatConstant(b, b.getLoc(), wideType, 64);
+        Value k32 = createScalarOrSplatConstant(b, b.getLoc(), wideType, 32);
+        Value loMask = createScalarOrSplatConstant(
+            b, b.getLoc(), wideType, APInt::getLowBitsSet(/*numBits=*/128, 64));
+        auto solinasReduce = [&](Value x) -> Value {
+          // x : wideType. hi = x >> 64; lo = x & ((1<<64)-1).
+          Value hi = arith::ShRUIOp::create(b, x, k64);
+          Value lo = arith::AndIOp::create(b, x, loMask);
+          Value hiShl32 = arith::ShLIOp::create(b, hi, k32);
+          // Use signed sub here so a transient negative is well-defined.
+          Value sub = arith::SubIOp::create(b, hiShl32, hi);
+          return arith::AddIOp::create(b, sub, lo);
+        };
+        Value r = solinasReduce(mul); // ≤ ~2^96
+        r = solinasReduce(r);         // ≤ ~2^64 + small
+        // Final correction: at most a couple of subtracts in i128, but one
+        // subtract is sufficient because after two Solinas rounds the
+        // magnitude is at most p + 2^32. A safe loop unroll: while (r >= p)
+        // r -= p, bounded by 2 iterations. Implement via two CmpI + Select.
+        for (int i = 0; i < 2; ++i) {
+          Value ge =
+              arith::CmpIOp::create(b, arith::CmpIPredicate::uge, r, cmodExt);
+          Value sub = arith::SubIOp::create(b, r, cmodExt);
+          r = arith::SelectOp::create(b, ge, sub, r);
+        }
+        rewriter.replaceOp(op, arith::TruncIOp::create(b, modulusType(op), r));
+        return success();
+      }
     }
 
     // Use standard multiplication and reduction
@@ -1224,7 +1271,8 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   // extui / constants stay coherent with the operand.
   auto shapedInput = dyn_cast<ShapedType>(input.getType());
   auto withShape = [&](Type elem) -> Type {
-    if (shapedInput) return shapedInput.cloneWith(std::nullopt, elem);
+    if (shapedInput)
+      return shapedInput.cloneWith(std::nullopt, elem);
     return elem;
   };
   Type intTy = withShape(intType);
@@ -1323,9 +1371,8 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   Value resultLow = zero;
   Value resultHigh = zero;
   for (unsigned i = 0; i < 2 * numLimbs; ++i) {
-    Value rAtI = numLimbs == 1
-                     ? resultVec[i]
-                     : arith::ExtUIOp::create(b, intTy, resultVec[i]);
+    Value rAtI = numLimbs == 1 ? resultVec[i]
+                               : arith::ExtUIOp::create(b, intTy, resultVec[i]);
     if (i < numLimbs) {
       auto shifted = arith::ShLIOp::create(
           b, rAtI,
@@ -1376,6 +1423,42 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
 
     Value cmod =
         arith::ConstantOp::create(b, modulusAttr(op, /*extended=*/true));
+
+    // Goldilocks Solinas reduction (mirrors ConvertMul's path). The default
+    // `arith.remui i128, i128` lowers to libgcc's `__umodti3`, which the CPU
+    // JIT runtime doesn't link. For p = 2^64 - 2^32 + 1 use the field's
+    // special form: 2^64 ≡ 2^32 - 1 (mod p), so for x = hi*2^64 + lo (each
+    // i64), x ≡ (hi << 32) - hi + lo (mod p). Two rounds + final correction.
+    APInt modulus = modType.getModulus().getValue();
+    bool isGoldilocks = modulus.getBitWidth() == 64 &&
+                        modulus == APInt(64, 0xFFFFFFFF00000001ULL);
+    if (isGoldilocks) {
+      // intExtType is i128 (or tensor<...x i128> when shaped). Use
+      // createScalarOrSplatConstant so constants get the right wrapper for
+      // both scalar and shaped paths.
+      Value k64 = createScalarOrSplatConstant(b, b.getLoc(), intExtType, 64);
+      Value k32 = createScalarOrSplatConstant(b, b.getLoc(), intExtType, 32);
+      Value loMask = createScalarOrSplatConstant(
+          b, b.getLoc(), intExtType, APInt::getLowBitsSet(/*numBits=*/128, 64));
+      auto solinasReduce = [&](Value x) -> Value {
+        Value hi = arith::ShRUIOp::create(b, x, k64);
+        Value lo = arith::AndIOp::create(b, x, loMask);
+        Value hiShl32 = arith::ShLIOp::create(b, hi, k32);
+        Value sub = arith::SubIOp::create(b, hiShl32, hi);
+        return arith::AddIOp::create(b, sub, lo);
+      };
+      Value r = solinasReduce(squared);
+      r = solinasReduce(r);
+      for (int i = 0; i < 2; ++i) {
+        Value ge = arith::CmpIOp::create(b, arith::CmpIPredicate::uge, r, cmod);
+        Value sub = arith::SubIOp::create(b, r, cmod);
+        r = arith::SelectOp::create(b, ge, sub, r);
+      }
+      rewriter.replaceOp(op, arith::TruncIOp::create(
+                                 b, modulusType(op, /*extended=*/false), r));
+      return success();
+    }
+
     Value remu = arith::RemUIOp::create(b, squared, cmod);
     Value trunc =
         arith::TruncIOp::create(b, modulusType(op, /*extended=*/false), remu);
