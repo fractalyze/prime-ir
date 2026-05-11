@@ -820,7 +820,6 @@ void EllipticCurveToField::runOnOperation() {
       // clang-format off
       ConstantOp,
       CmpOp,
-      ConvertPointTypeOp,
       IsZeroOp,
       MSMOp,
       PairingCheckOp
@@ -840,6 +839,32 @@ void EllipticCurveToField::runOnOperation() {
           return isa<ShapedType>(t) &&
                  isa<PointTypeInterface>(getElementTypeOrSelf(t));
         });
+      });
+  // ConvertPointTypeOp follows the same two-pass pattern EXCEPT for 1-D
+  // jacobian/xyzz → affine, which `rewriteTensorToAffine` handles directly
+  // via batch field.inverse on the Z coordinates (Montgomery's trick).
+  // Other shaped directions (affine → {jacobian,xyzz}, jacobian ↔ xyzz,
+  // and rank ≥ 2 jacobian/xyzz → affine which the 1-D batch path can't
+  // handle) pass through to convert-elementwise-to-linalg scalarization
+  // and a second EC pass.
+  target.addDynamicallyLegalOp<ConvertPointTypeOp>(
+      [](Operation *op) {
+        auto convertOp = cast<ConvertPointTypeOp>(op);
+        auto tensorType = dyn_cast<RankedTensorType>(
+            convertOp.getInput().getType());
+        if (!tensorType || tensorType.getRank() == 0) return false;
+        auto inputPti = cast<PointTypeInterface>(tensorType.getElementType());
+        auto outputPti = cast<PointTypeInterface>(
+            getElementTypeOrSelf(convertOp.getType()));
+        // The 1-D batch inverse path handles jacobian/xyzz → affine; let
+        // it fire (return false = illegal). Higher ranks have no batch
+        // path yet, so escape to scalarization.
+        if (tensorType.getRank() == 1 &&
+            outputPti.getPointKind() == PointKind::kAffine &&
+            inputPti.getPointKind() != PointKind::kAffine) {
+          return false;
+        }
+        return true;
       });
 
   target.addLegalDialect<
