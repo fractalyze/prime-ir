@@ -332,10 +332,33 @@ Operation *FieldDialect::materializeConstant(OpBuilder &builder,
   if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
     return builder.create<arith::ConstantOp>(loc, boolAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
+    auto elementType = getElementTypeOrSelf(type);
     if (!isa<PrimeFieldType, BinaryFieldType, ExtensionFieldType>(
-            getElementTypeOrSelf(type))) {
+            elementType)) {
       // This could be a folding result of CmpOp.
       return builder.create<arith::ConstantOp>(loc, denseElementsAttr);
+    }
+    // For ExtensionFieldType, parseFieldConstant requires the value attribute
+    // shape to be [type.getShape()..., efType.getAttrShape()...] for tensor
+    // types and [efType.getAttrShape()...] for scalar types. Reject
+    // pass-through attributes (e.g. from a bitcast fold) that don't match;
+    // the fold framework then reverts and leaves the bitcast in place for
+    // field-to-llvm to lower as a runtime memref reinterpret.
+    if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
+      SmallVector<int64_t> expectedShape;
+      if (auto shapedType = dyn_cast<ShapedType>(type)) {
+        if (!shapedType.hasRank()) {
+          return nullptr;
+        }
+        expectedShape.append(shapedType.getShape().begin(),
+                             shapedType.getShape().end());
+      }
+      auto towerDims = efType.getAttrShape();
+      expectedShape.append(towerDims.begin(), towerDims.end());
+      if (denseElementsAttr.getType().getShape() !=
+          ArrayRef<int64_t>(expectedShape)) {
+        return nullptr;
+      }
     }
   }
   return ConstantOp::materialize(builder, value, type, loc);
