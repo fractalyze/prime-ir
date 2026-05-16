@@ -117,7 +117,7 @@ OpFoldResult foldBitcast(BitcastOpT op,
   } else if (auto denseAttr =
                  dyn_cast_if_present<DenseIntElementsAttr>(input)) {
     auto outputShaped = dyn_cast<ShapedType>(outputType);
-    if (outputShaped &&
+    if (outputShaped && outputShaped.hasRank() &&
         denseAttr.getType().getShape() == outputShaped.getShape()) {
       return denseAttr;
     }

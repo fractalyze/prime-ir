@@ -1390,3 +1390,21 @@ func.func @test_bitcast_int_to_ef_no_fold() -> tensor<1x!EF2_17> {
   %1 = field.bitcast %0 : tensor<2xi32> -> tensor<1x!EF2_17>
   return %1 : tensor<1x!EF2_17>
 }
+
+// Element-wise EF where input and output shapes coincidentally agree:
+// `tensor<1xi64>` and `tensor<1x!EF2_17>` both have shape [1] and 64 bits
+// total. The template's shape gate matches, so the fold tries to materialize
+// `field.constant dense<...> : tensor<1x!EF2_17>` with attribute shape [1]
+// — but field.constant for EF requires attribute shape [1, 2] (tower dims
+// appended). FieldDialect::materializeConstant detects the mismatch and
+// returns nullptr, reverting the fold so the bitcast stays for field-to-llvm.
+// CHECK-LABEL: @test_bitcast_element_wise_int_to_ef_no_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_bitcast_element_wise_int_to_ef_no_fold() -> tensor<1x!EF2_17> {
+  // CHECK: %[[C:.*]] = arith.constant dense<42> : tensor<1xi64>
+  // CHECK: %[[BC:.*]] = field.bitcast %[[C]] : tensor<1xi64> -> [[T]]
+  // CHECK: return %[[BC]] : [[T]]
+  %0 = arith.constant dense<42> : tensor<1xi64>
+  %1 = field.bitcast %0 : tensor<1xi64> -> tensor<1x!EF2_17>
+  return %1 : tensor<1x!EF2_17>
+}
