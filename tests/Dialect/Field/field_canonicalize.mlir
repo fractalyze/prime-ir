@@ -1317,3 +1317,76 @@ func.func @test_add_of_to_mont_mixed_no_fold(%arg0: !PF17, %arg1: !PF17m) -> !PF
   %1 = field.add %0, %arg1 : !PF17m
   return %1 : !PF17m
 }
+
+//===----------------------------------------------------------------------===//
+// BitcastOp constant folding
+//===----------------------------------------------------------------------===//
+
+// Tensor: bitcast(arith.constant : tensor<2xi32>) -> tensor<2x!PF17> folds to
+// a single field.constant of the same raw bits.
+// CHECK-LABEL: @test_bitcast_from_int_to_pf_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_bitcast_from_int_to_pf_fold() -> tensor<2x!PF17> {
+  // CHECK: %[[C:.*]] = field.constant dense<[2, 3]> : [[T]]
+  // CHECK-NOT: field.bitcast
+  // CHECK: return %[[C]] : [[T]]
+  %0 = arith.constant dense<[2, 3]> : tensor<2xi32>
+  %1 = field.bitcast %0 : tensor<2xi32> -> tensor<2x!PF17>
+  return %1 : tensor<2x!PF17>
+}
+
+// Reverse direction: bitcast(field.constant : tensor<2x!PF17>) -> tensor<2xi32>
+// folds to an arith.constant with the same raw bits.
+// CHECK-LABEL: @test_bitcast_from_pf_to_int_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_bitcast_from_pf_to_int_fold() -> tensor<2xi32> {
+  // CHECK: %[[C:.*]] = arith.constant dense<[2, 3]> : [[T]]
+  // CHECK-NOT: field.bitcast
+  // CHECK: return %[[C]] : [[T]]
+  %0 = field.constant dense<[2, 3]> : tensor<2x!PF17>
+  %1 = field.bitcast %0 : tensor<2x!PF17> -> tensor<2xi32>
+  return %1 : tensor<2xi32>
+}
+
+// Scalar IntegerAttr operand: bitcast(arith.constant : i32) -> !PF17 folds to
+// a scalar field.constant.
+// CHECK-LABEL: @test_bitcast_scalar_int_to_pf_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_bitcast_scalar_int_to_pf_fold() -> !PF17 {
+  // CHECK: %[[C:.*]] = field.constant 5 : [[T]]
+  // CHECK-NOT: field.bitcast
+  // CHECK: return %[[C]] : [[T]]
+  %0 = arith.constant 5 : i32
+  %1 = field.bitcast %0 : i32 -> !PF17
+  return %1 : !PF17
+}
+
+// Mont-encoded target: the materialized field.constant stores the input
+// attribute's raw bits — no canonical->Mont conversion at fold time.
+// CHECK-LABEL: @test_bitcast_int_to_pf_mont_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_bitcast_int_to_pf_mont_fold() -> tensor<2x!PF17m> {
+  // CHECK: %[[C:.*]] = field.constant dense<[2, 3]> : [[T]]
+  // CHECK-NOT: field.bitcast
+  // CHECK: return %[[C]] : [[T]]
+  %0 = arith.constant dense<[2, 3]> : tensor<2xi32>
+  %1 = field.bitcast %0 : tensor<2xi32> -> tensor<2x!PF17m>
+  return %1 : tensor<2x!PF17m>
+}
+
+// Extension-field target: the constant fold MUST NOT fire because the
+// field.constant attribute for tensor<Mx!EF<DxBase>> is shaped [M, D, ...]
+// (tower dims appended), not the bitcast's flat [M*D*...]. A pass-through
+// fold would produce an ill-formed constant. The bitcast must remain so
+// field-to-llvm can lower it as a runtime memref reinterpret.
+!EF2_17 = !field.ef<2x!PF17, 11:i32>
+// CHECK-LABEL: @test_bitcast_int_to_ef_no_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_bitcast_int_to_ef_no_fold() -> tensor<1x!EF2_17> {
+  // CHECK: %[[C:.*]] = arith.constant dense<[2, 3]> : tensor<2xi32>
+  // CHECK: %[[BC:.*]] = field.bitcast %[[C]] : tensor<2xi32> -> [[T]]
+  // CHECK: return %[[BC]] : [[T]]
+  %0 = arith.constant dense<[2, 3]> : tensor<2xi32>
+  %1 = field.bitcast %0 : tensor<2xi32> -> tensor<1x!EF2_17>
+  return %1 : tensor<1x!EF2_17>
+}

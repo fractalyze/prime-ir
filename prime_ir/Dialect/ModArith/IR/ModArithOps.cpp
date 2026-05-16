@@ -333,18 +333,7 @@ Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
-  OpFoldResult result = foldBitcast(*this, adaptor);
-  if (result)
-    return result;
-
-  // Fold constant bitcast.
-  // Bitcasting a constant is a no-op since only the type interpretation
-  // changes, not the underlying data.
-  if (isa_and_present<IntegerAttr>(adaptor.getInput()) ||
-      isa_and_present<DenseIntElementsAttr>(adaptor.getInput())) {
-    return adaptor.getInput();
-  }
-  return {};
+  return foldBitcast(*this, adaptor);
 }
 
 LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
