@@ -17,6 +17,11 @@
 
 !PF17 = !field.pf<17:i32>
 !PF17m = !field.pf<17:i32, true>
+// `PF251` keeps `R mod p` distinct from 1 so the KnownBitToMont tests can
+// pin the `kMontOne` mask constant in the output unambiguously. For p=251
+// with i32 storage, `R mod p = 2^32 mod 251 = 123`.
+!PF251 = !field.pf<251:i32>
+!PF251m = !field.pf<251:i32, true>
 
 //===----------------------------------------------------------------------===//
 // Constant Folding
@@ -1316,6 +1321,149 @@ func.func @test_add_of_to_mont_mixed_no_fold(%arg0: !PF17, %arg1: !PF17m) -> !PF
   %0 = field.to_mont %arg0 : !PF17m
   %1 = field.add %0, %arg1 : !PF17m
   return %1 : !PF17m
+}
+
+//===----------------------------------------------------------------------===//
+// ToMont known-bit branchless fold
+//===----------------------------------------------------------------------===//
+
+// `to_mont(bitcast(andi %_, c1))` folds to a branchless `(-bit) & kMontOne`
+// integer chain followed by a plain `field.bitcast`, eliminating the
+// Montgomery multiplication for a value that is structurally `∈ {0, 1}`.
+// PF251 has `kMontOne = 123`, which the CHECK pins explicitly.
+// CHECK-LABEL: @test_to_mont_of_andi_one_folds
+// CHECK-SAME: (%[[ARG:.*]]: i32) -> [[TM:.*]] {
+func.func @test_to_mont_of_andi_one_folds(%arg0: i32) -> !PF251m {
+  // CHECK-DAG: %[[C0:.*]] = arith.constant 0 : i32
+  // CHECK-DAG: %[[C1:.*]] = arith.constant 1 : i32
+  // CHECK-DAG: %[[KMONT:.*]] = arith.constant 123 : i32
+  // CHECK: %[[BIT:.*]] = arith.andi %[[ARG]], %[[C1]] : i32
+  // CHECK: %[[NEG:.*]] = arith.subi %[[C0]], %[[BIT]] : i32
+  // CHECK: %[[MASK:.*]] = arith.andi %[[NEG]], %[[KMONT]] : i32
+  // CHECK: %[[RES:.*]] = field.bitcast %[[MASK]] : i32 -> [[TM]]
+  // CHECK-NOT: field.to_mont
+  // CHECK: return %[[RES]] : [[TM]]
+  %c1 = arith.constant 1 : i32
+  %bit = arith.andi %arg0, %c1 : i32
+  %fstd = field.bitcast %bit : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `arith.extui %_ : i1 -> iN` is structurally bounded to `{0, 1}` by the i1
+// source type, so the fold also fires through it (covers the `cmpi → extui`
+// chain at the bit boundary).
+// CHECK-LABEL: @test_to_mont_of_extui_from_i1_folds
+// CHECK-SAME: (%[[ARG:.*]]: i1) -> [[TM:.*]] {
+func.func @test_to_mont_of_extui_from_i1_folds(%arg0: i1) -> !PF251m {
+  // CHECK-DAG: %[[KMONT:.*]] = arith.constant 123 : i32
+  // CHECK: %[[BIT:.*]] = arith.extui %[[ARG]] : i1 to i32
+  // CHECK-NOT: field.to_mont
+  // CHECK: arith.subi
+  // CHECK: arith.andi {{.*}}, %[[KMONT]]
+  // CHECK: field.bitcast {{.*}} : i32 -> [[TM]]
+  %bit = arith.extui %arg0 : i1 to i32
+  %fstd = field.bitcast %bit : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// Recursive chain: `andi (_, 1) → extui i32 to i64 → trunci i64 to i32` is
+// still provably 1-bit. Mirrors the common widen-for-shift / narrow-for-store
+// pattern emitted by limb-decomposition lowerings.
+// CHECK-LABEL: @test_to_mont_recursive_known_bit_folds
+// CHECK-SAME: (%[[ARG:.*]]: i32) -> [[TM:.*]] {
+func.func @test_to_mont_recursive_known_bit_folds(%arg0: i32) -> !PF251m {
+  // CHECK-NOT: field.to_mont
+  // CHECK: field.bitcast {{.*}} : i32 -> [[TM]]
+  %c1 = arith.constant 1 : i32
+  %bit32 = arith.andi %arg0, %c1 : i32
+  %bit64 = arith.extui %bit32 : i32 to i64
+  %narrow = arith.trunci %bit64 : i64 to i32
+  %fstd = field.bitcast %narrow : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `andi` generalises beyond a literal-1 mask: when either operand is itself
+// provably 1-bit (here `extui` from `i1`), the AND result inherits the bound
+// and the fold fires.
+// CHECK-LABEL: @test_to_mont_of_andi_non_literal_mask_folds
+// CHECK-SAME: (%[[ARG:.*]]: i32, %[[MASK:.*]]: i1) -> [[TM:.*]] {
+func.func @test_to_mont_of_andi_non_literal_mask_folds(%arg0: i32, %mask: i1)
+    -> !PF251m {
+  // CHECK-NOT: field.to_mont
+  // CHECK: field.bitcast {{.*}} : i32 -> [[TM]]
+  %m32 = arith.extui %mask : i1 to i32
+  %bit = arith.andi %arg0, %m32 : i32
+  %fstd = field.bitcast %bit : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `xor(%bit, %c1)` is boolean NOT — `xor(0, 1) = 1`, `xor(1, 1) = 0`. The
+// result stays in `{0, 1}`, so the fold fires through it.
+// CHECK-LABEL: @test_to_mont_of_xori_boolean_not_folds
+// CHECK-SAME: (%[[ARG:.*]]: i1) -> [[TM:.*]] {
+func.func @test_to_mont_of_xori_boolean_not_folds(%arg0: i1) -> !PF251m {
+  // CHECK-NOT: field.to_mont
+  // CHECK: field.bitcast {{.*}} : i32 -> [[TM]]
+  %c1 = arith.constant 1 : i32
+  %bit = arith.extui %arg0 : i1 to i32
+  %neg = arith.xori %bit, %c1 : i32
+  %fstd = field.bitcast %neg : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `or(%bit, %bit)` aggregates two bit flags; result stays in `{0, 1}`.
+// CHECK-LABEL: @test_to_mont_of_ori_two_bits_folds
+// CHECK-SAME: (%[[A:.*]]: i1, %[[B:.*]]: i1) -> [[TM:.*]] {
+func.func @test_to_mont_of_ori_two_bits_folds(%a: i1, %b: i1) -> !PF251m {
+  // CHECK-NOT: field.to_mont
+  // CHECK: field.bitcast {{.*}} : i32 -> [[TM]]
+  %a32 = arith.extui %a : i1 to i32
+  %b32 = arith.extui %b : i1 to i32
+  %agg = arith.ori %a32, %b32 : i32
+  %fstd = field.bitcast %agg : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `or(opaque_i32, %c1)` — only one operand is bit; OR can introduce arbitrary
+// high bits from the opaque side. The fold must NOT fire (asymmetric vs AND).
+// CHECK-LABEL: @test_to_mont_of_ori_one_opaque_no_fold
+// CHECK-SAME: (%[[ARG:.*]]: i32) -> [[TM:.*]] {
+func.func @test_to_mont_of_ori_one_opaque_no_fold(%arg0: i32) -> !PF251m {
+  // CHECK: field.to_mont
+  %c1 = arith.constant 1 : i32
+  %v = arith.ori %arg0, %c1 : i32
+  %fstd = field.bitcast %v : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `andi %_, c2` is provably `∈ {0, 2}`, not `{0, 1}`. The fold must NOT fire.
+// CHECK-LABEL: @test_to_mont_of_andi_two_no_fold
+// CHECK-SAME: (%[[ARG:.*]]: i32) -> [[TM:.*]] {
+func.func @test_to_mont_of_andi_two_no_fold(%arg0: i32) -> !PF251m {
+  // CHECK: field.to_mont
+  %c2 = arith.constant 2 : i32
+  %v = arith.andi %arg0, %c2 : i32
+  %fstd = field.bitcast %v : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// Opaque block-arg int feeding `bitcast` has no known bit range — the fold
+// must leave the canonical `to_mont` in place.
+// CHECK-LABEL: @test_to_mont_of_opaque_int_no_fold
+// CHECK-SAME: (%[[ARG:.*]]: i32) -> [[TM:.*]] {
+func.func @test_to_mont_of_opaque_int_no_fold(%arg0: i32) -> !PF251m {
+  // CHECK: field.to_mont
+  %fstd = field.bitcast %arg0 : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
 }
 
 //===----------------------------------------------------------------------===//
