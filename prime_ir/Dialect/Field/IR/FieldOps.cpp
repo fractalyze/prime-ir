@@ -2119,6 +2119,19 @@ bool isProvablyOneBit(Value value, int depth) {
         return isProvablyOneBit(op.getLhs(), depth + 1) &&
                isProvablyOneBit(op.getRhs(), depth + 1);
       })
+      .Case<arith::SubIOp>([depth](arith::SubIOp op) {
+        // `subi(1, x) = 1 - x ∈ {0, 1}` iff `x ∈ {0, 1}`. The boolean-NOT
+        // idiom written as `c1 - bit` (vs `xor(bit, c1)`) survives MLIR
+        // canonicalize, so we cover it here. Other lhs constants do not
+        // fold: `subi(0, bit) ∈ {0, -1}` (negation), `subi(c, bit)` for
+        // c > 1 grows above 1. Asymmetric — only the lhs-is-1 form qualifies.
+        APInt cst;
+        if (!matchPattern(op.getLhs(), m_ConstantInt(&cst)))
+          return false;
+        if (!cst.isOne())
+          return false;
+        return isProvablyOneBit(op.getRhs(), depth + 1);
+      })
       .Case<arith::ExtUIOp>([depth](arith::ExtUIOp op) {
         return isProvablyOneBit(op.getIn(), depth + 1);
       })

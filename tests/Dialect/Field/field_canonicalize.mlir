@@ -1466,6 +1466,62 @@ func.func @test_to_mont_of_opaque_int_no_fold(%arg0: i32) -> !PF251m {
   return %fmnt : !PF251m
 }
 
+// `subi(%c1, %bit) = 1 - bit` is boolean NOT written in subtraction form —
+// `1 - 0 = 1`, `1 - 1 = 0`. MLIR canonicalize does not rewrite this to
+// `xori(%bit, %c1)`, so the bit-source recognizer must cover it directly.
+// CHECK-LABEL: @test_to_mont_of_subi_one_minus_bit_folds
+// CHECK-SAME: (%[[ARG:.*]]: i1) -> [[TM:.*]] {
+func.func @test_to_mont_of_subi_one_minus_bit_folds(%arg0: i1) -> !PF251m {
+  // CHECK-NOT: field.to_mont
+  // CHECK: field.bitcast {{.*}} : i32 -> [[TM]]
+  %c1 = arith.constant 1 : i32
+  %bit = arith.extui %arg0 : i1 to i32
+  %neg = arith.subi %c1, %bit : i32
+  %fstd = field.bitcast %neg : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `subi(%c2, %bit)` is `∈ {1, 2}`, not `{0, 1}`. The fold must NOT fire.
+// CHECK-LABEL: @test_to_mont_of_subi_two_minus_bit_no_fold
+// CHECK-SAME: (%[[ARG:.*]]: i1) -> [[TM:.*]] {
+func.func @test_to_mont_of_subi_two_minus_bit_no_fold(%arg0: i1) -> !PF251m {
+  // CHECK: field.to_mont
+  %c2 = arith.constant 2 : i32
+  %bit = arith.extui %arg0 : i1 to i32
+  %v = arith.subi %c2, %bit : i32
+  %fstd = field.bitcast %v : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `subi(%bit, %c1)` is `∈ {-1, 0}`, not `{0, 1}` — the lhs must be the
+// constant 1, not the rhs (asymmetric; mirrors the `xori(c1, bit)` /
+// `xori(bit, c1)` symmetry vs the `subi` non-symmetry).
+// CHECK-LABEL: @test_to_mont_of_subi_bit_minus_one_no_fold
+// CHECK-SAME: (%[[ARG:.*]]: i1) -> [[TM:.*]] {
+func.func @test_to_mont_of_subi_bit_minus_one_no_fold(%arg0: i1) -> !PF251m {
+  // CHECK: field.to_mont
+  %c1 = arith.constant 1 : i32
+  %bit = arith.extui %arg0 : i1 to i32
+  %v = arith.subi %bit, %c1 : i32
+  %fstd = field.bitcast %v : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
+// `subi(%c1, %opaque)` has unbounded range — the rhs must also be bit.
+// CHECK-LABEL: @test_to_mont_of_subi_one_minus_opaque_no_fold
+// CHECK-SAME: (%[[ARG:.*]]: i32) -> [[TM:.*]] {
+func.func @test_to_mont_of_subi_one_minus_opaque_no_fold(%arg0: i32) -> !PF251m {
+  // CHECK: field.to_mont
+  %c1 = arith.constant 1 : i32
+  %v = arith.subi %c1, %arg0 : i32
+  %fstd = field.bitcast %v : i32 -> !PF251
+  %fmnt = field.to_mont %fstd : !PF251m
+  return %fmnt : !PF251m
+}
+
 //===----------------------------------------------------------------------===//
 // BitcastOp constant folding
 //===----------------------------------------------------------------------===//
