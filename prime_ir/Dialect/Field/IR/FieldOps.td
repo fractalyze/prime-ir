@@ -211,6 +211,7 @@ def Field_ToMontOp : Field_Op<"to_mont", [TypesMatchWith<
   let results = (outs FieldLike:$output);
   let hasVerifier = 1;
   let hasFolder = 1;
+  let hasCanonicalizer = 1;
   let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 

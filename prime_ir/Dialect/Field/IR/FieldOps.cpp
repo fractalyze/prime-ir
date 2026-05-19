@@ -2045,6 +2045,140 @@ using FieldAddOfToMont = AdditiveOfToMontDistributivity<AddOp>;
 using FieldSubOfToMont = AdditiveOfToMontDistributivity<SubOp>;
 
 //===----------------------------------------------------------------------===//
+// ToMont known-bit branchless fold
+//===----------------------------------------------------------------------===//
+//
+// `to_mont` is a Montgomery encode — `x * R mod p` at the math level, lowered
+// to a Montgomery multiplication sequence. When `x` is structurally limited
+// to `{0, 1}` the result is also a 2-valued set: `0` stays `0`, and `1`
+// becomes `kMontOne = R mod p`. We can compute it as a branchless integer
+// mask:
+//
+//   to_mont(x) ==  (x == 0) ? 0 : kMontOne
+//              ==  (-x) & kMontOne     // since (-0) & kMontOne == 0 and
+//                                      //       (-1) & kMontOne == kMontOne
+//
+// Sources of provably-1-bit integers we accept:
+//   - any `i1`-typed value                       (type-derived bound)
+//   - `arith.constant 0` / `arith.constant 1`
+//   - `arith.andi` if EITHER operand is bit      (bit AND-mask is bounded by
+//                                                 the smaller of the two)
+//   - `arith.ori`  if BOTH operands are bit      (max(bit, bit) is bit)
+//   - `arith.xori` if BOTH operands are bit      (xor(bit, bit) ∈ {0, 1};
+//                                                 covers boolean NOT via
+//                                                 `xor(_, 1)`)
+//   - `arith.extui %_ : i1 to iN`                (type-derived bound)
+//   - `arith.trunci %known_bit : iN to iM`       (low-bit-preserving)
+//   - `arith.select %cond, %a, %b` where both arms are recognised
+//
+// The walk is bounded to keep the analysis O(1) per `to_mont`; the common
+// chains bottom out within 1-3 hops.
+
+constexpr int kMaxKnownBitDepth = 8;
+
+bool isProvablyOneBit(Value value, int depth) {
+  if (depth > kMaxKnownBitDepth)
+    return false;
+
+  // An i1-typed value is structurally limited to {0, 1}.
+  if (auto intType = dyn_cast<IntegerType>(value.getType())) {
+    if (intType.getWidth() == 1)
+      return true;
+  }
+
+  Operation *def = value.getDefiningOp();
+  if (!def)
+    return false;
+
+  return llvm::TypeSwitch<Operation *, bool>(def)
+      .Case<arith::ConstantOp>([](arith::ConstantOp op) {
+        auto attr = dyn_cast<IntegerAttr>(op.getValue());
+        if (!attr)
+          return false;
+        const APInt &v = attr.getValue();
+        return v.isZero() || v.isOne();
+      })
+      .Case<arith::AndIOp>([depth](arith::AndIOp op) {
+        // `andi` clamps each bit to the AND of its operands; whenever
+        // either operand is itself provably `∈ {0, 1}`, the AND result is
+        // bounded by it. Covers the `andi %_, 1` literal case as well as
+        // `andi(_, extui i1)`, chained masks, and so on.
+        return isProvablyOneBit(op.getLhs(), depth + 1) ||
+               isProvablyOneBit(op.getRhs(), depth + 1);
+      })
+      .Case<arith::OrIOp>([depth](arith::OrIOp op) {
+        // `or(x, y) ∈ {0, 1}` requires BOTH operands to be bit (max
+        // saturates at 1 only when neither side can introduce a higher
+        // bit). Covers bit-flag aggregation chains.
+        return isProvablyOneBit(op.getLhs(), depth + 1) &&
+               isProvablyOneBit(op.getRhs(), depth + 1);
+      })
+      .Case<arith::XOrIOp>([depth](arith::XOrIOp op) {
+        // `xor(x, y) ∈ {0, 1}` requires BOTH operands to be bit. The
+        // canonical use is boolean NOT via `xor(%bit, %c1)`.
+        return isProvablyOneBit(op.getLhs(), depth + 1) &&
+               isProvablyOneBit(op.getRhs(), depth + 1);
+      })
+      .Case<arith::ExtUIOp>([depth](arith::ExtUIOp op) {
+        return isProvablyOneBit(op.getIn(), depth + 1);
+      })
+      .Case<arith::TruncIOp>([depth](arith::TruncIOp op) {
+        return isProvablyOneBit(op.getIn(), depth + 1);
+      })
+      .Case<arith::SelectOp>([depth](arith::SelectOp op) {
+        return isProvablyOneBit(op.getTrueValue(), depth + 1) &&
+               isProvablyOneBit(op.getFalseValue(), depth + 1);
+      })
+      .Default([](Operation *) { return false; });
+}
+
+struct KnownBitToMont : public OpRewritePattern<ToMontOp> {
+  using OpRewritePattern<ToMontOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(ToMontOp op,
+                                PatternRewriter &rewriter) const override {
+    // Scalar Montgomery prime field only. Extension fields and tensor /
+    // vector shapes need a separate fold and fall through to the canonical
+    // Montgomery-multiply lowering.
+    auto montType = dyn_cast<PrimeFieldType>(op.getOutput().getType());
+    if (!montType || !montType.isMontgomery())
+      return failure();
+
+    auto bitcast = op.getInput().getDefiningOp<BitcastOp>();
+    if (!bitcast)
+      return failure();
+
+    Value intInput = bitcast.getInput();
+    auto intType = dyn_cast<IntegerType>(intInput.getType());
+    if (!intType)
+      return failure();
+
+    if (!isProvablyOneBit(intInput, /*depth=*/0))
+      return failure();
+
+    Location loc = op.getLoc();
+    unsigned width = intType.getWidth();
+    auto zero = rewriter.create<arith::ConstantOp>(
+        loc, intType, rewriter.getIntegerAttr(intType, 0));
+    auto neg = rewriter.create<arith::SubIOp>(loc, zero, intInput);
+
+    // `kMontOne` = the stored representation of `1` in Montgomery form
+    // (= `R mod p`). `PrimeFieldOperation::getOne()` on a Montgomery type
+    // returns this value byte-for-byte. The integer attr stores it raw so
+    // the masked integer can be reinterpreted as a field element with a
+    // plain bitcast — no further Montgomery encode needed.
+    auto montOnePfo = PrimeFieldOperation::fromUnchecked(0, montType).getOne();
+    APInt montOne = static_cast<APInt>(montOnePfo).zextOrTrunc(width);
+    auto montOneConst = rewriter.create<arith::ConstantOp>(
+        loc, intType, rewriter.getIntegerAttr(intType, montOne));
+    auto masked = rewriter.create<arith::AndIOp>(loc, neg, montOneConst);
+
+    rewriter.replaceOpWithNewOp<BitcastOp>(op, montType, masked);
+    return success();
+  }
+};
+
+//===----------------------------------------------------------------------===//
 // Mixed-type expansion patterns
 //===----------------------------------------------------------------------===//
 
@@ -2165,6 +2299,11 @@ void MulOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
   PRIME_IR_FIELD_MUL_PATTERN_LIST(PRIME_IR_MUL_PATTERN)
 #undef PRIME_IR_MUL_PATTERN
   patterns.add<ExpandMixedMulOp>(context);
+}
+
+void ToMontOp::getCanonicalizationPatterns(RewritePatternSet &patterns,
+                                           MLIRContext *context) {
+  patterns.add<KnownBitToMont>(context);
 }
 
 namespace {
