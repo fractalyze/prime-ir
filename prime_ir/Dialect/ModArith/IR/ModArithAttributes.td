@@ -51,6 +51,30 @@ def ModArith_MontgomeryAttr : ModArith_Attr<"Montgomery", "montgomery"> {
   let genStorageClass = 0;
 }
 
+def ModArith_BarrettAttr : ModArith_Attr<"Barrett", "barrett"> {
+  let summary = "An attribute with precomputed Barrett reduction parameters";
+  let description = [{
+    This attribute contains the precomputed Barrett reduction parameter
+    `mu = floor(2^(2k) / p)` where `k` is the modulus storage bit-width.
+    `mu` is used by Barrett's reduction step `q ≈ floor(x * mu / 2^(2k))`,
+    producing an approximate quotient for the modular reduction of `x` by `p`
+    when `x < p²`.
+  }];
+  let parameters = (ins "IntegerAttr":$modulus);
+  let extraClassDeclaration = [{
+    // Returns `mu = floor(2^(2k) / p)`, typed as i(2k) so it can be used
+    // directly as a constant in the extended-width multiplication.
+    IntegerAttr getMu() const;
+    // Returns the extended bit width `2 * k`, where `k` is the modulus
+    // storage bit width. This is the type width used for the wide product
+    // `a * b` and the wide intermediate `prod * mu` (after shifting right
+    // by `2k`).
+    unsigned getExtBitWidth() const;
+  }];
+  let assemblyFormat = "`<`$modulus`>`";
+  let genStorageClass = 0;
+}
+
 def ModArith_BYAttr : ModArith_Attr<"BY", "by"> {
   let summary = "An attribute with precomputed Bernstein-Yang inverse parameters";
   let description = [{

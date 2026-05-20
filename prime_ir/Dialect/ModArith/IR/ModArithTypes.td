@@ -82,6 +82,9 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
     BYAttr getBYAttr() const {
       return BYAttr::get(getContext(), getModulus());
     }
+    BarrettAttr getBarrettAttr() const {
+      return BarrettAttr::get(getContext(), getModulus());
+    }
     IntegerType getStorageType() const {
       APInt mod = getModulus().getValue();
       if (mod.isPowerOf2()) {
