@@ -1,0 +1,54 @@
+--- a/mlir/lib/Dialect/Affine/Analysis/Utils.cpp
++++ b/mlir/lib/Dialect/Affine/Analysis/Utils.cpp
+@@ -423,16 +423,24 @@
+ // otherwise.
+ bool MemRefDependenceGraph::hasEdge(unsigned srcId, unsigned dstId,
+                                     Value value) const {
+-  if (!outEdges.contains(srcId) || !inEdges.contains(dstId)) {
++  // Cache iterators to avoid re-hashing and (more importantly) to access the
++  // SmallVector<Edge> by reference. `DenseMap::lookup` returns the value by
++  // value; on the hot init path each call would otherwise copy the entire
++  // edge vector and immediately destroy the temporary.
++  auto outIt = outEdges.find(srcId);
++  if (outIt == outEdges.end())
+     return false;
+-  }
+-  bool hasOutEdge = llvm::any_of(outEdges.lookup(srcId), [=](const Edge &edge) {
++  auto inIt = inEdges.find(dstId);
++  if (inIt == inEdges.end())
++    return false;
++  bool hasOutEdge = llvm::any_of(outIt->second, [=](const Edge &edge) {
+     return edge.id == dstId && (!value || edge.value == value);
+   });
+-  bool hasInEdge = llvm::any_of(inEdges.lookup(dstId), [=](const Edge &edge) {
++  if (!hasOutEdge)
++    return false;
++  return llvm::any_of(inIt->second, [=](const Edge &edge) {
+     return edge.id == srcId && (!value || edge.value == value);
+   });
+-  return hasOutEdge && hasInEdge;
+ }
+ 
+ // Adds an edge from node 'srcId' to node 'dstId' for 'value'.
+@@ -494,14 +502,17 @@
+     if (idAndIndex.first == dstId)
+       return true;
+     // Pop and continue if node has no out edges, or if all out edges have
+-    // already been visited.
+-    if (!outEdges.contains(idAndIndex.first) ||
+-        idAndIndex.second == outEdges.lookup(idAndIndex.first).size()) {
++    // already been visited. Use find() so we access the SmallVector<Edge>
++    // by reference — `DenseMap::lookup` returns by value, which on this hot
++    // loop copies the edge vector (and frees the copy) on every iteration.
++    auto outEdgesIt = outEdges.find(idAndIndex.first);
++    if (outEdgesIt == outEdges.end() ||
++        idAndIndex.second == outEdgesIt->second.size()) {
+       worklist.pop_back();
+       continue;
+     }
+     // Get graph edge to traverse.
+-    const Edge edge = outEdges.lookup(idAndIndex.first)[idAndIndex.second];
++    const Edge edge = outEdgesIt->second[idAndIndex.second];
+     // Increment next output edge index for 'idAndIndex'.
+     ++idAndIndex.second;
+     // Add node at 'edge.id' to the worklist. We don't need to consider
