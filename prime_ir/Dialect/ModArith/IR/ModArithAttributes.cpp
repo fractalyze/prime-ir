@@ -138,6 +138,38 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
 
 } // namespace detail
 
+IntegerAttr BarrettAttr::getModulus() const { return getImpl()->modulus; }
+IntegerAttr BarrettAttr::getMu() const { return getImpl()->mu; }
+unsigned BarrettAttr::getExtBitWidth() const {
+  return 2 * getModulus().getType().getIntOrFloatBitWidth();
+}
+
+namespace detail {
+
+// static
+BarrettAttrStorage *
+BarrettAttrStorage::construct(AttributeStorageAllocator &allocator,
+                              KeyTy &&key) {
+  IntegerAttr modAttr = key;
+  APInt modulus = modAttr.getValue();
+  unsigned k = modulus.getBitWidth();
+  unsigned extW = 2 * k;
+
+  // mu = floor(2^(2k) / p). The numerator 2^(2k) does not fit in extW bits,
+  // so work in (extW + 1) bits and truncate. `mu` itself is at most k + 1
+  // bits, which fits in the extW-bit type used at the conversion site.
+  APInt twoToTwoK = APInt::getOneBitSet(extW + 1, extW);
+  APInt pExt = modulus.zext(extW + 1);
+  APInt muVal = twoToTwoK.udiv(pExt).trunc(extW);
+  auto extType = IntegerType::get(modAttr.getContext(), extW);
+  IntegerAttr muAttr = IntegerAttr::get(extType, muVal);
+
+  return new (allocator.allocate<BarrettAttrStorage>())
+      BarrettAttrStorage(std::move(modAttr), std::move(muAttr));
+}
+
+} // namespace detail
+
 IntegerAttr BYAttr::getModulus() const { return getImpl()->modulus; }
 IntegerAttr BYAttr::getDivsteps() const { return getImpl()->divsteps; }
 IntegerAttr BYAttr::getMInv() const { return getImpl()->mInv; }

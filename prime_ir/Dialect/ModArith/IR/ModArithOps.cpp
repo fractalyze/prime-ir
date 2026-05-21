@@ -642,6 +642,12 @@ void MontMulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
   setLazyRedcRange(getResult(), setResultRange);
 }
 
+void BarrettMulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                     SetIntRangeFn setResultRange) {
+  // Barrett reduction returns the canonical residue in [0, p).
+  setCanonicalRange(getResult(), setResultRange);
+}
+
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
   SmallVector<APInt> parsedInts;
   Type parsedType;

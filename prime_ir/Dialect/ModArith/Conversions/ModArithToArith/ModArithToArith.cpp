@@ -46,6 +46,7 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Inverter/BYInverter.h"
+#include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/BarrettReducer.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/MontReducer.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
@@ -1015,6 +1016,22 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
       return success();
     }
 
+    // Barrett path for wide non-Mersenne primes. The Mersenne branch below
+    // (p = 2^k - 1) keeps precedence — its shift+add is faster than Barrett.
+    // Below 64 bits, hardware urem is a single instruction and wins anyway.
+    // The `!modulus.isPowerOf2()` guard is defensive: the type parser rejects
+    // power-of-two moduli today, but if the dialect ever supports binary
+    // fields, their storage is `log2(p)` bits — narrower than
+    // `modulus.getBitWidth()` — which would break the reducer's
+    // `2k == extBitWidth` precondition.
+    if (modulus.getBitWidth() >= 64 && !(modulus + 1).isPowerOf2() &&
+        !modulus.isPowerOf2()) {
+      auto result =
+          b.create<BarrettMulOp>(op.getType(), op.getLhs(), op.getRhs());
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     auto cmodExt =
         b.create<arith::ConstantOp>(modulusAttr(op, /*extended=*/true));
     Type wideType = modulusType(op, /*extended=*/true);
@@ -1138,6 +1155,28 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
     }
 
     Value result = reducer.reduce(lo, hi, /*lazy=*/resBound >= 2);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct ConvertBarrettMul : public OpConversionPattern<BarrettMulOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(BarrettMulOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    ModArithType modType = getResultModArithType(op);
+    if (modType.isMontgomery()) {
+      return op->emitError(
+          "BarrettMulOp with Montgomery type is not supported in "
+          "ModArithToArith conversion");
+    }
+
+    BarrettReducer reducer(b, modType);
+    Value result = reducer.reduce(adaptor.getLhs(), adaptor.getRhs());
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -1492,6 +1531,7 @@ void ModArithToArith::runOnOperation() {
   // Patterns that don't use BoundMap.
   patterns.add<
       // clang-format off
+      ConvertBarrettMul,
       ConvertBitcast,
       ConvertConstant,
       ConvertFromMont,
