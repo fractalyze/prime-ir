@@ -28,6 +28,12 @@ LLVM_PATCHES = [
     # TODO(chokobole): Remove owning_memref_memset.patch once we upgrade the version of LLVM.
     # See https://github.com/llvm/llvm-project/pull/158200
     "@prime_ir//third_party/llvm-project:owning_memref_memset.patch",
+    # Add visited set to MemRefDependenceGraph::hasDependencePath. Without it
+    # the DFS path search enumerates every path through the MDG, which is
+    # exponential when many memref ops touch the same buffer (e.g. fully
+    # unrolled SIMD-like bodies). affine-loop-fusion hangs at 99% CPU on
+    # such inputs. Pending upstream submission.
+    "@prime_ir//third_party/llvm-project:affine_loop_fusion_visited_set.patch",
     # NOTE(chokobole): Patches for supporting PrimeIR Dialects.
     "@prime_ir//third_party/llvm-project:linalg_type_support.patch",
     "@prime_ir//third_party/llvm-project:tensor_type_support.patch",
