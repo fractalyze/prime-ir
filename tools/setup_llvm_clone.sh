@@ -52,6 +52,7 @@ shopt -s nullglob
 patches=(
     "$patch_dir/owning_memref_free.patch"
     "$patch_dir/owning_memref_memset.patch"
+    "$patch_dir/affine_loop_fusion_visited_set.patch"
     "$patch_dir/linalg_type_support.patch"
     "$patch_dir/tensor_type_support.patch"
     "$patch_dir/vector_type_support.patch"
