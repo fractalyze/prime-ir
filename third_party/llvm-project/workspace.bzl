@@ -34,6 +34,12 @@ LLVM_PATCHES = [
     # unrolled SIMD-like bodies). affine-loop-fusion hangs at 99% CPU on
     # such inputs. Pending upstream submission.
     "@prime_ir//third_party/llvm-project:affine_loop_fusion_visited_set.patch",
+    # Cache MemRefDependenceGraph edge lookups by-reference in
+    # hasDependencePath / hasEdge. With the visited-set fix above bounding
+    # the DFS, the next dominant cost on dense MDG inputs is DenseMap::lookup
+    # returning SmallVector<Edge> by value on every iteration. Pending
+    # upstream submission.
+    "@prime_ir//third_party/llvm-project:affine_dependence_path_lookup_cache.patch",
     # NOTE(chokobole): Patches for supporting PrimeIR Dialects.
     "@prime_ir//third_party/llvm-project:linalg_type_support.patch",
     "@prime_ir//third_party/llvm-project:tensor_type_support.patch",
