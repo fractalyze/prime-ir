@@ -48,7 +48,7 @@ fi
 
 patch_dir="$repo_root/third_party/llvm-project"
 shopt -s nullglob
-# List of patches in the order specified in workspace.bzl (lines 23-37)
+# List of patches in the order specified in workspace.bzl (LLVM_PATCHES)
 patches=(
     "$patch_dir/affine_loop_fusion_visited_set.patch"
     "$patch_dir/affine_dependence_path_lookup_cache.patch"
