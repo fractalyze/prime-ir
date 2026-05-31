@@ -216,3 +216,56 @@ func.func @test_batch_xyzz_to_affine(%arg0: tensor<4x!xyzzm>) -> tensor<4x!affin
   %result = elliptic_curve.convert_point_type %arg0 : tensor<4x!xyzzm> -> tensor<4x!affinem>
   return %result : tensor<4x!affinem>
 }
+
+// R2 (3x4) tensor convert_point_type. Previously only rank-1 tensors hit
+// the batch field.inverse path; higher ranks fell through to scalarized
+// per-lane inverse via convert-elementwise-to-linalg. Now any rank ≥ 1
+// rewrites to one batched field.inverse with the appropriate
+// tensor.generate shape.
+// CHECK-LABEL: @test_batch_jacobian_to_affine_r2
+func.func @test_batch_jacobian_to_affine_r2(%arg0: tensor<3x4x!jacobianm>)
+    -> tensor<3x4x!affinem> {
+  // CHECK-NOT: elliptic_curve.convert_point_type
+  // CHECK: tensor.generate
+  // CHECK: elliptic_curve.to_coords
+  // CHECK: field.inverse
+  // CHECK: tensor.generate
+  // CHECK: field.mul
+  // CHECK: elliptic_curve.from_coords
+  %result = elliptic_curve.convert_point_type %arg0
+      : tensor<3x4x!jacobianm> -> tensor<3x4x!affinem>
+  return %result : tensor<3x4x!affinem>
+}
+
+// R3 (2x3x4) — same shape generalization through one extra dim.
+// CHECK-LABEL: @test_batch_xyzz_to_affine_r3
+func.func @test_batch_xyzz_to_affine_r3(%arg0: tensor<2x3x4x!xyzzm>)
+    -> tensor<2x3x4x!affinem> {
+  // CHECK-NOT: elliptic_curve.convert_point_type
+  // CHECK: tensor.generate
+  // CHECK: elliptic_curve.to_coords
+  // CHECK: field.inverse
+  // CHECK: tensor.generate
+  // CHECK: field.mul
+  // CHECK: elliptic_curve.from_coords
+  %result = elliptic_curve.convert_point_type %arg0
+      : tensor<2x3x4x!xyzzm> -> tensor<2x3x4x!affinem>
+  return %result : tensor<2x3x4x!affinem>
+}
+
+// Shaped EC arithmetic (add of jacobian tensors) is marked *dynamically
+// legal* in the first pass so PointCodeGen — which is scalar-only and
+// unreachable-asserts on RankedTensorType — never sees it. The op
+// passes through to the next pipeline stage (convert-elementwise-to-linalg)
+// where it gets scalarized, and only the scalar form goes through this
+// pass on a re-run. The test verifies the pass leaves the shaped op
+// alone rather than crashing.
+// CHECK-LABEL: @test_shaped_add_left_for_next_pass
+func.func @test_shaped_add_left_for_next_pass(
+    %a: tensor<2x3x!jacobianm>, %b: tensor<2x3x!jacobianm>)
+    -> tensor<2x3x!jacobianm> {
+  // CHECK: elliptic_curve.add {{.*}} : tensor<2x3x!jacobian{{.*}}>, tensor<2x3x!jacobian{{.*}}>
+  %r = elliptic_curve.add %a, %b
+      : tensor<2x3x!jacobianm>, tensor<2x3x!jacobianm> -> tensor<2x3x!jacobianm>
+  return %r : tensor<2x3x!jacobianm>
+}
