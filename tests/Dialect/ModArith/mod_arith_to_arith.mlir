@@ -304,3 +304,65 @@ func.func @test_lower_sub_goldilocks(%lhs : !Gp, %rhs : !Gp) -> !Gp {
   %res = mod_arith.sub %lhs, %rhs : !Gp
   return %res : !Gp
 }
+
+// -----
+
+// Goldilocks p = 2^64 - 2^32 + 1 takes a 64-bit Solinas reduction path so the
+// CPU JIT runtime doesn't need libgcc's `__umodti3` (the generic
+// `arith.remui i128, i128` fallback is unsupported on that runtime). The whole
+// reduction stays in i64: the product comes from mului_extended and the
+// borrow/carry corrections come from addui_extended — no i128.
+!Goldilocks = !mod_arith.int<18446744069414584321 : i64>
+// The full reducer chain is asserted via SSA capture: product halves from
+// mului_extended, the lo - hi_hi borrow correction, the hi_lo·ε term, the
+// addui_extended carry correction, and the final canonicalizing subtract.
+// CHECK-LABEL: @test_lower_mul_goldilocks
+func.func @test_lower_mul_goldilocks(%lhs : !Goldilocks, %rhs : !Goldilocks)
+    -> !Goldilocks {
+  // CHECK-NOT: mod_arith.mul
+  // CHECK-NOT: arith.remui
+  // CHECK-NOT: i128
+  // CHECK:      %[[LO:.*]], %[[HI:.*]] = arith.mului_extended %{{.*}}, %{{.*}} : i64
+  // CHECK:      %[[HIHI:.*]] = arith.shrui %[[HI]], %{{.*}} : i64
+  // CHECK:      %[[HILO:.*]] = arith.andi %[[HI]], %{{.*}} : i64
+  // CHECK:      %[[BORROW:.*]] = arith.cmpi ult, %[[LO]], %[[HIHI]] : i64
+  // CHECK:      %[[T0RAW:.*]] = arith.subi %[[LO]], %[[HIHI]] : i64
+  // CHECK:      %[[T0COR:.*]] = arith.subi %[[T0RAW]], %{{.*}} : i64
+  // CHECK:      %[[T0:.*]] = arith.select %[[BORROW]], %[[T0COR]], %[[T0RAW]] : i64
+  // CHECK:      %[[T1:.*]] = arith.muli %[[HILO]], %{{.*}} : i64
+  // CHECK:      %[[SUM:.*]], %[[CARRY:.*]] = arith.addui_extended %[[T0]], %[[T1]] : i64, i1
+  // CHECK:      %[[T2COR:.*]] = arith.addi %[[SUM]], %{{.*}} : i64
+  // CHECK:      %[[T2:.*]] = arith.select %[[CARRY]], %[[T2COR]], %[[SUM]] : i64
+  // CHECK:      %[[GE:.*]] = arith.cmpi uge, %[[T2]], %{{.*}} : i64
+  // CHECK:      %[[PSUB:.*]] = arith.subi %[[T2]], %{{.*}} : i64
+  // CHECK:      %[[RES:.*]] = arith.select %[[GE]], %[[PSUB]], %[[T2]] : i64
+  // CHECK:      return %[[RES]] : i64
+  %res = mod_arith.mul %lhs, %rhs : !Goldilocks
+  return %res : !Goldilocks
+}
+
+// Squaring feeds the same reducer (via squareExtended's product halves), so it
+// must lower to the identical i64 chain.
+// CHECK-LABEL: @test_lower_square_goldilocks
+func.func @test_lower_square_goldilocks(%lhs : !Goldilocks) -> !Goldilocks {
+  // CHECK-NOT: mod_arith.square
+  // CHECK-NOT: arith.remui
+  // CHECK-NOT: i128
+  // CHECK:      %[[LO:.*]], %[[HI:.*]] = arith.mului_extended %{{.*}}, %{{.*}} : i64
+  // CHECK:      %[[HIHI:.*]] = arith.shrui %[[HI]], %{{.*}} : i64
+  // CHECK:      %[[HILO:.*]] = arith.andi %[[HI]], %{{.*}} : i64
+  // CHECK:      %[[BORROW:.*]] = arith.cmpi ult, %[[LO]], %[[HIHI]] : i64
+  // CHECK:      %[[T0RAW:.*]] = arith.subi %[[LO]], %[[HIHI]] : i64
+  // CHECK:      %[[T0COR:.*]] = arith.subi %[[T0RAW]], %{{.*}} : i64
+  // CHECK:      %[[T0:.*]] = arith.select %[[BORROW]], %[[T0COR]], %[[T0RAW]] : i64
+  // CHECK:      %[[T1:.*]] = arith.muli %[[HILO]], %{{.*}} : i64
+  // CHECK:      %[[SUM:.*]], %[[CARRY:.*]] = arith.addui_extended %[[T0]], %[[T1]] : i64, i1
+  // CHECK:      %[[T2COR:.*]] = arith.addi %[[SUM]], %{{.*}} : i64
+  // CHECK:      %[[T2:.*]] = arith.select %[[CARRY]], %[[T2COR]], %[[SUM]] : i64
+  // CHECK:      %[[GE:.*]] = arith.cmpi uge, %[[T2]], %{{.*}} : i64
+  // CHECK:      %[[PSUB:.*]] = arith.subi %[[T2]], %{{.*}} : i64
+  // CHECK:      %[[RES:.*]] = arith.select %[[GE]], %[[PSUB]], %[[T2]] : i64
+  // CHECK:      return %[[RES]] : i64
+  %res = mod_arith.square %lhs : !Goldilocks
+  return %res : !Goldilocks
+}
