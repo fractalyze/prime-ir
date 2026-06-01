@@ -333,3 +333,40 @@ func.func @test_lower_mul_self_bn254_tensor(%lhs : !BN254v) -> !BN254v {
   %res = mod_arith.mul %lhs, %lhs : !BN254v
   return %res : !BN254v
 }
+
+// -----
+
+// Goldilocks p = 2^64 - 2^32 + 1 takes a Solinas reduction path so the
+// CPU JIT runtime doesn't need libgcc's `__umodti3` (the generic
+// `arith.remui i128, i128` fallback is unsupported on that runtime).
+!Goldilocks = !mod_arith.int<18446744069414584321 : i64>
+// CHECK-LABEL: @test_lower_mul_goldilocks
+func.func @test_lower_mul_goldilocks(%lhs : !Goldilocks, %rhs : !Goldilocks)
+    -> !Goldilocks {
+  // CHECK-NOT: mod_arith.mul
+  // CHECK-NOT: arith.remui
+  // CHECK-DAG:  arith.constant 64
+  // CHECK-DAG:  arith.constant 32
+  // CHECK:      arith.shrui {{.*}}, %{{.*}} : i128
+  // CHECK:      arith.shli {{.*}}, %{{.*}} : i128
+  // CHECK:      arith.subi {{.*}} : i128
+  // CHECK:      arith.addi {{.*}} : i128
+  // CHECK:      arith.cmpi uge, {{.*}} : i128
+  // CHECK:      arith.select
+  %res = mod_arith.mul %lhs, %rhs : !Goldilocks
+  return %res : !Goldilocks
+}
+
+// CHECK-LABEL: @test_lower_square_goldilocks
+func.func @test_lower_square_goldilocks(%lhs : !Goldilocks) -> !Goldilocks {
+  // CHECK-NOT: mod_arith.square
+  // CHECK-NOT: arith.remui
+  // CHECK-DAG:  arith.constant 64
+  // CHECK-DAG:  arith.constant 32
+  // CHECK:      arith.shrui {{.*}}, %{{.*}} : i128
+  // CHECK:      arith.shli {{.*}}, %{{.*}} : i128
+  // CHECK:      arith.cmpi uge, {{.*}} : i128
+  // CHECK:      arith.select
+  %res = mod_arith.square %lhs : !Goldilocks
+  return %res : !Goldilocks
+}
