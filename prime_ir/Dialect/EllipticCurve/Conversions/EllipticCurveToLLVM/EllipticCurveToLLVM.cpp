@@ -136,6 +136,8 @@ struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
 void populateEllipticCurveToLLVMTypeConversion(
     LLVMTypeConverter &typeConverter) {
   typeConverter.addConversion(
+      [](field::PrimeFieldType type) { return type.getStorageType(); });
+  typeConverter.addConversion(
       [&](AffineType type) { return convertPointType(type, typeConverter); });
   typeConverter.addConversion(
       [&](JacobianType type) { return convertPointType(type, typeConverter); });
@@ -187,7 +189,8 @@ struct EllipticCurveToLLVM
 
 struct EllipticCurveToLLVMDialectInterface
     : public mlir::ConvertToLLVMPatternInterface {
-  using ConvertToLLVMPatternInterface::ConvertToLLVMPatternInterface;
+  explicit EllipticCurveToLLVMDialectInterface(mlir::Dialect *dialect)
+      : ConvertToLLVMPatternInterface(dialect) {}
 
   void loadDependentDialects(mlir::MLIRContext *context) const final {
     context->loadDialect<LLVM::LLVMDialect>();

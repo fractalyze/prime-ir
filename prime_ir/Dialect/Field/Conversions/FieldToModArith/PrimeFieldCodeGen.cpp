@@ -25,13 +25,13 @@ PrimeFieldCodeGen
 PrimeFieldCodeGen::operator+(const PrimeFieldCodeGen &other) const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   return PrimeFieldCodeGen(
-      b->create<mod_arith::AddOp>(value, other.value).getOutput());
+      mod_arith::AddOp::create(*b, value, other.value).getOutput());
 }
 
 PrimeFieldCodeGen &
 PrimeFieldCodeGen::operator+=(const PrimeFieldCodeGen &other) {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  value = b->create<mod_arith::AddOp>(value, other.value).getOutput();
+  value = mod_arith::AddOp::create(*b, value, other.value).getOutput();
   return *this;
 }
 
@@ -39,13 +39,13 @@ PrimeFieldCodeGen
 PrimeFieldCodeGen::operator-(const PrimeFieldCodeGen &other) const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   return PrimeFieldCodeGen(
-      b->create<mod_arith::SubOp>(value, other.value).getOutput());
+      mod_arith::SubOp::create(*b, value, other.value).getOutput());
 }
 
 PrimeFieldCodeGen &
 PrimeFieldCodeGen::operator-=(const PrimeFieldCodeGen &other) {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  value = b->create<mod_arith::SubOp>(value, other.value).getOutput();
+  value = mod_arith::SubOp::create(*b, value, other.value).getOutput();
   return *this;
 }
 
@@ -53,34 +53,34 @@ PrimeFieldCodeGen
 PrimeFieldCodeGen::operator*(const PrimeFieldCodeGen &other) const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   return PrimeFieldCodeGen(
-      b->create<mod_arith::MulOp>(value, other.value).getOutput());
+      mod_arith::MulOp::create(*b, value, other.value).getOutput());
 }
 
 PrimeFieldCodeGen &
 PrimeFieldCodeGen::operator*=(const PrimeFieldCodeGen &other) {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  value = b->create<mod_arith::MulOp>(value, other.value).getOutput();
+  value = mod_arith::MulOp::create(*b, value, other.value).getOutput();
   return *this;
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::operator-() const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return PrimeFieldCodeGen(b->create<mod_arith::NegateOp>(value).getOutput());
+  return PrimeFieldCodeGen(mod_arith::NegateOp::create(*b, value).getOutput());
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::Double() const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return PrimeFieldCodeGen(b->create<mod_arith::DoubleOp>(value).getOutput());
+  return PrimeFieldCodeGen(mod_arith::DoubleOp::create(*b, value).getOutput());
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::Square() const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return PrimeFieldCodeGen(b->create<mod_arith::SquareOp>(value).getOutput());
+  return PrimeFieldCodeGen(mod_arith::SquareOp::create(*b, value).getOutput());
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::Inverse() const {
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-  return PrimeFieldCodeGen(b->create<mod_arith::InverseOp>(value).getOutput());
+  return PrimeFieldCodeGen(mod_arith::InverseOp::create(*b, value).getOutput());
 }
 
 PrimeFieldCodeGen PrimeFieldCodeGen::CreateConst(int64_t constant) const {
@@ -88,7 +88,7 @@ PrimeFieldCodeGen PrimeFieldCodeGen::CreateConst(int64_t constant) const {
   mod_arith::ModArithOperation op(
       constant, cast<mod_arith::ModArithType>(value.getType()));
   return PrimeFieldCodeGen(
-      b->create<mod_arith::ConstantOp>(value.getType(), op.getIntegerAttr())
+      mod_arith::ConstantOp::create(*b, value.getType(), op.getIntegerAttr())
           .getOutput());
 }
 
@@ -99,9 +99,9 @@ PrimeFieldCodeGen PrimeFieldCodeGen::CreateRationalConst(int64_t num,
   mod_arith::ModArithOperation result =
       mod_arith::ModArithOperation(num, modArithType) /
       mod_arith::ModArithOperation(denom, modArithType);
-  return PrimeFieldCodeGen(
-      b->create<mod_arith::ConstantOp>(value.getType(), result.getIntegerAttr())
-          .getOutput());
+  return PrimeFieldCodeGen(mod_arith::ConstantOp::create(
+                               *b, value.getType(), result.getIntegerAttr())
+                               .getOutput());
 }
 
 } // namespace mlir::prime_ir::field

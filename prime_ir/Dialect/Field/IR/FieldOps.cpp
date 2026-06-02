@@ -318,25 +318,25 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
       auto tensorType =
           RankedTensorType::get(efType.getAttrShape(), storageType);
       auto scalarAttr = DenseIntElementsAttr::get(tensorType, coeffs);
-      return builder.create<ConstantOp>(loc, type, scalarAttr);
+      return ConstantOp::create(builder, loc, type, scalarAttr);
     }
-    return builder.create<ConstantOp>(loc, type, intAttr);
+    return ConstantOp::create(builder, loc, type, intAttr);
   }
-  return builder.create<ConstantOp>(loc, type,
-                                    cast<DenseIntElementsAttr>(value));
+  return ConstantOp::create(builder, loc, type,
+                            cast<DenseIntElementsAttr>(value));
 }
 
 Operation *FieldDialect::materializeConstant(OpBuilder &builder,
                                              Attribute value, Type type,
                                              Location loc) {
   if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
-    return builder.create<arith::ConstantOp>(loc, boolAttr);
+    return arith::ConstantOp::create(builder, loc, boolAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
     auto elementType = getElementTypeOrSelf(type);
     if (!isa<PrimeFieldType, BinaryFieldType, ExtensionFieldType>(
             elementType)) {
       // This could be a folding result of CmpOp.
-      return builder.create<arith::ConstantOp>(loc, denseElementsAttr);
+      return arith::ConstantOp::create(builder, loc, denseElementsAttr);
     }
     // For ExtensionFieldType, parseFieldConstant requires the value attribute
     // shape to be [type.getShape()..., efType.getAttrShape()...] for tensor
@@ -1654,7 +1654,7 @@ namespace {
 LogicalResult
 inferBinaryOpReturnTypes(MLIRContext *context, std::optional<Location> location,
                          ValueRange operands, DictionaryAttr attributes,
-                         OpaqueProperties properties, RegionRange regions,
+                         PropertyRef properties, RegionRange regions,
                          SmallVectorImpl<Type> &inferredReturnTypes) {
   Type lhsType = operands[0].getType();
   Type rhsType = operands[1].getType();
@@ -1785,7 +1785,7 @@ ParseResult parseBinaryOp(OpAsmParser &parser, OperationState &result) {
 LogicalResult
 AddOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
-                        OpaqueProperties properties, RegionRange regions,
+                        PropertyRef properties, RegionRange regions,
                         SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferBinaryOpReturnTypes(context, location, operands, attributes,
                                   properties, regions, inferredReturnTypes);
@@ -1794,7 +1794,7 @@ AddOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
 LogicalResult
 SubOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
-                        OpaqueProperties properties, RegionRange regions,
+                        PropertyRef properties, RegionRange regions,
                         SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferBinaryOpReturnTypes(context, location, operands, attributes,
                                   properties, regions, inferredReturnTypes);
@@ -1803,7 +1803,7 @@ SubOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
 LogicalResult
 MulOp::inferReturnTypes(MLIRContext *context, std::optional<Location> location,
                         ValueRange operands, DictionaryAttr attributes,
-                        OpaqueProperties properties, RegionRange regions,
+                        PropertyRef properties, RegionRange regions,
                         SmallVectorImpl<Type> &inferredReturnTypes) {
   return inferBinaryOpReturnTypes(context, location, operands, attributes,
                                   properties, regions, inferredReturnTypes);
@@ -2034,8 +2034,8 @@ struct AdditiveOfToMontDistributivity : public OpRewritePattern<BinaryOp> {
     if (!lhsToMont->hasOneUse() && !rhsToMont->hasOneUse())
       return failure();
 
-    Value newBinary = rewriter.create<BinaryOp>(
-        op.getLoc(), lhsToMont.getInput(), rhsToMont.getInput());
+    Value newBinary = BinaryOp::create(
+        rewriter, op.getLoc(), lhsToMont.getInput(), rhsToMont.getInput());
     rewriter.replaceOpWithNewOp<ToMontOp>(op, op.getType(), newBinary);
     return success();
   }
@@ -2171,9 +2171,9 @@ struct KnownBitToMont : public OpRewritePattern<ToMontOp> {
 
     Location loc = op.getLoc();
     unsigned width = intType.getWidth();
-    auto zero = rewriter.create<arith::ConstantOp>(
-        loc, intType, rewriter.getIntegerAttr(intType, 0));
-    auto neg = rewriter.create<arith::SubIOp>(loc, zero, intInput);
+    auto zero = arith::ConstantOp::create(rewriter, loc, intType,
+                                          rewriter.getIntegerAttr(intType, 0));
+    auto neg = arith::SubIOp::create(rewriter, loc, zero, intInput);
 
     // `kMontOne` = the stored representation of `1` in Montgomery form
     // (= `R mod p`). `PrimeFieldOperation::getOne()` on a Montgomery type
@@ -2182,9 +2182,9 @@ struct KnownBitToMont : public OpRewritePattern<ToMontOp> {
     // plain bitcast — no further Montgomery encode needed.
     auto montOnePfo = PrimeFieldOperation::fromUnchecked(0, montType).getOne();
     APInt montOne = static_cast<APInt>(montOnePfo).zextOrTrunc(width);
-    auto montOneConst = rewriter.create<arith::ConstantOp>(
-        loc, intType, rewriter.getIntegerAttr(intType, montOne));
-    auto masked = rewriter.create<arith::AndIOp>(loc, neg, montOneConst);
+    auto montOneConst = arith::ConstantOp::create(
+        rewriter, loc, intType, rewriter.getIntegerAttr(intType, montOne));
+    auto masked = arith::AndIOp::create(rewriter, loc, neg, montOneConst);
 
     rewriter.replaceOpWithNewOp<BitcastOp>(op, montType, masked);
     return success();
@@ -2225,21 +2225,21 @@ struct ExpandMixedAdditiveOp : public OpRewritePattern<BinaryOp> {
 
     SmallVector<Type> coeffTypes(efType.getDegree(), efType.getBaseField());
     auto coeffsOp =
-        rewriter.create<ExtToCoeffsOp>(op.getLoc(), coeffTypes, extVal);
+        ExtToCoeffsOp::create(rewriter, op.getLoc(), coeffTypes, extVal);
     SmallVector<Value> newCoeffs(coeffsOp->getResults());
 
     // Apply the operation only on coeff[0].
     if (baseIsLhs && std::is_same_v<BinaryOp, SubOp>) {
       // base - ext: coeff[0] = base - coeff[0], negate others
       newCoeffs[0] =
-          rewriter.create<BinaryOp>(op.getLoc(), baseVal, newCoeffs[0]);
+          BinaryOp::create(rewriter, op.getLoc(), baseVal, newCoeffs[0]);
       for (size_t i = 1; i < newCoeffs.size(); ++i) {
-        newCoeffs[i] = rewriter.create<NegateOp>(op.getLoc(), newCoeffs[i]);
+        newCoeffs[i] = NegateOp::create(rewriter, op.getLoc(), newCoeffs[i]);
       }
     } else {
       // ext + base, ext - base, base + ext: only modify coeff[0]
       newCoeffs[0] =
-          rewriter.create<BinaryOp>(op.getLoc(), newCoeffs[0], baseVal);
+          BinaryOp::create(rewriter, op.getLoc(), newCoeffs[0], baseVal);
     }
 
     rewriter.replaceOpWithNewOp<ExtFromCoeffsOp>(op, efType, newCoeffs);
@@ -2275,10 +2275,10 @@ struct ExpandMixedMulOp : public OpRewritePattern<MulOp> {
 
     SmallVector<Type> coeffTypes(efType.getDegree(), efType.getBaseField());
     auto coeffsOp =
-        rewriter.create<ExtToCoeffsOp>(op.getLoc(), coeffTypes, extVal);
+        ExtToCoeffsOp::create(rewriter, op.getLoc(), coeffTypes, extVal);
     SmallVector<Value> newCoeffs;
     for (Value coeff : coeffsOp->getResults()) {
-      newCoeffs.push_back(rewriter.create<MulOp>(op.getLoc(), coeff, baseVal));
+      newCoeffs.push_back(MulOp::create(rewriter, op.getLoc(), coeff, baseVal));
     }
 
     rewriter.replaceOpWithNewOp<ExtFromCoeffsOp>(op, efType, newCoeffs);

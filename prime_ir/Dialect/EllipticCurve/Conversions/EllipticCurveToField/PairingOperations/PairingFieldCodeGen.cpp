@@ -94,7 +94,7 @@ PairingFpCodeGen PairingFp2CodeGen::NonResidue() const {
 PairingFp2CodeGen
 PairingFp2CodeGen::operator*(const PairingFp2CodeGen &o) const {
   return PairingFp2CodeGen(
-      getBuilder()->create<field::MulOp>(value, o.value).getOutput());
+      field::MulOp::create(*getBuilder(), value, o.value).getOutput());
 }
 
 PairingFp2CodeGen
@@ -106,12 +106,12 @@ PairingFp2CodeGen::operator*(const PairingFpCodeGen &scalar) const {
 
 PairingFp2CodeGen PairingFp2CodeGen::Square() const {
   return PairingFp2CodeGen(
-      getBuilder()->create<field::SquareOp>(value).getOutput());
+      field::SquareOp::create(*getBuilder(), value).getOutput());
 }
 
 PairingFp2CodeGen PairingFp2CodeGen::Inverse() const {
   return PairingFp2CodeGen(
-      getBuilder()->create<field::InverseOp>(value).getOutput());
+      field::InverseOp::create(*getBuilder(), value).getOutput());
 }
 
 PairingFp2CodeGen PairingFp2CodeGen::CreateConst(int64_t constant) const {
@@ -136,10 +136,10 @@ PairingFp2CodeGen PairingFp2CodeGen::Select(Value condition,
   auto aC = a.ToCoeffs();
   auto bC = b.ToCoeffs();
   auto *builder = getBuilder();
-  Value s0 = builder->create<mlir::arith::SelectOp>(condition, (Value)aC[0],
-                                                    (Value)bC[0]);
-  Value s1 = builder->create<mlir::arith::SelectOp>(condition, (Value)aC[1],
-                                                    (Value)bC[1]);
+  Value s0 = mlir::arith::SelectOp::create(*builder, condition, (Value)aC[0],
+                                           (Value)bC[0]);
+  Value s1 = mlir::arith::SelectOp::create(*builder, condition, (Value)aC[1],
+                                           (Value)bC[1]);
   auto &ctx = PairingCodeGenContext::GetInstance();
   return PairingFp2CodeGen(field::fromCoeffs(*builder, ctx.fp2Type, {s0, s1}));
 }
@@ -206,7 +206,7 @@ PairingFp2CodeGen PairingFp6CodeGen::NonResidue() const {
 PairingFp6CodeGen
 PairingFp6CodeGen::operator*(const PairingFp6CodeGen &o) const {
   return PairingFp6CodeGen(
-      getBuilder()->create<field::MulOp>(value, o.value).getOutput());
+      field::MulOp::create(*getBuilder(), value, o.value).getOutput());
 }
 
 PairingFp6CodeGen
@@ -218,12 +218,12 @@ PairingFp6CodeGen::operator*(const PairingFp2CodeGen &scalar) const {
 
 PairingFp6CodeGen PairingFp6CodeGen::Square() const {
   return PairingFp6CodeGen(
-      getBuilder()->create<field::SquareOp>(value).getOutput());
+      field::SquareOp::create(*getBuilder(), value).getOutput());
 }
 
 PairingFp6CodeGen PairingFp6CodeGen::Inverse() const {
   return PairingFp6CodeGen(
-      getBuilder()->create<field::InverseOp>(value).getOutput());
+      field::InverseOp::create(*getBuilder(), value).getOutput());
 }
 
 PairingFp6CodeGen PairingFp6CodeGen::CreateConst(int64_t constant) const {
@@ -326,7 +326,7 @@ PairingFp12CodeGen::CyclotomicPow(const zk_dtypes::BigInt<1> &exponent) const {
   assert(limb != 0 && "CyclotomicPow with zero exponent");
 
   Value expConst =
-      b->create<arith::ConstantOp>(b->getIntegerAttr(b->getI64Type(), limb));
+      arith::ConstantOp::create(*b, b->getIntegerAttr(b->getI64Type(), limb));
   Value identity = (Value)PairingFp12CodeGen::One();
 
   Value result = generateBitSerialLoop(
@@ -449,29 +449,30 @@ mlir::Value Traits::GetNafBit(mlir::Value iv) {
                                       std::end(BN254Config::kAteLoopCount));
   auto nafTensorType = mlir::RankedTensorType::get({kLoopSize}, b->getI8Type());
   auto nafAttr = mlir::DenseIntElementsAttr::get(nafTensorType, nafValues);
-  mlir::Value nafTensor = b->create<mlir::arith::ConstantOp>(nafAttr);
-  mlir::Value sizeMin2 = b->create<mlir::arith::ConstantIndexOp>(kLoopSize - 2);
+  mlir::Value nafTensor = mlir::arith::ConstantOp::create(*b, nafAttr);
+  mlir::Value sizeMin2 =
+      mlir::arith::ConstantIndexOp::create(*b, kLoopSize - 2);
 
   // NAF bit at index (kLoopSize - 2 - iv).
-  mlir::Value bitIdx = b->create<mlir::arith::SubIOp>(sizeMin2, iv);
-  return b->create<mlir::tensor::ExtractOp>(nafTensor,
-                                            mlir::ValueRange{bitIdx});
+  mlir::Value bitIdx = mlir::arith::SubIOp::create(*b, sizeMin2, iv);
+  return mlir::tensor::ExtractOp::create(*b, nafTensor,
+                                         mlir::ValueRange{bitIdx});
 }
 
 mlir::Value Traits::IsNafNonZero(mlir::Value nafBit) {
   auto *b = mlir::prime_ir::BuilderContext::GetInstance().Top();
   mlir::Value zeroI8 =
-      b->create<mlir::arith::ConstantOp>(b->getI8IntegerAttr(0));
-  return b->create<mlir::arith::CmpIOp>(mlir::arith::CmpIPredicate::ne, nafBit,
-                                        zeroI8);
+      mlir::arith::ConstantOp::create(*b, b->getI8IntegerAttr(0));
+  return mlir::arith::CmpIOp::create(*b, mlir::arith::CmpIPredicate::ne, nafBit,
+                                     zeroI8);
 }
 
 mlir::Value Traits::IsNafPositive(mlir::Value nafBit) {
   auto *b = mlir::prime_ir::BuilderContext::GetInstance().Top();
   mlir::Value zeroI8 =
-      b->create<mlir::arith::ConstantOp>(b->getI8IntegerAttr(0));
-  return b->create<mlir::arith::CmpIOp>(mlir::arith::CmpIPredicate::sgt, nafBit,
-                                        zeroI8);
+      mlir::arith::ConstantOp::create(*b, b->getI8IntegerAttr(0));
+  return mlir::arith::CmpIOp::create(*b, mlir::arith::CmpIPredicate::sgt,
+                                     nafBit, zeroI8);
 }
 
 } // namespace zk_dtypes

@@ -66,8 +66,8 @@ Value PairingOutliner::emitFp12MulCall(ImplicitLocOpBuilder &b, Value lhs,
       funcName, {fp12Type, fp12Type}, {fp12Type}, [&](func::FuncOp func) {
         OpBuilder builder(func.getContext());
         auto args = setupFunctionBody(func, builder);
-        Value result = builder.create<field::MulOp>(func.getLoc(), fp12Type,
-                                                    args[0], args[1]);
+        Value result = field::MulOp::create(builder, func.getLoc(), fp12Type,
+                                            args[0], args[1]);
         emitReturn(builder, func.getLoc(), result);
       });
 

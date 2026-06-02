@@ -66,8 +66,8 @@ TypedAttr extractFieldElementAttr(DenseIntElementsAttr denseAttr,
 Value createFieldZero(PatternRewriter &rewriter, Location loc,
                       Type elementType) {
   auto constantLike = cast<ConstantLikeInterface>(elementType);
-  return rewriter.create<ConstantOp>(loc, elementType,
-                                     constantLike.createConstantAttr(0));
+  return ConstantOp::create(rewriter, loc, elementType,
+                            constantLike.createConstantAttr(0));
 }
 
 // Pattern to fold linalg.matvec when the matrix operand is a field.constant.
@@ -113,8 +113,8 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
     // Extract vector elements
     SmallVector<Value> vecElements;
     for (int64_t j = 0; j < numCols; ++j) {
-      Value idx = rewriter.create<arith::ConstantIndexOp>(loc, j);
-      Value elem = rewriter.create<tensor::ExtractOp>(loc, vec, idx);
+      Value idx = arith::ConstantIndexOp::create(rewriter, loc, j);
+      Value elem = tensor::ExtractOp::create(rewriter, loc, vec, idx);
       vecElements.push_back(elem);
     }
 
@@ -142,15 +142,15 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
         } else {
           // Create constant for coefficient
           Value coeffVal =
-              rewriter.create<ConstantOp>(loc, elementType, coeffAttr);
-          term = rewriter.create<MulOp>(loc, coeffVal, vecElements[j]);
+              ConstantOp::create(rewriter, loc, elementType, coeffAttr);
+          term = MulOp::create(rewriter, loc, coeffVal, vecElements[j]);
         }
 
         if (!hasTerms) {
           sum = term;
           hasTerms = true;
         } else {
-          sum = rewriter.create<AddOp>(loc, sum, term);
+          sum = AddOp::create(rewriter, loc, sum, term);
         }
       }
 
@@ -164,8 +164,8 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
 
     // Build result tensor using tensor.from_elements
     auto resultType = cast<RankedTensorType>(output.getType());
-    Value result = rewriter.create<tensor::FromElementsOp>(loc, resultType,
-                                                           resultElements);
+    Value result = tensor::FromElementsOp::create(rewriter, loc, resultType,
+                                                  resultElements);
 
     rewriter.replaceOp(op, result);
     return success();
@@ -237,8 +237,8 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
         continue;
 
       // Extract variable vector element
-      Value idx = rewriter.create<arith::ConstantIndexOp>(loc, i);
-      Value varElem = rewriter.create<tensor::ExtractOp>(loc, varVec, idx);
+      Value idx = arith::ConstantIndexOp::create(rewriter, loc, i);
+      Value varElem = tensor::ExtractOp::create(rewriter, loc, varVec, idx);
 
       Value term;
       if (coeffOp.isOne()) {
@@ -247,15 +247,15 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
       } else {
         // Create constant for coefficient
         Value coeffVal =
-            rewriter.create<ConstantOp>(loc, elementType, coeffAttr);
-        term = rewriter.create<MulOp>(loc, coeffVal, varElem);
+            ConstantOp::create(rewriter, loc, elementType, coeffAttr);
+        term = MulOp::create(rewriter, loc, coeffVal, varElem);
       }
 
       if (!hasTerms) {
         sum = term;
         hasTerms = true;
       } else {
-        sum = rewriter.create<AddOp>(loc, sum, term);
+        sum = AddOp::create(rewriter, loc, sum, term);
       }
     }
 
@@ -267,7 +267,7 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
     // Wrap the scalar result in a 0-D tensor
     auto resultType = cast<RankedTensorType>(op.getOutputs()[0].getType());
     Value result =
-        rewriter.create<tensor::FromElementsOp>(loc, resultType, sum);
+        tensor::FromElementsOp::create(rewriter, loc, resultType, sum);
 
     rewriter.replaceOp(op, result);
     return success();
