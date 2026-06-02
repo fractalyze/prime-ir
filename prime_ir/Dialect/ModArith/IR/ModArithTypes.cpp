@@ -16,6 +16,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
+#include "prime_ir/IR/DenseElementBytes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::prime_ir::mod_arith {
@@ -31,7 +32,7 @@ void ModArithType::print(AsmPrinter &printer) const {
 llvm::TypeSize ModArithType::getTypeSizeInBits(
     mlir::DataLayout const &,
     llvm::ArrayRef<mlir::DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getStorageBitWidth());
+  return llvm::TypeSize::getFixed(getDenseElementBitSize());
 }
 
 uint64_t
@@ -84,5 +85,23 @@ ModArithType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
 
 ShapedType ModArithType::overrideShapedType(ShapedType type) const {
   return type.clone(getStorageType());
+}
+
+// DenseElementTypeInterface: a mod_arith element stores as a single
+// storage int, so `DenseElementsAttr<tensor<...x!mod_arith.int>>` round-trips
+// through the same scalar-int byte view the field types use.
+size_t ModArithType::getDenseElementBitSize() const {
+  return getStorageType().getWidth();
+}
+
+Attribute
+ModArithType::convertToAttribute(::llvm::ArrayRef<char> rawData) const {
+  return scalarIntConvertToAttribute(getStorageType(), rawData);
+}
+
+::llvm::LogicalResult ModArithType::convertFromAttribute(
+    Attribute attr, ::llvm::SmallVectorImpl<char> &result) const {
+  return scalarIntConvertFromAttribute(getStorageType().getWidth(), attr,
+                                       result);
 }
 } // namespace mlir::prime_ir::mod_arith

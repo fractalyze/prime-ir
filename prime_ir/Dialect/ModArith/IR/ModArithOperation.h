@@ -53,7 +53,7 @@ public:
     }
   }
   ModArithOperation(uint64_t value, ModArithType type)
-      : ModArithOperation(APInt(type.getStorageBitWidth(), value), type) {}
+      : ModArithOperation(APInt(type.getDenseElementBitSize(), value), type) {}
 
   static ModArithOperation fromUnchecked(const APInt &value,
                                          ModArithType type) {

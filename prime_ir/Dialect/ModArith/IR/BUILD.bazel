@@ -62,6 +62,7 @@ prime_ir_cc_library(
         ":dialect_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
+        "//prime_ir/IR:DenseElementBytes",
         "//prime_ir/Utils:APIntUtils",
         "//prime_ir/Utils:AssemblyFormatUtils",
         "//prime_ir/Utils:BitcastOpUtils",

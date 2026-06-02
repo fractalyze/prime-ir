@@ -48,3 +48,15 @@ prime_ir_cc_test(
         "@llvm-project//mlir:IR",
     ],
 )
+
+prime_ir_cc_test(
+    name = "ModArithDenseElementInterfaceTest",
+    srcs = ["ModArithDenseElementInterfaceTest.cpp"],
+    deps = [
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+    ],
+)
