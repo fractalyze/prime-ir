@@ -76,7 +76,7 @@ static bool shouldUseFieldAOTRuntime(Operation *op, Type fieldType,
   if (!efType)
     return false;
   unsigned degree = efType.getDegreeOverPrime();
-  unsigned primeBits = efType.getBasePrimeField().getStorageBitWidth();
+  unsigned primeBits = efType.getBasePrimeField().getDenseElementBitSize();
   if (degree < 2)
     return false;
   bool expensive = degree >= 4 || primeBits > 64;

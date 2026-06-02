@@ -161,7 +161,7 @@ field::ExtensionFieldType buildBN254Fp12Type(MLIRContext *ctx,
   // the type manually.
   auto fp6Type = buildBN254Fp6Type(ctx, isMontgomery);
   auto storageType = fp6Type.getBasePrimeField().getStorageType();
-  unsigned bitWidth = fp6Type.getBasePrimeField().getStorageBitWidth();
+  unsigned bitWidth = fp6Type.getBasePrimeField().getDenseElementBitSize();
 
   // Non-residue: v = (0, 1, 0) in Fp6 = (c₀, c₁, c₂) where cᵢ ∈ Fp2.
   // Flattened to 6 prime field values: [c₀₀, c₀₁, c₁₀, c₁₁, c₂₀, c₂₁]

@@ -308,13 +308,14 @@ ParseResult parseOptionalFieldConstant(OpAsmParser &parser,
   // caller's pre-existing error stays surfaced. On success, parseFieldConstant
   // emits no diagnostics, so the buffer is empty and dropping is a no-op.
   llvm::SmallVector<mlir::Diagnostic, 2> captured;
-  mlir::ScopedDiagnosticHandler scope(
-      parser.getContext(), [&](mlir::Diagnostic &diag) {
-        captured.emplace_back(std::move(diag));
-        return mlir::success();
-      });
+  mlir::ScopedDiagnosticHandler scope(parser.getContext(),
+                                      [&](mlir::Diagnostic &diag) {
+                                        captured.emplace_back(std::move(diag));
+                                        return mlir::success();
+                                      });
 
-  if (succeeded(parseFieldConstant(parser, result))) return success();
+  if (succeeded(parseFieldConstant(parser, result)))
+    return success();
 
   // Restore: rewind the token stream and roll back any attributes / result
   // types parseFieldConstant added before failing.
@@ -357,9 +358,10 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
     // its result type (round-trippable, no stranded scalar reaching
     // downstream type-converted consumers).
     if (auto shapedTy = dyn_cast<ShapedType>(type)) {
-      auto storageType = isa<PrimeFieldType>(elementType)
-                             ? cast<PrimeFieldType>(elementType).getStorageType()
-                             : cast<BinaryFieldType>(elementType).getStorageType();
+      auto storageType =
+          isa<PrimeFieldType>(elementType)
+              ? cast<PrimeFieldType>(elementType).getStorageType()
+              : cast<BinaryFieldType>(elementType).getStorageType();
       auto storageTensorTy = shapedTy.clone(storageType);
       auto splatAttr =
           DenseIntElementsAttr::get(storageTensorTy, intAttr.getValue());
@@ -655,7 +657,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     // Calculate bitwidth for each element type
     unsigned inputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      inputBitWidth = efType.getStorageBitWidth();
+      inputBitWidth = efType.getDenseElementBitSize();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(inputElementType)) {
       inputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -665,7 +667,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 
     unsigned outputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      outputBitWidth = efType.getStorageBitWidth();
+      outputBitWidth = efType.getDenseElementBitSize();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(outputElementType)) {
       outputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -738,12 +740,12 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   // Case 4: extension field <-> integer bitcast (same storage bitwidth)
   if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
     if (auto outputInt = dyn_cast<IntegerType>(outputElementType)) {
-      return inputEF.getStorageBitWidth() == outputInt.getWidth();
+      return inputEF.getDenseElementBitSize() == outputInt.getWidth();
     }
   }
   if (auto inputInt = dyn_cast<IntegerType>(inputElementType)) {
     if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      return inputInt.getWidth() == outputEF.getStorageBitWidth();
+      return inputInt.getWidth() == outputEF.getDenseElementBitSize();
     }
   }
 
@@ -793,7 +795,7 @@ LogicalResult BitcastOp::verify() {
 
     auto getElementBitWidth = [](Type t) -> unsigned {
       if (auto ef = dyn_cast<ExtensionFieldType>(t))
-        return ef.getStorageBitWidth();
+        return ef.getDenseElementBitSize();
       return getIntOrPrimeFieldBitWidth(t);
     };
 

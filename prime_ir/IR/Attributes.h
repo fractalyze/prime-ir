@@ -16,11 +16,21 @@ limitations under the License.
 #ifndef PRIME_IR_IR_ATTRIBUTES_H_
 #define PRIME_IR_IR_ATTRIBUTES_H_
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "prime_ir/IR/DenseElementBytes.h"
 
 namespace mlir::prime_ir {
 
 ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type);
+
+// Retype a field-typed DenseElementsAttr<tensor<...x!PF/!EF>> as the
+// equivalent storage-int-typed DenseElementsAttr (the form upstream fold
+// paths expect). Pass-through for DenseIntElementsAttr and non-field element
+// types. Splat caveat: tensor<Nx!EF> with degree>1 stores one EF element's
+// bytes; expanded to a full prime-coeff row so the storage-int view's
+// splat-vs-full size check passes.
+DenseElementsAttr maybeDemoteFieldDenseToStorageInt(DenseElementsAttr attr);
 
 } // namespace mlir::prime_ir
 

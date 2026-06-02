@@ -190,7 +190,7 @@ public:
     if constexpr (N == 4) {
       auto efType = cast<ExtensionFieldType>(value.getType());
       auto pfType = efType.getBasePrimeField();
-      unsigned limbNums = (pfType.getStorageBitWidth() + 63) / 64;
+      unsigned limbNums = (pfType.getDenseElementBitSize() + 63) / 64;
       return (limbNums > 1) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
                             : zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     }
@@ -201,7 +201,7 @@ public:
     if constexpr (N == 4) {
       auto efType = cast<ExtensionFieldType>(value.getType());
       auto pfType = efType.getBasePrimeField();
-      unsigned limbNums = (pfType.getStorageBitWidth() + 63) / 64;
+      unsigned limbNums = (pfType.getDenseElementBitSize() + 63) / 64;
       // kCustom saves 1 mul, 1 add, 2 doubles vs Karatsuba for quartic square.
       return (limbNums > 1) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
                             : zk_dtypes::ExtensionFieldMulAlgorithm::kCustom;

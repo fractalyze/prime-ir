@@ -19,6 +19,7 @@ limitations under the License.
 #include "mlir/IR/BuiltinTypes.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/IR/DenseElementBytes.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
@@ -113,104 +114,71 @@ ShapedType EdExtendedType::overrideShapedType(ShapedType type) const {
 }
 
 //===----------------------------------------------------------------------===//
-// DenseElementTypeInterface implementations
-//
-// EC points lay out as `numCoords × baseFieldStorageBits` in dense storage.
-// Without this interface, MLIR's `getDenseElementBitWidth` hits
-// `llvm_unreachable("unsupported element type")` when any pass touches a
-// DenseElementsAttr typed `tensor<...x!ec.point>` (e.g. via getValues, byte
-// width queries, canonicalize). In release builds the unreachable becomes
-// UB and manifests as heap corruption — observed as a "free(): invalid
-// pointer" SIGSEGV at process teardown after a GPU compile of a fused
-// scalar EC constant + broadcast.
+// DenseElementTypeInterface — required so
+// `DenseElementsAttr<tensor<...x!Point>>` can answer byte-width queries. A
+// point lays out as `numCoords × baseFieldStorageBits` little-endian. Missing
+// impl is UB in release builds.
 //===----------------------------------------------------------------------===//
 
 namespace {
-size_t pointDenseElementBitSize(unsigned numCoords, Type baseField) {
+
+unsigned baseFieldStorageBits(Type baseField) {
   if (auto pf = dyn_cast<field::PrimeFieldType>(baseField))
-    return numCoords * pf.getStorageBitWidth();
+    return pf.getDenseElementBitSize();
   if (auto ef = dyn_cast<field::ExtensionFieldType>(baseField))
-    return numCoords * ef.getStorageBitWidth();
+    return ef.getDenseElementBitSize();
   if (auto bf = dyn_cast<field::BinaryFieldType>(baseField))
-    return numCoords * bf.getStorageBitWidth();
+    return bf.getDenseElementBitSize();
   llvm_unreachable("Unsupported EC base field type");
 }
-}  // namespace
 
-namespace {
-// Encode `rawData` (numCoords * baseFieldStorageBits bits, little-endian) as
-// a DenseIntElementsAttr typed `tensor<numCoords x i{baseStorageBits}>`. The
-// IR pipeline already encodes EC constants this way at JAX level (each
-// element is a per-coord storage int), so the round-trip via the textual
-// AsmPrinter is symmetric.
-Attribute pointConvertToAttribute(unsigned numCoords, Type baseField,
-                                  ::llvm::ArrayRef<char> rawData) {
-  unsigned baseBits = 0;
-  if (auto pf = dyn_cast<field::PrimeFieldType>(baseField))
-    baseBits = pf.getStorageBitWidth();
-  else if (auto ef = dyn_cast<field::ExtensionFieldType>(baseField))
-    baseBits = ef.getStorageBitWidth();
-  else if (auto bf = dyn_cast<field::BinaryFieldType>(baseField))
-    baseBits = bf.getStorageBitWidth();
-  if (baseBits == 0) return {};
-  unsigned baseBytes = (baseBits + 7) / 8;
-  if (rawData.size() != numCoords * baseBytes) return {};
-
-  ::llvm::SmallVector<APInt, 4> coordVals;
-  coordVals.reserve(numCoords);
-  for (unsigned c = 0; c < numCoords; ++c) {
-    unsigned numWords = (baseBits + 63) / 64;
-    ::llvm::SmallVector<uint64_t, 8> words(numWords, 0);
-    std::memcpy(words.data(), rawData.data() + c * baseBytes, baseBytes);
-    coordVals.emplace_back(baseBits, words);
-  }
-  auto intTy = IntegerType::get(baseField.getContext(), baseBits);
-  auto tensorTy = RankedTensorType::get({static_cast<int64_t>(numCoords)},
-                                         intTy);
-  return DenseIntElementsAttr::get(tensorTy, coordVals);
+size_t pointDenseElementBitSize(unsigned numCoords, Type baseField) {
+  return numCoords * baseFieldStorageBits(baseField);
 }
 
-::llvm::LogicalResult pointConvertFromAttribute(
-    unsigned numCoords, Type baseField, Attribute attr,
-    ::llvm::SmallVectorImpl<char>& result) {
-  unsigned baseBits = 0;
-  if (auto pf = dyn_cast<field::PrimeFieldType>(baseField))
-    baseBits = pf.getStorageBitWidth();
-  else if (auto ef = dyn_cast<field::ExtensionFieldType>(baseField))
-    baseBits = ef.getStorageBitWidth();
-  else if (auto bf = dyn_cast<field::BinaryFieldType>(baseField))
-    baseBits = bf.getStorageBitWidth();
-  if (baseBits == 0) return ::llvm::failure();
+Attribute pointConvertToAttribute(unsigned numCoords, Type baseField,
+                                  ::llvm::ArrayRef<char> rawData) {
+  unsigned baseBits = baseFieldStorageBits(baseField);
   unsigned baseBytes = (baseBits + 7) / 8;
+  if (rawData.size() != numCoords * baseBytes)
+    return {};
 
+  auto intTy = IntegerType::get(baseField.getContext(), baseBits);
+  auto tensorTy =
+      RankedTensorType::get({static_cast<int64_t>(numCoords)}, intTy);
+  return DenseIntElementsAttr::get(
+      tensorTy, prime_ir::coeffsFromRawBytes(
+                    DenseElementsAttr::getFromRawBuffer(tensorTy, rawData),
+                    baseBits, numCoords));
+}
+
+::llvm::LogicalResult
+pointConvertFromAttribute(unsigned numCoords, Type baseField, Attribute attr,
+                          ::llvm::SmallVectorImpl<char> &result) {
   auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr);
-  if (!denseAttr) return ::llvm::failure();
+  if (!denseAttr)
+    return ::llvm::failure();
   if (denseAttr.getNumElements() != static_cast<int64_t>(numCoords))
     return ::llvm::failure();
-
-  size_t prevSize = result.size();
-  result.resize(prevSize + numCoords * baseBytes);
-  unsigned c = 0;
-  for (const APInt& v : denseAttr.getValues<APInt>()) {
-    if (c >= numCoords) break;
-    std::memcpy(result.data() + prevSize + c * baseBytes,
-                v.getRawData(), baseBytes);
-    ++c;
+  unsigned baseBytes = (baseFieldStorageBits(baseField) + 7) / 8;
+  for (const APInt &v : denseAttr.getValues<APInt>()) {
+    auto bytes = prime_ir::apintLowBytes(v, baseBytes);
+    result.append(bytes.begin(), bytes.end());
   }
   return ::llvm::success();
 }
-}  // namespace
+} // namespace
 
 #define DEFINE_EC_DENSE_ELEMENT_TYPE_INTERFACE(TYPE, N)                        \
   size_t TYPE##Type::getDenseElementBitSize() const {                          \
     return pointDenseElementBitSize(N, getBaseFieldType());                    \
   }                                                                            \
-  Attribute TYPE##Type::convertToAttribute(                                    \
-      ::llvm::ArrayRef<char> rawData) const {                                  \
+  Attribute TYPE##Type::convertToAttribute(::llvm::ArrayRef<char> rawData)     \
+      const {                                                                  \
     return pointConvertToAttribute(N, getBaseFieldType(), rawData);            \
   }                                                                            \
   ::llvm::LogicalResult TYPE##Type::convertFromAttribute(                      \
-      Attribute attr, ::llvm::SmallVectorImpl<char>& result) const {           \
+      Attribute attr, ::llvm::SmallVectorImpl<char> &result) const {           \
     return pointConvertFromAttribute(N, getBaseFieldType(), attr, result);     \
   }
 

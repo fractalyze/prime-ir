@@ -40,4 +40,21 @@ ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type) {
   return type;
 }
 
+DenseElementsAttr maybeDemoteFieldDenseToStorageInt(DenseElementsAttr attr) {
+  if (isa<DenseIntElementsAttr>(attr))
+    return attr;
+  auto shaped = attr.getType();
+  Type elementType = shaped.getElementType();
+  if (!isa<field::PrimeFieldType, field::ExtensionFieldType>(elementType))
+    return attr;
+  auto viewType = maybeConvertPrimeIRToBuiltinType(shaped);
+  unsigned degree = field::getExtensionDegree(elementType);
+  if (attr.isSplat() && degree > 1) {
+    auto expanded =
+        replicateRawBytes(attr.getRawData(), shaped.getNumElements());
+    return DenseElementsAttr::getFromRawBuffer(viewType, expanded);
+  }
+  return DenseElementsAttr::getFromRawBuffer(viewType, attr.getRawData());
+}
+
 } // namespace mlir::prime_ir
