@@ -74,7 +74,7 @@ LogicalResult verifyPointCoordTypes(OpType op, Type pointType, Type coordType) {
                << "output must have the same montgomery form as the "
                   "base field of input";
     } else if (auto intType = dyn_cast<IntegerType>(coordType)) {
-      if (intType.getWidth() != pfType.getStorageBitWidth())
+      if (intType.getWidth() != pfType.getDenseElementBitSize())
         return op.emitError()
                << "output must have the same bitwidth as the base "
                   "field of input";

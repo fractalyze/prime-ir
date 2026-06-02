@@ -304,3 +304,32 @@ func.func @test_lower_sub_goldilocks(%lhs : !Gp, %rhs : !Gp) -> !Gp {
   %res = mod_arith.sub %lhs, %rhs : !Gp
   return %res : !Gp
 }
+
+// -----
+
+// BN254 Fr non-Mont: hits the multi-limb squareExtended path. Earlier the
+// helper hardcoded scalar limb types (i64), so a tensor operand emitted
+// `arith.trunci tensor<NxiW> to i64` (verifier reject). Fix derives limb
+// types from `dyn_cast<ShapedType>(input.getType())` so trunci/extui keep
+// matching shapes — verifies the rewritten body parses + verifies on a
+// tensor operand without crashing the pass.
+!BN254 = !mod_arith.int<21888242871839275222246405745257275088548364400416034343698204186575808495617 : i256>
+!BN254v = tensor<2x!BN254>
+
+// CHECK-LABEL: @test_lower_square_bn254_tensor
+func.func @test_lower_square_bn254_tensor(%lhs : !BN254v) -> !BN254v {
+  // CHECK-NOT: mod_arith.square
+  // CHECK-NOT: arith.trunci %{{.*}} : tensor<{{.*}}> to i64
+  %res = mod_arith.square %lhs : !BN254v
+  return %res : !BN254v
+}
+
+// MulSelfIsSquare canonicalizes mul(x,x) to square(x), so a tensor
+// mod_arith.mul is the more common path into the same lowering.
+// CHECK-LABEL: @test_lower_mul_self_bn254_tensor
+func.func @test_lower_mul_self_bn254_tensor(%lhs : !BN254v) -> !BN254v {
+  // CHECK-NOT: mod_arith.mul
+  // CHECK-NOT: arith.trunci %{{.*}} : tensor<{{.*}}> to i64
+  %res = mod_arith.mul %lhs, %lhs : !BN254v
+  return %res : !BN254v
+}

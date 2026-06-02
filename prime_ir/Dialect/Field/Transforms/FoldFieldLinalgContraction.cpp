@@ -41,23 +41,36 @@ unsigned getFieldDegree(Type elementType) {
 // Extract a scalar field element's attribute from a dense tensor attribute.
 // For tensor<MxN x PrimeField>: denseAttr has M*N elements
 // For tensor<MxN x ExtensionField<degree>>: denseAttr has M*N*degree elements
-TypedAttr extractFieldElementAttr(DenseIntElementsAttr denseAttr,
-                                  Type elementType, int64_t linearIndex) {
+TypedAttr extractFieldElementAttr(DenseElementsAttr denseAttr, Type elementType,
+                                  int64_t linearIndex) {
   unsigned degree = getFieldDegree(elementType);
-  auto values = denseAttr.getValues<APInt>();
+  PrimeFieldType pfType =
+      isa<PrimeFieldType>(elementType)
+          ? cast<PrimeFieldType>(elementType)
+          : cast<ExtensionFieldType>(elementType).getBasePrimeField();
+  unsigned primeBits = pfType.getDenseElementBitSize();
+  unsigned primeBytes = (primeBits + 7) / 8;
+  ArrayRef<char> raw = denseAttr.getRawData();
+  bool splat = denseAttr.isSplat();
+  unsigned available = raw.size() / primeBytes;
+  auto readCoeff = [&](unsigned idx) {
+    unsigned src = splat ? (idx % available) : idx;
+    unsigned numWords = (primeBits + 63) / 64;
+    SmallVector<uint64_t, 4> words(numWords, 0);
+    std::memcpy(words.data(), raw.data() + src * primeBytes, primeBytes);
+    return APInt(primeBits, words);
+  };
 
-  if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
-    return IntegerAttr::get(pfType.getStorageType(), values[linearIndex]);
+  if (isa<PrimeFieldType>(elementType)) {
+    return IntegerAttr::get(pfType.getStorageType(), readCoeff(linearIndex));
   }
-
   auto efType = cast<ExtensionFieldType>(elementType);
   SmallVector<APInt> coeffs;
-  for (unsigned d = 0; d < degree; ++d) {
-    coeffs.push_back(values[linearIndex * degree + d]);
-  }
-  auto tensorType =
-      RankedTensorType::get({static_cast<int64_t>(degree)},
-                            efType.getBasePrimeField().getStorageType());
+  for (unsigned d = 0; d < degree; ++d)
+    coeffs.push_back(readCoeff(linearIndex * degree + d));
+  auto tensorType = RankedTensorType::get({static_cast<int64_t>(degree)},
+                                          pfType.getStorageType());
+  (void)efType;
   return DenseIntElementsAttr::get(tensorType, coeffs);
 }
 
@@ -91,7 +104,7 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
       return failure();
 
     // Get the dense attribute from the constant
-    auto denseAttr = dyn_cast<DenseIntElementsAttr>(matrixConst.getValue());
+    auto denseAttr = dyn_cast<DenseElementsAttr>(matrixConst.getValue());
     if (!denseAttr)
       return failure();
 
@@ -204,12 +217,9 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
       return failure();
     }
 
-    // Get the dense attribute from the constant
-    auto denseAttr = dyn_cast<DenseIntElementsAttr>(constOp.getValue());
+    auto denseAttr = dyn_cast<DenseElementsAttr>(constOp.getValue());
     if (!denseAttr)
       return failure();
-
-    // Get vector shape
     auto vecType = cast<RankedTensorType>(constOp.getType());
     if (vecType.getRank() != 1)
       return failure();

@@ -16,8 +16,10 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/IR/DenseElementBytes.h"
 
 namespace mlir::prime_ir::elliptic_curve {
 
@@ -110,5 +112,80 @@ EdExtendedType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
 ShapedType EdExtendedType::overrideShapedType(ShapedType type) const {
   return type;
 }
+
+//===----------------------------------------------------------------------===//
+// DenseElementTypeInterface — required so
+// `DenseElementsAttr<tensor<...x!Point>>` can answer byte-width queries. A
+// point lays out as `numCoords × baseFieldStorageBits` little-endian. Missing
+// impl is UB in release builds.
+//===----------------------------------------------------------------------===//
+
+namespace {
+
+unsigned baseFieldStorageBits(Type baseField) {
+  if (auto pf = dyn_cast<field::PrimeFieldType>(baseField))
+    return pf.getDenseElementBitSize();
+  if (auto ef = dyn_cast<field::ExtensionFieldType>(baseField))
+    return ef.getDenseElementBitSize();
+  if (auto bf = dyn_cast<field::BinaryFieldType>(baseField))
+    return bf.getDenseElementBitSize();
+  llvm_unreachable("Unsupported EC base field type");
+}
+
+size_t pointDenseElementBitSize(unsigned numCoords, Type baseField) {
+  return numCoords * baseFieldStorageBits(baseField);
+}
+
+Attribute pointConvertToAttribute(unsigned numCoords, Type baseField,
+                                  ::llvm::ArrayRef<char> rawData) {
+  unsigned baseBits = baseFieldStorageBits(baseField);
+  unsigned baseBytes = (baseBits + 7) / 8;
+  if (rawData.size() != numCoords * baseBytes)
+    return {};
+
+  auto intTy = IntegerType::get(baseField.getContext(), baseBits);
+  auto tensorTy =
+      RankedTensorType::get({static_cast<int64_t>(numCoords)}, intTy);
+  return DenseIntElementsAttr::get(
+      tensorTy, prime_ir::coeffsFromRawBytes(
+                    DenseElementsAttr::getFromRawBuffer(tensorTy, rawData),
+                    baseBits, numCoords));
+}
+
+::llvm::LogicalResult
+pointConvertFromAttribute(unsigned numCoords, Type baseField, Attribute attr,
+                          ::llvm::SmallVectorImpl<char> &result) {
+  auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr);
+  if (!denseAttr)
+    return ::llvm::failure();
+  if (denseAttr.getNumElements() != static_cast<int64_t>(numCoords))
+    return ::llvm::failure();
+  unsigned baseBytes = (baseFieldStorageBits(baseField) + 7) / 8;
+  for (const APInt &v : denseAttr.getValues<APInt>()) {
+    auto bytes = prime_ir::apintLowBytes(v, baseBytes);
+    result.append(bytes.begin(), bytes.end());
+  }
+  return ::llvm::success();
+}
+} // namespace
+
+#define DEFINE_EC_DENSE_ELEMENT_TYPE_INTERFACE(TYPE, N)                        \
+  size_t TYPE##Type::getDenseElementBitSize() const {                          \
+    return pointDenseElementBitSize(N, getBaseFieldType());                    \
+  }                                                                            \
+  Attribute TYPE##Type::convertToAttribute(::llvm::ArrayRef<char> rawData)     \
+      const {                                                                  \
+    return pointConvertToAttribute(N, getBaseFieldType(), rawData);            \
+  }                                                                            \
+  ::llvm::LogicalResult TYPE##Type::convertFromAttribute(                      \
+      Attribute attr, ::llvm::SmallVectorImpl<char> &result) const {           \
+    return pointConvertFromAttribute(N, getBaseFieldType(), attr, result);     \
+  }
+
+DEFINE_EC_DENSE_ELEMENT_TYPE_INTERFACE(Affine, 2)
+DEFINE_EC_DENSE_ELEMENT_TYPE_INTERFACE(Jacobian, 3)
+DEFINE_EC_DENSE_ELEMENT_TYPE_INTERFACE(XYZZ, 4)
+
+#undef DEFINE_EC_DENSE_ELEMENT_TYPE_INTERFACE
 
 } // namespace mlir::prime_ir::elliptic_curve

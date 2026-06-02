@@ -61,7 +61,7 @@ struct BaseFieldBitWidth;
 template <>
 struct BaseFieldBitWidth<PrimeFieldOperation> {
   static unsigned get(ExtensionFieldType efType) {
-    return cast<PrimeFieldType>(efType.getBaseField()).getStorageBitWidth();
+    return cast<PrimeFieldType>(efType.getBaseField()).getDenseElementBitSize();
   }
 };
 
@@ -69,7 +69,7 @@ template <size_t M, typename InnerBaseT>
 struct BaseFieldBitWidth<ExtensionFieldOperation<M, InnerBaseT>> {
   static unsigned get(ExtensionFieldType efType) {
     // For tower extensions, get the bit width from the underlying prime field
-    return efType.getBasePrimeField().getStorageBitWidth();
+    return efType.getBasePrimeField().getDenseElementBitSize();
   }
 };
 // Helper to detect if a zk_dtypes field type is a prime field or extension
@@ -643,7 +643,7 @@ private:
     } else if constexpr (N == 2) {
       auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
       // Heuristic: custom squaring when n² > 2n + C
-      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      unsigned limbNums = (baseFieldType.getDenseElementBitSize() + 63) / 64;
       if (limbNums * N >= 2) {
         return zk_dtypes::ExtensionFieldMulAlgorithm::kCustom2;
       }
@@ -651,14 +651,14 @@ private:
     } else if constexpr (N == 3) {
       auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
       // Heuristic: custom squaring when n² > 4n
-      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      unsigned limbNums = (baseFieldType.getDenseElementBitSize() + 63) / 64;
       if (limbNums * N >= 4) {
         return zk_dtypes::ExtensionFieldMulAlgorithm::kCustom;
       }
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     } else if constexpr (N == 4) {
       auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
-      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      unsigned limbNums = (baseFieldType.getDenseElementBitSize() + 63) / 64;
       // kCustom saves 1 mul, 1 add, 2 doubles vs Karatsuba for quartic square.
       // ToomCook only for multi-limb fields.
       return (limbNums > 1) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
@@ -673,7 +673,7 @@ private:
       return zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     } else if constexpr (N == 4) {
       auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());
-      unsigned limbNums = (baseFieldType.getStorageBitWidth() + 63) / 64;
+      unsigned limbNums = (baseFieldType.getDenseElementBitSize() + 63) / 64;
       return (limbNums > 1) ? zk_dtypes::ExtensionFieldMulAlgorithm::kToomCook
                             : zk_dtypes::ExtensionFieldMulAlgorithm::kKaratsuba;
     } else {
@@ -684,7 +684,7 @@ private:
   BaseFieldT CreateConstBaseField(int64_t x) const {
     if constexpr (kIsTower) {
       auto baseEfType = cast<ExtensionFieldType>(efType.getBaseField());
-      APInt value(efType.getBasePrimeField().getStorageBitWidth(), x);
+      APInt value(efType.getBasePrimeField().getDenseElementBitSize(), x);
       return BaseFieldT::fromUnchecked(value, baseEfType);
     } else {
       auto baseFieldType = cast<PrimeFieldType>(efType.getBaseField());

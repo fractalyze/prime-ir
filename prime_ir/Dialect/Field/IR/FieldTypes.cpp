@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 
+#include <cstring>
+
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldOperation.h"
@@ -22,6 +24,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/TowerFieldConfig.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
+#include "prime_ir/IR/DenseElementBytes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::prime_ir::field {
@@ -39,7 +42,7 @@ bool isMontgomery(Type type) {
 unsigned getIntOrPrimeFieldBitWidth(Type type) {
   assert((llvm::isa<PrimeFieldType, IntegerType>(type)));
   if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
-    return pfType.getStorageBitWidth();
+    return pfType.getDenseElementBitSize();
   }
   return cast<IntegerType>(type).getWidth();
 }
@@ -145,7 +148,7 @@ void PrimeFieldType::print(AsmPrinter &printer) const {
 
 llvm::TypeSize PrimeFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getStorageBitWidth());
+  return llvm::TypeSize::getFixed(getDenseElementBitSize());
 }
 
 uint64_t PrimeFieldType::getABIAlignment(
@@ -174,6 +177,23 @@ PrimeFieldType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
 
 ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
   return type.clone(getStorageType());
+}
+
+// DenseElementTypeInterface: lets DenseElementsAttr store field-typed
+// elements. Storage is the underlying integer width; conversion to/from
+// Attribute uses IntegerAttr typed as the field's storage IntegerType.
+size_t PrimeFieldType::getDenseElementBitSize() const {
+  return getStorageType().getWidth();
+}
+
+Attribute
+PrimeFieldType::convertToAttribute(::llvm::ArrayRef<char> rawData) const {
+  return scalarIntConvertToAttribute(getStorageType(), rawData);
+}
+
+::llvm::LogicalResult PrimeFieldType::convertFromAttribute(
+    Attribute attr, ::llvm::SmallVectorImpl<char> &result) const {
+  return scalarIntConvertFromAttribute(getDenseElementBitSize(), attr, result);
 }
 
 //===----------------------------------------------------------------------===//
@@ -246,6 +266,18 @@ BinaryFieldType::createConstantAttrFromValues(ArrayRef<APInt> values) const {
 
 ShapedType BinaryFieldType::overrideShapedType(ShapedType type) const {
   return type.clone(getStorageType());
+}
+
+size_t BinaryFieldType::getDenseElementBitSize() const { return getBitWidth(); }
+
+Attribute
+BinaryFieldType::convertToAttribute(::llvm::ArrayRef<char> rawData) const {
+  return scalarIntConvertToAttribute(getStorageType(), rawData);
+}
+
+::llvm::LogicalResult BinaryFieldType::convertFromAttribute(
+    Attribute attr, ::llvm::SmallVectorImpl<char> &result) const {
+  return scalarIntConvertFromAttribute(getDenseElementBitSize(), attr, result);
 }
 
 //===----------------------------------------------------------------------===//
@@ -511,7 +543,7 @@ void ExtensionFieldType::print(AsmPrinter &printer) const {
 llvm::TypeSize ExtensionFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return llvm::TypeSize::getFixed(getDegreeOverPrime() *
-                                  getBasePrimeField().getStorageBitWidth());
+                                  getBasePrimeField().getDenseElementBitSize());
 }
 
 uint64_t ExtensionFieldType::getABIAlignment(
@@ -533,7 +565,7 @@ TypedAttr ExtensionFieldType::createConstantAttr(int64_t c) const {
   PrimeFieldType pfType = getBasePrimeField();
   PrimeFieldOperation pfOp(c, pfType); // Handles Montgomery conversion
   unsigned degreeOverPrime = getDegreeOverPrime();
-  unsigned bitWidth = pfType.getStorageBitWidth();
+  unsigned bitWidth = pfType.getDenseElementBitSize();
 
   SmallVector<APInt> coeffs(degreeOverPrime, APInt::getZero(bitWidth));
   coeffs[0] = static_cast<APInt>(pfOp);
@@ -547,6 +579,61 @@ ExtensionFieldType::createConstantAttrFromValues(ArrayRef<APInt> coeffs) const {
 
 ShapedType ExtensionFieldType::overrideShapedType(ShapedType type) const {
   return type;
+}
+
+size_t ExtensionFieldType::getDenseElementBitSize() const {
+  return getDegreeOverPrime() * getBasePrimeField().getDenseElementBitSize();
+}
+
+// An EF element serializes as its `degreeOverPrime` prime-field coefficients,
+// each a storage-int's worth of little-endian bytes. The (de)serialization is
+// symmetric with the `tensor<degree x iStorage>` cover the AsmPrinter walks.
+Attribute
+ExtensionFieldType::convertToAttribute(::llvm::ArrayRef<char> rawData) const {
+  PrimeFieldType pfType = getBasePrimeField();
+  unsigned primeBits = pfType.getDenseElementBitSize();
+  // Sub-byte prime storage isn't supported — would need bit-packing per coeff.
+  if (primeBits % 8 != 0)
+    return Attribute{};
+  unsigned primeBytes = primeBits / 8;
+  unsigned degree = getDegreeOverPrime();
+  if (rawData.size() != degree * primeBytes)
+    return Attribute{};
+
+  auto tensorTy = RankedTensorType::get({static_cast<int64_t>(degree)},
+                                        pfType.getStorageType());
+  return DenseElementsAttr::getFromRawBuffer(tensorTy, rawData);
+}
+
+::llvm::LogicalResult ExtensionFieldType::convertFromAttribute(
+    Attribute attr, ::llvm::SmallVectorImpl<char> &result) const {
+  PrimeFieldType pfType = getBasePrimeField();
+  unsigned primeBits = pfType.getDenseElementBitSize();
+  if (primeBits % 8 != 0)
+    return failure();
+  unsigned primeBytes = primeBits / 8;
+  unsigned degree = getDegreeOverPrime();
+
+  auto denseAttr = dyn_cast<DenseElementsAttr>(attr);
+  if (!denseAttr)
+    return failure();
+  if (denseAttr.getNumElements() != static_cast<int64_t>(degree))
+    return failure();
+
+  ArrayRef<char> raw = denseAttr.getRawData();
+  size_t want = static_cast<size_t>(degree) * primeBytes;
+  if (denseAttr.isSplat()) {
+    if (raw.size() != primeBytes)
+      return failure();
+    result.reserve(result.size() + want);
+    for (unsigned i = 0; i < degree; ++i)
+      result.append(raw.begin(), raw.end());
+  } else {
+    if (raw.size() != want)
+      return failure();
+    result.append(raw.begin(), raw.end());
+  }
+  return success();
 }
 
 unsigned ExtensionFieldType::getDegreeOverPrime() const {

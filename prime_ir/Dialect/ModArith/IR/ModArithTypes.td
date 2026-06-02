@@ -34,7 +34,8 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<ConstantLikeInterface>,
-  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>
+  DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "Integer type with modular arithmetic";
   let description = [{
@@ -95,13 +96,12 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
       // Prime field: use modulus type as-is
       return cast<IntegerType>(getModulus().getType());
     }
-    unsigned getStorageBitWidth() const {
-      return getStorageType().getWidth();
-    }
+    [[deprecated("use getDenseElementBitSize() instead")]]
+    unsigned getStorageBitWidth() const { return getDenseElementBitSize(); }
     // Returns floor((2^storageWidth - 1) / modulus).
     uint64_t getMaxBound() const {
       APInt mod = getModulus().getValue();
-      unsigned w = getStorageBitWidth();
+      unsigned w = getDenseElementBitSize();
       APInt maxVal = APInt::getMaxValue(w);
       APInt modW = mod.zext(w);
       return maxVal.udiv(modW).getZExtValue();

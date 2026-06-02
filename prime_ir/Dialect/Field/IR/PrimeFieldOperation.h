@@ -58,7 +58,7 @@ public:
       : op(value, convertPrimeFieldType(type)), type(type) {}
 
   static PrimeFieldOperation fromUnchecked(int64_t value, PrimeFieldType type) {
-    return fromUnchecked(APInt(type.getStorageBitWidth(), value), type);
+    return fromUnchecked(APInt(type.getDenseElementBitSize(), value), type);
   }
   static PrimeFieldOperation fromUnchecked(const APInt &value,
                                            PrimeFieldType type) {

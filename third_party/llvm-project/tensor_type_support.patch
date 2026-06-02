@@ -113,37 +113,39 @@ index d33b8d32a1d8..a8386aefa02b 100644
    return {};
  }
  
-@@ -1609,9 +1672,12 @@ LogicalResult GatherOp::verify() {
+@@ -1609,9 +1672,13 @@ LogicalResult GatherOp::verify() {
  }
  
  OpFoldResult GatherOp::fold(FoldAdaptor adaptor) {
 +  auto resultType = cast<TensorType>(
 +      prime_ir::maybeConvertPrimeIRToBuiltinType(
 +          cast<ShapedType>(getResult().getType())));
++  auto src = dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource());
++  if (src) src = prime_ir::maybeDemoteFieldDenseToStorageInt(src);
    if (OpFoldResult reshapedSource = reshapeConstantSource(
 -          llvm::dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
 -          getResult().getType()))
-+          dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
-+          resultType))
++          src, resultType))
      return reshapedSource;
    return {};
  }
-@@ -1850,9 +1916,12 @@ LogicalResult ReshapeOp::verify() {
+@@ -1850,9 +1917,13 @@ LogicalResult ReshapeOp::verify() {
  }
  
  OpFoldResult ReshapeOp::fold(FoldAdaptor adaptor) {
 +  auto resultType = cast<TensorType>(
 +      prime_ir::maybeConvertPrimeIRToBuiltinType(
 +          cast<ShapedType>(getResult().getType())));
++  auto src = dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource());
++  if (src) src = prime_ir::maybeDemoteFieldDenseToStorageInt(src);
    if (OpFoldResult reshapedSource = reshapeConstantSource(
 -          llvm::dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
 -          getResult().getType()))
-+          dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource()),
-+          resultType))
++          src, resultType))
      return reshapedSource;
  
    // If the producer of operand 'source' is another 'tensor.reshape' op, use the
-@@ -2311,11 +2380,29 @@ void CollapseShapeOp::getCanonicalizationPatterns(RewritePatternSet &results,
+@@ -2311,11 +2382,31 @@ void CollapseShapeOp::getCanonicalizationPatterns(RewritePatternSet &results,
  }
  
  OpFoldResult ExpandShapeOp::fold(FoldAdaptor adaptor) {
@@ -151,6 +153,7 @@ index d33b8d32a1d8..a8386aefa02b 100644
 +  // DenseElementsAttr has extra coefficient dimensions.
 +  if (auto elements =
 +          dyn_cast_or_null<DenseElementsAttr>(adaptor.getOperands().front())) {
++    elements = prime_ir::maybeDemoteFieldDenseToStorageInt(elements);
 +    auto resultType = prime_ir::maybeConvertPrimeIRToBuiltinType(
 +        cast<ShapedType>(getResult().getType()));
 +    if (resultType != cast<ShapedType>(getResult().getType()))
@@ -165,6 +168,7 @@ index d33b8d32a1d8..a8386aefa02b 100644
 +  // DenseElementsAttr has extra coefficient dimensions.
 +  if (auto elements =
 +          dyn_cast_or_null<DenseElementsAttr>(adaptor.getOperands().front())) {
++    elements = prime_ir::maybeDemoteFieldDenseToStorageInt(elements);
 +    auto resultType = prime_ir::maybeConvertPrimeIRToBuiltinType(
 +        cast<ShapedType>(getResult().getType()));
 +    if (resultType != cast<ShapedType>(getResult().getType()))
@@ -173,22 +177,24 @@ index d33b8d32a1d8..a8386aefa02b 100644
    return foldReshapeOp<CollapseShapeOp, ExpandShapeOp>(*this,
                                                         adaptor.getOperands());
  }
-@@ -2806,9 +2893,12 @@ static Value foldExtractAfterInsertSlice(ExtractSliceOp extractOp) {
+@@ -2806,9 +2897,14 @@ static Value foldExtractAfterInsertSlice(ExtractSliceOp extractOp) {
  }
  
  OpFoldResult ExtractSliceOp::fold(FoldAdaptor adaptor) {
 +  auto resultType = cast<TensorType>(
 +      prime_ir::maybeConvertPrimeIRToBuiltinType(
 +          cast<ShapedType>(getResult().getType())));
++  auto src = dyn_cast_if_present<DenseElementsAttr>(adaptor.getSource());
++  if (src) src = prime_ir::maybeDemoteFieldDenseToStorageInt(src);
++  auto splatSrc = dyn_cast_if_present<SplatElementsAttr>(src);
    if (OpFoldResult reshapedSource = reshapeConstantSource(
 -          llvm::dyn_cast_if_present<SplatElementsAttr>(adaptor.getSource()),
 -          getResult().getType()))
-+          dyn_cast_if_present<SplatElementsAttr>(adaptor.getSource()),
-+          resultType))
++          splatSrc, resultType))
      return reshapedSource;
    if (getSourceType() == getType() &&
        succeeded(foldIdentityOffsetSizeAndStrideOpInterface(*this, getType())))
-@@ -4096,7 +4186,8 @@ SplatOp::reifyResultShapes(OpBuilder &builder,
+@@ -4096,7 +4192,8 @@ SplatOp::reifyResultShapes(OpBuilder &builder,
  
  OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
    auto constOperand = adaptor.getInput();
@@ -198,7 +204,7 @@ index d33b8d32a1d8..a8386aefa02b 100644
      return {};
  
    // Do not fold if the splat is not statically shaped
-@@ -4105,7 +4196,19 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
+@@ -4105,7 +4202,19 @@ OpFoldResult SplatOp::fold(FoldAdaptor adaptor) {
  
    // SplatElementsAttr::get treats single value for second arg as being a
    // splat.

@@ -63,7 +63,8 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "Prime field element type";
   let description = [{
@@ -95,9 +96,8 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
       // Prime field: use modulus type as-is
       return cast<IntegerType>(getModulus().getType());
     }
-    unsigned getStorageBitWidth() const {
-      return getStorageType().getWidth();
-    }
+    [[deprecated("use getDenseElementBitSize() instead")]]
+    unsigned getStorageBitWidth() const { return getDenseElementBitSize(); }
   }];
   let hasCustomAssemblyFormat = 1;
 }
@@ -108,7 +108,8 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "Binary tower field element type";
   let description = [{
@@ -149,7 +150,8 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     }
 
     /// Returns the storage bit width.
-    unsigned getStorageBitWidth() const { return getBitWidth(); }
+    [[deprecated("use getDenseElementBitSize() instead")]]
+    unsigned getStorageBitWidth() const { return getDenseElementBitSize(); }
 
     /// Maximum supported tower level (GF(2^128)).
     static constexpr unsigned kMaxTowerLevel = 7;
@@ -167,7 +169,8 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "Extension field element type";
   let description = [{
@@ -204,9 +207,8 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     unsigned getTowerDepth() const;
 
     // Returns the total storage bit width (degreeOverPrime * prime field width).
-    unsigned getStorageBitWidth() const {
-      return getDegreeOverPrime() * getBasePrimeField().getStorageBitWidth();
-    }
+    [[deprecated("use getDenseElementBitSize() instead")]]
+    unsigned getStorageBitWidth() const { return getDenseElementBitSize(); }
 
     Type cloneWith(Type baseField, Attribute element) const;
 

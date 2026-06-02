@@ -44,8 +44,11 @@ def IsNegativeSeven : Constraint<CPred<"isNegativeOf($0, $1, 7)">>;
 def IsNegativeEight : Constraint<CPred<"isNegativeOf($0, $1, 8)">>;
 def IsNegativeNine : Constraint<CPred<"isNegativeOf($0, $1, 9)">>;
 
-// Constant materialization
-def GetAsConstant : NativeCodeCall<"ConstantOp::create($_builder, odsLoc, $0.getType(), cast<TypedAttr>($1))">;
+// Constant materialization. Routed through ConstantOp::materialize so a
+// scalar IntegerAttr lifted onto a shaped result type becomes a properly
+// shaped DenseElementsAttr splat — keeping the op's value attribute
+// consistent with its result type.
+def GetAsConstant : NativeCodeCall<"ConstantOp::materialize($_builder, $1, $0.getType(), odsLoc)">;
 def GetZeroAttr : NativeCodeCall<"cast<ConstantLikeInterface>(getElementTypeOrSelf($0.getType())).createConstantAttr(0)">;
 
 //===----------------------------------------------------------------------===//

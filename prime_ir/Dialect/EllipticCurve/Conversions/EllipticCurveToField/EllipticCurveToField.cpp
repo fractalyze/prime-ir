@@ -354,18 +354,22 @@ struct ConvertConvertPointType
   }
 
 private:
-  /// Lower tensor<N x !ec.jacobian> → tensor<N x !ec.affine> using batch
-  /// field.inverse on the Z coordinates.
+  /// Lower tensor<NxMx...x!ec.jacobian> → tensor<NxMx...x!ec.affine> using
+  /// batch field.inverse on the Z coordinates. Shape-agnostic — works for
+  /// any rank ≥ 1. The single field.inverse call delegates to
+  /// FieldToModArith::ConvertInverse, which internally collapses to 1-D
+  /// for the Montgomery prefix-product trick (3(N-1) muls + 1 inverse
+  /// instead of N inverses).
   ///
   /// Jacobian (X, Y, Z) → Affine (X / Z², Y / Z³):
-  ///   z_inv = field.inverse(Z)          ← batch on tensor<N x !F>
+  ///   z_inv = field.inverse(Z)          ← batch on tensor<...x !F>
   ///   z_inv² = z_inv * z_inv
   ///   z_inv³ = z_inv² * z_inv
   ///   x = X * z_inv²
   ///   y = Y * z_inv³
   ///
   /// XYZZ (X, Y, ZZ, ZZZ) → Affine (X / ZZ, Y / ZZZ):
-  ///   z_inv³ = field.inverse(ZZZ)       ← batch on tensor<N x !F>
+  ///   z_inv³ = field.inverse(ZZZ)       ← batch on tensor<...x !F>
   ///   per-element: z_inv = z_inv³ * ZZ, z_inv² = z_inv²
   ///   x = X * z_inv², y = Y * z_inv³
   LogicalResult rewriteTensorToAffine(ConvertPointTypeOp op, OpAdaptor adaptor,
@@ -373,26 +377,25 @@ private:
                                       RankedTensorType tensorType,
                                       PointTypeInterface inputPti,
                                       PointTypeInterface outputPti) const {
-    if (tensorType.getRank() != 1)
+    if (tensorType.getRank() == 0)
       return rewriter.notifyMatchFailure(
-          op, "batch convert_point_type requires 1-D tensor");
+          op, "scalar convert_point_type handled by scalar path");
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     Type fieldType = inputPti.getBaseFieldType();
-    int64_t n = tensorType.getDimSize(0); // may be kDynamic
-    bool isDynamic = n == ShapedType::kDynamic;
+    ArrayRef<int64_t> shape = tensorType.getShape();
 
-    // Get N as Value.
-    Value c0val = arith::ConstantIndexOp::create(b, 0);
-    Value dimNval =
-        isDynamic
-            ? tensor::DimOp::create(b, adaptor.getInput(), c0val).getResult()
-            : arith::ConstantIndexOp::create(b, n).getResult();
-    SmallVector<Value, 1> dynExtentsStorage;
-    if (isDynamic)
-      dynExtentsStorage.push_back(dimNval);
+    // Dynamic extents = one entry per dynamic dim, in dim order.
+    SmallVector<Value> dynExtentsStorage;
+    for (int64_t i = 0, e = tensorType.getRank(); i < e; ++i) {
+      if (tensorType.isDynamicDim(i)) {
+        Value dimIdx = arith::ConstantIndexOp::create(b, i);
+        dynExtentsStorage.push_back(
+            tensor::DimOp::create(b, adaptor.getInput(), dimIdx).getResult());
+      }
+    }
     ValueRange dynExtents = dynExtentsStorage;
-    auto colType = RankedTensorType::get({n}, fieldType);
+    auto colType = RankedTensorType::get(shape, fieldType);
 
     PointKind inKind = inputPti.getPointKind();
     if (inKind != PointKind::kJacobian && inKind != PointKind::kXYZZ) {
@@ -400,7 +403,9 @@ private:
           op, "unsupported input point kind for batch conversion");
     }
 
-    // Extract coordinate columns via tensor.generate + to_coords.
+    // Extract coordinate columns via tensor.generate + to_coords. The
+    // generate body receives a multi-index `ivs` that works for any rank,
+    // so the same lambda lowers 1-D, 2-D, and higher inputs unchanged.
     // No bitcast/expand_shape/extract_slice — avoids buffer aliasing
     // issues that cause use-after-free during bufferization.
     auto makeCol = [&](unsigned coordIdx) -> Value {
@@ -418,7 +423,8 @@ private:
 
     // Fused output: batch inverse → single tensor.generate that computes
     // affine coordinates and assembles the output point in one pass.
-    auto outputTensorType = RankedTensorType::get({n}, cast<Type>(outputPti));
+    auto outputTensorType =
+        RankedTensorType::get(shape, cast<Type>(outputPti));
     Value result;
     if (inKind == PointKind::kJacobian) {
       Value colZ = makeCol(2);
@@ -818,19 +824,52 @@ void EllipticCurveToField::runOnOperation() {
   ConversionTarget target(*context);
   target.addIllegalOp<
       // clang-format off
-      AddOp,
       ConstantOp,
       CmpOp,
-      ConvertPointTypeOp,
-      DoubleOp,
       IsZeroOp,
       MSMOp,
-      NegateOp,
-      PairingCheckOp,
-      ScalarMulOp,
-      SubOp
+      PairingCheckOp
       // clang-format on
       >();
+  // Elementwise EC ops on shaped tensors are intentionally legal in this
+  // pass: PointCodeGen is scalar-only (its constructor unreachables on
+  // RankedTensorType). The CPU pipeline runs `convert-elementwise-to-linalg`
+  // after this pass, which scalarizes shaped EC ops into `linalg.generic`
+  // bodies with scalar `elliptic_curve.* : !ec.point` ops; a SECOND
+  // EllipticCurveToField pass then handles them. Mirrors the
+  // FieldToModArith two-pass pattern for ExtensionField.
+  target.addDynamicallyLegalOp<
+      AddOp, DoubleOp, NegateOp, SubOp, ScalarMulOp>(
+      [](Operation *op) {
+        return llvm::any_of(op->getResultTypes(), [](Type t) {
+          return isa<ShapedType>(t) &&
+                 isa<PointTypeInterface>(getElementTypeOrSelf(t));
+        });
+      });
+  // ConvertPointTypeOp follows the two-pass pattern EXCEPT for any-rank
+  // jacobian/xyzz → affine, which `rewriteTensorToAffine` handles
+  // directly via batch field.inverse on the Z coordinates (Montgomery's
+  // trick). FieldToModArith::ConvertInverse collapses N-D to 1-D
+  // internally, so the same pattern lowers 1-D, 2-D, and higher inputs
+  // through the same prefix-product chain.
+  // Other shaped directions (affine → {jacobian,xyzz}, jacobian ↔ xyzz)
+  // pass through to convert-elementwise-to-linalg scalarization and a
+  // second EC pass.
+  target.addDynamicallyLegalOp<ConvertPointTypeOp>(
+      [](Operation *op) {
+        auto convertOp = cast<ConvertPointTypeOp>(op);
+        auto tensorType = dyn_cast<RankedTensorType>(
+            convertOp.getInput().getType());
+        if (!tensorType || tensorType.getRank() == 0) return false;
+        auto inputPti = cast<PointTypeInterface>(tensorType.getElementType());
+        auto outputPti = cast<PointTypeInterface>(
+            getElementTypeOrSelf(convertOp.getType()));
+        if (outputPti.getPointKind() == PointKind::kAffine &&
+            inputPti.getPointKind() != PointKind::kAffine) {
+          return false;
+        }
+        return true;
+      });
 
   target.addLegalDialect<
       // clang-format off
