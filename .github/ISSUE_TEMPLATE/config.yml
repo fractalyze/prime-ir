@@ -1,0 +1,9 @@
+# Controls the issue chooser experience. Disable blank issues so contributors
+# always pick a structured template — keeps downstream automation (/handle-issue,
+# milestone/project assignment) able to rely on the labels and required fields.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Discussion / open-ended question
+    url: https://github.com/fractalyze/prime-ir/discussions
+    about: For design questions, RFCs, or anything not actionable as a single task.

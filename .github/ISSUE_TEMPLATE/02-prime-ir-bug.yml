@@ -1,0 +1,69 @@
+name: "PrimeIR bug"
+description: |
+  A bug in PrimeIR itself — a dialect op verifier, a pass that miscompiles or
+  mis-folds, a bad lowering to LLVM, a crash, or a perf cliff, observed while
+  building or testing PrimeIR directly (not surfaced through a downstream
+  consumer — use the downstream-bug template for that).
+title: "fix(<area>): <symptom>"
+labels: ["area:prime-ir"]
+type: Bug
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Symptom
+      description: |
+        What you see — failed verifier, wrong constant fold, miscompiled
+        lowering, crash in a pass, perf cliff.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproducer
+      description: |
+        Minimum commands. Use `bazel test` / lit (`prime-opt`) invocations, not
+        built binary paths. Prefix file inputs with `$PWD`.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: diagnostic
+    attributes:
+      label: Captured diagnostic
+      description: |
+        IR before/after the failing pass (`prime-opt` dump), the verifier
+        error, a stack trace, or a flamegraph hotspot. Do not link to scratch
+        paths or home-directory artifacts the reviewer cannot open.
+
+  - type: input
+    id: parent
+    attributes:
+      label: Parent issue
+      description: |
+        Issue number or full URL of the tracking / parent issue this
+        work belongs to, if any. Same-repo form: `#1234`. Cross-repo
+        form: `https://github.com/<owner>/<repo>/issues/1234`. The
+        /workflow:create-issue skill registers the sub-issue link
+        automatically when filed via the CLI.
+      placeholder: "#1234 or https://github.com/<owner>/<repo>/issues/1234"
+
+  - type: input
+    id: milestone
+    attributes:
+      label: Milestone
+      description: |
+        Existing milestone name to attach this issue to. The
+        /workflow:create-issue skill checks the milestone exists
+        before applying it.
+      placeholder: "e.g. <area>: <feature> v<n>"
+
+  - type: textarea
+    id: knowledge
+    attributes:
+      label: Relevant knowledge
+      description: |
+        Wiki links to related prior bugs, design notes, personal memo excerpts.
+        Strip session IDs and absolute home paths.

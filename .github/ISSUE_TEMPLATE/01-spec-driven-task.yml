@@ -1,0 +1,119 @@
+name: "Spec-driven task"
+description: |
+  Issue created from a `/spec-driven-development` session. Bundles the spec,
+  the multi-PR plan, and relevant local knowledge so any agent or human can
+  pick the work up.
+title: "<type>(<area>): <one-line summary>"
+labels: ["area:spec-driven"]
+type: Task
+body:
+  - type: dropdown
+    id: type
+    attributes:
+      label: Type
+      description: Conventional-commit type. Drives version bump policy on merge.
+      options:
+        - feat
+        - fix
+        - perf
+        - refactor
+        - test
+        - chore
+        - ci
+        - docs
+        - build
+        - style
+    validations:
+      required: true
+
+  - type: input
+    id: area
+    attributes:
+      label: Area
+      description: Conventional-commit scope. Examples — `dialect`, `pass`, `codegen`, `lowering`.
+      placeholder: pass
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Why does this exist? What problem does it solve, what motivated the spec?
+    validations:
+      required: true
+
+  - type: textarea
+    id: spec
+    attributes:
+      label: Spec
+      description: |
+        Full spec body from `/spec-driven-development`. Behavior, acceptance
+        criteria, non-goals. Inline the content here — don't link to a local
+        file that the reviewer cannot open.
+    validations:
+      required: true
+
+  - type: textarea
+    id: plan
+    attributes:
+      label: Plan
+      description: |
+        Checkbox task list, one row per planned PR. GitHub renders the
+        completion ratio in the issue header.
+      value: |
+        - [ ] PR1: …
+        - [ ] PR2: …
+    validations:
+      required: true
+
+  - type: textarea
+    id: downstream_impact
+    attributes:
+      label: Downstream impact
+      description: |
+        PrimeIR is the IR that zkx lowers through and that riscv-witness
+        consumes. Which downstream stages does this dialect/pass/codegen change
+        affect? Note IR-contract or lowering-output changes consumers must
+        absorb. Leave blank if purely internal.
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproducer (include when Type = fix)
+      description: |
+        Minimum commands or input that reproduce the bug. Use `bazel test` /
+        lit invocations, not built binary paths. Prefix file inputs with `$PWD`.
+        Leave blank for non-fix tasks.
+      render: shell
+
+  - type: textarea
+    id: knowledge
+    attributes:
+      label: Relevant knowledge
+      description: |
+        Excerpts from personal memory and links into the team wiki so other
+        agents can pick this up without your local `~/.claude/` directory.
+        Sanitize home paths, scratch dirs, and session IDs before pasting.
+      placeholder: |
+        - [[wiki/page-name]] — one-line hook
+        - Personal memo excerpt: "…"
+
+  - type: input
+    id: parent
+    attributes:
+      label: Parent issue
+      description: |
+        Issue number or full URL of the tracking / parent issue this
+        work belongs to, if any. Same-repo form: `#1234`. Cross-repo
+        form: `https://github.com/<owner>/<repo>/issues/1234`. The
+        /workflow:create-issue skill registers the sub-issue link
+        automatically when filed via the CLI.
+      placeholder: "#1234 or https://github.com/<owner>/<repo>/issues/1234"
+
+  - type: input
+    id: milestone
+    attributes:
+      label: Milestone (if multi-PR)
+      description: "Milestone name to attach. Convention — `<area>: <feature> v<n>`."
+      placeholder: "pass: barrett-mul lowering v1"
