@@ -90,9 +90,14 @@ LogicalResult canonicalizeBitcast(BitcastOpT op, PatternRewriter &rewriter) {
 // - getInput() method returning the input value
 // - getOutput() method returning the output value
 // - FoldAdaptor type for accessing constant attributes
+// `inputOverride`, when non-null, replaces `adaptor.getInput()` as the
+// constant operand. Callers whose constant operand needs normalizing first
+// (e.g. a field-typed DenseElementsAttr demoted to its storage-int view)
+// pass the normalized attribute here.
 template <typename BitcastOpT>
 OpFoldResult foldBitcast(BitcastOpT op,
-                         typename BitcastOpT::FoldAdaptor adaptor) {
+                         typename BitcastOpT::FoldAdaptor adaptor,
+                         Attribute inputOverride = nullptr) {
   // Fold bitcast with same input and output types.
   if (op.getInput().getType() == op.getOutput().getType()) {
     return op.getInput();
@@ -108,7 +113,7 @@ OpFoldResult foldBitcast(BitcastOpT op,
   // Fold bitcast of a constant operand. BitcastOp::verify already enforces
   // matching storage widths, so the raw bits are reinterpretable without
   // conversion.
-  Attribute input = adaptor.getInput();
+  Attribute input = inputOverride ? inputOverride : adaptor.getInput();
   Type outputType = op.getOutput().getType();
   if (auto intAttr = dyn_cast_if_present<IntegerAttr>(input)) {
     if (!isa<ShapedType>(outputType)) {

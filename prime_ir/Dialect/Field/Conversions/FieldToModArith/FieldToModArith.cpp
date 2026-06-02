@@ -46,6 +46,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
+#include "prime_ir/IR/Attributes.h"
 #include "prime_ir/Utils/BitSerialAlgorithm.h"
 #include "prime_ir/Utils/BuilderContext.h"
 #include "prime_ir/Utils/ConversionUtils.h"
@@ -174,11 +175,16 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // Case 1: Prime field constants (scalar or tensor)
+    // Case 1: Prime field constants (scalar or tensor). For tensor PF the
+    // value attr is field-typed DenseElementsAttr<tensor<...x!PF>>; demote
+    // to the storage-int-typed view mod_arith.constant expects.
     if (auto pfType =
             dyn_cast<PrimeFieldType>(getElementTypeOrSelf(op.getType()))) {
+      TypedAttr val = op.getValueAttr();
+      if (auto dense = dyn_cast<DenseElementsAttr>(val))
+        val = prime_ir::maybeDemoteFieldDenseToStorageInt(dense);
       auto cval = mod_arith::ConstantOp::create(
-          b, typeConverter->convertType(op.getType()), op.getValueAttr());
+          b, typeConverter->convertType(op.getType()), val);
       rewriter.replaceOp(op, cval);
       return success();
     }
@@ -199,8 +205,10 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
           typeConverter->convertType(efType.getBasePrimeField()));
       unsigned degree = efType.getDegreeOverPrime();
 
-      auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
-      auto allValues = denseAttr.getValues<APInt>();
+      auto denseAttr =
+          cast<DenseElementsAttr>(prime_ir::maybeDemoteFieldDenseToStorageInt(
+              cast<DenseElementsAttr>(op.getValueAttr())));
+      auto allValues = cast<DenseIntElementsAttr>(denseAttr).getValues<APInt>();
 
       // Create a flattened prime field tensor constant
       // tensor<K x !EF> with degree N becomes tensor<K*N x !ModArith>
