@@ -76,7 +76,7 @@ Pippengers::Pippengers(Value scalarsIn, Value points, Type outputType,
                       .getResult()
                 : scalarsIn;
 
-  size_t scalarBitWidth = scalarFieldType.getStorageBitWidth();
+  size_t scalarBitWidth = scalarFieldType.getTypeSizeInBits();
   bitsPerWindow =
       windowBits > 0
           ? windowBits
