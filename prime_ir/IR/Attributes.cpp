@@ -40,4 +40,18 @@ ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type) {
   return type;
 }
 
+DenseElementsAttr maybeConvertPrimeIRToBuiltinAttr(DenseElementsAttr attr) {
+  auto builtinType = maybeConvertPrimeIRToBuiltinType(attr.getType());
+  if (builtinType == attr.getType())
+    return attr;
+  // A splat holds one logical element's bytes (EF: degree primes; EC point:
+  // numCoords coords); the storage-int form has no splat encoding for a
+  // multi-int row, so tile across all N elements.
+  if (attr.isSplat())
+    return denseIntFromRawBytes(
+        builtinType,
+        replicateRawBytes(attr.getRawData(), attr.getType().getNumElements()));
+  return denseIntFromRawBytes(builtinType, attr.getRawData());
+}
+
 } // namespace mlir::prime_ir
