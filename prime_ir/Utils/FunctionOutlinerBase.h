@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/SymbolTable.h"
@@ -84,6 +85,14 @@ protected:
     auto func =
         func::FuncOp::create(builder, module_.getLoc(), funcName, funcType);
     func.setPrivate();
+    // setPrivate() only sets symbol visibility; FuncToLLVM does not derive
+    // LLVM linkage from that alone, so an explicit Internal linkage attribute
+    // is needed for the LLVM IR functions to be local (otherwise downstream
+    // CPU codegen's "module must have one externally visible definition"
+    // check fails for outlined pairing helpers).
+    func->setAttr(
+        "llvm.linkage",
+        LLVM::LinkageAttr::get(module_.getContext(), LLVM::Linkage::Internal));
 
     bodyGenerator(func);
     symbolTable_.insert(func);
