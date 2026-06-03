@@ -58,6 +58,7 @@ patches=(
     "$patch_dir/lazy_linking.patch"
     "$patch_dir/elementwise_op_fusion_constant_support.patch"
     "$patch_dir/constant_like_interface.patch"
+    "$patch_dir/asm_parser_rewind.patch"
 )
 shopt -u nullglob
 
