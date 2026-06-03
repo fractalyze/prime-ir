@@ -16,11 +16,18 @@ limitations under the License.
 #ifndef PRIME_IR_IR_ATTRIBUTES_H_
 #define PRIME_IR_IR_ATTRIBUTES_H_
 
+#include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypeInterfaces.h"
+#include "prime_ir/IR/DenseElementBytes.h"
 
 namespace mlir::prime_ir {
 
 ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type);
+
+// Attr-level dual of maybeConvertPrimeIRToBuiltinType: retype a native-typed
+// dense value (EF or EC point) as its storage-int form. Returns attr unchanged
+// when the type already maps to itself (PF/BF/ModArith and builtin ints).
+DenseElementsAttr maybeConvertPrimeIRToBuiltinAttr(DenseElementsAttr attr);
 
 } // namespace mlir::prime_ir
 

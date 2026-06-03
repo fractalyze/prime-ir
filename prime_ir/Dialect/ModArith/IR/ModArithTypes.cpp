@@ -16,6 +16,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
+#include "prime_ir/IR/DenseElementBytes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::prime_ir::mod_arith {
@@ -31,7 +32,7 @@ void ModArithType::print(AsmPrinter &printer) const {
 llvm::TypeSize ModArithType::getTypeSizeInBits(
     mlir::DataLayout const &,
     llvm::ArrayRef<mlir::DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getStorageBitWidth());
+  return llvm::TypeSize::getFixed(getTypeSizeInBits());
 }
 
 uint64_t

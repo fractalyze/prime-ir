@@ -4,6 +4,7 @@ prime_ir_cc_test(
     name = "BitSerialAlgorithmTest",
     srcs = ["BitSerialAlgorithmTest.cpp"],
     deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Utils:BitSerialAlgorithm",

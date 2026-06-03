@@ -95,9 +95,10 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
       // Prime field: use modulus type as-is
       return cast<IntegerType>(getModulus().getType());
     }
-    unsigned getStorageBitWidth() const {
-      return getStorageType().getWidth();
-    }
+    /// Returns the bit width of an element in this type.
+    unsigned getTypeSizeInBits() const { return getStorageType().getWidth(); }
+    [[deprecated("use getTypeSizeInBits() instead")]]
+    unsigned getStorageBitWidth() const { return getTypeSizeInBits(); }
   }];
   let hasCustomAssemblyFormat = 1;
 }
@@ -148,8 +149,12 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
       return IntegerType::get(getContext(), getBitWidth());
     }
 
+    /// Returns the bit width of an element in this type.
+    unsigned getTypeSizeInBits() const { return getBitWidth(); }
+
     /// Returns the storage bit width.
-    unsigned getStorageBitWidth() const { return getBitWidth(); }
+    [[deprecated("use getTypeSizeInBits() instead")]]
+    unsigned getStorageBitWidth() const { return getTypeSizeInBits(); }
 
     /// Maximum supported tower level (GF(2^128)).
     static constexpr unsigned kMaxTowerLevel = 7;
@@ -167,7 +172,8 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "Extension field element type";
   let description = [{
@@ -203,10 +209,14 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
     // Returns the tower depth (1 for direct extension over prime).
     unsigned getTowerDepth() const;
 
-    // Returns the total storage bit width (degreeOverPrime * prime field width).
-    unsigned getStorageBitWidth() const {
-      return getDegreeOverPrime() * getBasePrimeField().getStorageBitWidth();
+    // Returns the total bit width (degreeOverPrime * prime field width).
+    unsigned getTypeSizeInBits() const {
+      return getDegreeOverPrime() * getBasePrimeField().getTypeSizeInBits();
     }
+
+    // Returns the total storage bit width (degreeOverPrime * prime field width).
+    [[deprecated("use getTypeSizeInBits() instead")]]
+    unsigned getStorageBitWidth() const { return getTypeSizeInBits(); }
 
     Type cloneWith(Type baseField, Attribute element) const;
 
