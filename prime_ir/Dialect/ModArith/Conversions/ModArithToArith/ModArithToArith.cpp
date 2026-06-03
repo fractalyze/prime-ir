@@ -87,7 +87,7 @@ public:
 
 private:
   static IntegerType convertModArithType(ModArithType type) {
-    return IntegerType::get(type.getContext(), type.getStorageBitWidth());
+    return IntegerType::get(type.getContext(), type.getTypeSizeInBits());
   }
 };
 
@@ -129,7 +129,7 @@ protected:
     auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(v.getType()));
     if (!modType)
       return APInt(64, 0);
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     APInt p = modType.getModulus().getValue().zext(2 * w);
     return p - 1;
   }
@@ -139,7 +139,7 @@ protected:
     auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(v.getType()));
     if (!modType)
       return 1;
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     APInt p = modType.getModulus().getValue().zext(2 * w);
     return kpFromUmax(lookupUmax(v), p);
   }
@@ -150,7 +150,7 @@ protected:
 // Returns storage bit width for a type, handling ModArithType.
 unsigned getModArithStorageBitwidth(Type type) {
   if (auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(type)))
-    return modType.getStorageBitWidth();
+    return modType.getTypeSizeInBits();
   return ConstantIntRanges::getStorageBitwidth(type);
 }
 
@@ -308,7 +308,7 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
       if (!modType)
         continue;
 
-      unsigned w = modType.getStorageBitWidth();
+      unsigned w = modType.getTypeSizeInBits();
       unsigned dw = 2 * w;
       APInt p = modType.getModulus().getValue().zext(dw);
       APInt defaultUmax = p - 1;
@@ -361,7 +361,7 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
     auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(val.getType()));
     if (!modType)
       continue;
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     unsigned dw = 2 * w;
     APInt p = modType.getModulus().getValue().zext(dw);
     if (kpFromUmax(umax, p) <= 1)
@@ -689,7 +689,7 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ModArithType modArithType = getResultModArithType(op);
     APInt modulus = modArithType.getModulus().getValue();
-    unsigned storageWidth = modArithType.getStorageBitWidth();
+    unsigned storageWidth = modArithType.getTypeSizeInBits();
     unsigned modWidth = modulus.getActiveBits();
     uint64_t resBound = lookupKp(op.getResult());
 
@@ -768,7 +768,7 @@ struct ConvertDouble : public BoundMapPattern<DoubleOp> {
 
     ModArithType modArithType = getResultModArithType(op);
     APInt modulus = modArithType.getModulus().getValue();
-    unsigned storageWidth = modArithType.getStorageBitWidth();
+    unsigned storageWidth = modArithType.getTypeSizeInBits();
     unsigned modWidth = modulus.getActiveBits();
     uint64_t resBound = lookupKp(op.getResult());
 
@@ -836,7 +836,7 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
     MontReducer montReducer(b, modType);
     Value lhs = adaptor.getLhs();
     Value rhs = adaptor.getRhs();
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     unsigned dw = 2 * w;
     APInt wMax = APInt::getMaxValue(w).zext(dw);
     APInt p = modType.getModulus().getValue().zext(dw);
@@ -1105,7 +1105,7 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
     APInt lhsUmax = lookupUmax(op.getLhs());
     APInt rhsUmax = lookupUmax(op.getRhs());
     MontReducer reducer(b, modType);
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     unsigned qw = 4 * w;
     APInt p = modType.getModulus().getValue().zext(qw);
     APInt redcLimit = p.shl(w);
@@ -1352,7 +1352,7 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
     Value lowExt = arith::ExtUIOp::create(b, intExtType, result.lo);
     Value highExt = arith::ExtUIOp::create(b, intExtType, result.hi);
     Value shift = arith::ConstantIntOp::create(b, intExtType,
-                                               modType.getStorageBitWidth());
+                                               modType.getTypeSizeInBits());
     highExt = arith::ShLIOp::create(b, highExt, shift);
     Value squared = arith::OrIOp::create(b, lowExt, highExt);
 
@@ -1385,7 +1385,7 @@ struct ConvertMontSquare : public BoundMapPattern<MontSquareOp> {
     Value input = adaptor.getInput();
     APInt inputUmax = lookupUmax(op.getInput());
     MontReducer reducer(b, modType);
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     unsigned qw = 4 * w;
     APInt p = modType.getModulus().getValue().zext(qw);
     APInt redcLimit = p.shl(w);

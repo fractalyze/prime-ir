@@ -95,13 +95,14 @@ def ModArith_ModArithType : ModArith_Type<"ModArith", "int", [
       // Prime field: use modulus type as-is
       return cast<IntegerType>(getModulus().getType());
     }
-    unsigned getStorageBitWidth() const {
-      return getStorageType().getWidth();
-    }
+    /// Returns the bit width of an element in this type.
+    unsigned getTypeSizeInBits() const { return getStorageType().getWidth(); }
+    [[deprecated("use getTypeSizeInBits() instead")]]
+    unsigned getStorageBitWidth() const { return getTypeSizeInBits(); }
     // Returns floor((2^storageWidth - 1) / modulus).
     uint64_t getMaxBound() const {
       APInt mod = getModulus().getValue();
-      unsigned w = getStorageBitWidth();
+      unsigned w = getTypeSizeInBits();
       APInt maxVal = APInt::getMaxValue(w);
       APInt modW = mod.zext(w);
       return maxVal.udiv(modW).getZExtValue();
