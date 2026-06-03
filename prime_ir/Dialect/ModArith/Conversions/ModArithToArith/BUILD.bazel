@@ -33,6 +33,7 @@ prime_ir_cc_library(
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Inverter:BYInverter",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer:BarrettReducer",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer:MontReducer",
+        "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer:SolinasReducer",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Dialect/TensorExt/IR:TensorExt",
         "//prime_ir/Utils:ConversionUtils",
@@ -58,6 +59,7 @@ prime_ir_cc_library(
         "@llvm-project//mlir:TransformUtils",
         "@llvm-project//mlir:UBDialect",
         "@llvm-project//mlir:VectorDialect",
+        "@zk_dtypes//zk_dtypes:goldilocks",
     ],
 )
 

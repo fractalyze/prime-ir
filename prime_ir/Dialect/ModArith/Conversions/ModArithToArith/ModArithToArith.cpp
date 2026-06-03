@@ -48,6 +48,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Inverter/BYInverter.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/BarrettReducer.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/MontReducer.h"
+#include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/SolinasReducer.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
@@ -55,6 +56,7 @@ limitations under the License.
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
 #include "prime_ir/Utils/ConversionUtils.h"
 #include "prime_ir/Utils/ShapedTypeConverter.h"
+#include "zk_dtypes/include/field/goldilocks/goldilocks.h"
 
 namespace mlir::prime_ir::mod_arith {
 
@@ -1018,8 +1020,15 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
       return success();
     }
 
-    // Barrett path for wide non-Mersenne primes. The Mersenne branch below
-    // (p = 2^k - 1) keeps precedence — its shift+add is faster than Barrett.
+    // Goldilocks (p = 2^64 - 2^32 + 1) matches the wide non-Mersenne shape
+    // but has a faster Solinas fast-path below, so it takes precedence over
+    // Barrett — same as the Mersenne branch.
+    bool isGoldilocks =
+        modulus.getBitWidth() == 64 &&
+        modulus == APInt(64, zk_dtypes::Goldilocks::Config::kModulus);
+
+    // Barrett path for wide non-Mersenne primes. The Mersenne and Goldilocks
+    // branches below keep precedence — their shift+add is faster than Barrett.
     // Below 64 bits, hardware urem is a single instruction and wins anyway.
     // The `!modulus.isPowerOf2()` guard is defensive: the type parser rejects
     // power-of-two moduli today, but if the dialect ever supports binary
@@ -1027,10 +1036,23 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
     // `modulus.getBitWidth()` — which would break the reducer's
     // `2k == extBitWidth` precondition.
     if (modulus.getBitWidth() >= 64 && !(modulus + 1).isPowerOf2() &&
-        !modulus.isPowerOf2()) {
+        !modulus.isPowerOf2() && !isGoldilocks) {
       auto result =
           BarrettMulOp::create(b, op.getType(), op.getLhs(), op.getRhs());
       rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    // Goldilocks (p = 2^64 - 2^32 + 1) reduces the 128-bit product via the
+    // 64-bit Solinas fast path, sidestepping the `arith.remui i128` fallback
+    // below (which lowers to libgcc's `__umodti3`, unavailable on the CPU JIT
+    // runtime). Take the product halves straight from mului_extended — the
+    // reduction stays in 64-bit arithmetic, no i128.
+    if (isGoldilocks) {
+      auto prod =
+          arith::MulUIExtendedOp::create(b, adaptor.getLhs(), adaptor.getRhs());
+      rewriter.replaceOp(
+          op, SolinasReducer(b, modType).reduce(prod.getLow(), prod.getHigh()));
       return success();
     }
 
@@ -1347,8 +1369,23 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
       return success();
     }
 
-    Type intExtType = modulusType(op, /*extended=*/true);
     MulExtendedResult result = squareExtended(b, op, adaptor.getInput());
+
+    // Goldilocks reduces the 128-bit square via the 64-bit Solinas fast path
+    // (mirrors ConvertMul), sidestepping the `arith.remui i128` fallback below.
+    // squareExtended already hands back the product halves, so reduce them
+    // directly — no i128 reassembly.
+    APInt modulus = modType.getModulus().getValue();
+    bool isGoldilocks =
+        modulus.getBitWidth() == 64 &&
+        modulus == APInt(64, zk_dtypes::Goldilocks::Config::kModulus);
+    if (isGoldilocks) {
+      rewriter.replaceOp(
+          op, SolinasReducer(b, modType).reduce(result.lo, result.hi));
+      return success();
+    }
+
+    Type intExtType = modulusType(op, /*extended=*/true);
     Value lowExt = arith::ExtUIOp::create(b, intExtType, result.lo);
     Value highExt = arith::ExtUIOp::create(b, intExtType, result.hi);
     Value shift = arith::ConstantIntOp::create(b, intExtType,
