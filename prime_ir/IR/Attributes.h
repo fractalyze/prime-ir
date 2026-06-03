@@ -24,9 +24,9 @@ namespace mlir::prime_ir {
 
 ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type);
 
-// Attr-level dual of maybeConvertPrimeIRToBuiltinType: retype an EF-typed dense
-// value as its storage-int tower. Returns attr unchanged when the type already
-// maps to itself (PF/BF/ModArith and builtin ints).
+// Attr-level dual of maybeConvertPrimeIRToBuiltinType: retype a native-typed
+// dense value (EF or EC point) as its storage-int form. Returns attr unchanged
+// when the type already maps to itself (PF/BF/ModArith and builtin ints).
 DenseElementsAttr maybeConvertPrimeIRToBuiltinAttr(DenseElementsAttr attr);
 
 } // namespace mlir::prime_ir

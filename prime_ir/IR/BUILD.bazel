@@ -34,6 +34,7 @@ prime_ir_cc_library(
     hdrs = ["Attributes.h"],
     deps = [
         ":DenseElementBytes",
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurveHdrs",
         "//prime_ir/Dialect/Field/IR:FieldHdrs",
         "//prime_ir/Dialect/ModArith/IR:ModArithHdrs",
         "@llvm-project//llvm:Support",

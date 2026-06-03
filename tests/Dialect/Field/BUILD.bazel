@@ -27,6 +27,7 @@ prime_ir_cc_test(
     name = "BinaryFieldOperationTest",
     srcs = ["BinaryFieldOperationTest.cpp"],
     deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Utils:ZkDtypes",
         "@com_google_googletest//:gtest",
@@ -39,6 +40,7 @@ prime_ir_cc_test(
     name = "PrimeFieldOperationTest",
     srcs = ["PrimeFieldOperationTest.cpp"],
     deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Utils:ZkDtypes",
         "@com_google_googletest//:gtest",
@@ -55,6 +57,7 @@ prime_ir_cc_test(
     name = "FieldDenseElementInterfaceTest",
     srcs = ["FieldDenseElementInterfaceTest.cpp"],
     deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",
@@ -67,6 +70,7 @@ prime_ir_cc_test(
     name = "ExtensionFieldOperationTest",
     srcs = ["ExtensionFieldOperationTest.cpp"],
     deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Utils:ZkDtypes",
         "@com_google_googletest//:gtest",
@@ -84,6 +88,7 @@ prime_ir_cc_test(
     name = "BitcastOpTest",
     srcs = ["BitcastOpTest.cpp"],
     deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
         "//prime_ir/Dialect/Field/IR:Field",
         "@com_google_googletest//:gtest",
         "@com_google_googletest//:gtest_main",

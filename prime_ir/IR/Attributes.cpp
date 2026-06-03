@@ -15,10 +15,23 @@ limitations under the License.
 
 #include "prime_ir/IR/Attributes.h"
 
+#include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveTypes.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 
 namespace mlir::prime_ir {
+
+namespace {
+unsigned fieldElementBits(Type t) {
+  if (auto pf = dyn_cast<field::PrimeFieldType>(t))
+    return pf.getTypeSizeInBits();
+  if (auto ef = dyn_cast<field::ExtensionFieldType>(t))
+    return ef.getTypeSizeInBits();
+  if (auto bf = dyn_cast<field::BinaryFieldType>(t))
+    return bf.getTypeSizeInBits();
+  llvm_unreachable("unsupported base field type");
+}
+} // namespace
 
 ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type) {
   auto elementType = type.getElementType();
@@ -36,6 +49,15 @@ ShapedType maybeConvertPrimeIRToBuiltinType(ShapedType type) {
     SmallVector<int64_t> attrShape(type.getShape());
     attrShape.append(towerDims.begin(), towerDims.end());
     return type.clone(attrShape, pfType.getStorageType());
+  } else if (auto ptType =
+                 dyn_cast<elliptic_curve::PointTypeInterface>(elementType)) {
+    // A point appends a coordinate dim; each coord is one base-field-wide int
+    // (e.g. tensor<4x!affine<pf>> stores as tensor<4x2xi32>).
+    SmallVector<int64_t> shape(type.getShape());
+    shape.push_back(ptType.getNumCoords());
+    return type.clone(
+        shape, IntegerType::get(type.getContext(),
+                                fieldElementBits(ptType.getBaseFieldType())));
   }
   return type;
 }

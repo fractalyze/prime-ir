@@ -10,10 +10,11 @@ index c64660420c9c..5f2b4b904311 100644
      ],
  )
  
-@@ -9404,6 +9405,8 @@ cc_binary(
+@@ -9404,6 +9405,9 @@ cc_binary(
          "//llvm:Linker",
          "//llvm:Support",
          "//llvm:X86AsmParser",
++        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
 +        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
 +        "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArith",
      ],
