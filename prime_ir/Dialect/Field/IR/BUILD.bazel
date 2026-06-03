@@ -79,6 +79,8 @@ prime_ir_cc_library(
         ":types_inc_gen",
         "//prime_ir/Dialect/EllipticCurve/IR:PointOperationBaseForward",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "//prime_ir/IR:Attributes",
+        "//prime_ir/IR:DenseElementBytes",
         "//prime_ir/Utils:AssemblyFormatUtils",
         "//prime_ir/Utils:BitcastOpUtils",
         "//prime_ir/Utils:CanonicalizationPatterns",

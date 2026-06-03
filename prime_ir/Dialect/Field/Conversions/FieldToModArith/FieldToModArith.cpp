@@ -46,6 +46,7 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
+#include "prime_ir/IR/Attributes.h"
 #include "prime_ir/Utils/BitSerialAlgorithm.h"
 #include "prime_ir/Utils/BuilderContext.h"
 #include "prime_ir/Utils/ConversionUtils.h"
@@ -76,7 +77,7 @@ static bool shouldUseFieldAOTRuntime(Operation *op, Type fieldType,
   if (!efType)
     return false;
   unsigned degree = efType.getDegreeOverPrime();
-  unsigned primeBits = efType.getBasePrimeField().getStorageBitWidth();
+  unsigned primeBits = efType.getBasePrimeField().getTypeSizeInBits();
   if (degree < 2)
     return false;
   bool expensive = degree >= 4 || primeBits > 64;
@@ -174,7 +175,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    // Case 1: Prime field constants (scalar or tensor)
+    // Case 1: Prime field constants (scalar or tensor). The PF value attr is
+    // already storage-int (IntegerAttr / DenseIntElementsAttr), which is what
+    // mod_arith.constant expects.
     if (auto pfType =
             dyn_cast<PrimeFieldType>(getElementTypeOrSelf(op.getType()))) {
       auto cval = mod_arith::ConstantOp::create(
@@ -199,7 +202,9 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
           typeConverter->convertType(efType.getBasePrimeField()));
       unsigned degree = efType.getDegreeOverPrime();
 
-      auto denseAttr = cast<DenseIntElementsAttr>(op.getValueAttr());
+      auto denseAttr =
+          cast<DenseIntElementsAttr>(prime_ir::maybeConvertPrimeIRToBuiltinAttr(
+              cast<DenseElementsAttr>(op.getValueAttr())));
       auto allValues = denseAttr.getValues<APInt>();
 
       // Create a flattened prime field tensor constant

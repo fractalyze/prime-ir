@@ -23,6 +23,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldOperation.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
+#include "prime_ir/IR/Attributes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 #include "prime_ir/Utils/BitcastOpUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
@@ -258,20 +259,34 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
 
   auto shapedType = cast<ShapedType>(parsedType);
   auto elementType = getElementTypeOrSelf(parsedType);
+
+  auto applyMontPerCoeff = [&](PrimeFieldType pfType,
+                               MutableArrayRef<APInt> ints) {
+    auto modArithType = mod_arith::ModArithType::get(
+        pfType.getContext(), pfType.getModulus(), /*isMontgomery=*/false);
+    for (APInt &v : ints)
+      v = mod_arith::ModArithOperation::fromUnchecked(v, modArithType).toMont();
+  };
+
   if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
+    if (pfType.isMontgomery())
+      applyMontPerCoeff(pfType, parsedInts);
+    SmallVector<APInt> adjustedInts;
+    adjustedInts.reserve(parsedInts.size());
+    for (const APInt &val : parsedInts)
+      adjustedInts.push_back(
+          val.zextOrTrunc(pfType.getStorageType().getWidth()));
     auto denseElementsAttr = DenseIntElementsAttr::get(
-        shapedType.clone(pfType.getStorageType()), parsedInts);
-    result.addAttribute("value", maybeToMontgomery(pfType, denseElementsAttr));
+        shapedType.clone(pfType.getStorageType()), adjustedInts);
+    result.addAttribute("value", denseElementsAttr);
     result.addTypes(parsedType);
     return success();
   }
   if (auto bfType = dyn_cast<BinaryFieldType>(elementType)) {
-    // Adjust each APInt to the correct bitwidth for binary field storage
     SmallVector<APInt> adjustedInts;
     adjustedInts.reserve(parsedInts.size());
-    for (const APInt &val : parsedInts) {
+    for (const APInt &val : parsedInts)
       adjustedInts.push_back(val.zextOrTrunc(bfType.getBitWidth()));
-    }
     auto denseElementsAttr = DenseIntElementsAttr::get(
         shapedType.clone(bfType.getStorageType()), adjustedInts);
     result.addAttribute("value", denseElementsAttr);
@@ -279,14 +294,23 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     return success();
   }
   if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
-    auto pfType = efType.getBasePrimeField();
-    // For tensor<Nx!EF{d}>, the attribute shape is [N, towerDims...].
-    auto towerDims = efType.getAttrShape();
-    SmallVector<int64_t> attrShape(shapedType.getShape());
-    attrShape.append(towerDims.begin(), towerDims.end());
-    auto attrType = RankedTensorType::get(attrShape, pfType.getStorageType());
-    auto denseElementsAttr = DenseIntElementsAttr::get(attrType, parsedInts);
-    result.addAttribute("value", maybeToMontgomery(efType, denseElementsAttr));
+    PrimeFieldType pfType = efType.getBasePrimeField();
+    if (efType.isMontgomery())
+      applyMontPerCoeff(pfType, parsedInts);
+    unsigned primeBytes = (pfType.getTypeSizeInBits() + 7) / 8;
+    unsigned degree = efType.getDegreeOverPrime();
+    SmallVector<APInt> packedInts;
+    // Splat input: replicate the scalar across `degree` coeffs so the
+    // packed bytes equal one EF element's worth. getFromRawBuffer treats
+    // one element's bytes as a splat.
+    if (parsedInts.size() == 1 && degree > 1) {
+      packedInts.assign(degree, parsedInts[0]);
+    } else {
+      packedInts.assign(parsedInts.begin(), parsedInts.end());
+    }
+    auto bytes = packAPIntsLE(packedInts, primeBytes);
+    result.addAttribute("value",
+                        DenseElementsAttr::getFromRawBuffer(shapedType, bytes));
     result.addTypes(parsedType);
     return success();
   }
@@ -308,13 +332,14 @@ ParseResult parseOptionalFieldConstant(OpAsmParser &parser,
   // caller's pre-existing error stays surfaced. On success, parseFieldConstant
   // emits no diagnostics, so the buffer is empty and dropping is a no-op.
   llvm::SmallVector<mlir::Diagnostic, 2> captured;
-  mlir::ScopedDiagnosticHandler scope(
-      parser.getContext(), [&](mlir::Diagnostic &diag) {
-        captured.emplace_back(std::move(diag));
-        return mlir::success();
-      });
+  mlir::ScopedDiagnosticHandler scope(parser.getContext(),
+                                      [&](mlir::Diagnostic &diag) {
+                                        captured.emplace_back(std::move(diag));
+                                        return mlir::success();
+                                      });
 
-  if (succeeded(parseFieldConstant(parser, result))) return success();
+  if (succeeded(parseFieldConstant(parser, result)))
+    return success();
 
   // Restore: rewind the token stream and roll back any attributes / result
   // types parseFieldConstant added before failing.
@@ -351,10 +376,44 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
       auto scalarAttr = DenseIntElementsAttr::get(tensorType, coeffs);
       return ConstantOp::create(builder, loc, type, scalarAttr);
     }
+    if (auto shapedTy = dyn_cast<ShapedType>(type)) {
+      // PF/BF: a scalar carries implicit-splat semantics; store as a
+      // storage-int DenseIntElementsAttr splat matching the result shape.
+      auto storageType =
+          isa<PrimeFieldType>(elementType)
+              ? cast<PrimeFieldType>(elementType).getStorageType()
+              : cast<BinaryFieldType>(elementType).getStorageType();
+      auto splatAttr = DenseIntElementsAttr::get(
+          shapedTy.clone(storageType),
+          intAttr.getValue().zextOrTrunc(storageType.getWidth()));
+      return ConstantOp::create(builder, loc, type, splatAttr);
+    }
     return ConstantOp::create(builder, loc, type, intAttr);
   }
-  return ConstantOp::create(builder, loc, type,
-                            cast<DenseIntElementsAttr>(value));
+  // Fold results may arrive as storage-int-typed DenseElementsAttr. For an EF
+  // result, promote to the field-typed view. A storage-int splat holds one
+  // prime int; an EF element is `degree` primes, so replicate before retyping.
+  if (auto dense = dyn_cast<DenseElementsAttr>(value)) {
+    auto shapedTy = dyn_cast<ShapedType>(type);
+    if (auto efType = dyn_cast<ExtensionFieldType>(elementType);
+        efType && shapedTy && dense.getType() != shapedTy) {
+      ArrayRef<char> raw = dense.getRawData();
+      unsigned degree = efType.getDegreeOverPrime();
+      DenseElementsAttr promoted;
+      if (dense.isSplat() && degree > 1) {
+        SmallVector<char> expanded;
+        expanded.reserve(degree * raw.size());
+        for (unsigned i = 0; i < degree; ++i)
+          expanded.append(raw.begin(), raw.end());
+        promoted = DenseElementsAttr::getFromRawBuffer(shapedTy, expanded);
+      } else {
+        promoted = DenseElementsAttr::getFromRawBuffer(shapedTy, raw);
+      }
+      return ConstantOp::create(builder, loc, type, promoted);
+    }
+    return ConstantOp::create(builder, loc, type, dense);
+  }
+  return ConstantOp::create(builder, loc, type, cast<ElementsAttr>(value));
 }
 
 Operation *FieldDialect::materializeConstant(OpBuilder &builder,
@@ -404,19 +463,37 @@ void ConstantOp::print(OpAsmPrinter &p) {
 
   Type type = getType();
   Type elementType = getElementTypeOrSelf(type);
-  Attribute value = maybeToStandard(elementType, getValue());
+  Attribute value = getValue();
 
-  // Scalar EF constants are stored as DenseIntElementsAttr, but the parser
-  // expects list syntax [c₀, c₁, ...] rather than dense<[c₀, c₁, ...]>.
+  // Scalar EF: stored as DenseIntElementsAttr at tower shape. Parser
+  // expects bracketed coeff list, not dense<[...]>.
   if (!isa<ShapedType>(type) && isa<ExtensionFieldType>(elementType)) {
-    auto denseAttr = cast<DenseIntElementsAttr>(value);
+    auto denseAttr =
+        cast<DenseIntElementsAttr>(maybeToStandard(elementType, value));
     p << "[";
     llvm::interleaveComma(denseAttr.getValues<APInt>(), p,
                           [&](const APInt &v) { p << v; });
     p << "]";
-  } else {
-    p.printAttributeWithoutType(value);
+    p << " : ";
+    p.printType(type);
+    return;
   }
+
+  // Tensor EF: value is field-typed; reinterpret its bytes as the storage-int
+  // tower so MLIR's built-in dense<...> printer can format it (tower-nested,
+  // round-trips through parseFieldConstant). A splat holds one EF element's
+  // bytes (degree primes); replicate to a full row first.
+  if (isa<ShapedType>(type) && isa<ExtensionFieldType>(elementType)) {
+    Attribute storageInt = prime_ir::maybeConvertPrimeIRToBuiltinAttr(
+        cast<DenseElementsAttr>(value));
+    p.printAttributeWithoutType(maybeToStandard(elementType, storageInt));
+    p << " : ";
+    p.printType(type);
+    return;
+  }
+
+  Attribute scalar = maybeToStandard(elementType, value);
+  p.printAttributeWithoutType(scalar);
   p << " : ";
   p.printType(type);
 }
@@ -442,7 +519,7 @@ struct CmpConstantFolderConfig {
   using NativeInputType = APInt;
   using NativeOutputType = bool;
   using ScalarAttr = IntegerAttr;
-  using TensorAttr = DenseIntElementsAttr;
+  using TensorAttr = DenseElementsAttr;
 };
 
 class PrimeFieldCmpConstantFolder
@@ -462,6 +539,12 @@ public:
                              ArrayRef<bool> values) const final {
     return DenseIntElementsAttr::get(type.clone(IntegerType::get(context, 1)),
                                      values);
+  }
+
+  SmallVector<APInt, 0> extractValues(DenseElementsAttr attr) const final {
+    int64_t total = attr.getType().getNumElements();
+    auto v = coeffsFromRawBytes(attr, pfType.getTypeSizeInBits(), total);
+    return SmallVector<APInt, 0>(v.begin(), v.end());
   }
 
   bool operate(const APInt &a, const APInt &b) const final {
@@ -495,7 +578,7 @@ struct ExtFieldCmpConstantFolderConfig {
   using NativeInputType = SmallVector<APInt>;
   using NativeOutputType = bool;
   using ScalarAttr = DenseIntElementsAttr;
-  using TensorAttr = DenseIntElementsAttr;
+  using TensorAttr = DenseElementsAttr;
 };
 
 class ExtensionFieldCmpConstantFolder
@@ -641,7 +724,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     // Calculate bitwidth for each element type
     unsigned inputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(inputElementType)) {
-      inputBitWidth = efType.getStorageBitWidth();
+      inputBitWidth = efType.getTypeSizeInBits();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(inputElementType)) {
       inputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -651,7 +734,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
 
     unsigned outputBitWidth;
     if (auto efType = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      outputBitWidth = efType.getStorageBitWidth();
+      outputBitWidth = efType.getTypeSizeInBits();
     } else if (auto maType =
                    dyn_cast<mod_arith::ModArithType>(outputElementType)) {
       outputBitWidth = mod_arith::getIntOrModArithBitWidth(maType);
@@ -724,12 +807,12 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
   // Case 4: extension field <-> integer bitcast (same storage bitwidth)
   if (auto inputEF = dyn_cast<ExtensionFieldType>(inputElementType)) {
     if (auto outputInt = dyn_cast<IntegerType>(outputElementType)) {
-      return inputEF.getStorageBitWidth() == outputInt.getWidth();
+      return inputEF.getTypeSizeInBits() == outputInt.getWidth();
     }
   }
   if (auto inputInt = dyn_cast<IntegerType>(inputElementType)) {
     if (auto outputEF = dyn_cast<ExtensionFieldType>(outputElementType)) {
-      return inputInt.getWidth() == outputEF.getStorageBitWidth();
+      return inputInt.getWidth() == outputEF.getTypeSizeInBits();
     }
   }
 
@@ -779,7 +862,7 @@ LogicalResult BitcastOp::verify() {
 
     auto getElementBitWidth = [](Type t) -> unsigned {
       if (auto ef = dyn_cast<ExtensionFieldType>(t))
-        return ef.getStorageBitWidth();
+        return ef.getTypeSizeInBits();
       return getIntOrPrimeFieldBitWidth(t);
     };
 
@@ -865,7 +948,13 @@ OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
   if (dyn_cast_if_present<IntegerAttr>(adaptor.getInput()) &&
       isa<ExtensionFieldType>(getOutput().getType()))
     return {};
-  return foldBitcast(*this, adaptor);
+  // An EF field.constant stores a field-typed dense value; reinterpret its
+  // bytes as the storage-int tower so they cast to the output type. PF/BF and
+  // non-field constants are already storage-int.
+  Attribute input = adaptor.getInput();
+  if (auto dense = dyn_cast_if_present<DenseElementsAttr>(input))
+    input = prime_ir::maybeConvertPrimeIRToBuiltinAttr(dense);
+  return foldBitcast(*this, adaptor, input);
 }
 
 LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
@@ -970,14 +1059,14 @@ struct PrimeFieldConstantFolderConfig {
   using NativeInputType = APInt;
   using NativeOutputType = APInt;
   using ScalarAttr = IntegerAttr;
-  using TensorAttr = DenseIntElementsAttr;
+  using TensorAttr = DenseElementsAttr;
 };
 
 struct ExtensionFieldConstantFolderConfig {
   using NativeInputType = SmallVector<APInt>;
   using NativeOutputType = SmallVector<APInt>;
   using ScalarAttr = DenseIntElementsAttr;
-  using TensorAttr = DenseIntElementsAttr;
+  using TensorAttr = DenseElementsAttr;
 };
 
 struct BinaryFieldConstantFolderConfig {
@@ -1001,8 +1090,17 @@ public:
 
   OpFoldResult getTensorAttr(ShapedType type,
                              ArrayRef<APInt> values) const final {
-    return DenseIntElementsAttr::get(type.clone(pfType.getStorageType()),
-                                     values);
+    unsigned primeBytes = (pfType.getTypeSizeInBits() + 7) / 8;
+    auto bytes = packAPIntsLE(values, primeBytes);
+    return DenseElementsAttr::getFromRawBuffer(type, bytes);
+  }
+
+  // Walk per-prime-coeff APInts from a tensor constant (field-typed or
+  // storage-int-typed). Bytes are bit-identical between the two forms.
+  SmallVector<APInt, 0> extractValues(DenseElementsAttr attr) const final {
+    int64_t total = attr.getType().getNumElements();
+    auto v = coeffsFromRawBytes(attr, pfType.getTypeSizeInBits(), total);
+    return SmallVector<APInt, 0>(v.begin(), v.end());
   }
 
 protected:
@@ -1031,18 +1129,36 @@ public:
 
   OpFoldResult getTensorAttr(ShapedType type,
                              ArrayRef<SmallVector<APInt>> values) const final {
-    // Flatten all coefficient vectors into a single vector
-    SmallVector<APInt> flattenedValues;
-    for (const auto &coeffs : values) {
-      flattenedValues.append(coeffs.begin(), coeffs.end());
-    }
-    // Create result attribute with shape [tensor_dims..., towerDims...]
+    SmallVector<APInt> flat;
+    for (const auto &coeffs : values)
+      flat.append(coeffs.begin(), coeffs.end());
     PrimeFieldType pfType = efType.getBasePrimeField();
-    auto towerDims = efType.getAttrShape();
-    SmallVector<int64_t> attrShape(type.getShape());
-    attrShape.append(towerDims.begin(), towerDims.end());
-    auto attrType = RankedTensorType::get(attrShape, pfType.getStorageType());
-    return DenseIntElementsAttr::get(attrType, flattenedValues);
+    unsigned primeBytes = (pfType.getTypeSizeInBits() + 7) / 8;
+    auto bytes = packAPIntsLE(flat, primeBytes);
+    return DenseElementsAttr::getFromRawBuffer(type, bytes);
+  }
+
+  // Walk raw bytes and group per-degree coeffs for tensor EF constants.
+  SmallVector<SmallVector<APInt>, 0>
+  extractValues(DenseElementsAttr attr) const final {
+    PrimeFieldType pfType = efType.getBasePrimeField();
+    unsigned degree = efType.getDegreeOverPrime();
+    // Count field elements from the op's field type, not the attribute. A
+    // legacy storage-int constant covers each EF element with `degree`
+    // coefficient slots, so `attr.getType().getNumElements()` would overcount
+    // by `degree`; the field type carries the true element count.
+    int64_t numElems =
+        isa<ShapedType>(type) ? cast<ShapedType>(type).getNumElements() : 1;
+    auto flat =
+        coeffsFromRawBytes(attr, pfType.getTypeSizeInBits(), numElems * degree);
+    SmallVector<SmallVector<APInt>, 0> grouped;
+    grouped.reserve(numElems);
+    for (int64_t i = 0; i < numElems; ++i) {
+      SmallVector<APInt> coeffs(flat.begin() + i * degree,
+                                flat.begin() + (i + 1) * degree);
+      grouped.push_back(std::move(coeffs));
+    }
+    return grouped;
   }
 
 protected:
@@ -1113,41 +1229,32 @@ public:
         fn(FieldOperation::fromUnchecked(coeffs, inputEfType)));
   }
 
-  // Override foldScalar to dispatch to foldTensor when dealing with tensors.
-  // This is needed because for extension fields, ScalarAttr == TensorAttr ==
-  // DenseIntElementsAttr, so the generic fold() always calls foldScalar.
+  // For EF, ScalarAttr (DenseIntElementsAttr) only describes the scalar EF
+  // cover (tensor<degree x i_pf>); tensor EF lives in TensorAttr
+  // (DenseElementsAttr<tensor<...x!EF>>). Dispatch scalar-shape attrs to
+  // the actual scalar fold and shaped attrs to foldTensor.
   OpFoldResult foldScalar(DenseIntElementsAttr attr) const override {
-    if (isa<ShapedType>(this->type)) {
-      return foldTensor(attr);
+    if (isa<ShapedType>(this->type) && isa<ShapedType>(attr.getType()) &&
+        cast<ShapedType>(attr.getType()).getRank() > 1) {
+      // Legacy storage-int tensor EF (rank = tensor dims + tower dims).
+      return foldTensor(cast<DenseElementsAttr>(attr));
     }
-    // Actual scalar folding: use default implementation
     return this->getScalarAttr(operate(this->getNativeInput(attr)));
   }
 
-  // Override foldTensor to handle extension field tensor constants properly.
-  OpFoldResult foldTensor(DenseIntElementsAttr attr) const override {
-    unsigned degree = this->efType.getDegreeOverPrime();
-    auto inputValues = attr.getValues<APInt>();
-    size_t numElements = inputValues.size();
-
-    if (numElements % degree != 0) {
-      return {};
-    }
-
-    SmallVector<SmallVector<APInt>> results;
-    results.reserve(numElements / degree);
-
-    for (size_t i = 0; i < numElements; i += degree) {
-      SmallVector<APInt> coeffs(inputValues.begin() + i,
-                                inputValues.begin() + i + degree);
-      results.push_back(operate(coeffs));
-    }
-
+  OpFoldResult foldTensor(DenseElementsAttr attr) const override {
     auto shapedType = dyn_cast<ShapedType>(this->type);
-    if (!shapedType) {
+    if (!shapedType)
       return {};
-    }
-    return this->getTensorAttr(shapedType, results);
+    auto inputs = this->extractValues(attr);
+    if (inputs.empty())
+      return {};
+    SmallVector<SmallVector<APInt>, 0> results;
+    results.reserve(inputs.size());
+    for (const auto &coeffs : inputs)
+      results.push_back(operate(coeffs));
+    SmallVector<SmallVector<APInt>> resultsCopy(results.begin(), results.end());
+    return this->getTensorAttr(shapedType, resultsCopy);
   }
 
 private:
@@ -1232,41 +1339,26 @@ public:
     return BaseDelegate::foldScalar(rhs);
   }
 
-  // Override foldTensor to handle extension field tensor constants properly.
-  OpFoldResult foldTensor(DenseIntElementsAttr lhsAttr,
-                          DenseIntElementsAttr rhsAttr) const override {
-    unsigned degree = this->efType.getDegreeOverPrime();
-    auto lhsValues = lhsAttr.getValues<APInt>();
-    auto rhsValues = rhsAttr.getValues<APInt>();
-    size_t numElements = lhsValues.size();
-
-    if (numElements != rhsValues.size() || numElements % degree != 0) {
-      return {};
-    }
-
-    SmallVector<SmallVector<APInt>> results;
-    results.reserve(numElements / degree);
-
-    for (size_t i = 0; i < numElements; i += degree) {
-      SmallVector<APInt> lhsCoeffs(lhsValues.begin() + i,
-                                   lhsValues.begin() + i + degree);
-      SmallVector<APInt> rhsCoeffs(rhsValues.begin() + i,
-                                   rhsValues.begin() + i + degree);
-      results.push_back(operate(lhsCoeffs, rhsCoeffs));
-    }
-
+  OpFoldResult foldTensor(DenseElementsAttr lhsAttr,
+                          DenseElementsAttr rhsAttr) const override {
     auto shapedType = dyn_cast<ShapedType>(this->type);
-    if (!shapedType) {
+    if (!shapedType)
       return {};
-    }
-    return this->getTensorAttr(shapedType, results);
+    auto lhsGroups = this->extractValues(lhsAttr);
+    auto rhsGroups = this->extractValues(rhsAttr);
+    if (lhsGroups.size() != rhsGroups.size() || lhsGroups.empty())
+      return {};
+    SmallVector<SmallVector<APInt>, 0> results;
+    results.reserve(lhsGroups.size());
+    for (size_t i = 0; i < lhsGroups.size(); ++i)
+      results.push_back(operate(lhsGroups[i], rhsGroups[i]));
+    SmallVector<SmallVector<APInt>> resultsCopy(results.begin(), results.end());
+    return this->getTensorAttr(shapedType, resultsCopy);
   }
 
-  // Override single-arg foldTensor for special case optimizations.
-  // Subclasses (Additive/Multiplicative) will override with specific logic.
-  OpFoldResult foldTensor(DenseIntElementsAttr rhs) const override {
-    return {};
-  }
+  // Single-arg foldTensor: subclasses (Additive/Multiplicative) override with
+  // identity-fold logic.
+  OpFoldResult foldTensor(DenseElementsAttr rhs) const override { return {}; }
 
 protected:
   Op *const op;
@@ -1349,11 +1441,13 @@ public:
   }
 
   // Fold additive identity: x + 0 = x
-  OpFoldResult foldTensor(DenseIntElementsAttr rhs) const override {
-    auto rhsValues = rhs.getValues<APInt>();
-    // If all elements are zero, return lhs (x + 0 = x)
-    // NOLINTNEXTLINE(whitespace/newline)
-    if (llvm::all_of(rhsValues, [](const APInt &v) { return v.isZero(); })) {
+  OpFoldResult foldTensor(DenseElementsAttr rhs) const override {
+    auto groups = this->extractValues(rhs);
+    if (groups.empty())
+      return {};
+    if (llvm::all_of(groups, [](const SmallVector<APInt> &g) {
+          return llvm::all_of(g, [](const APInt &v) { return v.isZero(); });
+        })) {
       return this->op->getOperand(0);
     }
     return {};
@@ -1387,42 +1481,23 @@ public:
   }
 
   // Fold multiplicative identities: x * 0 = 0, x * 1 = x
-  OpFoldResult foldTensor(DenseIntElementsAttr rhs) const override {
-    auto rhsValues = rhs.getValues<APInt>();
-    unsigned degree = this->efType.getDegreeOverPrime();
-    size_t numElements = rhsValues.size();
-
-    if (numElements % degree != 0) {
+  OpFoldResult foldTensor(DenseElementsAttr rhs) const override {
+    auto groups = this->extractValues(rhs);
+    if (groups.empty())
       return {};
-    }
-
-    // Check if all extension field elements are zero or one
-    bool allZeros = true;
-    bool allOnes = true;
-
-    for (size_t i = 0; i < numElements; i += degree) {
-      SmallVector<APInt> coeffs(rhsValues.begin() + i,
-                                rhsValues.begin() + i + degree);
-      if (!isZero(coeffs)) {
+    bool allZeros = true, allOnes = true;
+    for (const auto &g : groups) {
+      if (!isZero(g))
         allZeros = false;
-      }
-      if (!isOne(coeffs)) {
+      if (!isOne(g))
         allOnes = false;
-      }
-      if (!allZeros && !allOnes) {
-        break; // Early exit if neither condition holds
-      }
+      if (!allZeros && !allOnes)
+        break;
     }
-
-    // x * 0 = 0, return rhs
-    if (allZeros) {
+    if (allZeros)
       return this->op->getOperand(1);
-    }
-    // x * 1 = x, return lhs
-    if (allOnes) {
+    if (allOnes)
       return this->op->getOperand(0);
-    }
-
     return {};
   }
 
@@ -1560,12 +1635,11 @@ OpFoldResult foldMixedBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
     return DenseIntElementsAttr::get(tensorType, flatCoeffs);
   }
 
-  // Tensor operands: fold element-wise. This loop runs at compile time and
-  // iterates over every element, but it only fires when both operands are
-  // constants — in practice these are small hand-written literals, not large
-  // tensors.
-  auto lhsDense = dyn_cast<DenseIntElementsAttr>(lhsAttr);
-  auto rhsDense = dyn_cast<DenseIntElementsAttr>(rhsAttr);
+  // Tensor operands: fold element-wise. Walks raw bytes so both legacy
+  // storage-int (DenseIntElementsAttr) and new field-typed
+  // (DenseElementsAttr<tensor<...x!T>>) constants work.
+  auto lhsDense = dyn_cast<DenseElementsAttr>(lhsAttr);
+  auto rhsDense = dyn_cast<DenseElementsAttr>(rhsAttr);
   if (!lhsDense || !rhsDense)
     return {};
 
@@ -1576,23 +1650,22 @@ OpFoldResult foldMixedBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
 
   unsigned lhsDeg = lhsFti.getDegreeOverPrime();
   unsigned rhsDeg = rhsFti.getDegreeOverPrime();
-  auto lhsVals = lhsDense.getValues<APInt>();
-  auto rhsVals = rhsDense.getValues<APInt>();
-  if (lhsVals.size() % lhsDeg != 0 || rhsVals.size() % rhsDeg != 0)
-    return {};
-  unsigned numElems = lhsVals.size() / lhsDeg;
-  if (numElems != rhsVals.size() / rhsDeg)
+  PrimeFieldType pfType = efType.getBasePrimeField();
+  unsigned primeBits = pfType.getTypeSizeInBits();
+  // Count field elements from the op's result type. A legacy storage-int
+  // constant's attr shape covers each element with its coefficient slots, so
+  // the two operands' `getNumElements()` disagree across differing degrees
+  // (e.g. EF deg-2 vs base PF); the result type carries the true count.
+  unsigned numElems = cast<ShapedType>(op->getType()).getNumElements();
+  auto lhsVals = coeffsFromRawBytes(lhsDense, primeBits, numElems * lhsDeg);
+  auto rhsVals = coeffsFromRawBytes(rhsDense, primeBits, numElems * rhsDeg);
+  if (lhsVals.empty() || rhsVals.empty())
     return {};
 
-  auto intType = lhsDense.getElementType();
+  auto intType = pfType.getStorageType();
 
-  // Extract the i-th field element as a TypedAttr suitable for
-  // FieldOperation::fromUnchecked (IntegerAttr for PF, DenseIntElementsAttr
-  // for EF).
-  auto extractElem = [intType](DenseIntElementsAttr dense, unsigned deg,
-                               unsigned idx,
+  auto extractElem = [intType](ArrayRef<APInt> vals, unsigned deg, unsigned idx,
                                FieldTypeInterface fti) -> TypedAttr {
-    auto vals = dense.getValues<APInt>();
     if (deg == 1)
       return IntegerAttr::get(intType, vals[idx]);
     SmallVector<APInt> coeffs;
@@ -1605,21 +1678,18 @@ OpFoldResult foldMixedBinaryOp(Op *op, typename Op::FoldAdaptor adaptor,
   SmallVector<APInt> resultCoeffs;
   for (unsigned i = 0; i < numElems; ++i) {
     auto lhsOp = FieldOperation::fromUnchecked(
-        extractElem(lhsDense, lhsDeg, i, lhsFti), lhsElemType);
+        extractElem(lhsVals, lhsDeg, i, lhsFti), lhsElemType);
     auto rhsOp = FieldOperation::fromUnchecked(
-        extractElem(rhsDense, rhsDeg, i, rhsFti), rhsElemType);
+        extractElem(rhsVals, rhsDeg, i, rhsFti), rhsElemType);
     SmallVector<APInt> elemCoeffs =
         static_cast<SmallVector<APInt>>(fn(lhsOp, rhsOp));
     resultCoeffs.append(elemCoeffs);
   }
 
-  auto storageType = efType.getBasePrimeField().getStorageType();
   auto resultShapedType = cast<ShapedType>(op->getType());
-  auto towerShape = efType.getAttrShape();
-  SmallVector<int64_t> attrShape(resultShapedType.getShape());
-  attrShape.append(towerShape.begin(), towerShape.end());
-  auto resultType = RankedTensorType::get(attrShape, storageType);
-  return DenseIntElementsAttr::get(resultType, resultCoeffs);
+  unsigned primeBytes = (pfType.getTypeSizeInBits() + 7) / 8;
+  auto bytes = packAPIntsLE(resultCoeffs, primeBytes);
+  return DenseElementsAttr::getFromRawBuffer(resultShapedType, bytes);
 }
 
 template <typename Op, typename Func>
@@ -1939,9 +2009,16 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
                        Predicate pred) {
   Type elementType = getElementTypeOrSelf(val.getType());
 
-  // Guard DRR patterns against mixed-type ops: a DenseElementsAttr paired with
-  // a scalar PF value means the constant is an EF value. DRR patterns would
-  // produce a PF result instead of the required EF result type.
+  // Guard DRR patterns against mixed-type ops: a DenseElementsAttr paired
+  // with a PF value means the constant is an EF value with mismatched
+  // element type. DRR patterns would produce a PF result instead of the
+  // required EF result type. Bail.
+  if (auto denseAttr = dyn_cast<DenseElementsAttr>(attr)) {
+    Type attrElem = denseAttr.getType().getElementType();
+    if (isa<ExtensionFieldType>(attrElem) &&
+        !isa<ExtensionFieldType>(elementType))
+      return false;
+  }
   if (isa<DenseElementsAttr>(attr) && !isa<ShapedType>(val.getType()) &&
       !isa<ExtensionFieldType>(elementType))
     return false;
@@ -1950,34 +2027,42 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
   TypedAttr typedAttr;
   if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
     typedAttr = intAttr;
-  } else if (auto splatAttr = dyn_cast<SplatElementsAttr>(attr)) {
-    // For EF types, a splat [v,v,...,v] can never be a valid scalar embedding
-    // [v,0,...,0] (unless degreeOverPrime == 1, but then it's PF).
-    if (isa<ExtensionFieldType>(elementType))
-      return false;
+  } else if (auto splatAttr = dyn_cast<SplatElementsAttr>(attr);
+             splatAttr && !isa<ExtensionFieldType>(elementType) &&
+             splatAttr.getElementType().isIntOrIndex()) {
+    // Storage-int splat (legacy DenseIntElementsAttr representation).
+    // For EF and field-typed dense, fall through to the DenseElementsAttr
+    // branch below which walks raw bytes for per-coeff comparison.
     typedAttr = splatAttr.getSplatValue<IntegerAttr>();
-  } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr)) {
-    if (auto fti = dyn_cast<FieldTypeInterface>(elementType)) {
-      // Field types: verify all tensor elements are identical by checking
-      // each coefficient repeats the pattern of the first element.
+  } else if (auto denseAttr = dyn_cast<DenseElementsAttr>(attr)) {
+    if (auto fti = dyn_cast<FieldTypeInterface>(elementType);
+        fti && isa<PrimeFieldType, ExtensionFieldType>(elementType)) {
+      // PF/EF only: verify all tensor elements are identical by checking
+      // each coefficient repeats the pattern of the first element. Walks
+      // raw bytes so both legacy storage-int and new field-typed dense
+      // attrs work. BinaryField doesn't participate in mixed PF/EF DRR
+      // patterns.
+      auto pfType = field::getBasePrimeField(elementType);
       unsigned degreeOverPrime = fti.getDegreeOverPrime();
-      auto allValues = denseAttr.getValues<APInt>();
+      auto numElems = denseAttr.getType().getNumElements();
+      auto allValues = coeffsFromRawBytes(denseAttr, pfType.getTypeSizeInBits(),
+                                          numElems * degreeOverPrime);
+      if (allValues.empty())
+        return false;
       unsigned total = allValues.size();
       if (total % degreeOverPrime != 0)
         return false;
-
       for (unsigned i = degreeOverPrime; i < total; ++i) {
         if (allValues[i] != allValues[i % degreeOverPrime])
           return false;
       }
-
       if (degreeOverPrime == 1) {
-        typedAttr = IntegerAttr::get(denseAttr.getElementType(), allValues[0]);
+        typedAttr = IntegerAttr::get(pfType.getStorageType(), allValues[0]);
       } else {
         SmallVector<APInt> firstCoeffs(allValues.begin(),
                                        allValues.begin() + degreeOverPrime);
-        auto singleType = RankedTensorType::get(fti.getAttrShape(),
-                                                denseAttr.getElementType());
+        auto singleType =
+            RankedTensorType::get(fti.getAttrShape(), pfType.getStorageType());
         typedAttr = DenseIntElementsAttr::get(singleType, firstCoeffs);
       }
     } else {

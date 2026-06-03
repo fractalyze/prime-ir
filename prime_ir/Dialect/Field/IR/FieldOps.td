@@ -94,7 +94,7 @@ def Field_ConstantOp : Field_Op_Base<"constant", [ConstantLike]> {
     OpBuilder<(ins "ExtensionFieldType":$ty, "uint64_t":$c0), [{
       auto primeField = ty.getBasePrimeField();
       unsigned degreeOverPrime = ty.getDegreeOverPrime();
-      unsigned bitWidth = primeField.getStorageBitWidth();
+      unsigned bitWidth = primeField.getTypeSizeInBits();
       SmallVector<APInt> coeffs(degreeOverPrime, APInt(bitWidth, 0));
       coeffs[0] = static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c0), primeField));
       auto tensorType = RankedTensorType::get(ty.getAttrShape(), primeField.getStorageType());
@@ -103,7 +103,7 @@ def Field_ConstantOp : Field_Op_Base<"constant", [ConstantLike]> {
     OpBuilder<(ins "ExtensionFieldType":$ty, "llvm::ArrayRef<uint64_t>":$coeffs), [{
       assert(coeffs.size() == ty.getDegreeOverPrime() && "coefficient count must match total degree over prime");
       auto primeField = ty.getBasePrimeField();
-      unsigned bitWidth = primeField.getStorageBitWidth();
+      unsigned bitWidth = primeField.getTypeSizeInBits();
       SmallVector<APInt> coeffInts;
       for (auto c : coeffs)
         coeffInts.push_back(static_cast<APInt>(PrimeFieldOperation::fromUnchecked(APInt(bitWidth, c), primeField)));
