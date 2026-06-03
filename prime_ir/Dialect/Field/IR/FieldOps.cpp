@@ -825,6 +825,15 @@ LogicalResult BitcastOp::verify() {
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
+  // A scalar integer operand folds through foldBitcast as a raw IntegerAttr,
+  // but for an ExtensionField result that integer packs all tower coefficients
+  // and materializeConstant can't stamp it into a field.constant (whose value
+  // attr is tower-shaped). Mirror foldBitcast's dense-operand EF exclusion and
+  // decline the fold; the bitcast lowers via field-to-llvm as a noop
+  // reinterpret.
+  if (dyn_cast_if_present<IntegerAttr>(adaptor.getInput()) &&
+      isa<ExtensionFieldType>(getOutput().getType()))
+    return {};
   return foldBitcast(*this, adaptor);
 }
 
