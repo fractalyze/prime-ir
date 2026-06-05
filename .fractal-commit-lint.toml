@@ -1,21 +1,18 @@
 # Commit-scope policy for prime_ir (fractal-commit-lint).
 #
-# A scope is valid iff it equals the canonical scope derived from the changed
-# files (root stripped, each path segment camel_to_snake'd, capped at
-# max_scope_depth), or it is a curated [scopes] alias. See fractal-lint's
-# docs/scope-resolution.md.
-#
-# The [scopes] block blesses prime_ir's established short dialect names
-# (field, mod_arith, ...) as aliases: a blessed scope is checked by scope-path
-# only (its files must live under the listed prefixes) and is exempt from the
-# deepest-directory derivation — so feat(mod_arith) stays valid for a commit
-# under prime_ir/Dialect/ModArith/Conversions without demanding
-# mod_arith/conversions. CI runs this same tool over each commit via the
-# commit-lint action in hybrid mode (.github/workflows/commit-lint.yml), so
-# local pre-commit and CI agree.
+# Scopes are derived from the changed files: the `prime_ir` root is stripped, a
+# leading `tests` segment folds a test file onto its source scope (test_dirs),
+# each segment is camel_to_snake'd (with EllipticCurve shortened to ec), and
+# the result is capped at max_scope_depth (default 2). So
+# prime_ir/Dialect/ModArith/... and tests/Dialect/ModArith/... both derive
+# `dialect/mod_arith`, any deeper subdir (IR, Conversions) still caps to the
+# same scope, and a commit spanning two dialects takes no scope. CI runs this
+# same tool over each commit via the commit-lint action in hybrid mode
+# (.github/workflows/commit-lint.yml), so local pre-commit and CI agree.
 
 roots = ["prime_ir"]
 require_scope = false
+test_dirs = ["tests"]
 
 exempt_paths = [
   "WORKSPACE.bazel",
@@ -26,11 +23,5 @@ exempt_paths = [
   ".github",
 ]
 
-[scopes]
-arith_ext = ["prime_ir/Dialect/ArithExt"]
-elliptic_curve = ["prime_ir/Dialect/EllipticCurve"]
-field = ["prime_ir/Dialect/Field"]
-mod_arith = ["prime_ir/Dialect/ModArith"]
-poly = ["prime_ir/Dialect/Poly"]
-tensor_ext = ["prime_ir/Dialect/TensorExt"]
-tools = ["tools"]
+[dictionary]
+EllipticCurve = "ec"   # dialect/ec, not dialect/elliptic_curve
