@@ -21,6 +21,7 @@ exempt_paths = [
   "BUILD.bazel",
   "third_party",     # vendored deps (llvm, zk_dtypes pins)
   ".github",
+  "build_tools",     # CI scripts, cross-cutting
 ]
 
 [dictionary]
