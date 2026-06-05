@@ -216,3 +216,39 @@ func.func @test_batch_xyzz_to_affine(%arg0: tensor<4x!xyzzm>) -> tensor<4x!affin
   %result = elliptic_curve.convert_point_type %arg0 : tensor<4x!xyzzm> -> tensor<4x!affinem>
   return %result : tensor<4x!affinem>
 }
+
+// Single-element tensor convert_point_type takes the scalar path in inline
+// mode too: extract, scalar conversion, wrap back. The batch field.inverse
+// path saves nothing at N = 1, and the inline scalar codegen cannot consume
+// a tensor-typed point.
+// CHECK-LABEL: @test_1elem_jacobian_to_affine_inline
+func.func @test_1elem_jacobian_to_affine_inline(%arg0: tensor<1x!jacobianm>) -> tensor<1x!affinem> {
+  // CHECK-NOT: tensor.generate
+  // CHECK: tensor.extract
+  // CHECK: field.inverse
+  // CHECK-NOT: tensor.generate
+  // CHECK: tensor.from_elements
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<1x!jacobianm> -> tensor<1x!affinem>
+  return %result : tensor<1x!affinem>
+}
+
+// Same for directions the batch path never covered (affine input).
+// CHECK-LABEL: @test_1elem_affine_to_jacobian_inline
+func.func @test_1elem_affine_to_jacobian_inline(%arg0: tensor<1x!affinem>) -> tensor<1x!jacobianm> {
+  // CHECK-NOT: elliptic_curve.convert_point_type
+  // CHECK: tensor.extract
+  // CHECK: elliptic_curve.from_coords
+  // CHECK: tensor.from_elements
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<1x!affinem> -> tensor<1x!jacobianm>
+  return %result : tensor<1x!jacobianm>
+}
+
+// Multi-dim single-element tensors unwrap with one zero index per dimension.
+// CHECK-LABEL: @test_1x1_jacobian_to_affine_inline
+// CHECK: %[[C0:.*]] = arith.constant 0 : index
+func.func @test_1x1_jacobian_to_affine_inline(%arg0: tensor<1x1x!jacobianm>) -> tensor<1x1x!affinem> {
+  // CHECK: tensor.extract %{{.*}}[%[[C0]], %[[C0]]]
+  // CHECK: tensor.from_elements
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<1x1x!jacobianm> -> tensor<1x1x!affinem>
+  return %result : tensor<1x1x!affinem>
+}

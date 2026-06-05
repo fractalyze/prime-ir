@@ -37,3 +37,26 @@ func.func @test_r0_jacobian_to_affine_aot(%arg0: tensor<!jacobianm>) -> tensor<!
   %result = elliptic_curve.convert_point_type %arg0 : tensor<!jacobianm> -> tensor<!affinem>
   return %result : tensor<!affinem>
 }
+
+// Single-element tensors take the scalar AOT path too — the batch
+// jacobian → affine lowering (Montgomery's trick) saves nothing at N = 1,
+// and its batch field.inverse path can't unwrap to the runtime call.
+// CHECK-LABEL: @test_1elem_jacobian_to_affine_aot
+func.func @test_1elem_jacobian_to_affine_aot(%arg0: tensor<1x!jacobianm>) -> tensor<1x!affinem> {
+  // CHECK: tensor.extract
+  // CHECK: call @ec_jacobian_to_affine_bn254_g1_mont
+  // CHECK: tensor.from_elements
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<1x!jacobianm> -> tensor<1x!affinem>
+  return %result : tensor<1x!affinem>
+}
+
+// Multi-dim single-element tensors unwrap with one index per dimension.
+// CHECK-LABEL: @test_1x1_affine_to_jacobian_aot
+// CHECK: %[[C0:.*]] = arith.constant 0 : index
+func.func @test_1x1_affine_to_jacobian_aot(%arg0: tensor<1x1x!affinem>) -> tensor<1x1x!jacobianm> {
+  // CHECK: tensor.extract %{{.*}}[%[[C0]], %[[C0]]]
+  // CHECK: call @ec_affine_to_jacobian_bn254_g1_mont
+  // CHECK: tensor.from_elements
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<1x1x!affinem> -> tensor<1x1x!jacobianm>
+  return %result : tensor<1x1x!jacobianm>
+}
