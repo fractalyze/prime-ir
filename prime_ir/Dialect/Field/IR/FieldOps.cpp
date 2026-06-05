@@ -376,18 +376,6 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
       auto scalarAttr = DenseIntElementsAttr::get(tensorType, coeffs);
       return ConstantOp::create(builder, loc, type, scalarAttr);
     }
-    if (auto shapedTy = dyn_cast<ShapedType>(type)) {
-      // PF/BF: a scalar carries implicit-splat semantics; store as a
-      // storage-int DenseIntElementsAttr splat matching the result shape.
-      auto storageType =
-          isa<PrimeFieldType>(elementType)
-              ? cast<PrimeFieldType>(elementType).getStorageType()
-              : cast<BinaryFieldType>(elementType).getStorageType();
-      auto splatAttr = DenseIntElementsAttr::get(
-          shapedTy.clone(storageType),
-          intAttr.getValue().zextOrTrunc(storageType.getWidth()));
-      return ConstantOp::create(builder, loc, type, splatAttr);
-    }
     return ConstantOp::create(builder, loc, type, intAttr);
   }
   // Fold results may arrive as storage-int-typed DenseElementsAttr. For an EF
