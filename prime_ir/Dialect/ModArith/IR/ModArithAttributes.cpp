@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "llvm/ADT/STLExtras.h"
@@ -71,9 +72,11 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   // `b` = 2^`w`
   APInt b = APInt::getOneBitSet(w + 1, w);
 
-  // `bReduced` = `b` (mod `modulus`)
-  APInt modExt = modulus.zextOrTrunc(b.getBitWidth());
-  APInt bReduced = b.urem(modExt);
+  // `bReduced` = `b` (mod `modulus`). Truncating the modulus first
+  // (b.getBitWidth() == w+1 < modulus width for multi-word moduli) gave a
+  // wrong bReduced for bit-64==0 fields like BLS12-377 (issue #344).
+  unsigned cw = std::max(b.getBitWidth(), modulus.getBitWidth());
+  APInt bReduced = b.zext(cw).urem(modulus.zext(cw));
   bReduced = bReduced.zextOrTrunc(modulus.getBitWidth());
   ModArithType modType = ModArithType::get(modAttr.getContext(), modAttr);
   ModArithOperation bReducedOp(bReduced, modType);
