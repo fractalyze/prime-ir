@@ -44,6 +44,11 @@ def ModArithToArith : Pass<"mod-arith-to-arith", "ModuleOp"> {
   let options = [
     Option<"lazyReduction", "lazy-reduction", "bool", "false",
       "Enable lazy reduction optimization via integer range analysis">,
+    Option<"target", "target", "std::string", /*default=*/"\"cpu\"",
+      "Lowering target: 'cpu' keeps the wide-int limb lowering (native "
+      "64-bit multiply); 'gpu' lowers multi-limb Montgomery multiplies "
+      "via 32-bit-limb CIOS (IMAD.WIDE). Sign-bit-set moduli always use "
+      "the cpu path.">,
   ];
 }
 
