@@ -24,6 +24,7 @@ limitations under the License.
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/Patterns.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -186,6 +187,47 @@ LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
   return success();
 }
 
+namespace {
+// populateSCFStructuralTypeConversionsAndLegality covers scf.for/if/while but
+// not scf.index_switch, so an index_switch carrying converted-away result types
+// (e.g. field.pf -> mod_arith.int) is left unconverted while its body converts,
+// stranding an unresolved materialization at its yields. Convert it the way
+// upstream's ConvertIfOpTypes converts scf.if: clone with converted result
+// types and inline the original regions so the framework recurses into them
+// (the index arg and case attribute are unaffected by the type converter).
+class ConvertIndexSwitchOpTypes
+    : public OpConversionPattern<scf::IndexSwitchOp> {
+public:
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(scf::IndexSwitchOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    SmallVector<Type> newResultTypes;
+    if (failed(
+            typeConverter->convertTypes(op.getResultTypes(), newResultTypes)))
+      return rewriter.notifyMatchFailure(op, "could not convert result types");
+
+    auto newOp = scf::IndexSwitchOp::create(rewriter, op.getLoc(),
+                                            newResultTypes, adaptor.getArg(),
+                                            op.getCases(), op.getNumCases());
+
+    // Inline the original regions so the conversion framework keeps converting
+    // the ops (and yields) inside them, rather than cloning them out of its
+    // worklist.
+    rewriter.inlineRegionBefore(op.getDefaultRegion(), newOp.getDefaultRegion(),
+                                newOp.getDefaultRegion().end());
+    for (unsigned i = 0, e = op.getNumCases(); i < e; ++i)
+      rewriter.inlineRegionBefore(op.getCaseRegions()[i],
+                                  newOp.getCaseRegions()[i],
+                                  newOp.getCaseRegions()[i].end());
+
+    rewriter.replaceOp(op, newOp.getResults());
+    return success();
+  }
+};
+} // namespace
+
 void addStructuralConversionPatterns(TypeConverter &typeConverter,
                                      RewritePatternSet &patterns,
                                      ConversionTarget &target) {
@@ -214,6 +256,23 @@ void addStructuralConversionPatterns(TypeConverter &typeConverter,
 
   scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns,
                                                        target);
+  // Upstream's SCF structural conversion omits scf.index_switch; add it so a
+  // converted-away result type (e.g. field → mod_arith) is rewritten with the
+  // op rather than left for an unresolvable materialization at its yields.
+  patterns.add<ConvertIndexSwitchOpTypes>(typeConverter, patterns.getContext());
+  target.addDynamicallyLegalOp<scf::IndexSwitchOp>(
+      [&](scf::IndexSwitchOp op) { return typeConverter.isLegal(op); });
+  // The upstream populate marks index_switch-parented yields legal (it only
+  // recognizes for/if/while), so the already-registered yield conversion never
+  // fires on them. addDynamicallyLegalOp overwrites, so re-register the whole
+  // predicate with index_switch added — keep the for/if/while arm in sync with
+  // upstream's populateSCFStructuralTypeConversionTarget.
+  target.addDynamicallyLegalOp<scf::YieldOp>([&](scf::YieldOp op) {
+    if (!isa<scf::ForOp, scf::IfOp, scf::WhileOp, scf::IndexSwitchOp>(
+            op->getParentOp()))
+      return true;
+    return typeConverter.isLegal(op.getOperandTypes());
+  });
 }
 
 bool hasConstantOperand(Operation *op) {
