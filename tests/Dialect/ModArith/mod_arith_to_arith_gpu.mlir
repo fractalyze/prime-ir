@@ -130,3 +130,20 @@ func.func @gpu_square_multi_limb(%a : !BLS377m) -> !BLS377m {
   %r = mod_arith.square %a : !BLS377m
   return %r : !BLS377m
 }
+
+// -----
+
+// BabyBear (p = 2013265921, i32, Montgomery): single-limb type never routes
+// through the 12-limb CIOS path — reduceSingleLimb is used unchanged under
+// target=gpu. The lowering uses i32 extended multiplies, not the i64 limb
+// accumulations of CIOS.
+!BBm = !mod_arith.int<2013265921 : i32, true>
+
+// GPU-LABEL: @gpu_mont_mul_single_limb_babybear
+// Single-limb path: i32 extended mul present, no i64 CIOS limb products.
+// GPU: arith.mului_extended {{.*}} : i32
+// GPU-NOT: arith.muli {{.*}} : i64
+func.func @gpu_mont_mul_single_limb_babybear(%a : !BBm, %b : !BBm) -> !BBm {
+  %r = mod_arith.mont_mul %a, %b : !BBm
+  return %r : !BBm
+}
