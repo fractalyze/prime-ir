@@ -21,6 +21,7 @@ limitations under the License.
 #include "mlir/Analysis/DataFlow/IntegerRangeAnalysis.h"
 #include "mlir/Analysis/DataFlowFramework.h"
 #include "mlir/Dialect/Affine/IR/AffineOps.h"
+#include "llvm/ADT/Twine.h"
 #include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -1489,6 +1490,55 @@ void ModArithToArith::runOnOperation() {
     }
     return WalkResult::advance();
   });
+
+  // Outline scalar mod_arith.inverse into shared private funcs: the inverse
+  // body (a constant-time binary-GCD loop) is large, and emitting it at every
+  // call site blows up the conversion + canonicalize super-linearly when many
+  // inverses chain (e.g. the coefficient-form jagged sumcheck's per-round
+  // inverses across rounds). Outlining materializes one body per type and
+  // leaves opaque func.calls at the sites; addStructuralConversionPatterns
+  // converts the func boundaries during the conversion below.
+  if (outlineInverse) {
+    llvm::DenseMap<Type, func::FuncOp> invFns;
+    SmallVector<InverseOp> toOutline;
+    module.walk([&](InverseOp op) {
+      if (isa<ShapedType>(op.getType()))
+        return;
+      auto parent = op->getParentOfType<func::FuncOp>();
+      if (parent && parent.getName().starts_with("__prime_ir_"))
+        return;
+      toOutline.push_back(op);
+    });
+    for (InverseOp op : toOutline) {
+      Type t = op.getType();
+      func::FuncOp &fn = invFns[t];
+      if (!fn) {
+        auto mt = cast<ModArithType>(t);
+        APInt m = mt.getModulus().getValue();
+        uint64_t h = m.getLimitedValue();
+        if (m.getBitWidth() > 64)
+          h ^= m.extractBits(64, 64).getLimitedValue();
+        std::string name = ("__prime_ir_mod_arith_inverse_" +
+                            Twine(mt.isMontgomery() ? "m" : "s") + "_" +
+                            Twine(h))
+                               .str();
+        OpBuilder b(context);
+        b.setInsertionPointToEnd(module.getBody());
+        fn = b.create<func::FuncOp>(module.getLoc(), name,
+                                    FunctionType::get(context, {t}, {t}));
+        fn.setPrivate();
+        Block *blk = fn.addEntryBlock();
+        b.setInsertionPointToStart(blk);
+        Value r = b.create<InverseOp>(module.getLoc(), blk->getArgument(0));
+        b.create<func::ReturnOp>(module.getLoc(), r);
+      }
+      OpBuilder b(op);
+      auto call =
+          b.create<func::CallOp>(op.getLoc(), fn, ValueRange{op.getInput()});
+      op.getResult().replaceAllUsesWith(call.getResult(0));
+      op.erase();
+    }
+  }
 
   // Build per-function bound maps for lazy reduction.
   BoundMap moduleBoundMap;

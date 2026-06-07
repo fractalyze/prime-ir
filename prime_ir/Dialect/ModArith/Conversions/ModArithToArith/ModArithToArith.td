@@ -44,6 +44,11 @@ def ModArithToArith : Pass<"mod-arith-to-arith", "ModuleOp"> {
   let options = [
     Option<"lazyReduction", "lazy-reduction", "bool", "false",
       "Enable lazy reduction optimization via integer range analysis">,
+    Option<"outlineInverse", "outline-inverse", "bool", "false",
+      "Outline scalar mod_arith.inverse into shared private funcs (one body "
+      "per type, opaque func.call at each site) instead of emitting the large "
+      "inverse body inline. Prevents super-linear IR blowup when many inverses "
+      "chain (e.g. coefficient-form sumcheck round polys across rounds).">,
   ];
 }
 
