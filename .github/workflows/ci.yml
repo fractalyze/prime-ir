@@ -39,6 +39,12 @@ jobs:
         if: github.event_name != 'pull_request'
         run: ./build_tools/github_actions/ci_build_bazel.sh
 
+      # Capture the runner-local test.log a failed test leaves behind — the CI
+      # stream only carries the FAIL summary, not the gtest output.
+      - name: Upload bazel test logs
+        if: ${{ failure() }}
+        uses: fractalyze/.github/.github/actions/upload-bazel-testlogs@main
+
   pre-commit-style:
     if: github.actor != 'fractalyze-dev'
     runs-on: [self-hosted, cpu]
