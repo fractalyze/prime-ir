@@ -547,7 +547,11 @@ struct ConvertNegate : public BoundMapPattern<NegateOp> {
 };
 
 struct ConvertMontReduce : public BoundMapPattern<MontReduceOp> {
-  using BoundMapPattern::BoundMapPattern;
+  ConvertMontReduce(const TypeConverter &tc, MLIRContext *context,
+                    const BoundMap *boundMap, bool useGpuCios,
+                    PatternBenefit benefit = 1)
+      : BoundMapPattern(tc, context, boundMap, benefit),
+        useGpuCios(useGpuCios) {}
 
   LogicalResult
   matchAndRewrite(MontReduceOp op, OpAdaptor adaptor,
@@ -559,13 +563,26 @@ struct ConvertMontReduce : public BoundMapPattern<MontReduceOp> {
     Value tLow = adaptor.getLow();
     Value tHigh = adaptor.getHigh();
 
-    // Perform Montgomery reduction using MontReducer helper class.
-    MontReducer reducer(b, getResultModArithType(op));
+    ModArithType modType = getResultModArithType(op);
     uint64_t resBound = lookupKp(op.getResult());
+
+    // GPU target: emit 32-bit-limb fused-CIOS REDC instead of the wide-int
+    // path. Same R as the wide path. Falls through when ineligible.
+    if (useGpuCios && CiosMontEmitter::isEligible(modType, tLow.getType())) {
+      Value result = CiosMontEmitter(b, modType)
+                         .emitRedc(tLow, tHigh, /*lazy=*/resBound >= 2);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    // Perform Montgomery reduction using MontReducer helper class.
+    MontReducer reducer(b, modType);
     Value result = reducer.reduce(tLow, tHigh, /*lazy=*/resBound >= 2);
     rewriter.replaceOp(op, result);
     return success();
   }
+
+  bool useGpuCios;
 };
 
 struct ConvertToMont : public OpConversionPattern<ToMontOp> {
@@ -1421,7 +1438,11 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
 };
 
 struct ConvertMontSquare : public BoundMapPattern<MontSquareOp> {
-  using BoundMapPattern::BoundMapPattern;
+  ConvertMontSquare(const TypeConverter &tc, MLIRContext *context,
+                    const BoundMap *boundMap, bool useGpuCios,
+                    PatternBenefit benefit = 1)
+      : BoundMapPattern(tc, context, boundMap, benefit),
+        useGpuCios(useGpuCios) {}
 
   LogicalResult
   matchAndRewrite(MontSquareOp op, OpAdaptor adaptor,
@@ -1450,14 +1471,26 @@ struct ConvertMontSquare : public BoundMapPattern<MontSquareOp> {
         input = reducer.getCanonicalFromExtended(input, inputKp);
     }
 
-    auto sqResult = squareExtended(b, op, input);
     uint64_t resBound = lookupKp(op.getResult());
 
+    // GPU target: emit 32-bit-limb fused-CIOS via emitMontMul(input, input).
+    // Same R as the wide path; the operand pre-reduction above applies
+    // unchanged. Falls through when ineligible.
+    if (useGpuCios && CiosMontEmitter::isEligible(modType, input.getType())) {
+      Value result = CiosMontEmitter(b, modType)
+                         .emitMontMul(input, input, /*lazy=*/resBound >= 2);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    auto sqResult = squareExtended(b, op, input);
     Value result = reducer.reduce(sqResult.lo, sqResult.hi,
                                   /*lazy=*/resBound >= 2);
     rewriter.replaceOp(op, result);
     return success();
   }
+
+  bool useGpuCios;
 };
 
 // TODO(ashjeong): Account for Montgomery domain inputs. Currently only accounts
@@ -1578,14 +1611,13 @@ void ModArithToArith::runOnOperation() {
       ConvertDouble,
       ConvertInverse,
       ConvertMontInverse,
-      ConvertMontReduce,
-      ConvertMontSquare,
       ConvertNegate,
       ConvertSub
       // clang-format on
       >(typeConverter, context, bm);
-  // ConvertMontMul additionally takes the GPU/CIOS routing flag.
-  patterns.add<ConvertMontMul>(typeConverter, context, bm, useGpuCios);
+  // The Montgomery-family patterns additionally take the GPU/CIOS routing flag.
+  patterns.add<ConvertMontMul, ConvertMontReduce, ConvertMontSquare>(
+      typeConverter, context, bm, useGpuCios);
   // Patterns that don't use BoundMap.
   patterns.add<
       // clang-format off

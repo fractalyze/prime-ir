@@ -50,6 +50,11 @@ public:
   // a * b * R⁻¹ mod n. lazy=true returns [0, 2p), else [0, p).
   Value emitMontMul(Value a, Value b, bool lazy);
 
+  // REDC of T = tLow + tHigh·2ʷ (each w = storage bits) to T·R⁻¹ mod n, in
+  // 32-bit limbs. Shares the reduction row with emitMontMul. lazy=true returns
+  // [0, 2p), else [0, p).
+  Value emitRedc(Value tLow, Value tHigh, bool lazy);
+
 private:
   SmallVector<Value> decompose(Value wide);            // iW -> N x i32
   Value recompose(ArrayRef<Value> limbs, Type wideTy); // N x i32 -> iW
@@ -58,6 +63,14 @@ private:
                                      Value c32);
   // s = (i64)t + (i64)c. Returns {lo32(s), hi32(s)} for the overflow columns.
   std::pair<Value, Value> addCarryStep(Value t32, Value c32);
+
+  // One CIOS reduction row over the window t[0..N]: m = t[0]·n′₃₂ (low half),
+  // then t[0..N] += m·n[0..N) with the bottom limb zeroed and the window
+  // shifted down one limb, so the reduced limbs land in t[0..N-1]. Consumes
+  // t[N] via an i64-safe add. Returns the carry exiting column N for the caller
+  // to fold into its overflow columns. Shared by emitMontMul and emitRedc.
+  Value reduceRow(MutableArrayRef<Value> t, ArrayRef<Value> nConst, Value np32,
+                  unsigned n);
 
   Value i32Const(uint64_t v);
 

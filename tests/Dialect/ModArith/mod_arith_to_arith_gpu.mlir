@@ -45,3 +45,88 @@ func.func @gpu_mont_mul_sign_bit_set(%a : !Secpm, %b : !Secpm) -> !Secpm {
   %r = mod_arith.mont_mul %a, %b : !Secpm
   return %r : !Secpm
 }
+
+// -----
+
+!BLS377m = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
+
+// mont_square routes through emitMontMul(input, input): 32-bit-limb CIOS, so
+// the wide product/reduce must be gone.
+// GPU-LABEL: @gpu_mont_square_multi_limb
+// GPU: arith.muli {{.*}} : i64
+// GPU-NOT: arith.mului_extended {{.*}} : i384
+// GPU: return {{.*}} : i384
+// CPU-LABEL: @gpu_mont_square_multi_limb
+// CPU: arith.mului_extended {{.*}} : i384
+func.func @gpu_mont_square_multi_limb(%a : !BLS377m) -> !BLS377m {
+  %r = mod_arith.mont_square %a : !BLS377m
+  return %r : !BLS377m
+}
+
+// -----
+
+!BLS377m = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
+!BLS377 = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384>
+
+// mont_reduce routes through emitRedc: 32-bit-limb CIOS REDC, so the wide
+// mont reducer's product/reduce must be gone.
+// GPU-LABEL: @gpu_mont_reduce_multi_limb
+// GPU: arith.muli {{.*}} : i64
+// GPU-NOT: arith.mului_extended {{.*}} : i384
+// GPU: return {{.*}} : i384
+// CPU-LABEL: @gpu_mont_reduce_multi_limb
+// CPU: arith.mului_extended {{.*}} : i384
+func.func @gpu_mont_reduce_multi_limb(%lo : i384, %hi : i384) -> !BLS377 {
+  %r = mod_arith.mont_reduce %lo, %hi : i384 -> !BLS377
+  return %r : !BLS377
+}
+
+// -----
+
+!BLS377m = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
+!BLS377 = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384>
+
+// from_mont lowers to mont_reduce(input, 0), inheriting the CIOS REDC path.
+// GPU-LABEL: @gpu_from_mont_multi_limb
+// GPU: arith.muli {{.*}} : i64
+// GPU-NOT: arith.mului_extended {{.*}} : i384
+// GPU: return {{.*}} : i384
+// CPU-LABEL: @gpu_from_mont_multi_limb
+// CPU: arith.mului_extended {{.*}} : i384
+func.func @gpu_from_mont_multi_limb(%a : !BLS377m) -> !BLS377 {
+  %r = mod_arith.from_mont %a : !BLS377
+  return %r : !BLS377
+}
+
+// -----
+
+!BLS377m = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
+!BLS377 = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384>
+
+// to_mont lowers to mont_mul(input, R²), inheriting the CIOS path.
+// GPU-LABEL: @gpu_to_mont_multi_limb
+// GPU: arith.muli {{.*}} : i64
+// GPU-NOT: arith.mului_extended {{.*}} : i384
+// GPU: return {{.*}} : i384
+// CPU-LABEL: @gpu_to_mont_multi_limb
+// CPU: arith.mului_extended {{.*}} : i384
+func.func @gpu_to_mont_multi_limb(%a : !BLS377) -> !BLS377m {
+  %r = mod_arith.to_mont %a : !BLS377m
+  return %r : !BLS377m
+}
+
+// -----
+
+!BLS377m = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
+
+// square lowers to mont_square (Montgomery type), inheriting the CIOS path.
+// GPU-LABEL: @gpu_square_multi_limb
+// GPU: arith.muli {{.*}} : i64
+// GPU-NOT: arith.mului_extended {{.*}} : i384
+// GPU: return {{.*}} : i384
+// CPU-LABEL: @gpu_square_multi_limb
+// CPU: arith.mului_extended {{.*}} : i384
+func.func @gpu_square_multi_limb(%a : !BLS377m) -> !BLS377m {
+  %r = mod_arith.square %a : !BLS377m
+  return %r : !BLS377m
+}
