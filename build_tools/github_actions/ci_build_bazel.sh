@@ -105,8 +105,13 @@ bazel-test-diff() {
   echo "$formatted_impacted_targets"
   echo ""
 
-  # Remove external and duplicate targets.
-  sort "$IMPACTED_TARGETS_PATH" | uniq | grep -v '//external' > "$FILTERED_TARGETS_PATH" || true
+  # Remove external and duplicate targets. Also drop pywrap_library's
+  # Windows DLL-export helpers (`*_def`): their WinDefFileParse action is a
+  # Windows-only stub (no_op.bat) on Linux, so building them explicitly
+  # fails. The full-suite path never reaches them — `bazel test //...`
+  # builds only tests and their deps.
+  sort "$IMPACTED_TARGETS_PATH" | uniq | grep -v '//external' \
+    | grep -vE '_def$' > "$FILTERED_TARGETS_PATH" || true
 
   # Build and Test impacted targets. A single `test` invocation also builds
   # the impacted non-test targets — a separate `build` would compile a second
