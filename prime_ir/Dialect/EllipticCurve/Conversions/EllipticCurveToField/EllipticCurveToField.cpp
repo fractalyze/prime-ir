@@ -304,6 +304,10 @@ struct ConvertConvertPointType
   explicit ConvertConvertPointType(MLIRContext *context,
                                    AOTConfig aotConfig = {})
       : OpConversionPattern<ConvertPointTypeOp>(context), aotConfig(aotConfig) {
+    // The wrapped-scalar normalization below re-emits a scalar
+    // convert_point_type that this same pattern must legalize; the scalar op
+    // cannot match the normalization branch again, so recursion is bounded.
+    setHasBoundedRewriteRecursion();
   }
 
   LogicalResult
@@ -311,12 +315,31 @@ struct ConvertConvertPointType
                   ConversionPatternRewriter &rewriter) const override {
     Type inputType = op.getInput().getType();
     Type outputType = getElementTypeOrSelf(op.getType());
+    auto loc = op.getLoc();
+
+    // Normalize wrapped scalars: a statically single-element tensor (any
+    // rank, including rank-0) is a scalar in disguise — extract it, convert
+    // as a scalar, and wrap the result back. The scalar convert_point_type
+    // re-enters this pattern and takes the AOT or inline path per lowering
+    // mode. The batch path below saves nothing at N = 1 (Montgomery's trick
+    // costs 3(N-1) muls + 1 inverse).
+    if (auto tensorType = dyn_cast<RankedTensorType>(inputType);
+        tensorType && tensorType.hasStaticShape() &&
+        tensorType.getNumElements() == 1) {
+      Value zeroIdx = arith::ConstantIndexOp::create(rewriter, loc, 0);
+      SmallVector<Value> indices(tensorType.getRank(), zeroIdx);
+      Value scalar =
+          tensor::ExtractOp::create(rewriter, loc, adaptor.getInput(), indices);
+      Value converted =
+          ConvertPointTypeOp::create(rewriter, loc, outputType, scalar);
+      rewriter.replaceOpWithNewOp<tensor::FromElementsOp>(
+          op, cast<RankedTensorType>(op.getType()), converted);
+      return success();
+    }
 
     // Tensor batch path: Jacobian/XYZZ → Affine with batch field.inverse.
     // The batch inverse avoids per-element scalar inverse, enabling
     // Montgomery's trick (3(N-1) muls + 1 inverse instead of N inverses).
-    // Skip rank-0 tensors — they are scalars wrapped in tensor<T> and should
-    // use the scalar AOT/inline path below.
     if (auto tensorType = dyn_cast<RankedTensorType>(inputType);
         tensorType && tensorType.getRank() > 0) {
       auto inputPti = cast<PointTypeInterface>(tensorType.getElementType());
@@ -329,8 +352,8 @@ struct ConvertConvertPointType
     }
 
     // AOT runtime path for point type conversions.
-    // Use getElementTypeOrSelf for inputType since it is a rank-0 tensor
-    // when the batch path above is skipped (rank>0 tensors are handled there).
+    // Use getElementTypeOrSelf for inputType: multi-element tensors that the
+    // batch path doesn't cover (e.g. affine input) can still reach here.
     if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
                             aotConfig.inlineConstOps)) {
       auto inputPti = cast<PointTypeInterface>(getElementTypeOrSelf(inputType));

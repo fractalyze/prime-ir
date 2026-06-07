@@ -533,6 +533,17 @@ func.func @test_sub_self_is_zero(%arg0: !PF17) -> !PF17 {
   return %0 : !PF17
 }
 
+// The zero constant must materialize as a splat matching the shaped result —
+// a scalar attr on a tensor-typed field.constant fails verification.
+// CHECK-LABEL: @test_sub_self_tensor_is_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_sub_self_tensor_is_zero(%arg0: tensor<4x!PF17>) -> tensor<4x!PF17> {
+  %0 = field.sub %arg0, %arg0 : tensor<4x!PF17>
+  // CHECK: %[[C:.*]] = field.constant dense<0> : [[T]]
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : tensor<4x!PF17>
+}
+
 // CHECK-LABEL: @test_sub_lhs_after_add
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]]
 func.func @test_sub_lhs_after_add(%arg0: !PF17, %arg1: !PF17) -> !PF17 {

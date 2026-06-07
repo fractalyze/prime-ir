@@ -756,6 +756,20 @@ bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
                               const ModArithOperation &b) { return a == b; });
 }
 
+// DRR constant helper: builds a zero attribute matching `type` — the element
+// type's scalar attr for scalar results, a storage-int splat over the result
+// shape for shaped ones.
+TypedAttr createZeroAttr(Type type) {
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
+  auto zero = cast<IntegerAttr>(modArithType.createConstantAttr(0));
+  auto shapedTy = dyn_cast<ShapedType>(type);
+  if (!shapedTy) {
+    return zero;
+  }
+  return DenseIntElementsAttr::get(
+      shapedTy.clone(modArithType.getStorageType()), zero.getValue());
+}
+
 } // namespace
 
 namespace {

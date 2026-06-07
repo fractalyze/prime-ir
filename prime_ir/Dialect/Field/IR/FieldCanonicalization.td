@@ -46,7 +46,9 @@ def IsNegativeNine : Constraint<CPred<"isNegativeOf($0, $1, 9)">>;
 
 // Constant materialization
 def GetAsConstant : NativeCodeCall<"ConstantOp::create($_builder, odsLoc, $0.getType(), cast<TypedAttr>($1))">;
-def GetZeroAttr : NativeCodeCall<"cast<ConstantLikeInterface>(getElementTypeOrSelf($0.getType())).createConstantAttr(0)">;
+// The zero attribute must match the full result type: a scalar attr for
+// scalar results, a storage-int splat over the result shape for shaped ones.
+def GetZeroAttr : NativeCodeCall<"createZeroAttr($0.getType())">;
 
 //===----------------------------------------------------------------------===//
 // Include Canonicalization Pattern Files

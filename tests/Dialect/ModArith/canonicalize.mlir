@@ -850,6 +850,17 @@ func.func @test_sub_self_is_zero(%arg0: !Zp) -> !Zp {
   return %0 : !Zp
 }
 
+// The zero constant must materialize as a splat matching the shaped result —
+// a scalar attr on a tensor-typed mod_arith.constant fails verification.
+// CHECK-LABEL: @test_sub_self_tensor_is_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_sub_self_tensor_is_zero(%arg0: tensor<4x!Zp>) -> tensor<4x!Zp> {
+  %0 = mod_arith.sub %arg0, %arg0 : tensor<4x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<0> : [[T]]
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : tensor<4x!Zp>
+}
+
 // CHECK-LABEL: @test_sub_lhs_after_add
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]]
 func.func @test_sub_lhs_after_add(%arg0: !Zp, %arg1: !Zp) -> !Zp {

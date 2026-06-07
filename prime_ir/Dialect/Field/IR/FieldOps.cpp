@@ -376,18 +376,6 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
       auto scalarAttr = DenseIntElementsAttr::get(tensorType, coeffs);
       return ConstantOp::create(builder, loc, type, scalarAttr);
     }
-    if (auto shapedTy = dyn_cast<ShapedType>(type)) {
-      // PF/BF: a scalar carries implicit-splat semantics; store as a
-      // storage-int DenseIntElementsAttr splat matching the result shape.
-      auto storageType =
-          isa<PrimeFieldType>(elementType)
-              ? cast<PrimeFieldType>(elementType).getStorageType()
-              : cast<BinaryFieldType>(elementType).getStorageType();
-      auto splatAttr = DenseIntElementsAttr::get(
-          shapedTy.clone(storageType),
-          intAttr.getValue().zextOrTrunc(storageType.getWidth()));
-      return ConstantOp::create(builder, loc, type, splatAttr);
-    }
     return ConstantOp::create(builder, loc, type, intAttr);
   }
   // Fold results may arrive as storage-int-typed DenseElementsAttr. For an EF
@@ -2110,6 +2098,33 @@ bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
   return compareWithOffset(
       attr, val, offset,
       [](const FieldOperation &a, const FieldOperation &b) { return a == b; });
+}
+
+// DRR constant helper: builds a zero attribute matching `type` — the element
+// type's scalar attr for scalar results, a storage-int splat over the result
+// shape (with the EF coefficient dims appended) for shaped ones.
+TypedAttr createZeroAttr(Type type) {
+  auto elementType = getElementTypeOrSelf(type);
+  TypedAttr zero =
+      cast<ConstantLikeInterface>(elementType).createConstantAttr(0);
+  auto shapedTy = dyn_cast<ShapedType>(type);
+  if (!shapedTy) {
+    return zero;
+  }
+  SmallVector<int64_t> attrShape(shapedTy.getShape());
+  IntegerType storageType;
+  if (auto efType = dyn_cast<ExtensionFieldType>(elementType)) {
+    auto towerShape = efType.getAttrShape();
+    attrShape.append(towerShape.begin(), towerShape.end());
+    storageType = efType.getBasePrimeField().getStorageType();
+  } else if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
+    storageType = pfType.getStorageType();
+  } else {
+    storageType = cast<BinaryFieldType>(elementType).getStorageType();
+  }
+  return DenseIntElementsAttr::get(
+      RankedTensorType::get(attrShape, storageType),
+      APInt(storageType.getWidth(), 0));
 }
 
 } // namespace

@@ -108,6 +108,22 @@ bazel-test-diff() {
   # Remove external and duplicate targets.
   sort "$IMPACTED_TARGETS_PATH" | uniq | grep -v '//external' > "$FILTERED_TARGETS_PATH" || true
 
+  # Mirror wildcard (//...) semantics: keep only rule targets and drop
+  # `manual`-tagged ones. bazel-diff also lists output-file labels and manual
+  # rules; naming those in --target_pattern_file would force-build targets a
+  # plain `bazel test //...` run never touches (e.g. the Windows-only
+  # _prime_ir_common_def stub, which fails outright on Linux).
+  if [[ -s "$FILTERED_TARGETS_PATH" ]]; then
+    QUERY_FILE="$SCRATCH_DIR/wildcard_semantics_query.txt"
+    {
+      printf 'let t = set('
+      tr '\n' ' ' < "$FILTERED_TARGETS_PATH"
+      printf ') in kind(rule, $t) except attr("tags", "(^\\[|, )manual(, |\\]$)", $t)'
+    } > "$QUERY_FILE"
+    bazel query --query_file="$QUERY_FILE" > "$FILTERED_TARGETS_PATH.rules"
+    mv "$FILTERED_TARGETS_PATH.rules" "$FILTERED_TARGETS_PATH"
+  fi
+
   # Build and Test impacted targets. A single `test` invocation also builds
   # the impacted non-test targets — a separate `build` would compile a second
   # configuration, since test:ci carries build settings (--//:has_avx512).
