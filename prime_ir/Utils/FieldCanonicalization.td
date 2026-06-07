@@ -16,6 +16,21 @@ limitations under the License.
 #ifndef PRIME_IR_UTILS_FIELD_CANONICALIZATION_TD
 #define PRIME_IR_UTILS_FIELD_CANONICALIZATION_TD
 
+// The constant-reassociation patterns below (additive and multiplicative)
+// must not bind a constant as their "value" operand. When the value operand is
+// itself constant the matched expression is fully constant, so the rewrite only
+// permutes which constant pairs with the value rather than shrinking the IR;
+// under commutative greedy rewriting on a shared arithmetic DAG the driver
+// keeps re-matching the reassociated output and never reaches a fixpoint
+// (observed as an unbounded canonicalizer blowup to >44 GB on a 4.8k-op module,
+// prime-ir#339 — multiplicatively here, since the hot constant products are the
+// sumcheck's Lagrange/inverse coefficients, but the additive patterns share the
+// shape and the hazard). Excluding constant value operands costs no
+// optimization: a fully-constant expression is the folder's job.
+def IsNotConstantLike : Constraint<
+    CPred<"!::mlir::matchPattern($0, ::mlir::m_Constant())">,
+    "is not produced by a constant-like op">;
+
 //===----------------------------------------------------------------------===//
 // FieldCanonicalizationPatterns
 //===----------------------------------------------------------------------===//
@@ -129,7 +144,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
         Pat<(AddOp (AddOp $x, (ConstantLikeMatcher TypedAttrInterface:$c0)),
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
             (AddOp $x, (AddOp (GetAsConstant $x, $c0),
-                              (GetAsConstant $x, $c1)))>;
+                              (GetAsConstant $x, $c1))),
+            [(IsNotConstantLike $x)]>;
 
     // (c0 - x) + c1 -> (c0 + c1) - x
     def AddConstantToSubLhs :
@@ -137,7 +153,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
             (SubOp (AddOp (GetAsConstant $x, $c0),
                           (GetAsConstant $x, $c1)),
-                   $x)>;
+                   $x),
+            [(IsNotConstantLike $x)]>;
 
     // (x - c0) + c1 -> x + (c1 - c0)
     def AddConstantToSubRhs :
@@ -145,7 +162,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
             (AddOp $x,
                    (SubOp (GetAsConstant $x, $c1),
-                          (GetAsConstant $x, $c0)))>;
+                          (GetAsConstant $x, $c0))),
+            [(IsNotConstantLike $x)]>;
 
     //===--------------------------------------------------------------------===//
     // SubOp Constant Patterns
@@ -157,7 +175,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
             (AddOp $x,
                    (SubOp (GetAsConstant $x, $c0),
-                          (GetAsConstant $x, $c1)))>;
+                          (GetAsConstant $x, $c1))),
+            [(IsNotConstantLike $x)]>;
 
     // (c0 - x) - c1 -> (c0 - c1) - x
     def SubConstantTwiceLhs :
@@ -165,7 +184,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
             (SubOp (SubOp (GetAsConstant $x, $c0),
                           (GetAsConstant $x, $c1)),
-                   $x)>;
+                   $x),
+            [(IsNotConstantLike $x)]>;
 
     // (x - c0) - c1 -> x - (c0 + c1)
     def SubConstantTwiceRhs :
@@ -173,7 +193,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
             (SubOp $x,
                    (AddOp (GetAsConstant $x, $c0),
-                          (GetAsConstant $x, $c1)))>;
+                          (GetAsConstant $x, $c1))),
+            [(IsNotConstantLike $x)]>;
 
     // c0 - (x + c1) -> (c0 - c1) - x
     def SubAddFromConstant :
@@ -181,7 +202,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
                     (AddOp $x, (ConstantLikeMatcher TypedAttrInterface:$c1))),
             (SubOp (SubOp (GetAsConstant $x, $c0),
                           (GetAsConstant $x, $c1)),
-                   $x)>;
+                   $x),
+            [(IsNotConstantLike $x)]>;
 
     // c0 - (c1 - x) -> x + (c0 - c1)
     def SubSubFromConstantLhs :
@@ -189,7 +211,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
                     (SubOp (ConstantLikeMatcher TypedAttrInterface:$c1), $x)),
             (AddOp $x,
                    (SubOp (GetAsConstant $x, $c0),
-                          (GetAsConstant $x, $c1)))>;
+                          (GetAsConstant $x, $c1))),
+            [(IsNotConstantLike $x)]>;
 
     // c0 - (x - c1) -> (c0 + c1) - x
     def SubSubFromConstantRhs :
@@ -197,7 +220,8 @@ multiclass FieldAdditiveConstantPatterns<Op AddOp, Op SubOp> {
                     (SubOp $x, (ConstantLikeMatcher TypedAttrInterface:$c1))),
             (SubOp (AddOp (GetAsConstant $x, $c0),
                           (GetAsConstant $x, $c1)),
-                   $x)>;
+                   $x),
+            [(IsNotConstantLike $x)]>;
 
     // x - x -> 0
     def SubSelfIsZero :
@@ -233,7 +257,8 @@ multiclass FieldMultiplicativeConstantPatterns<Op MulOp> {
                     (ConstantLikeMatcher TypedAttrInterface:$c1)),
             (MulOp $x,
                    (MulOp (GetAsConstant $x, $c0),
-                          (GetAsConstant $x, $c1)))>;
+                          (GetAsConstant $x, $c1))),
+            [(IsNotConstantLike $x)]>;
 
     // (x * c0) * (y * c1) -> (x * y) * (c0 * c1)
     def MulOfMulByConstant :
@@ -241,7 +266,8 @@ multiclass FieldMultiplicativeConstantPatterns<Op MulOp> {
                     (MulOp $y, (ConstantLikeMatcher TypedAttrInterface:$c1))),
             (MulOp (MulOp $x, $y),
                    (MulOp (GetAsConstant $x, $c0),
-                          (GetAsConstant $y, $c1)))>;
+                          (GetAsConstant $y, $c1))),
+            [(IsNotConstantLike $x), (IsNotConstantLike $y)]>;
 }
 
 //===----------------------------------------------------------------------===//

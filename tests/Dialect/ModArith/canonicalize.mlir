@@ -1277,6 +1277,28 @@ func.func @test_mul_of_mul_by_constant(%arg0: !Zp, %arg1: !Zp) -> !Zp {
   return %2 : !Zp
 }
 
+// Constant-factor reassociation over a value that feeds two constant-scaled
+// products must converge to a single folded constant — it must not bind the
+// folded constant product as a new value operand and re-reassociate forever.
+// This is the shape the coefficient-form jagged sumcheck emits at scale; the
+// greedy rewriter looped to OOM on it before the IsNotConstantLike value-operand
+// guard on the constant-reassociation patterns.
+// CHECK-LABEL: @test_mul_constant_reassoc_shared_value
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_constant_reassoc_shared_value(%arg0: !Zp) -> !Zp {
+  %c11 = mod_arith.constant 11 : !Zp
+  %c12 = mod_arith.constant 12 : !Zp
+  %a = mod_arith.mul %arg0, %c11 : !Zp
+  %b = mod_arith.mul %arg0, %c12 : !Zp
+  %r = mod_arith.mul %a, %b : !Zp
+  // (x*11)*(x*12) -> (x*x)*(11*12) -> square(x) * 21  (132 mod 37 = 21)
+  // CHECK: %[[C21:.*]] = mod_arith.constant 21 : [[T]]
+  // CHECK: %[[SQ:.*]] = mod_arith.square %[[ARG0]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[SQ]], %[[C21]] : [[T]]
+  // CHECK: return %[[RES]] : [[T]]
+  return %r : !Zp
+}
+
 // CHECK-LABEL: @test_mul_add_distribute_constant
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_mul_add_distribute_constant(%arg0: !Zp) -> !Zp {
