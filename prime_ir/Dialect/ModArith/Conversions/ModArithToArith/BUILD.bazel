@@ -32,6 +32,7 @@ prime_ir_cc_library(
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Inverter:BYInverter",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer:BarrettReducer",
+        "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer:CiosMontEmitter",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer:MontReducer",
         "//prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer:SolinasReducer",
         "//prime_ir/Dialect/ModArith/IR:ModArith",

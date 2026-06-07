@@ -1,0 +1,47 @@
+// Copyright 2026 The PrimeIR Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+// ==============================================================================
+
+// RUN: prime-ir-opt -mod-arith-to-arith=target=gpu -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=GPU
+// The default (no target) RUN proves the flag actually gates: the same
+// spare-bit BLS377 case keeps the wide-int path.
+// RUN: prime-ir-opt -mod-arith-to-arith -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=CPU
+
+!BLS377m = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
+
+// GPU-LABEL: @gpu_mont_mul_multi_limb
+// 32-bit-limb CIOS: limb products are (i64)a32*b32 accumulations; the wide
+// product/reduce of the cpu path must be gone.
+// GPU: arith.muli {{.*}} : i64
+// GPU-NOT: arith.mului_extended {{.*}} : i384
+// GPU: return {{.*}} : i384
+// CPU-LABEL: @gpu_mont_mul_multi_limb
+// CPU: arith.mului_extended {{.*}} : i384
+func.func @gpu_mont_mul_multi_limb(%a : !BLS377m, %b : !BLS377m) -> !BLS377m {
+  %r = mod_arith.mont_mul %a, %b : !BLS377m
+  return %r : !BLS377m
+}
+
+// -----
+
+// secp256k1 base field (p > 2^255, sign bit set): CIOS gate rejects sign-bit-set
+// moduli, so even under target=gpu this falls back to the wide-int path.
+!Secpm = !mod_arith.int<115792089237316195423570985008687907853269984665640564039457584007908834671663 : i256, true>
+
+// GPU-LABEL: @gpu_mont_mul_sign_bit_set
+// GPU: arith.mului_extended {{.*}} : i256
+func.func @gpu_mont_mul_sign_bit_set(%a : !Secpm, %b : !Secpm) -> !Secpm {
+  %r = mod_arith.mont_mul %a, %b : !Secpm
+  return %r : !Secpm
+}

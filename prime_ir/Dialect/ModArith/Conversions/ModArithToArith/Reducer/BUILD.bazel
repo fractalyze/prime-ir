@@ -34,6 +34,19 @@ prime_ir_cc_library(
 )
 
 prime_ir_cc_library(
+    name = "CiosMontEmitter",
+    srcs = ["CiosMontEmitter.cpp"],
+    hdrs = ["CiosMontEmitter.h"],
+    deps = [
+        ":MontReducer",
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+    ],
+)
+
+prime_ir_cc_library(
     name = "BarrettReducer",
     srcs = ["BarrettReducer.cpp"],
     hdrs = ["BarrettReducer.h"],

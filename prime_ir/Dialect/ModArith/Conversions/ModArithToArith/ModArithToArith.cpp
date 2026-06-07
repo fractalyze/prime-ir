@@ -47,6 +47,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Inverter/BYInverter.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/BarrettReducer.h"
+#include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/CiosMontEmitter.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/MontReducer.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/SolinasReducer.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
@@ -1103,7 +1104,11 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 };
 
 struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
-  using BoundMapPattern::BoundMapPattern;
+  ConvertMontMul(const TypeConverter &tc, MLIRContext *context,
+                 const BoundMap *boundMap, bool useGpuCios,
+                 PatternBenefit benefit = 1)
+      : BoundMapPattern(tc, context, boundMap, benefit),
+        useGpuCios(useGpuCios) {}
 
   LogicalResult
   matchAndRewrite(MontMulOp op, OpAdaptor adaptor,
@@ -1155,6 +1160,16 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
       }
     }
 
+    // GPU target: emit 32-bit-limb fused-CIOS instead of the wide-int path.
+    // Same R as the wide path, so the operand pre-reduction above (REDC
+    // precondition) applies unchanged. Falls through when ineligible.
+    if (useGpuCios && CiosMontEmitter::isEligible(modType, lhs.getType())) {
+      Value result = CiosMontEmitter(b, modType)
+                         .emitMontMul(lhs, rhs, /*lazy=*/resBound >= 2);
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     // Signed multiply optimization: extract pre-reduction values from
     // minui(sub, sub+p) to use MulSIExtendedOp. Only safe for single-limb
     // types — reduceMultiLimb uses unsigned shifts that don't preserve
@@ -1182,6 +1197,8 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
     rewriter.replaceOp(op, result);
     return success();
   }
+
+  bool useGpuCios;
 };
 
 struct ConvertBarrettMul : public OpConversionPattern<BarrettMulOp> {
@@ -1545,6 +1562,7 @@ void ModArithToArith::runOnOperation() {
     }
   }
   const BoundMap *bm = lazyReduction ? &moduleBoundMap : nullptr;
+  const bool useGpuCios = this->target == "gpu";
 
   ConversionTarget target(*context);
   target.addIllegalDialect<ModArithDialect>();
@@ -1560,13 +1578,14 @@ void ModArithToArith::runOnOperation() {
       ConvertDouble,
       ConvertInverse,
       ConvertMontInverse,
-      ConvertMontMul,
       ConvertMontReduce,
       ConvertMontSquare,
       ConvertNegate,
       ConvertSub
       // clang-format on
       >(typeConverter, context, bm);
+  // ConvertMontMul additionally takes the GPU/CIOS routing flag.
+  patterns.add<ConvertMontMul>(typeConverter, context, bm, useGpuCios);
   // Patterns that don't use BoundMap.
   patterns.add<
       // clang-format off
