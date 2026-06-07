@@ -26,9 +26,11 @@ limitations under the License.
 
 namespace mlir::prime_ir::mod_arith {
 
+namespace {
 // Limb width for the CIOS schedule. Fixed at 32 bits so that each
 // multiply-accumulate is a (i32 x i32 -> i64) widening — the IMAD.WIDE shape.
-static constexpr unsigned kLimbBits = 32;
+constexpr unsigned kLimbBits = 32;
+} // namespace
 
 CiosMontEmitter::CiosMontEmitter(ImplicitLocOpBuilder &b,
                                  ModArithType modArithType)
@@ -139,6 +141,18 @@ Value CiosMontEmitter::reduceRow(MutableArrayRef<Value> t,
   return c;
 }
 
+void CiosMontEmitter::buildModConsts(unsigned n, SmallVector<Value> &nConst,
+                                     Value &np32) {
+  // n′₃₂ = low 32 bits of n′ (x ≡ −n⁻¹ mod 2⁶⁴ ⇒ x ≡ −n⁻¹ mod 2³²).
+  APInt mod = modAttr.getValue();
+  nConst.reserve(n);
+  for (unsigned j = 0; j < n; ++j)
+    nConst.push_back(
+        i32Const(mod.extractBits(kLimbBits, j * kLimbBits).getZExtValue()));
+  np32 = i32Const(
+      montAttr.getNPrime().getValue().extractBits(kLimbBits, 0).getZExtValue());
+}
+
 Value CiosMontEmitter::emitMontMul(Value lhs, Value rhs, bool lazy) {
   auto wideTy = cast<IntegerType>(lhs.getType());
   unsigned w = wideTy.getWidth();
@@ -147,16 +161,9 @@ Value CiosMontEmitter::emitMontMul(Value lhs, Value rhs, bool lazy) {
   SmallVector<Value> a = decompose(lhs);
   SmallVector<Value> bLimbs = decompose(rhs);
 
-  // Compile-time constants: modulus limbs n[0..N) and n′₃₂ = low 32 bits of
-  // n′ (x ≡ −n⁻¹ mod 2⁶⁴ ⇒ x ≡ −n⁻¹ mod 2³²).
-  APInt mod = modAttr.getValue();
   SmallVector<Value> nConst;
-  nConst.reserve(n);
-  for (unsigned j = 0; j < n; ++j)
-    nConst.push_back(
-        i32Const(mod.extractBits(kLimbBits, j * kLimbBits).getZExtValue()));
-  Value np32 = i32Const(
-      montAttr.getNPrime().getValue().extractBits(kLimbBits, 0).getZExtValue());
+  Value np32;
+  buildModConsts(n, nConst, np32);
 
   // t[0..N+2): accumulator with two overflow columns t[N], t[N+1].
   SmallVector<Value> t(n + 2, i32Const(0));
@@ -197,15 +204,9 @@ Value CiosMontEmitter::emitRedc(Value tLow, Value tHigh, bool lazy) {
   SmallVector<Value> th = decompose(tHigh);
   tl.append(th.begin(), th.end());
 
-  // Compile-time constants: modulus limbs n[0..N) and n′₃₂ = low 32 bits of n′.
-  APInt mod = modAttr.getValue();
   SmallVector<Value> nConst;
-  nConst.reserve(n);
-  for (unsigned j = 0; j < n; ++j)
-    nConst.push_back(
-        i32Const(mod.extractBits(kLimbBits, j * kLimbBits).getZExtValue()));
-  Value np32 = i32Const(
-      montAttr.getNPrime().getValue().extractBits(kLimbBits, 0).getZExtValue());
+  Value np32;
+  buildModConsts(n, nConst, np32);
 
   // Fixed window t[0..N+1] over the 2N-limb T, mirroring emitMontMul's
   // reduction accumulator: t[N] holds the limb consumed this row (a full T

@@ -72,6 +72,10 @@ private:
   Value reduceRow(MutableArrayRef<Value> t, ArrayRef<Value> nConst, Value np32,
                   unsigned n);
 
+  // Compile-time reduction constants: modulus limbs n[0..N) and n′₃₂ = low 32
+  // bits of n′. Shared setup for emitMontMul and emitRedc.
+  void buildModConsts(unsigned n, SmallVector<Value> &nConst, Value &np32);
+
   Value i32Const(uint64_t v);
 
   ImplicitLocOpBuilder &b;
