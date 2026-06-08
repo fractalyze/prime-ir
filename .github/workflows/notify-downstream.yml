@@ -18,3 +18,12 @@ jobs:
             -f event_type=pin-bump \
             -f 'client_payload[source_repo]=prime-ir' \
             -f 'client_payload[commit]=${{ github.sha }}'
+
+      - name: Dispatch pin-bump to stablehlo_fork
+        env:
+          GH_TOKEN: ${{ secrets.BUMPER_GH_PAT }}
+        run: |
+          gh api repos/fractalyze/stablehlo_fork/dispatches \
+            -f event_type=pin-bump \
+            -f 'client_payload[source_repo]=prime-ir' \
+            -f 'client_payload[commit]=${{ github.sha }}'
