@@ -1,0 +1,114 @@
+name: "Downstream bug (zkx / riscv-witness …)"
+description: |
+  A downstream consumer of PrimeIR hit a bug — wrong lowering output, a missing
+  op/feature, an IR-contract break, or a perf regression — while compiling its
+  own workload. File this so the PrimeIR owner can reproduce without the
+  consumer's environment. Once root-caused it often becomes a PrimeIR bug; the
+  point of this template is to capture the consumer-side provenance the
+  maintainer doesn't have.
+title: "fix(<area>): <symptom> hit by <consumer>"
+labels: ["area:downstream"]
+type: Bug
+body:
+  - type: dropdown
+    id: consumer
+    attributes:
+      label: Consumer
+      description: Which downstream project hit this?
+      options:
+        - zkx
+        - riscv-witness
+        - other (note in title)
+    validations:
+      required: true
+
+  - type: input
+    id: downstream_commit
+    attributes:
+      label: Downstream commit
+      description: |
+        Where the issue was observed — paste a permalink to the consumer's
+        commit/file (carries the repo + SHA), or a bare SHA.
+      placeholder: https://github.com/<org>/<repo>/commit/ce1bcfbb
+    validations:
+      required: true
+
+  - type: input
+    id: prime_ir_sha
+    attributes:
+      label: PrimeIR commit / pin SHA
+      description: Which PrimeIR revision was the consumer building against?
+      placeholder: e.g. 1a2b3c4d
+    validations:
+      required: true
+
+  - type: textarea
+    id: workload
+    attributes:
+      label: Workload
+      description: |
+        What IR was the consumer lowering when it broke? The dialect ops, the
+        field/curve, the target (CPU/GPU) — enough to narrow the surface.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproducer
+      description: |
+        Minimum commands or input that reproduce the issue, ideally reduced to a
+        PrimeIR-only `.mlir` case. Use `bazel test` / lit, not built binary
+        paths. Prefix file inputs with `$PWD`.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: suspected_area
+    attributes:
+      label: Suspected PrimeIR area (optional)
+      description: If you have a hunch where the root cause lives, name the dialect op / pass / lowering.
+      placeholder: "e.g. modarith barrett lowering, field constant folding"
+
+  - type: input
+    id: parent
+    attributes:
+      label: Parent issue
+      description: |
+        Issue number or full URL of the tracking / parent issue this
+        work belongs to, if any. Same-repo form: `#1234`. Cross-repo
+        form: `https://github.com/<owner>/<repo>/issues/1234`. The
+        /workflow:create-issue skill registers the sub-issue link
+        automatically when filed via the CLI.
+      placeholder: "#1234 or https://github.com/<owner>/<repo>/issues/1234"
+
+  - type: input
+    id: milestone
+    attributes:
+      label: Milestone
+      description: |
+        Existing milestone name to attach this issue to. The
+        /workflow:create-issue skill checks the milestone exists
+        before applying it.
+      placeholder: "e.g. <area>: <feature> v<n>"
+
+  - type: textarea
+    id: knowledge
+    attributes:
+      label: Relevant knowledge (optional)
+      description: Wiki links or excerpts that contextualize the bug. Strip home paths and session IDs.

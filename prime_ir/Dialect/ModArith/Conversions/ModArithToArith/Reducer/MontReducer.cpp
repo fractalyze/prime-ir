@@ -37,21 +37,21 @@ namespace {
 Value createSplatConst(ImplicitLocOpBuilder &b, TypedAttr scalarAttr,
                        ShapedType shapedType, Value shapeRef) {
   if (shapedType.hasStaticShape()) {
-    return b.create<arith::ConstantOp>(
-        SplatElementsAttr::get(shapedType, scalarAttr));
+    return arith::ConstantOp::create(
+        b, SplatElementsAttr::get(shapedType, scalarAttr));
   }
   assert(shapeRef &&
          "A shape reference value must be provided for dynamic shapes.");
-  Value scalar = b.create<arith::ConstantOp>(scalarAttr);
+  Value scalar = arith::ConstantOp::create(b, scalarAttr);
   SmallVector<Value> dynamicDims;
   for (int64_t i = 0; i < shapedType.getRank(); ++i) {
     if (shapedType.isDynamicDim(i)) {
-      auto idx = b.create<arith::ConstantIndexOp>(i);
-      dynamicDims.push_back(b.create<tensor::DimOp>(shapeRef, idx));
+      auto idx = arith::ConstantIndexOp::create(b, i);
+      dynamicDims.push_back(tensor::DimOp::create(b, shapeRef, idx));
     }
   }
-  Value empty = b.create<tensor::EmptyOp>(shapedType, dynamicDims);
-  return b.create<linalg::FillOp>(scalar, empty).getResult(0);
+  Value empty = tensor::EmptyOp::create(b, shapedType, dynamicDims);
+  return linalg::FillOp::create(b, scalar, empty).getResult(0);
 }
 
 } // namespace
@@ -62,7 +62,7 @@ Value MontReducer::createModulusConst(Type inputType, Value inputValue) {
       return createSplatConst(b, this->modAttr, shapedType, inputValue);
     }
   }
-  return b.create<arith::ConstantOp>(this->modAttr);
+  return arith::ConstantOp::create(b, this->modAttr);
 }
 
 Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
@@ -86,10 +86,10 @@ Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
     if (auto shapedType = dyn_cast<ShapedType>(input.getType()))
       threshConst = createSplatConst(b, multipleAttr, shapedType, input);
     else
-      threshConst = b.create<arith::ConstantOp>(multipleAttr);
+      threshConst = arith::ConstantOp::create(b, multipleAttr);
 
-    auto sub = b.create<arith::SubIOp>(input, threshConst);
-    input = b.create<arith::MinUIOp>(sub, input).getResult();
+    auto sub = arith::SubIOp::create(b, input, threshConst);
+    input = arith::MinUIOp::create(b, sub, input).getResult();
   }
   return input;
 }
@@ -101,26 +101,26 @@ Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
   // overflow check logic. Currently, 'uge' is used for clearer logic, but
   // this choice should be re-evaluated after benchmarking. See
   // https://github.com/fractalyze/prime-ir/pull/86/commits/10d3807
-  auto ifge = b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, input, cmod);
-  auto or_ = b.create<arith::OrIOp>(ifge, overflow);
-  auto sub = b.create<arith::SubIOp>(input, cmod);
-  auto select = b.create<arith::SelectOp>(or_, sub, input);
+  auto ifge = arith::CmpIOp::create(b, arith::CmpIPredicate::uge, input, cmod);
+  auto or_ = arith::OrIOp::create(b, ifge, overflow);
+  auto sub = arith::SubIOp::create(b, input, cmod);
+  auto select = arith::SelectOp::create(b, or_, sub, input);
   return select.getResult();
 }
 
 Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
   auto cmod = createModulusConst(lhs.getType(), lhs);
-  auto sub = b.create<arith::SubIOp>(lhs, rhs);
-  auto add = b.create<arith::AddIOp>(sub, cmod);
+  auto sub = arith::SubIOp::create(b, lhs, rhs);
+  auto add = arith::AddIOp::create(b, sub, cmod);
   APInt mod = cast<IntegerAttr>(modAttr).getValue();
   if (mod.isSignBitSet()) {
     // When p > 2ʷ⁻¹, diff + p can overflow, so minui gives wrong results.
     // Fall back to cmpi + select.
     auto underflowed =
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, lhs, rhs);
-    return b.create<arith::SelectOp>(underflowed, add, sub).getResult();
+        arith::CmpIOp::create(b, arith::CmpIPredicate::ult, lhs, rhs);
+    return arith::SelectOp::create(b, underflowed, add, sub).getResult();
   }
-  return b.create<arith::MinUIOp>(sub, add).getResult();
+  return arith::MinUIOp::create(b, sub, add).getResult();
 }
 
 bool MontReducer::isFromSignedMul(Value input) {
@@ -136,19 +136,19 @@ Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh, bool lazy) {
     nInvConst =
         createSplatConst(b, nInvAttr, cast<ShapedType>(nInvShaped), tLow);
   } else {
-    nInvConst = b.create<arith::ConstantOp>(nInvAttr);
+    nInvConst = arith::ConstantOp::create(b, nInvAttr);
   }
   auto modConst = createModulusConst(tLow.getType(), tLow);
 
   // Compute m = tLow * nInv (mod base).
-  auto m = b.create<arith::MulIOp>(tLow, nInvConst);
+  auto m = arith::MulIOp::create(b, tLow, nInvConst);
   // Compute m * n.
   Value mNHigh;
   if (isFromSignedMul(tLow)) {
-    auto mN = b.create<arith::MulSIExtendedOp>(m, modConst);
+    auto mN = arith::MulSIExtendedOp::create(b, m, modConst);
     mNHigh = mN.getHigh();
   } else {
-    auto mN = b.create<arith::MulUIExtendedOp>(m, modConst);
+    auto mN = arith::MulUIExtendedOp::create(b, m, modConst);
     mNHigh = mN.getHigh();
   }
 
@@ -157,8 +157,8 @@ Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh, bool lazy) {
   if (lazy) {
     // tHigh - mNHigh can underflow, so unconditionally add p.
     // Result is in [0, 2p).
-    auto sub = b.create<arith::SubIOp>(tHigh, mNHigh);
-    return b.create<arith::AddIOp>(sub, modConst).getResult();
+    auto sub = arith::SubIOp::create(b, tHigh, mNHigh);
+    return arith::AddIOp::create(b, sub, modConst).getResult();
   }
   return getCanonicalDiff(tHigh, mNHigh);
 }
@@ -202,13 +202,13 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   }
 
   // Create constants for the Montgomery reduction.
-  auto nPrimeConst = b.create<arith::ConstantOp>(nPrimeAttr);
-  auto limbWidthConst = b.create<arith::ConstantOp>(limbWidthAttr);
-  auto limbMaskConst = b.create<arith::ConstantOp>(limbMaskAttr);
-  auto limbShiftConst = b.create<arith::ConstantOp>(limbShiftAttr);
-  auto modConst = b.create<arith::ConstantOp>(modAttrLocal);
-  auto bInvConst = b.create<arith::ConstantOp>(bInvAttr);
-  auto oneConst = b.create<arith::ConstantOp>(oneAttr);
+  auto nPrimeConst = arith::ConstantOp::create(b, nPrimeAttr);
+  auto limbWidthConst = arith::ConstantOp::create(b, limbWidthAttr);
+  auto limbMaskConst = arith::ConstantOp::create(b, limbMaskAttr);
+  auto limbShiftConst = arith::ConstantOp::create(b, limbShiftAttr);
+  auto modConst = arith::ConstantOp::create(b, modAttrLocal);
+  auto bInvConst = arith::ConstantOp::create(b, bInvAttr);
+  auto oneConst = arith::ConstantOp::create(b, oneAttr);
 
   auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
       b.getContext(),
@@ -219,37 +219,37 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   // The result of the `i`th iteration is `T` * b⁻¹ mod n.
   for (unsigned i = 0; i < numLimbs - 1; ++i) {
     // Shift `T` right by `limbWidth`.
-    Value freeCoeff = b.create<arith::AndIOp>(tLow, limbMaskConst);
-    tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
-    Value tHighLowerLimb = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
-    tLow = b.create<arith::OrIOp>(tLow, tHighLowerLimb);
-    tHigh = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
+    Value freeCoeff = arith::AndIOp::create(b, tLow, limbMaskConst);
+    tLow = arith::ShRUIOp::create(b, tLow, limbWidthConst);
+    Value tHighLowerLimb = arith::ShLIOp::create(b, tHigh, limbShiftConst);
+    tLow = arith::OrIOp::create(b, tLow, tHighLowerLimb);
+    tHigh = arith::ShRUIOp::create(b, tHigh, limbWidthConst);
 
     // Compute `m` = `freeCoeff` * (b⁻¹ mod n) and add to `T`.
-    auto m = b.create<arith::MulUIExtendedOp>(freeCoeff, bInvConst);
-    tLow = b.create<arith::AddIOp>(tLow, m.getLow());
+    auto m = arith::MulUIExtendedOp::create(b, freeCoeff, bInvConst);
+    tLow = arith::AddIOp::create(b, tLow, m.getLow());
     Value carry =
-        b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, tLow, m.getLow());
-    tHigh = b.create<arith::AddIOp>(tHigh, m.getHigh(), noOverflow);
-    auto tHighPlusOne = b.create<arith::AddIOp>(tHigh, oneConst, noOverflow);
-    tHigh = b.create<arith::SelectOp>(carry, tHighPlusOne, tHigh);
+        arith::CmpIOp::create(b, arith::CmpIPredicate::ult, tLow, m.getLow());
+    tHigh = arith::AddIOp::create(b, tHigh, m.getHigh(), noOverflow);
+    auto tHighPlusOne = arith::AddIOp::create(b, tHigh, oneConst, noOverflow);
+    tHigh = arith::SelectOp::create(b, carry, tHighPlusOne, tHigh);
   }
   // The last iteration is the same as normal Montgomery reduction.
-  Value freeCoeff = b.create<arith::TruncIOp>(limbType, tLow);
+  Value freeCoeff = arith::TruncIOp::create(b, limbType, tLow);
   // Compute `m` = `freeCoeff` * `nPrime` (mod `base`)
-  auto m = b.create<arith::MulIOp>(freeCoeff, nPrimeConst);
+  auto m = arith::MulIOp::create(b, freeCoeff, nPrimeConst);
   // Compute `m` * `n`
-  Value mExt = b.create<arith::ExtUIOp>(tLow.getType(), m);
-  auto mN = b.create<arith::MulUIExtendedOp>(modConst, mExt);
+  Value mExt = arith::ExtUIOp::create(b, tLow.getType(), m);
+  auto mN = arith::MulUIExtendedOp::create(b, modConst, mExt);
   // Add the product to `T`.
-  tLow = b.create<arith::AddIOp>(tLow, mN.getLow());
+  tLow = arith::AddIOp::create(b, tLow, mN.getLow());
   auto carry =
-      b.create<arith::CmpIOp>(arith::CmpIPredicate::ult, tLow, mN.getLow());
-  tHigh = b.create<arith::AddIOp>(tHigh, mN.getHigh(), noOverflow);
-  auto tHighPlusOne = b.create<arith::AddIOp>(tHigh, oneConst, noOverflow);
-  tHigh = b.create<arith::SelectOp>(carry, tHighPlusOne, tHigh);
+      arith::CmpIOp::create(b, arith::CmpIPredicate::ult, tLow, mN.getLow());
+  tHigh = arith::AddIOp::create(b, tHigh, mN.getHigh(), noOverflow);
+  auto tHighPlusOne = arith::AddIOp::create(b, tHigh, oneConst, noOverflow);
+  tHigh = arith::SelectOp::create(b, carry, tHighPlusOne, tHigh);
   // Shift right `T` by `limbWidth` to discard the zeroed limb.
-  tLow = b.create<arith::ShRUIOp>(tLow, limbWidthConst);
+  tLow = arith::ShRUIOp::create(b, tLow, limbWidthConst);
 
   // When p > 2ʷ⁻¹ (modulus uses all w bits), the REDC result can exceed
   // 2ʷ because 2p > 2ʷ. The upper bits of tHigh (above the lowest limb)
@@ -258,11 +258,11 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   // by adding tHighUpper * R to tLow, then conditionally subtracting p.
   APInt mod = cast<IntegerAttr>(modAttr).getValue();
   if (mod.isSignBitSet()) {
-    Value tHighUpper = b.create<arith::ShRUIOp>(tHigh, limbWidthConst);
+    Value tHighUpper = arith::ShRUIOp::create(b, tHigh, limbWidthConst);
     // Mask tHigh to only the lowest limb before the left-shift.
-    tHigh = b.create<arith::AndIOp>(tHigh, limbMaskConst);
-    tHigh = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
-    tLow = b.create<arith::OrIOp>(tLow, tHigh);
+    tHigh = arith::AndIOp::create(b, tHigh, limbMaskConst);
+    tHigh = arith::ShLIOp::create(b, tHigh, limbShiftConst);
+    tLow = arith::OrIOp::create(b, tLow, tHigh);
 
     // Add overflow * R to recover the truncated value mod p.
     // R = 2ʷ mod p is small, so tHighUpper * R fits in w bits.
@@ -274,15 +274,15 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
     if (auto shapedType = dyn_cast<ShapedType>(tLow.getType()))
       rConst = createSplatConst(b, rAttr, shapedType, tLow);
     else
-      rConst = b.create<arith::ConstantOp>(rAttr);
-    Value correction = b.create<arith::MulIOp>(tHighUpper, rConst);
-    tLow = b.create<arith::AddIOp>(tLow, correction);
+      rConst = arith::ConstantOp::create(b, rAttr);
+    Value correction = arith::MulIOp::create(b, tHighUpper, rConst);
+    tLow = arith::AddIOp::create(b, tLow, correction);
 
     return getCanonicalFromExtended(tLow);
   }
 
-  tHigh = b.create<arith::ShLIOp>(tHigh, limbShiftConst);
-  tLow = b.create<arith::OrIOp>(tLow, tHigh);
+  tHigh = arith::ShLIOp::create(b, tHigh, limbShiftConst);
+  tLow = arith::OrIOp::create(b, tLow, tHigh);
 
   if (lazy)
     return tLow;

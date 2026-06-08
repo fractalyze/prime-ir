@@ -18,6 +18,7 @@ limitations under the License.
 
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/SymbolTable.h"
@@ -52,7 +53,7 @@ inline bool isInsideOutlinedFunction(Operation *op) {
 ///         [&](func::FuncOp func) {
 ///           OpBuilder builder(func.getContext());
 ///           auto args = setupFunctionBody(func, builder);
-///           Value result = builder.create<MyOp>(func.getLoc(), args[0]);
+///           Value result = MyOp::create(builder, func.getLoc(), args[0]);
 ///           emitReturn(builder, func.getLoc(), result);
 ///         });
 ///   }
@@ -82,8 +83,16 @@ protected:
     OpBuilder builder(module_.getContext());
     builder.setInsertionPointToEnd(module_.getBody());
     auto func =
-        builder.create<func::FuncOp>(module_.getLoc(), funcName, funcType);
+        func::FuncOp::create(builder, module_.getLoc(), funcName, funcType);
     func.setPrivate();
+    // setPrivate() only sets symbol visibility; FuncToLLVM does not derive
+    // LLVM linkage from that alone, so an explicit Internal linkage attribute
+    // is needed for the LLVM IR functions to be local (otherwise downstream
+    // CPU codegen's "module must have one externally visible definition"
+    // check fails for outlined pairing helpers).
+    func->setAttr(
+        "llvm.linkage",
+        LLVM::LinkageAttr::get(module_.getContext(), LLVM::Linkage::Internal));
 
     bodyGenerator(func);
     symbolTable_.insert(func);
@@ -93,7 +102,7 @@ protected:
   /// Emit a function call and return the single result.
   static Value emitCall(OpBuilder &builder, Location loc, func::FuncOp func,
                         ValueRange operands) {
-    auto callOp = builder.create<func::CallOp>(loc, func, operands);
+    auto callOp = func::CallOp::create(builder, loc, func, operands);
     return callOp.getResult(0);
   }
 
@@ -112,7 +121,7 @@ protected:
 
   /// Emit return op with the given result.
   static void emitReturn(OpBuilder &builder, Location loc, Value result) {
-    builder.create<func::ReturnOp>(loc, result);
+    func::ReturnOp::create(builder, loc, result);
   }
 
   /// Access derived class (CRTP pattern).

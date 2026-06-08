@@ -45,36 +45,36 @@ BYInverter::BYInverter(ImplicitLocOpBuilder &b, Type inputType)
   extIntType = IntegerType::get(b.getContext(), extModBitWidth);
   limbType = IntegerType::get(b.getContext(), limbBitWidth);
 
-  maskN = b.create<arith::ConstantIntOp>(
-      limbType, APInt::getAllOnes(n).zextOrTrunc(limbBitWidth));
+  maskN = arith::ConstantIntOp::create(
+      b, limbType, APInt::getAllOnes(n).zextOrTrunc(limbBitWidth));
   APInt mInt = modulus.getValue().zext(extModBitWidth);
   APInt mInvInt = byAttr.getMInv().getValue();
-  m = b.create<arith::ConstantIntOp>(extIntType, mInt);
-  mInv = b.create<arith::ConstantIntOp>(limbType,
-                                        mInvInt.zextOrTrunc(limbBitWidth));
+  m = arith::ConstantIntOp::create(b, extIntType, mInt);
+  mInv = arith::ConstantIntOp::create(b, limbType,
+                                      mInvInt.zextOrTrunc(limbBitWidth));
 
-  limbTypeOne = b.create<arith::ConstantIntOp>(limbType, 1);
-  limbTypeZero = b.create<arith::ConstantIntOp>(limbType, 0);
-  extIntTypeOne = b.create<arith::ConstantIntOp>(extIntType, 1);
-  extIntTypeZero = b.create<arith::ConstantIntOp>(extIntType, 0);
+  limbTypeOne = arith::ConstantIntOp::create(b, limbType, 1);
+  limbTypeZero = arith::ConstantIntOp::create(b, limbType, 0);
+  extIntTypeOne = arith::ConstantIntOp::create(b, extIntType, 1);
+  extIntTypeZero = arith::ConstantIntOp::create(b, extIntType, 0);
 
-  extIntTypeN = b.create<arith::ConstantIntOp>(extIntType, n);
-  limbTypeN = b.create<arith::ConstantIntOp>(limbType, n);
+  extIntTypeN = arith::ConstantIntOp::create(b, extIntType, n);
+  limbTypeN = arith::ConstantIntOp::create(b, limbType, n);
 }
 
 BYInverter::JumpResult BYInverter::GenerateJump(Value f, Value g, Value eta) {
   TMatrix t = {limbTypeOne, limbTypeZero, limbTypeZero, limbTypeOne};
   Value steps = limbTypeN;
 
-  f = b.create<arith::AndIOp>(b.create<arith::TruncIOp>(limbType, f), maskN);
-  g = b.create<arith::AndIOp>(b.create<arith::TruncIOp>(limbType, g), maskN);
+  f = arith::AndIOp::create(b, arith::TruncIOp::create(b, limbType, f), maskN);
+  g = arith::AndIOp::create(b, arith::TruncIOp::create(b, limbType, g), maskN);
 
   SmallVector<Value, 8> initValues = {steps, f,     g,     eta,
                                       t.t00, t.t01, t.t10, t.t11};
   SmallVector<Type, 8> types(8, limbType);
 
-  auto whileOp = b.create<scf::WhileOp>(
-      types, initValues,
+  auto whileOp = scf::WhileOp::create(
+      b, types, initValues,
       [&](OpBuilder &builder, Location loc, ValueRange args) {
         ImplicitLocOpBuilder b(loc, builder);
         // While loop condition: steps != 0
@@ -82,18 +82,18 @@ BYInverter::JumpResult BYInverter::GenerateJump(Value f, Value g, Value eta) {
             std::make_tuple(args[0], args[1], args[2], args[3],
                             TMatrix{args[4], args[5], args[6], args[7]});
 
-        Value zeros = b.create<math::CountTrailingZerosOp>(g);
-        zeros = b.create<arith::MinUIOp>(zeros, steps);
-        steps = b.create<arith::SubIOp>(steps, zeros);
-        eta = b.create<arith::AddIOp>(eta, zeros);
-        g = b.create<arith::ShRUIOp>(g, zeros);
-        t.t00 = b.create<arith::ShLIOp>(t.t00, zeros);
-        t.t01 = b.create<arith::ShLIOp>(t.t01, zeros);
+        Value zeros = math::CountTrailingZerosOp::create(b, g);
+        zeros = arith::MinUIOp::create(b, zeros, steps);
+        steps = arith::SubIOp::create(b, steps, zeros);
+        eta = arith::AddIOp::create(b, eta, zeros);
+        g = arith::ShRUIOp::create(b, g, zeros);
+        t.t00 = arith::ShLIOp::create(b, t.t00, zeros);
+        t.t01 = arith::ShLIOp::create(b, t.t01, zeros);
 
-        Value isContinue = b.create<arith::CmpIOp>(arith::CmpIPredicate::ne,
-                                                   steps, limbTypeZero);
-        b.create<scf::ConditionOp>(
-            isContinue,
+        Value isContinue = arith::CmpIOp::create(b, arith::CmpIPredicate::ne,
+                                                 steps, limbTypeZero);
+        scf::ConditionOp::create(
+            b, isContinue,
             ValueRange{steps, f, g, eta, t.t00, t.t01, t.t10, t.t11});
       },
       [&](OpBuilder &builder, Location loc, ValueRange args) {
@@ -102,46 +102,47 @@ BYInverter::JumpResult BYInverter::GenerateJump(Value f, Value g, Value eta) {
             std::make_tuple(args[0], args[1], args[2], args[3],
                             TMatrix{args[4], args[5], args[6], args[7]});
 
-        Value deltaPos = b.create<arith::CmpIOp>(arith::CmpIPredicate::sgt, eta,
-                                                 limbTypeZero);
+        Value deltaPos = arith::CmpIOp::create(b, arith::CmpIPredicate::sgt,
+                                               eta, limbTypeZero);
 
-        Value negEta = b.create<arith::SubIOp>(limbTypeZero, eta);
-        Value negT00 = b.create<arith::SubIOp>(limbTypeZero, t.t00);
-        Value negT01 = b.create<arith::SubIOp>(limbTypeZero, t.t01);
-        Value negF = b.create<arith::SubIOp>(limbTypeZero, f);
+        Value negEta = arith::SubIOp::create(b, limbTypeZero, eta);
+        Value negT00 = arith::SubIOp::create(b, limbTypeZero, t.t00);
+        Value negT01 = arith::SubIOp::create(b, limbTypeZero, t.t01);
+        Value negF = arith::SubIOp::create(b, limbTypeZero, f);
 
-        eta = b.create<arith::SelectOp>(deltaPos, negEta, eta);
-        t.t00 = b.create<arith::SelectOp>(deltaPos, t.t10, t.t00);
-        t.t01 = b.create<arith::SelectOp>(deltaPos, t.t11, t.t01);
-        t.t10 = b.create<arith::SelectOp>(deltaPos, negT00, t.t10);
-        t.t11 = b.create<arith::SelectOp>(deltaPos, negT01, t.t11);
-        f = b.create<arith::SelectOp>(deltaPos, g, f);
-        g = b.create<arith::SelectOp>(deltaPos, negF, g);
+        eta = arith::SelectOp::create(b, deltaPos, negEta, eta);
+        t.t00 = arith::SelectOp::create(b, deltaPos, t.t10, t.t00);
+        t.t01 = arith::SelectOp::create(b, deltaPos, t.t11, t.t01);
+        t.t10 = arith::SelectOp::create(b, deltaPos, negT00, t.t10);
+        t.t11 = arith::SelectOp::create(b, deltaPos, negT01, t.t11);
+        f = arith::SelectOp::create(b, deltaPos, g, f);
+        g = arith::SelectOp::create(b, deltaPos, negF, g);
 
-        Value five = b.create<arith::ConstantIntOp>(limbType, 5);
-        Value oneMinusEta = b.create<arith::SubIOp>(limbTypeOne, eta);
-        Value shift = b.create<arith::MinSIOp>(
-            b.create<arith::MinSIOp>(steps, oneMinusEta), five);
-        Value mask = b.create<arith::SubIOp>(
-            b.create<arith::ShLIOp>(limbTypeOne, shift), limbTypeOne);
+        Value five = arith::ConstantIntOp::create(b, limbType, 5);
+        Value oneMinusEta = arith::SubIOp::create(b, limbTypeOne, eta);
+        Value shift = arith::MinSIOp::create(
+            b, arith::MinSIOp::create(b, steps, oneMinusEta), five);
+        Value mask = arith::SubIOp::create(
+            b, arith::ShLIOp::create(b, limbTypeOne, shift), limbTypeOne);
 
-        Value threeF = b.create<arith::MulIOp>(
-            b.create<arith::ConstantIntOp>(limbType, 3), f);
-        Value twentyEight = b.create<arith::ConstantIntOp>(limbType, 28);
-        Value w = b.create<arith::AndIOp>(
-            b.create<arith::MulIOp>(
-                g, b.create<arith::XOrIOp>(threeF, twentyEight)),
+        Value threeF = arith::MulIOp::create(
+            b, arith::ConstantIntOp::create(b, limbType, 3), f);
+        Value twentyEight = arith::ConstantIntOp::create(b, limbType, 28);
+        Value w = arith::AndIOp::create(
+            b,
+            arith::MulIOp::create(
+                b, g, arith::XOrIOp::create(b, threeF, twentyEight)),
             mask);
 
         t.t10 =
-            b.create<arith::AddIOp>(b.create<arith::MulIOp>(t.t00, w), t.t10);
+            arith::AddIOp::create(b, arith::MulIOp::create(b, t.t00, w), t.t10);
         t.t11 =
-            b.create<arith::AddIOp>(b.create<arith::MulIOp>(t.t01, w), t.t11);
+            arith::AddIOp::create(b, arith::MulIOp::create(b, t.t01, w), t.t11);
 
-        g = b.create<arith::AddIOp>(g, b.create<arith::MulIOp>(w, f));
+        g = arith::AddIOp::create(b, g, arith::MulIOp::create(b, w, f));
 
-        b.create<scf::YieldOp>(
-            ValueRange{steps, f, g, eta, t.t00, t.t01, t.t10, t.t11});
+        scf::YieldOp::create(
+            b, ValueRange{steps, f, g, eta, t.t00, t.t01, t.t10, t.t11});
       });
 
   return JumpResult{TMatrix{whileOp.getResult(4), whileOp.getResult(5),
@@ -150,102 +151,109 @@ BYInverter::JumpResult BYInverter::GenerateJump(Value f, Value g, Value eta) {
 }
 
 BYInverter::FGResult BYInverter::GenerateFG(Value f, Value g, TMatrix t) {
-  Value extT00 = b.create<arith::ExtSIOp>(extIntType, t.t00);
-  Value extT01 = b.create<arith::ExtSIOp>(extIntType, t.t01);
-  Value extT10 = b.create<arith::ExtSIOp>(extIntType, t.t10);
-  Value extT11 = b.create<arith::ExtSIOp>(extIntType, t.t11);
+  Value extT00 = arith::ExtSIOp::create(b, extIntType, t.t00);
+  Value extT01 = arith::ExtSIOp::create(b, extIntType, t.t01);
+  Value extT10 = arith::ExtSIOp::create(b, extIntType, t.t10);
+  Value extT11 = arith::ExtSIOp::create(b, extIntType, t.t11);
 
-  Value newF = b.create<arith::AddIOp>(b.create<arith::MulIOp>(f, extT00),
-                                       b.create<arith::MulIOp>(g, extT01));
+  Value newF = arith::AddIOp::create(b, arith::MulIOp::create(b, f, extT00),
+                                     arith::MulIOp::create(b, g, extT01));
 
-  Value newG = b.create<arith::AddIOp>(b.create<arith::MulIOp>(f, extT10),
-                                       b.create<arith::MulIOp>(g, extT11));
-  newF = b.create<arith::ShRSIOp>(newF, extIntTypeN);
-  newG = b.create<arith::ShRSIOp>(newG, extIntTypeN);
+  Value newG = arith::AddIOp::create(b, arith::MulIOp::create(b, f, extT10),
+                                     arith::MulIOp::create(b, g, extT11));
+  newF = arith::ShRSIOp::create(b, newF, extIntTypeN);
+  newG = arith::ShRSIOp::create(b, newG, extIntTypeN);
 
   return {newF, newG};
 }
 
 BYInverter::DEResult BYInverter::GenerateDE(Value d, Value e, TMatrix t) {
-  Value isNegD = b.create<arith::ExtUIOp>(
-      limbType,
-      b.create<arith::CmpIOp>(arith::CmpIPredicate::slt, d, extIntTypeZero));
-  Value isNegE = b.create<arith::ExtUIOp>(
-      limbType,
-      b.create<arith::CmpIOp>(arith::CmpIPredicate::slt, e, extIntTypeZero));
-  Value md = b.create<arith::AddIOp>(b.create<arith::MulIOp>(t.t00, isNegD),
-                                     b.create<arith::MulIOp>(t.t01, isNegE));
-  Value me = b.create<arith::AddIOp>(b.create<arith::MulIOp>(t.t10, isNegD),
-                                     b.create<arith::MulIOp>(t.t11, isNegE));
+  Value isNegD = arith::ExtUIOp::create(
+      b, limbType,
+      arith::CmpIOp::create(b, arith::CmpIPredicate::slt, d, extIntTypeZero));
+  Value isNegE = arith::ExtUIOp::create(
+      b, limbType,
+      arith::CmpIOp::create(b, arith::CmpIPredicate::slt, e, extIntTypeZero));
+  Value md = arith::AddIOp::create(b, arith::MulIOp::create(b, t.t00, isNegD),
+                                   arith::MulIOp::create(b, t.t01, isNegE));
+  Value me = arith::AddIOp::create(b, arith::MulIOp::create(b, t.t10, isNegD),
+                                   arith::MulIOp::create(b, t.t11, isNegE));
 
   // Calculate cd and ce using lowest bits
   Value dLow =
-      b.create<arith::AndIOp>(b.create<arith::TruncIOp>(limbType, d), maskN);
+      arith::AndIOp::create(b, arith::TruncIOp::create(b, limbType, d), maskN);
   Value eLow =
-      b.create<arith::AndIOp>(b.create<arith::TruncIOp>(limbType, e), maskN);
-  Value cd = b.create<arith::AndIOp>(
-      b.create<arith::AddIOp>(b.create<arith::MulIOp>(t.t00, dLow),
-                              b.create<arith::MulIOp>(t.t01, eLow)),
+      arith::AndIOp::create(b, arith::TruncIOp::create(b, limbType, e), maskN);
+  Value cd = arith::AndIOp::create(
+      b,
+      arith::AddIOp::create(b, arith::MulIOp::create(b, t.t00, dLow),
+                            arith::MulIOp::create(b, t.t01, eLow)),
       maskN);
-  Value ce = b.create<arith::AndIOp>(
-      b.create<arith::AddIOp>(b.create<arith::MulIOp>(t.t10, dLow),
-                              b.create<arith::MulIOp>(t.t11, eLow)),
+  Value ce = arith::AndIOp::create(
+      b,
+      arith::AddIOp::create(b, arith::MulIOp::create(b, t.t10, dLow),
+                            arith::MulIOp::create(b, t.t11, eLow)),
       maskN);
 
-  md = b.create<arith::SubIOp>(
-      md, b.create<arith::AndIOp>(
-              b.create<arith::AddIOp>(b.create<arith::MulIOp>(cd, mInv), md),
-              maskN));
-  me = b.create<arith::SubIOp>(
-      me, b.create<arith::AndIOp>(
-              b.create<arith::AddIOp>(b.create<arith::MulIOp>(ce, mInv), me),
-              maskN));
+  md = arith::SubIOp::create(
+      b, md,
+      arith::AndIOp::create(
+          b, arith::AddIOp::create(b, arith::MulIOp::create(b, cd, mInv), md),
+          maskN));
+  me = arith::SubIOp::create(
+      b, me,
+      arith::AndIOp::create(
+          b, arith::AddIOp::create(b, arith::MulIOp::create(b, ce, mInv), me),
+          maskN));
 
-  Value extT00 = b.create<arith::ExtSIOp>(extIntType, t.t00);
-  Value extT01 = b.create<arith::ExtSIOp>(extIntType, t.t01);
-  Value extT10 = b.create<arith::ExtSIOp>(extIntType, t.t10);
-  Value extT11 = b.create<arith::ExtSIOp>(extIntType, t.t11);
+  Value extT00 = arith::ExtSIOp::create(b, extIntType, t.t00);
+  Value extT01 = arith::ExtSIOp::create(b, extIntType, t.t01);
+  Value extT10 = arith::ExtSIOp::create(b, extIntType, t.t10);
+  Value extT11 = arith::ExtSIOp::create(b, extIntType, t.t11);
 
-  cd = b.create<arith::AddIOp>(
-      b.create<arith::AddIOp>(b.create<arith::MulIOp>(d, extT00),
-                              b.create<arith::MulIOp>(e, extT01)),
-      b.create<arith::MulIOp>(m, b.create<arith::ExtSIOp>(extIntType, md)));
-  ce = b.create<arith::AddIOp>(
-      b.create<arith::AddIOp>(b.create<arith::MulIOp>(d, extT10),
-                              b.create<arith::MulIOp>(e, extT11)),
-      b.create<arith::MulIOp>(m, b.create<arith::ExtSIOp>(extIntType, me)));
+  cd = arith::AddIOp::create(
+      b,
+      arith::AddIOp::create(b, arith::MulIOp::create(b, d, extT00),
+                            arith::MulIOp::create(b, e, extT01)),
+      arith::MulIOp::create(b, m, arith::ExtSIOp::create(b, extIntType, md)));
+  ce = arith::AddIOp::create(
+      b,
+      arith::AddIOp::create(b, arith::MulIOp::create(b, d, extT10),
+                            arith::MulIOp::create(b, e, extT11)),
+      arith::MulIOp::create(b, m, arith::ExtSIOp::create(b, extIntType, me)));
 
-  cd = b.create<arith::ShRSIOp>(cd, extIntTypeN);
-  ce = b.create<arith::ShRSIOp>(ce, extIntTypeN);
+  cd = arith::ShRSIOp::create(b, cd, extIntTypeN);
+  ce = arith::ShRSIOp::create(b, ce, extIntTypeN);
   return {cd, ce};
 }
 
 Value BYInverter::GenerateNorm(Value value, Value antiunit) {
-  Value isNeg =
-      b.create<arith::CmpIOp>(arith::CmpIPredicate::slt, value, extIntTypeZero);
-  Value result = b.create<arith::SelectOp>(
-      isNeg, b.create<arith::AddIOp>(value, m), value);
+  Value isNeg = arith::CmpIOp::create(b, arith::CmpIPredicate::slt, value,
+                                      extIntTypeZero);
+  Value result = arith::SelectOp::create(
+      b, isNeg, arith::AddIOp::create(b, value, m), value);
 
-  result = b.create<arith::SelectOp>(
-      antiunit, b.create<arith::SubIOp>(extIntTypeZero, result), result);
+  result = arith::SelectOp::create(
+      b, antiunit, arith::SubIOp::create(b, extIntTypeZero, result), result);
 
-  result = b.create<arith::SelectOp>(
-      b.create<arith::CmpIOp>(arith::CmpIPredicate::slt, result,
-                              extIntTypeZero),
-      b.create<arith::AddIOp>(result, m), result);
+  result = arith::SelectOp::create(
+      b,
+      arith::CmpIOp::create(b, arith::CmpIPredicate::slt, result,
+                            extIntTypeZero),
+      arith::AddIOp::create(b, result, m), result);
 
   return result;
 }
 
 Value BYInverter::Generate(Value input, bool isMont) {
   Value f = m;
-  Value g = b.create<arith::ExtUIOp>(extIntType, input);
+  Value g = arith::ExtUIOp::create(b, extIntType, input);
   Value d = extIntTypeZero;
   Value e;
   if (isMont) {
     MontgomeryAttr montAttr = modArithType.getMontgomeryAttr();
-    e = b.create<arith::ConstantOp>(montAttr.getRSquared());
-    e = b.create<arith::ExtUIOp>(extIntType, e);
+    e = arith::ConstantOp::create(b, montAttr.getRSquared());
+    e = arith::ExtUIOp::create(b, extIntType, e);
   } else {
     e = extIntTypeOne;
   }
@@ -257,14 +265,14 @@ Value BYInverter::Generate(Value input, bool isMont) {
     types.push_back(v.getType());
   }
 
-  auto whileOp = b.create<scf::WhileOp>(
-      types, initValues,
+  auto whileOp = scf::WhileOp::create(
+      b, types, initValues,
       [&](OpBuilder &builder, Location loc, ValueRange args) {
         ImplicitLocOpBuilder b(loc, builder);
         Value g = args[1];
-        Value cond = b.create<arith::CmpIOp>(arith::CmpIPredicate::ne, g,
-                                             extIntTypeZero);
-        b.create<scf::ConditionOp>(cond, args);
+        Value cond = arith::CmpIOp::create(b, arith::CmpIPredicate::ne, g,
+                                           extIntTypeZero);
+        scf::ConditionOp::create(b, cond, args);
       },
       [&](OpBuilder &builder, Location loc, ValueRange args) {
         ImplicitLocOpBuilder b(loc, builder);
@@ -277,25 +285,25 @@ Value BYInverter::Generate(Value input, bool isMont) {
         BYInverter::FGResult fgResult = GenerateFG(f, g, jumpResult.t);
         BYInverter::DEResult deResult = GenerateDE(d, e, jumpResult.t);
 
-        b.create<scf::YieldOp>(ValueRange{fgResult.f, fgResult.g, deResult.d,
-                                          deResult.e, jumpResult.eta});
+        scf::YieldOp::create(b, ValueRange{fgResult.f, fgResult.g, deResult.d,
+                                           deResult.e, jumpResult.eta});
       });
   f = whileOp.getResult(0);
   d = whileOp.getResult(2);
 
-  Value minusOneIntType = b.create<arith::ConstantIntOp>(
-      extIntType, APInt::getAllOnes(extIntType.getWidth()));
+  Value minusOneIntType = arith::ConstantIntOp::create(
+      b, extIntType, APInt::getAllOnes(extIntType.getWidth()));
 
   Value antiunit =
-      b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, f, minusOneIntType);
-  Value invertible = b.create<arith::OrIOp>(
-      b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, f, extIntTypeOne),
+      arith::CmpIOp::create(b, arith::CmpIPredicate::eq, f, minusOneIntType);
+  Value invertible = arith::OrIOp::create(
+      b, arith::CmpIOp::create(b, arith::CmpIPredicate::eq, f, extIntTypeOne),
       antiunit);
 
   d = GenerateNorm(d, antiunit);
   // return zero for non-invertible input
-  Value result = b.create<arith::SelectOp>(invertible, d, extIntTypeZero);
-  result = b.create<arith::TruncIOp>(intType, result);
+  Value result = arith::SelectOp::create(b, invertible, d, extIntTypeZero);
+  result = arith::TruncIOp::create(b, intType, result);
   return result;
 }
 

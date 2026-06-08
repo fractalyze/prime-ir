@@ -1,0 +1,26 @@
+--- a/mlir/lib/Dialect/Affine/Analysis/Utils.cpp
++++ b/mlir/lib/Dialect/Affine/Analysis/Utils.cpp
+@@ -480,6 +480,13 @@
+   SmallVector<std::pair<unsigned, unsigned>, 4> worklist;
+   worklist.push_back({srcId, 0});
+   Operation *dstOp = getNode(dstId)->op;
++  // Track nodes already pushed onto the worklist. The MDG is a DAG (edges
++  // respect program order), but without a visited set this DFS enumerates
++  // every path from 'srcId' to every reachable node — exponential in the
++  // number of diamond merges. With many independent memref accesses on the
++  // same buffer (e.g. fully-unrolled SIMD-like bodies), this is fatal.
++  DenseSet<unsigned> visited;
++  visited.insert(srcId);
+   // Run DFS traversal to see if 'dstId' is reachable from 'srcId'.
+   while (!worklist.empty()) {
+     auto &idAndIndex = worklist.back();
+@@ -501,7 +508,8 @@
+     // nodes that are "after" dstId in the containing block; one can't have a
+     // path to `dstId` from any of those nodes.
+     bool afterDst = dstOp->isBeforeInBlock(getNode(edge.id)->op);
+-    if (!afterDst && edge.id != idAndIndex.first)
++    if (!afterDst && edge.id != idAndIndex.first &&
++        visited.insert(edge.id).second)
+       worklist.push_back({edge.id, 0});
+   }
+   return false;

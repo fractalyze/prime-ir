@@ -57,6 +57,27 @@ struct MontgomeryAttrStorage : public AttributeStorage {
   SmallVector<IntegerAttr> invTwoPowers;
 };
 
+struct BarrettAttrStorage : public AttributeStorage {
+  using KeyTy = IntegerAttr;
+
+  BarrettAttrStorage(IntegerAttr modulus, IntegerAttr mu)
+      : modulus(std::move(modulus)), mu(std::move(mu)) {}
+
+  KeyTy getAsKey() const { return KeyTy(modulus); }
+
+  bool operator==(const KeyTy &key) const { return key == KeyTy(modulus); }
+
+  static llvm::hash_code hashKey(const KeyTy &key) {
+    return llvm::hash_combine(key);
+  }
+
+  static BarrettAttrStorage *construct(AttributeStorageAllocator &allocator,
+                                       KeyTy &&key);
+
+  IntegerAttr modulus;
+  IntegerAttr mu;
+};
+
 struct BYAttrStorage : public AttributeStorage {
   using KeyTy = IntegerAttr;
 

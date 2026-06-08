@@ -850,6 +850,17 @@ func.func @test_sub_self_is_zero(%arg0: !Zp) -> !Zp {
   return %0 : !Zp
 }
 
+// The zero constant must materialize as a splat matching the shaped result —
+// a scalar attr on a tensor-typed mod_arith.constant fails verification.
+// CHECK-LABEL: @test_sub_self_tensor_is_zero
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_sub_self_tensor_is_zero(%arg0: tensor<4x!Zp>) -> tensor<4x!Zp> {
+  %0 = mod_arith.sub %arg0, %arg0 : tensor<4x!Zp>
+  // CHECK: %[[C:.*]] = mod_arith.constant dense<0> : [[T]]
+  // CHECK: return %[[C]] : [[T]]
+  return %0 : tensor<4x!Zp>
+}
+
 // CHECK-LABEL: @test_sub_lhs_after_add
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]], %[[ARG1:.*]]: [[T]]) -> [[T]]
 func.func @test_sub_lhs_after_add(%arg0: !Zp, %arg1: !Zp) -> !Zp {
@@ -1266,6 +1277,28 @@ func.func @test_mul_of_mul_by_constant(%arg0: !Zp, %arg1: !Zp) -> !Zp {
   return %2 : !Zp
 }
 
+// Constant-factor reassociation over a value that feeds two constant-scaled
+// products must converge to a single folded constant — it must not bind the
+// folded constant product as a new value operand and re-reassociate forever.
+// This is the shape the coefficient-form jagged sumcheck emits at scale; the
+// greedy rewriter looped to OOM on it before the IsNotConstantLike value-operand
+// guard on the constant-reassociation patterns.
+// CHECK-LABEL: @test_mul_constant_reassoc_shared_value
+// CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_mul_constant_reassoc_shared_value(%arg0: !Zp) -> !Zp {
+  %c11 = mod_arith.constant 11 : !Zp
+  %c12 = mod_arith.constant 12 : !Zp
+  %a = mod_arith.mul %arg0, %c11 : !Zp
+  %b = mod_arith.mul %arg0, %c12 : !Zp
+  %r = mod_arith.mul %a, %b : !Zp
+  // (x*11)*(x*12) -> (x*x)*(11*12) -> square(x) * 21  (132 mod 37 = 21)
+  // CHECK: %[[C21:.*]] = mod_arith.constant 21 : [[T]]
+  // CHECK: %[[SQ:.*]] = mod_arith.square %[[ARG0]] : [[T]]
+  // CHECK: %[[RES:.*]] = mod_arith.mul %[[SQ]], %[[C21]] : [[T]]
+  // CHECK: return %[[RES]] : [[T]]
+  return %r : !Zp
+}
+
 // CHECK-LABEL: @test_mul_add_distribute_constant
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]]
 func.func @test_mul_add_distribute_constant(%arg0: !Zp) -> !Zp {
@@ -1428,10 +1461,10 @@ func.func @test_vector_extract() -> !Zp {
 // CHECK-SAME: () -> [[T:.*]] {
 func.func @test_splat_fold() -> vector<2x!Zp> {
   // CHECK: %[[C:.*]] = mod_arith.constant dense<1> : [[T]]
-  // CHECK-NOT: vector.splat
+  // CHECK-NOT: vector.broadcast
   // CHECK: return %[[C]] : [[T]]
   %0 = mod_arith.constant 1 : !Zp
-  %1 = vector.splat %0 : vector<2x!Zp>
+  %1 = vector.broadcast %0 : !Zp to vector<2x!Zp>
   return %1 : vector<2x!Zp>
 }
 

@@ -63,100 +63,100 @@ Pippengers::Pippengers(Value scalarsIn, Value points, Type outputType,
                        ImplicitLocOpBuilder &b, int32_t degree,
                        int32_t windowBits)
     : points(points), outputType(outputType), b(b) {
-  zero = b.create<arith::ConstantIndexOp>(0);
-  one = b.create<arith::ConstantIndexOp>(1);
+  zero = arith::ConstantIndexOp::create(b, 0);
+  one = arith::ConstantIndexOp::create(b, 1);
 
   auto scalarsType = cast<RankedTensorType>(scalarsIn.getType());
 
   scalarFieldType = cast<field::PrimeFieldType>(
       field::getStandardFormType(scalarsType.getElementType()));
   scalars = field::isMontgomery(scalarsType)
-                ? b.create<field::FromMontOp>(
-                       field::getStandardFormType(scalarsType), scalarsIn)
+                ? field::FromMontOp::create(
+                      b, field::getStandardFormType(scalarsType), scalarsIn)
                       .getResult()
                 : scalarsIn;
 
-  size_t scalarBitWidth = scalarFieldType.getStorageBitWidth();
+  size_t scalarBitWidth = scalarFieldType.getTypeSizeInBits();
   bitsPerWindow =
       windowBits > 0
           ? windowBits
           : estimateOptimalWindowBits(scalarBitWidth, size_t{1} << degree);
   numWindows = computeWindowsCount(scalarBitWidth, bitsPerWindow);
-  numScalarMuls = b.create<tensor::DimOp>(scalars, 0);
+  numScalarMuls = tensor::DimOp::create(b, scalars, 0);
 
   zeroPoint = createZeroPoint(b, outputType);
 
   auto windowSumsType =
       MemRefType::get({static_cast<int64_t>(numWindows)}, outputType);
-  windowSums = b.create<memref::AllocaOp>(windowSumsType);
+  windowSums = memref::AllocaOp::create(b, windowSumsType);
 
-  Value numWindows = b.create<arith::ConstantIndexOp>(this->numWindows);
-  b.create<scf::ForOp>(
-      zero, numWindows, one, std::nullopt,
+  Value numWindows = arith::ConstantIndexOp::create(b, this->numWindows);
+  scf::ForOp::create(
+      b, zero, numWindows, one, ValueRange{},
       [&](OpBuilder &builder, Location loc, Value i, ValueRange args) {
         ImplicitLocOpBuilder b0(loc, builder);
-        b0.create<memref::StoreOp>(zeroPoint, windowSums, i);
-        b0.create<scf::YieldOp>();
+        memref::StoreOp::create(b0, zeroPoint, windowSums, i);
+        scf::YieldOp::create(b0);
       });
 }
 
 // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-3.-bucket-reduction
 void Pippengers::bucketReduction(Value j, Value initialPoint, Value buckets,
                                  ImplicitLocOpBuilder &b) {
-  auto numBuckets = b.create<arith::ConstantIndexOp>(this->numBuckets);
+  auto numBuckets = arith::ConstantIndexOp::create(b, this->numBuckets);
 
   // TODO(ashjeong): explore potential for loop parallelization
-  auto bucketsForOp = b.create<scf::ForOp>(
-      zero, numBuckets, one,
+  auto bucketsForOp = scf::ForOp::create(
+      b, zero, numBuckets, one,
       ValueRange{/*runningSum=*/zeroPoint,
                  /*windowSum=*/initialPoint},
       [&](OpBuilder &builder, Location loc, Value i, ValueRange args) {
         ImplicitLocOpBuilder b0(loc, builder);
-        auto idxTmp1 = b0.create<arith::SubIOp>(numBuckets, i);
-        Value idx = b0.create<arith::SubIOp>(idxTmp1, one);
+        auto idxTmp1 = arith::SubIOp::create(b0, numBuckets, i);
+        Value idx = arith::SubIOp::create(b0, idxTmp1, one);
 
-        auto bucket = b0.create<memref::LoadOp>(buckets, idx);
-        auto rSum = b0.create<AddOp>(outputType, args[0], bucket);
-        auto wSum = b0.create<AddOp>(outputType, args[1], rSum);
+        auto bucket = memref::LoadOp::create(b0, buckets, idx);
+        auto rSum = AddOp::create(b0, outputType, args[0], bucket);
+        auto wSum = AddOp::create(b0, outputType, args[1], rSum);
 
-        b0.create<scf::YieldOp>(ValueRange{rSum, wSum});
+        scf::YieldOp::create(b0, ValueRange{rSum, wSum});
       });
-  b.create<memref::StoreOp>(bucketsForOp.getResult(1), windowSums, j);
+  memref::StoreOp::create(b, bucketsForOp.getResult(1), windowSums, j);
 }
 
 // https://encrypt.a41.io/primitives/abstract-algebra/elliptic-curve/msm/pippengers-algorithm#id-4.-window-reduction-final-msm-result
 Value Pippengers::windowReduction() {
-  Value numWindows = b.create<arith::ConstantIndexOp>(this->numWindows);
+  Value numWindows = arith::ConstantIndexOp::create(b, this->numWindows);
   // We're traversing windows from high to low.
-  auto windowsForOp = b.create<scf::ForOp>(
-      one, numWindows, one, ValueRange{/*accumulator=*/zeroPoint},
+  auto windowsForOp = scf::ForOp::create(
+      b, one, numWindows, one, ValueRange{/*accumulator=*/zeroPoint},
       [&](OpBuilder &winReducBuilder, Location winReducLoc, Value j,
           ValueRange winReducArgs) {
         ImplicitLocOpBuilder b1(winReducLoc, winReducBuilder);
         // scf::ForOp does not support reverse traversal. Reverse traversal
         // must be simulated using arithmetic with the for op index
         // (numWindows - j)
-        Value idx = b1.create<arith::SubIOp>(numWindows, j);
+        Value idx = arith::SubIOp::create(b1, numWindows, j);
         Value bitsPerWindow =
-            b1.create<arith::ConstantIndexOp>(this->bitsPerWindow);
+            arith::ConstantIndexOp::create(b1, this->bitsPerWindow);
 
         auto accumulator = winReducArgs[0];
-        auto windowSum = b1.create<memref::LoadOp>(windowSums, idx);
-        accumulator = b1.create<AddOp>(outputType, accumulator, windowSum);
-        auto bitAccForOp = b1.create<scf::ForOp>(
-            zero, bitsPerWindow, one, accumulator,
+        auto windowSum = memref::LoadOp::create(b1, windowSums, idx);
+        accumulator = AddOp::create(b1, outputType, accumulator, windowSum);
+        auto bitAccForOp = scf::ForOp::create(
+            b1, zero, bitsPerWindow, one, accumulator,
             [&](OpBuilder &bitAccBuilder, Location bitAccLoc, Value i,
                 ValueRange bitAccArgs) {
               ImplicitLocOpBuilder b2(bitAccLoc, bitAccBuilder);
-              Value doubled = b2.create<DoubleOp>(outputType, bitAccArgs[0]);
-              b2.create<scf::YieldOp>(doubled);
+              Value doubled = DoubleOp::create(b2, outputType, bitAccArgs[0]);
+              scf::YieldOp::create(b2, doubled);
             });
-        b1.create<scf::YieldOp>(bitAccForOp.getResult(0));
+        scf::YieldOp::create(b1, bitAccForOp.getResult(0));
       });
 
-  auto windowSumsAtZero = b.create<memref::LoadOp>(windowSums, zero);
-  return b.create<AddOp>(outputType, windowsForOp.getResult(0),
-                         windowSumsAtZero);
+  auto windowSumsAtZero = memref::LoadOp::create(b, windowSums, zero);
+  return AddOp::create(b, outputType, windowsForOp.getResult(0),
+                       windowSumsAtZero);
 }
 
 } // namespace mlir::prime_ir::elliptic_curve

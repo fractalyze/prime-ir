@@ -53,7 +53,8 @@ def EllipticCurve_PointTypeInterface : TypeInterface<"PointTypeInterface"> {
 def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [
   MemRefElementTypeInterface,
   DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "An affine point within an elliptic curve";
   let description = [{
@@ -73,7 +74,8 @@ def EllipticCurve_AffineType : EllipticCurve_Type<"Affine", "affine", [
 def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [
   MemRefElementTypeInterface,
   DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "A jacobian point within an elliptic curve";
   let description = [{
@@ -94,7 +96,8 @@ def EllipticCurve_JacobianType : EllipticCurve_Type<"Jacobian", "jacobian", [
 def EllipticCurve_XYZZType : EllipticCurve_Type<"XYZZ", "xyzz", [
   MemRefElementTypeInterface,
   DeclareTypeInterfaceMethods<EllipticCurve_PointTypeInterface>,
-  DeclareTypeInterfaceMethods<ConstantLikeInterface>
+  DeclareTypeInterfaceMethods<ConstantLikeInterface>,
+  DeclareTypeInterfaceMethods<DenseElementTypeInterface>
   ]> {
   let summary = "A xyzz point within an elliptic curve";
   let description = [{

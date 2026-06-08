@@ -18,14 +18,32 @@ jobs:
   build-and-test:
     runs-on: [self-hosted, cpu]
     steps:
+      # Full history so bazel-diff can check out and hash the PR base revision.
       - name: Checkout PrimeIR
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Run `bazel test`
+      # PRs build and test only the targets bazel-diff reports as impacted by
+      # the base..head change; pushes to main run the full suite.
+      - name: Run `bazel test` (diff only)
+        if: github.event_name == 'pull_request'
         run: |
-          bazel --bazelrc=.bazelrc.ci test \
-            --config ci \
-            //...
+          BAZEL_DIFF=$(mktemp -t bazel-diff.XXXXXX.jar)
+          curl -Lo "$BAZEL_DIFF" https://github.com/Tinder/bazel-diff/releases/download/17.0.2/bazel-diff_deploy.jar
+          ./build_tools/github_actions/ci_build_bazel.sh "$BAZEL_DIFF" \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}"
+
+      - name: Run `bazel test` (all)
+        if: github.event_name != 'pull_request'
+        run: ./build_tools/github_actions/ci_build_bazel.sh
+
+      # Capture the runner-local test.log a failed test leaves behind — the CI
+      # stream only carries the FAIL summary, not the gtest output.
+      - name: Upload bazel test logs
+        if: ${{ failure() }}
+        uses: fractalyze/.github/.github/actions/upload-bazel-testlogs@main
 
   pre-commit-style:
     if: github.actor != 'fractalyze-dev'

@@ -1,0 +1,28 @@
+# Commit-scope policy for prime_ir (fractal-commit-lint).
+#
+# Scopes are derived from the changed files: the `prime_ir` root is stripped, a
+# leading `tests` segment folds a test file onto its source scope (test_dirs),
+# each segment is camel_to_snake'd (with EllipticCurve shortened to ec), and
+# the result is capped at max_scope_depth (default 2). So
+# prime_ir/Dialect/ModArith/... and tests/Dialect/ModArith/... both derive
+# `dialect/mod_arith`, any deeper subdir (IR, Conversions) still caps to the
+# same scope, and a commit spanning two dialects takes no scope. CI runs this
+# same tool over each commit via the commit-lint action in hybrid mode
+# (.github/workflows/commit-lint.yml), so local pre-commit and CI agree.
+
+roots = ["prime_ir"]
+require_scope = false
+test_dirs = ["tests"]
+
+exempt_paths = [
+  "WORKSPACE.bazel",
+  "MODULE.bazel",
+  "MODULE.bazel.lock",
+  "BUILD.bazel",
+  "third_party",     # vendored deps (llvm, zk_dtypes pins)
+  ".github",
+  "build_tools",     # CI scripts, cross-cutting
+]
+
+[dictionary]
+EllipticCurve = "ec"   # dialect/ec, not dialect/elliptic_curve

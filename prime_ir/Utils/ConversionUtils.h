@@ -83,8 +83,8 @@ struct ConvertBinOp : public OpConversionPattern<SourceArithOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto result = b.create<TargetModArithOp>(
-        adaptor.getLhs().getType(), adaptor.getLhs(), adaptor.getRhs());
+    auto result = TargetModArithOp::create(b, adaptor.getLhs().getType(),
+                                           adaptor.getLhs(), adaptor.getRhs());
     rewriter.replaceOp(op, result);
     return success();
   }

@@ -46,7 +46,9 @@ limitations under the License.
 #include "prime_ir/Dialect/EllipticCurve/IR/EllipticCurveOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Inverter/BYInverter.h"
+#include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/BarrettReducer.h"
 #include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/MontReducer.h"
+#include "prime_ir/Dialect/ModArith/Conversions/ModArithToArith/Reducer/SolinasReducer.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
@@ -54,6 +56,7 @@ limitations under the License.
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtOps.h"
 #include "prime_ir/Utils/ConversionUtils.h"
 #include "prime_ir/Utils/ShapedTypeConverter.h"
+#include "zk_dtypes/include/field/goldilocks/goldilocks.h"
 
 namespace mlir::prime_ir::mod_arith {
 
@@ -86,7 +89,7 @@ public:
 
 private:
   static IntegerType convertModArithType(ModArithType type) {
-    return IntegerType::get(type.getContext(), type.getStorageBitWidth());
+    return IntegerType::get(type.getContext(), type.getTypeSizeInBits());
   }
 };
 
@@ -128,7 +131,7 @@ protected:
     auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(v.getType()));
     if (!modType)
       return APInt(64, 0);
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     APInt p = modType.getModulus().getValue().zext(2 * w);
     return p - 1;
   }
@@ -138,7 +141,7 @@ protected:
     auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(v.getType()));
     if (!modType)
       return 1;
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     APInt p = modType.getModulus().getValue().zext(2 * w);
     return kpFromUmax(lookupUmax(v), p);
   }
@@ -149,7 +152,7 @@ protected:
 // Returns storage bit width for a type, handling ModArithType.
 unsigned getModArithStorageBitwidth(Type type) {
   if (auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(type)))
-    return modType.getStorageBitWidth();
+    return modType.getTypeSizeInBits();
   return ConstantIntRanges::getStorageBitwidth(type);
 }
 
@@ -307,7 +310,7 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
       if (!modType)
         continue;
 
-      unsigned w = modType.getStorageBitWidth();
+      unsigned w = modType.getTypeSizeInBits();
       unsigned dw = 2 * w;
       APInt p = modType.getModulus().getValue().zext(dw);
       APInt defaultUmax = p - 1;
@@ -360,7 +363,7 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
     auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(val.getType()));
     if (!modType)
       continue;
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     unsigned dw = 2 * w;
     APInt p = modType.getModulus().getValue().zext(dw);
     if (kpFromUmax(umax, p) <= 1)
@@ -502,7 +505,7 @@ struct ConvertConstant : public OpConversionPattern<ConstantOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
-    auto cval = b.create<arith::ConstantOp>(op.getLoc(), adaptor.getValue());
+    auto cval = arith::ConstantOp::create(b, op.getLoc(), adaptor.getValue());
     rewriter.replaceOp(op, cval);
     return success();
   }
@@ -526,16 +529,17 @@ struct ConvertNegate : public BoundMapPattern<NegateOp> {
     Type intType = modulusType(op);
     Value zero;
     if (isa<ShapedType>(intType)) {
-      zero = b.create<arith::ConstantOp>(SplatElementsAttr::get(
-          cast<ShapedType>(intType),
-          IntegerAttr::get(getElementTypeOrSelf(intType), 0)));
+      zero = arith::ConstantOp::create(
+          b, SplatElementsAttr::get(
+                 cast<ShapedType>(intType),
+                 IntegerAttr::get(getElementTypeOrSelf(intType), 0)));
     } else {
-      zero = b.create<arith::ConstantIntOp>(intType, 0);
+      zero = arith::ConstantIntOp::create(b, intType, 0);
     }
-    auto cmp = b.create<arith::CmpIOp>(arith::CmpIPredicate::eq, input, zero);
-    auto cmod = b.create<arith::ConstantOp>(modulusAttr(op));
-    auto sub = b.create<arith::SubIOp>(cmod, input);
-    auto result = b.create<arith::SelectOp>(cmp, input, sub);
+    auto cmp = arith::CmpIOp::create(b, arith::CmpIPredicate::eq, input, zero);
+    auto cmod = arith::ConstantOp::create(b, modulusAttr(op));
+    auto sub = arith::SubIOp::create(b, cmod, input);
+    auto result = arith::SelectOp::create(b, cmp, input, sub);
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -582,9 +586,9 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
         b, b.getLoc(), modAttr.getType(), rSquaredInt);
 
     // x * R = REDC(x * rSquared)
-    Value rSquared = b.create<BitcastOp>(op.getType(), rSquaredConst);
-    Value bitcast = b.create<BitcastOp>(op.getType(), adaptor.getInput());
-    auto product = b.create<MontMulOp>(op.getType(), bitcast, rSquared);
+    Value rSquared = BitcastOp::create(b, op.getType(), rSquaredConst);
+    Value bitcast = BitcastOp::create(b, op.getType(), adaptor.getInput());
+    auto product = MontMulOp::create(b, op.getType(), bitcast, rSquared);
     rewriter.replaceOp(op, product);
     return success();
   }
@@ -605,7 +609,7 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
     Value zeroHighConst = createScalarOrSplatConstant(
         b, b.getLoc(), modulusAttr(op).getType(), 0);
     auto reduced =
-        b.create<MontReduceOp>(op.getType(), op.getInput(), zeroHighConst);
+        MontReduceOp::create(b, op.getType(), op.getInput(), zeroHighConst);
 
     rewriter.replaceOp(op, reduced);
     return success();
@@ -625,7 +629,7 @@ struct ConvertInverse : public BoundMapPattern<InverseOp> {
     ModArithType modType = getResultModArithType(op);
 
     if (modType.isMontgomery()) {
-      auto result = b.create<MontInverseOp>(op.getType(), op.getInput());
+      auto result = MontInverseOp::create(b, op.getType(), op.getInput());
       rewriter.replaceOp(op, result);
       return success();
     }
@@ -687,7 +691,7 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     ModArithType modArithType = getResultModArithType(op);
     APInt modulus = modArithType.getModulus().getValue();
-    unsigned storageWidth = modArithType.getStorageBitWidth();
+    unsigned storageWidth = modArithType.getTypeSizeInBits();
     unsigned modWidth = modulus.getActiveBits();
     uint64_t resBound = lookupKp(op.getResult());
 
@@ -722,7 +726,7 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
 
     Value result;
     if (modWidth == storageWidth) {
-      auto add = b.create<arith::AddUIExtendedOp>(lhs, rhs);
+      auto add = arith::AddUIExtendedOp::create(b, lhs, rhs);
       // In the full-width case (modWidth == storageWidth), A + B can exceed the
       // storage type range, producing an overflow bit, so lazy reduction is not
       // possible.
@@ -740,7 +744,7 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
       }
       auto noOverflow =
           arith::IntegerOverflowFlagsAttr::get(b.getContext(), flags);
-      auto add = b.create<arith::AddIOp>(lhs, rhs, noOverflow);
+      auto add = arith::AddIOp::create(b, lhs, rhs, noOverflow);
       if (resBound > 1) {
         result = add.getResult();
       } else {
@@ -766,7 +770,7 @@ struct ConvertDouble : public BoundMapPattern<DoubleOp> {
 
     ModArithType modArithType = getResultModArithType(op);
     APInt modulus = modArithType.getModulus().getValue();
-    unsigned storageWidth = modArithType.getStorageBitWidth();
+    unsigned storageWidth = modArithType.getTypeSizeInBits();
     unsigned modWidth = modulus.getActiveBits();
     uint64_t resBound = lookupKp(op.getResult());
 
@@ -786,7 +790,7 @@ struct ConvertDouble : public BoundMapPattern<DoubleOp> {
 
     Value result;
     if (modWidth == storageWidth) {
-      result = b.create<AddOp>(op.getInput(), op.getInput());
+      result = AddOp::create(b, op.getInput(), op.getInput());
     } else {
       TypedAttr modAttr = modulusAttr(op);
       Value one =
@@ -799,7 +803,7 @@ struct ConvertDouble : public BoundMapPattern<DoubleOp> {
       }
       auto noOverflow =
           arith::IntegerOverflowFlagsAttr::get(b.getContext(), flags);
-      auto shifted = b.create<arith::ShLIOp>(input, one, noOverflow);
+      auto shifted = arith::ShLIOp::create(b, input, one, noOverflow);
       if (resBound > 1) {
         result = shifted.getResult();
       } else {
@@ -834,7 +838,7 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
     MontReducer montReducer(b, modType);
     Value lhs = adaptor.getLhs();
     Value rhs = adaptor.getRhs();
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     unsigned dw = 2 * w;
     APInt wMax = APInt::getMaxValue(w).zext(dw);
     APInt p = modType.getModulus().getValue().zext(dw);
@@ -867,8 +871,8 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
       APInt correction = modulus * APInt(modulus.getBitWidth(), rhsKp);
       Value corrConst =
           createScalarOrSplatConstant(b, b.getLoc(), lhs.getType(), correction);
-      auto lhsPlusCorrected = b.create<arith::AddIOp>(lhs, corrConst);
-      auto result = b.create<arith::SubIOp>(lhsPlusCorrected, rhs);
+      auto lhsPlusCorrected = arith::AddIOp::create(b, lhs, corrConst);
+      auto result = arith::SubIOp::create(b, lhsPlusCorrected, rhs);
       rewriter.replaceOp(op, result);
     } else {
       // getCanonicalDiff requires both inputs in [0, p). When consumer-aware
@@ -906,7 +910,7 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
         createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 1);
     Value four =
         createScalarOrSplatConstant(b, b.getLoc(), modAttr.getType(), 4);
-    Value cmod = b.create<arith::ConstantOp>(modAttr);
+    Value cmod = arith::ConstantOp::create(b, modAttr);
     if (auto constRhs = op.getRhs().getDefiningOp<ConstantOp>()) {
       IntegerAttr rhsInt =
           dyn_cast_if_present<IntegerAttr>(constRhs.getValue());
@@ -939,13 +943,13 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
             if (i == 0) {
               // Efficient halve: if odd, add modulus, then shift right by 1
               Value lhs = adaptor.getLhs();
-              auto lhsIsOdd = b.create<arith::AndIOp>(lhs, one);
-              auto needsAdd = b.create<arith::CmpIOp>(arith::CmpIPredicate::ne,
-                                                      lhsIsOdd, zero);
-              auto halvedInput = b.create<arith::SelectOp>(
-                  needsAdd, b.create<arith::AddIOp>(lhs, cmod), lhs);
-              auto halved = b.create<arith::ShRUIOp>(halvedInput, one);
-              auto negatedHalved = b.create<arith::SubIOp>(cmod, halved);
+              auto lhsIsOdd = arith::AndIOp::create(b, lhs, one);
+              auto needsAdd = arith::CmpIOp::create(b, arith::CmpIPredicate::ne,
+                                                    lhsIsOdd, zero);
+              auto halvedInput = arith::SelectOp::create(
+                  b, needsAdd, arith::AddIOp::create(b, lhs, cmod), lhs);
+              auto halved = arith::ShRUIOp::create(b, halvedInput, one);
+              auto negatedHalved = arith::SubIOp::create(b, cmod, halved);
               rewriter.replaceOp(op, isNegated ? negatedHalved : halved);
               return success();
             } else {
@@ -964,37 +968,37 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 
               // hi = lhs >> invDegree
               auto hi =
-                  b.create<arith::ShRUIOp>(adaptor.getLhs(), invDegreeConst);
+                  arith::ShRUIOp::create(b, adaptor.getLhs(), invDegreeConst);
 
               // lo = last invDegree bits of lhs
-              auto lo = b.create<arith::AndIOp>(adaptor.getLhs(), mask);
+              auto lo = arith::AndIOp::create(b, adaptor.getLhs(), mask);
 
               // loTimesK = lo * k
               Value loTimesK;
               // TODO(batzor): this is temporary optimization for BabyBear. We
               // need to replace this with a more general solution.
               if (k == 15) {
-                auto loTimes16 = b.create<arith::ShLIOp>(lo, four);
-                loTimesK = b.create<arith::SubIOp>(loTimes16, lo);
+                auto loTimes16 = arith::ShLIOp::create(b, lo, four);
+                loTimesK = arith::SubIOp::create(b, loTimes16, lo);
               } else {
-                loTimesK = b.create<arith::MulIOp>(lo, kConst);
+                loTimesK = arith::MulIOp::create(b, lo, kConst);
               }
 
               // loShifted = loTimesK << degreeDelta
               auto loShifted =
-                  b.create<arith::ShLIOp>(loTimesK, degreeDeltaConst);
+                  arith::ShLIOp::create(b, loTimesK, degreeDeltaConst);
 
               // loIsNotZero = (lo != 0)
               auto loIsNotZero =
-                  b.create<arith::CmpIOp>(arith::CmpIPredicate::ne, lo, zero);
+                  arith::CmpIOp::create(b, arith::CmpIPredicate::ne, lo, zero);
 
               // loCorrected = loIsNotZero ? loShifted : cmod
               auto loCorrected =
-                  b.create<arith::SelectOp>(loIsNotZero, loShifted, cmod);
+                  arith::SelectOp::create(b, loIsNotZero, loShifted, cmod);
 
               // result = loCorrected - hi
-              auto result = b.create<arith::SubIOp>(loCorrected, hi);
-              auto negatedResult = b.create<arith::SubIOp>(cmod, result);
+              auto result = arith::SubIOp::create(b, loCorrected, hi);
+              auto negatedResult = arith::SubIOp::create(b, cmod, result);
 
               // NOTE(batzor): This inverted negation is as intended.
               // WARN(batzor): The output can be modulus when LHS is 0. This is
@@ -1010,17 +1014,54 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
     }
 
     if (modType.isMontgomery()) {
-      auto result = b.create<MontMulOp>(op.getType(), op.getLhs(), op.getRhs());
+      auto result =
+          MontMulOp::create(b, op.getType(), op.getLhs(), op.getRhs());
       rewriter.replaceOp(op, result);
       return success();
     }
 
+    // Goldilocks (p = 2^64 - 2^32 + 1) matches the wide non-Mersenne shape
+    // but has a faster Solinas fast-path below, so it takes precedence over
+    // Barrett — same as the Mersenne branch.
+    bool isGoldilocks =
+        modulus.getBitWidth() == 64 &&
+        modulus == APInt(64, zk_dtypes::Goldilocks::Config::kModulus);
+
+    // Barrett path for wide non-Mersenne primes. The Mersenne and Goldilocks
+    // branches below keep precedence — their shift+add is faster than Barrett.
+    // Below 64 bits, hardware urem is a single instruction and wins anyway.
+    // The `!modulus.isPowerOf2()` guard is defensive: the type parser rejects
+    // power-of-two moduli today, but if the dialect ever supports binary
+    // fields, their storage is `log2(p)` bits — narrower than
+    // `modulus.getBitWidth()` — which would break the reducer's
+    // `2k == extBitWidth` precondition.
+    if (modulus.getBitWidth() >= 64 && !(modulus + 1).isPowerOf2() &&
+        !modulus.isPowerOf2() && !isGoldilocks) {
+      auto result =
+          BarrettMulOp::create(b, op.getType(), op.getLhs(), op.getRhs());
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    // Goldilocks (p = 2^64 - 2^32 + 1) reduces the 128-bit product via the
+    // 64-bit Solinas fast path, sidestepping the `arith.remui i128` fallback
+    // below (which lowers to libgcc's `__umodti3`, unavailable on the CPU JIT
+    // runtime). Take the product halves straight from mului_extended — the
+    // reduction stays in 64-bit arithmetic, no i128.
+    if (isGoldilocks) {
+      auto prod =
+          arith::MulUIExtendedOp::create(b, adaptor.getLhs(), adaptor.getRhs());
+      rewriter.replaceOp(
+          op, SolinasReducer(b, modType).reduce(prod.getLow(), prod.getHigh()));
+      return success();
+    }
+
     auto cmodExt =
-        b.create<arith::ConstantOp>(modulusAttr(op, /*extended=*/true));
+        arith::ConstantOp::create(b, modulusAttr(op, /*extended=*/true));
     Type wideType = modulusType(op, /*extended=*/true);
-    Value lhs = b.create<arith::ExtUIOp>(wideType, adaptor.getLhs());
-    Value rhs = b.create<arith::ExtUIOp>(wideType, adaptor.getRhs());
-    Value mul = b.create<arith::MulIOp>(lhs, rhs);
+    Value lhs = arith::ExtUIOp::create(b, wideType, adaptor.getLhs());
+    Value rhs = arith::ExtUIOp::create(b, wideType, adaptor.getRhs());
+    Value mul = arith::MulIOp::create(b, lhs, rhs);
 
     if (APInt modulusPlusOne = modulus + 1; modulusPlusOne.isPowerOf2()) {
       unsigned k = modulusPlusOne.countTrailingZeros(); // e.g., 31
@@ -1030,31 +1071,31 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
 
       // 1. Reduce
       Value kConst =
-          b.create<arith::ConstantOp>(wideType, b.getIntegerAttr(wideType, k));
+          arith::ConstantOp::create(b, wideType, b.getIntegerAttr(wideType, k));
 
       // hi = mul >> k
-      Value hi = b.create<arith::ShRUIOp>(mul, kConst);
+      Value hi = arith::ShRUIOp::create(b, mul, kConst);
       // lo = mul & (2ᵏ - 1) (which is modulus)
-      Value lo = b.create<arith::AndIOp>(mul, cmodExt);
+      Value lo = arith::AndIOp::create(b, mul, cmodExt);
 
       // sum = hi + lo
-      Value sum = b.create<arith::AddIOp>(hi, lo);
+      Value sum = arith::AddIOp::create(b, hi, lo);
 
       // 2. Final Correction: if (sum >= p) sum -= p
       // Note: A single subtraction is sufficient because max(H+L) < 2*p
       Value cmp =
-          b.create<arith::CmpIOp>(arith::CmpIPredicate::uge, sum, cmodExt);
-      Value sub = b.create<arith::SubIOp>(sum, cmodExt);
-      Value reduced = b.create<arith::SelectOp>(cmp, sub, sum);
+          arith::CmpIOp::create(b, arith::CmpIPredicate::uge, sum, cmodExt);
+      Value sub = arith::SubIOp::create(b, sum, cmodExt);
+      Value reduced = arith::SelectOp::create(b, cmp, sub, sum);
 
       rewriter.replaceOp(op,
-                         b.create<arith::TruncIOp>(modulusType(op), reduced));
+                         arith::TruncIOp::create(b, modulusType(op), reduced));
       return success();
     }
 
     // Use standard multiplication and reduction
-    auto remu = b.create<arith::RemUIOp>(mul, cmodExt);
-    auto trunc = b.create<arith::TruncIOp>(modulusType(op), remu);
+    auto remu = arith::RemUIOp::create(b, mul, cmodExt);
+    auto trunc = arith::TruncIOp::create(b, modulusType(op), remu);
 
     rewriter.replaceOp(op, trunc);
     return success();
@@ -1086,7 +1127,7 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
     APInt lhsUmax = lookupUmax(op.getLhs());
     APInt rhsUmax = lookupUmax(op.getRhs());
     MontReducer reducer(b, modType);
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     unsigned qw = 4 * w;
     APInt p = modType.getModulus().getValue().zext(qw);
     APInt redcLimit = p.shl(w);
@@ -1128,16 +1169,38 @@ struct ConvertMontMul : public BoundMapPattern<MontMulOp> {
 
     Value lo, hi;
     if (signedLhs && signedRhs) {
-      auto mul = b.create<arith::MulSIExtendedOp>(signedLhs, signedRhs);
+      auto mul = arith::MulSIExtendedOp::create(b, signedLhs, signedRhs);
       lo = mul.getLow();
       hi = mul.getHigh();
     } else {
-      auto mul = b.create<arith::MulUIExtendedOp>(lhs, rhs);
+      auto mul = arith::MulUIExtendedOp::create(b, lhs, rhs);
       lo = mul.getLow();
       hi = mul.getHigh();
     }
 
     Value result = reducer.reduce(lo, hi, /*lazy=*/resBound >= 2);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct ConvertBarrettMul : public OpConversionPattern<BarrettMulOp> {
+  using OpConversionPattern::OpConversionPattern;
+
+  LogicalResult
+  matchAndRewrite(BarrettMulOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+
+    ModArithType modType = getResultModArithType(op);
+    if (modType.isMontgomery()) {
+      return op->emitError(
+          "BarrettMulOp with Montgomery type is not supported in "
+          "ModArithToArith conversion");
+    }
+
+    BarrettReducer reducer(b, modType);
+    Value result = reducer.reduce(adaptor.getLhs(), adaptor.getRhs());
     rewriter.replaceOp(op, result);
     return success();
   }
@@ -1171,14 +1234,14 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
     auto signedInput = getSignedFormFromCanonical(input, modulusAttr(op));
     auto results =
         signedInput
-            ? b.create<arith::MulSIExtendedOp>(signedInput, signedInput)
+            ? arith::MulSIExtendedOp::create(b, signedInput, signedInput)
                   .getResults()
-            : b.create<arith::MulUIExtendedOp>(input, input).getResults();
+            : arith::MulUIExtendedOp::create(b, input, input).getResults();
     return {results[0], results[1]};
   }
 
   Type limbType = IntegerType::get(b.getContext(), limbWidth);
-  Value zeroLimb = b.create<arith::ConstantIntOp>(limbType, 0);
+  Value zeroLimb = arith::ConstantIntOp::create(b, limbType, 0);
 
   auto decomposeToLimbs = [&b, limbType, limbWidth,
                            numLimbs](SmallVector<Value> &limbs, Value input,
@@ -1187,12 +1250,12 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
       limbs[0] = input;
       return limbs;
     }
-    limbs[0] = b.create<arith::TruncIOp>(limbType, input);
+    limbs[0] = arith::TruncIOp::create(b, limbType, input);
     Value remaining = input;
-    Value shift = b.create<arith::ConstantIntOp>(type, limbWidth);
+    Value shift = arith::ConstantIntOp::create(b, type, limbWidth);
     for (unsigned i = 1; i < limbs.size(); ++i) {
-      remaining = b.create<arith::ShRUIOp>(remaining, shift);
-      limbs[i] = b.create<arith::TruncIOp>(limbType, remaining);
+      remaining = arith::ShRUIOp::create(b, remaining, shift);
+      limbs[i] = arith::TruncIOp::create(b, limbType, remaining);
     }
     return limbs;
   };
@@ -1204,20 +1267,20 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   // Calculate x + y * z + carry
   auto mulAddWithCarry = [&b, limbType](Value x, Value y, Value z,
                                         Value carry) {
-    auto yz = b.create<arith::MulUIExtendedOp>(y, z);
+    auto yz = arith::MulUIExtendedOp::create(b, y, z);
     Value hi = yz.getHigh();
     Value lo = yz.getLow();
-    auto addResult = b.create<arith::AddUIExtendedOp>(x, lo);
+    auto addResult = arith::AddUIExtendedOp::create(b, x, lo);
     Value carry1 = addResult.getOverflow();
     auto addResult2 =
-        b.create<arith::AddUIExtendedOp>(addResult.getSum(), carry);
+        arith::AddUIExtendedOp::create(b, addResult.getSum(), carry);
     Value carry2 = addResult2.getOverflow();
     MulExtendedResult mulResult;
     mulResult.lo = addResult2.getSum();
-    mulResult.hi =
-        b.create<arith::AddIOp>(hi, b.create<arith::ExtUIOp>(limbType, carry1));
-    mulResult.hi = b.create<arith::AddIOp>(
-        mulResult.hi, b.create<arith::ExtUIOp>(limbType, carry2));
+    mulResult.hi = arith::AddIOp::create(
+        b, hi, arith::ExtUIOp::create(b, limbType, carry1));
+    mulResult.hi = arith::AddIOp::create(
+        b, mulResult.hi, arith::ExtUIOp::create(b, limbType, carry2));
     return mulResult;
   };
 
@@ -1235,17 +1298,17 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
   }
 
   // Reconstruct a single integer value by combining all limbs
-  Value result = b.create<arith::ConstantIntOp>(intExtType, 0);
+  Value result = arith::ConstantIntOp::create(b, intExtType, 0);
   for (unsigned i = 0; i < 2 * numLimbs; ++i) {
-    Value rAtI = b.create<arith::ExtUIOp>(intExtType, resultVec[i]);
-    Value shifted = b.create<arith::ShLIOp>(
-        rAtI, b.create<arith::ConstantIntOp>(intExtType, i * limbWidth));
-    result = b.create<arith::OrIOp>(result, shifted);
+    Value rAtI = arith::ExtUIOp::create(b, intExtType, resultVec[i]);
+    Value shifted = arith::ShLIOp::create(
+        b, rAtI, arith::ConstantIntOp::create(b, intExtType, i * limbWidth));
+    result = arith::OrIOp::create(b, result, shifted);
   }
 
   // Multiply result by 2. It's safe to assume no overflow
-  result = b.create<arith::ShLIOp>(
-      result, b.create<arith::ConstantIntOp>(intExtType, 1), noOverflow);
+  result = arith::ShLIOp::create(
+      b, result, arith::ConstantIntOp::create(b, intExtType, 1), noOverflow);
 
   decomposeToLimbs(resultVec, result, intExtType);
 
@@ -1259,28 +1322,28 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
 
     // (carry, r[2*i+1]) = r[2*i+1] + carry
     auto addResult =
-        b.create<arith::AddUIExtendedOp>(resultVec[2 * i + 1], carry);
+        arith::AddUIExtendedOp::create(b, resultVec[2 * i + 1], carry);
     resultVec[2 * i + 1] = addResult.getSum();
-    carry = b.create<arith::ExtUIOp>(limbType, addResult.getOverflow());
+    carry = arith::ExtUIOp::create(b, limbType, addResult.getOverflow());
   }
 
   // Reconstruct `lo` and `hi` values by composing individual limbs
-  Value zero = b.create<arith::ConstantIntOp>(intType, 0);
+  Value zero = arith::ConstantIntOp::create(b, intType, 0);
   Value resultLow = zero;
   Value resultHigh = zero;
   for (unsigned i = 0; i < 2 * numLimbs; ++i) {
     Value rAtI = numLimbs == 1
                      ? resultVec[i]
-                     : b.create<arith::ExtUIOp>(intType, resultVec[i]);
+                     : arith::ExtUIOp::create(b, intType, resultVec[i]);
     if (i < numLimbs) {
-      auto shifted = b.create<arith::ShLIOp>(
-          rAtI, b.create<arith::ConstantIntOp>(intType, i * limbWidth));
-      resultLow = b.create<arith::OrIOp>(resultLow, shifted);
+      auto shifted = arith::ShLIOp::create(
+          b, rAtI, arith::ConstantIntOp::create(b, intType, i * limbWidth));
+      resultLow = arith::OrIOp::create(b, resultLow, shifted);
     } else {
-      auto shifted = b.create<arith::ShLIOp>(
-          rAtI,
-          b.create<arith::ConstantIntOp>(intType, (i - numLimbs) * limbWidth));
-      resultHigh = b.create<arith::OrIOp>(resultHigh, shifted);
+      auto shifted = arith::ShLIOp::create(
+          b, rAtI,
+          arith::ConstantIntOp::create(b, intType, (i - numLimbs) * limbWidth));
+      resultHigh = arith::OrIOp::create(b, resultHigh, shifted);
     }
   }
   return MulExtendedResult{resultLow, resultHigh};
@@ -1301,25 +1364,40 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
 
     ModArithType modType = getResultModArithType(op);
     if (modType.isMontgomery()) {
-      auto result = b.create<MontSquareOp>(op.getType(), op.getInput());
+      auto result = MontSquareOp::create(b, op.getType(), op.getInput());
       rewriter.replaceOp(op, result);
       return success();
     }
 
-    Type intExtType = modulusType(op, /*extended=*/true);
     MulExtendedResult result = squareExtended(b, op, adaptor.getInput());
-    Value lowExt = b.create<arith::ExtUIOp>(intExtType, result.lo);
-    Value highExt = b.create<arith::ExtUIOp>(intExtType, result.hi);
-    Value shift = b.create<arith::ConstantIntOp>(intExtType,
-                                                 modType.getStorageBitWidth());
-    highExt = b.create<arith::ShLIOp>(highExt, shift);
-    Value squared = b.create<arith::OrIOp>(lowExt, highExt);
+
+    // Goldilocks reduces the 128-bit square via the 64-bit Solinas fast path
+    // (mirrors ConvertMul), sidestepping the `arith.remui i128` fallback below.
+    // squareExtended already hands back the product halves, so reduce them
+    // directly — no i128 reassembly.
+    APInt modulus = modType.getModulus().getValue();
+    bool isGoldilocks =
+        modulus.getBitWidth() == 64 &&
+        modulus == APInt(64, zk_dtypes::Goldilocks::Config::kModulus);
+    if (isGoldilocks) {
+      rewriter.replaceOp(
+          op, SolinasReducer(b, modType).reduce(result.lo, result.hi));
+      return success();
+    }
+
+    Type intExtType = modulusType(op, /*extended=*/true);
+    Value lowExt = arith::ExtUIOp::create(b, intExtType, result.lo);
+    Value highExt = arith::ExtUIOp::create(b, intExtType, result.hi);
+    Value shift = arith::ConstantIntOp::create(b, intExtType,
+                                               modType.getTypeSizeInBits());
+    highExt = arith::ShLIOp::create(b, highExt, shift);
+    Value squared = arith::OrIOp::create(b, lowExt, highExt);
 
     Value cmod =
-        b.create<arith::ConstantOp>(modulusAttr(op, /*extended=*/true));
-    Value remu = b.create<arith::RemUIOp>(squared, cmod);
+        arith::ConstantOp::create(b, modulusAttr(op, /*extended=*/true));
+    Value remu = arith::RemUIOp::create(b, squared, cmod);
     Value trunc =
-        b.create<arith::TruncIOp>(modulusType(op, /*extended=*/false), remu);
+        arith::TruncIOp::create(b, modulusType(op, /*extended=*/false), remu);
     rewriter.replaceOp(op, trunc);
     return success();
   };
@@ -1344,7 +1422,7 @@ struct ConvertMontSquare : public BoundMapPattern<MontSquareOp> {
     Value input = adaptor.getInput();
     APInt inputUmax = lookupUmax(op.getInput());
     MontReducer reducer(b, modType);
-    unsigned w = modType.getStorageBitWidth();
+    unsigned w = modType.getTypeSizeInBits();
     unsigned qw = 4 * w;
     APInt p = modType.getModulus().getValue().zext(qw);
     APInt redcLimit = p.shl(w);
@@ -1388,7 +1466,7 @@ struct ConvertCmp : public BoundMapPattern<CmpOp> {
     if (rhsBound > 1)
       rhs = reducer.getCanonicalFromExtended(rhs, rhsBound);
 
-    auto cmpOp = b.create<arith::CmpIOp>(op.getPredicate(), lhs, rhs);
+    auto cmpOp = arith::CmpIOp::create(b, op.getPredicate(), lhs, rhs);
     rewriter.replaceOp(op, cmpOp);
     return success();
   }
@@ -1492,6 +1570,7 @@ void ModArithToArith::runOnOperation() {
   // Patterns that don't use BoundMap.
   patterns.add<
       // clang-format off
+      ConvertBarrettMul,
       ConvertBitcast,
       ConvertConstant,
       ConvertFromMont,

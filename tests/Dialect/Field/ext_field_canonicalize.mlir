@@ -643,6 +643,21 @@ func.func @test_bitcast_chain_simplify(%arg0: tensor<2x!QF>) -> tensor<4x!PF> {
   return %1 : tensor<4x!PF>
 }
 
+// CHECK-LABEL: @test_bitcast_scalar_int_to_ef_no_fold
+// CHECK-SAME: () -> [[T:.*]] {
+func.func @test_bitcast_scalar_int_to_ef_no_fold() -> !QF {
+  // A scalar integer constant bitcast into an extension field must NOT be
+  // constant-folded: the packed integer spans every tower coefficient and
+  // can't be stamped into a field.constant. Leave the bitcast for
+  // field-to-llvm. Regression for an assert in ConstantOp::materialize.
+  // CHECK: %[[C:.*]] = arith.constant 1 : i64
+  // CHECK: %[[B:.*]] = field.bitcast %[[C]] : i64 -> [[T]]
+  // CHECK: return %[[B]] : [[T]]
+  %c = arith.constant 1 : i64
+  %0 = field.bitcast %c : i64 -> !QF
+  return %0 : !QF
+}
+
 //===----------------------------------------------------------------------===//
 // ToMont/FromMont cancellation
 //===----------------------------------------------------------------------===//

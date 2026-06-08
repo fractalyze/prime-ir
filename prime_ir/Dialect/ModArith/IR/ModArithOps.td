@@ -337,4 +337,24 @@ def ModArith_MontMulOp : ModArith_BinaryOp<"mont_mul", [Commutative]> {
   let hasFolder = 1;
 }
 
+def ModArith_BarrettMulOp : ModArith_BinaryOp<"barrett_mul", [Commutative]> {
+  let summary = "Modular multiplication via Barrett reduction";
+  let description = [{
+    Computes `a * b mod q` using Barrett's reduction. Both operands and the
+    result are in the standard (non-Montgomery) domain. The lowering uses a
+    precomputed `mu = floor(2^(2k) / q)` (where `k` is the modulus storage
+    bit-width) to approximate the quotient, followed by a single conditional
+    subtraction.
+
+    Inputs are assumed to be canonical representatives (`< q`); under that
+    assumption the post-Barrett residue is in `[0, 2q)` and a single
+    conditional subtraction suffices to canonicalize it.
+
+    Example:
+    ```
+    %r = mod_arith.barrett_mul %a, %b : !mod_arith.int<...:i256>
+    ```
+  }];
+}
+
 #endif  // PRIME_IR_DIALECT_MODARITH_IR_MODARITHOPS_TD_

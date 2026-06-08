@@ -1,8 +1,8 @@
 diff --git a/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp b/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
-index ca7f31dd6b51..714fe65fde46 100644
+index 2ba77cea8f16..739d8a85bbe3 100644
 --- a/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
 +++ b/mlir/lib/Dialect/Linalg/IR/LinalgInterfaces.cpp
-@@ -25,12 +25,18 @@
+@@ -25,10 +25,16 @@
  #include "llvm/ADT/SmallVector.h"
  #include "llvm/Support/Casting.h"
  #include "llvm/Support/raw_ostream.h"
@@ -11,8 +11,6 @@ index ca7f31dd6b51..714fe65fde46 100644
 +#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 +#include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 +
- #include <algorithm>
- #include <numeric>
  #include <optional>
  
  using namespace mlir;
@@ -21,7 +19,7 @@ index ca7f31dd6b51..714fe65fde46 100644
  
  /// Include the definitions of the copy operation interface.
  #include "mlir/Dialect/Linalg/IR/LinalgInterfaces.cpp.inc"
-@@ -525,6 +531,9 @@ mlir::linalg::detail::isContractionInterfaceImpl(
+@@ -543,6 +549,9 @@ mlir::linalg::detail::isContractionInterfaceImpl(
    // TODO: more fields than add/mul.
    // clang-format off
    if (!::isContractionBody<
@@ -32,10 +30,10 @@ index ca7f31dd6b51..714fe65fde46 100644
          arith::MulIOp, arith::AddIOp,
          complex::MulOp, complex::AddOp,
 diff --git a/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp b/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
-index 8075df730ccc..7931924b8144 100644
+index f9c8589683ba..b52eba7be052 100644
 --- a/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
 +++ b/mlir/lib/Dialect/Linalg/IR/LinalgOps.cpp
-@@ -51,6 +51,14 @@
+@@ -49,6 +49,14 @@
  #include "llvm/Support/LogicalResult.h"
  #include "llvm/Support/MathExtras.h"
  #include "llvm/Support/raw_ostream.h"
@@ -50,7 +48,7 @@ index 8075df730ccc..7931924b8144 100644
  #include <cassert>
  #include <optional>
  
-@@ -439,8 +447,16 @@ static void printNamedStructuredOp(OpAsmPrinter &p, Operation *op,
+@@ -444,8 +452,16 @@ static void printNamedStructuredOp(OpAsmPrinter &p, Operation *op,
  
  namespace {
  
@@ -67,7 +65,7 @@ index 8075df730ccc..7931924b8144 100644
    RegionBuilderHelper(OpBuilder &builder, Block &block)
        : builder(builder), block(block) {}
  
-@@ -506,11 +522,20 @@ public:
+@@ -511,11 +527,20 @@ public:
      bool allInteger = isInteger(arg0) && isInteger(arg1);
      bool allBool = allInteger && arg0.getType().getIntOrFloatBitWidth() == 1 &&
                     arg1.getType().getIntOrFloatBitWidth() == 1;
@@ -90,59 +88,59 @@ index 8075df730ccc..7931924b8144 100644
              << arg0.getType() << " and " << arg1.getType();
          return nullptr;
        }
-@@ -526,6 +551,15 @@ public:
-         return builder.create<arith::AddFOp>(arg0.getLoc(), arg0, arg1);
+@@ -531,6 +556,15 @@ public:
+         return arith::AddFOp::create(builder, arg0.getLoc(), arg0, arg1);
        if (allBool)
-         return builder.create<arith::OrIOp>(arg0.getLoc(), arg0, arg1);
+         return arith::OrIOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (allModular)
-+        return builder.create<mod_arith::AddOp>(arg0.getLoc(), arg0, arg1);
++        return mod_arith::AddOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (allField)
-+        return builder.create<field::AddOp>(arg0.getLoc(), arg0, arg1);
++        return field::AddOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (scalarByPoint)
 +        llvm_unreachable("unsupported operation: add with scalar and EC point");
 +      if (allECPoint)
-+        return builder.create<elliptic_curve::AddOp>(
-+            arg0.getLoc(), arg0.getType(), arg0, arg1);
-       return builder.create<arith::AddIOp>(arg0.getLoc(), arg0, arg1);
++        return elliptic_curve::AddOp::create(builder, arg0.getLoc(),
++                                             arg0.getType(), arg0, arg1);
+       return arith::AddIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::sub:
        if (allComplex)
-@@ -539,6 +573,15 @@ public:
+@@ -544,6 +578,15 @@ public:
          }
          llvm_unreachable("unsupported operation: sub with bools");
        }
 +      if (allModular)
-+        return builder.create<mod_arith::SubOp>(arg0.getLoc(), arg0, arg1);
++        return mod_arith::SubOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (allField)
-+        return builder.create<field::SubOp>(arg0.getLoc(), arg0, arg1);
++        return field::SubOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (scalarByPoint)
 +        llvm_unreachable("unsupported operation: sub with scalar and EC point");
 +      if (allECPoint)
-+        return builder.create<elliptic_curve::SubOp>(
-+            arg0.getLoc(), arg0.getType(), arg0, arg1);
-       return builder.create<arith::SubIOp>(arg0.getLoc(), arg0, arg1);
++        return elliptic_curve::SubOp::create(builder, arg0.getLoc(),
++                                             arg0.getType(), arg0, arg1);
+       return arith::SubIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::mul:
        if (allComplex)
-@@ -547,6 +590,19 @@ public:
-         return builder.create<arith::MulFOp>(arg0.getLoc(), arg0, arg1);
+@@ -552,6 +595,19 @@ public:
+         return arith::MulFOp::create(builder, arg0.getLoc(), arg0, arg1);
        if (allBool)
-         return builder.create<arith::AndIOp>(arg0.getLoc(), arg0, arg1);
+         return arith::AndIOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (allModular)
-+        return builder.create<mod_arith::MulOp>(arg0.getLoc(), arg0, arg1);
++        return mod_arith::MulOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (allField)
-+        return builder.create<field::MulOp>(arg0.getLoc(), arg0, arg1);
++        return field::MulOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (scalarByPoint) {
 +        if (isECPoint(arg0))
-+          return builder.create<elliptic_curve::ScalarMulOp>(
-+              arg0.getLoc(), arg0.getType(), arg1, arg0);
-+        return builder.create<elliptic_curve::ScalarMulOp>(
-+            arg0.getLoc(), arg1.getType(), arg0, arg1);
++          return elliptic_curve::ScalarMulOp::create(
++              builder, arg0.getLoc(), arg0.getType(), arg1, arg0);
++        return elliptic_curve::ScalarMulOp::create(
++            builder, arg0.getLoc(), arg1.getType(), arg0, arg1);
 +      }
 +      if (allECPoint)
 +        llvm_unreachable("unsupported operation: mul with two EC points");
-       return builder.create<arith::MulIOp>(arg0.getLoc(), arg0, arg1);
+       return arith::MulIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::div:
        if (allComplex)
-@@ -560,6 +616,14 @@ public:
+@@ -565,6 +621,14 @@ public:
          }
          llvm_unreachable("unsupported operation: div with bools");
        }
@@ -154,10 +152,10 @@ index 8075df730ccc..7931924b8144 100644
 +        llvm_unreachable("unsupported operation: div with scalar by EC points");
 +      if (allECPoint)
 +        llvm_unreachable("unsupported operation: div with two EC points");
-       return builder.create<arith::DivSIOp>(arg0.getLoc(), arg0, arg1);
+       return arith::DivSIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::div_unsigned:
        if (!allInteger || allBool) {
-@@ -569,26 +633,84 @@ public:
+@@ -574,16 +638,50 @@ public:
          }
          llvm_unreachable("unsupported operation: unsigned div not on uint");
        }
@@ -173,11 +171,11 @@ index 8075df730ccc..7931924b8144 100644
 +      if (allECPoint)
 +        llvm_unreachable(
 +            "unsupported operation: div_unsigned with two EC points");
-       return builder.create<arith::DivUIOp>(arg0.getLoc(), arg0, arg1);
+       return arith::DivUIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::max_signed:
        assert(!allComplex);
        if (allFloatingPoint)
-         return builder.create<arith::MaximumFOp>(arg0.getLoc(), arg0, arg1);
+         return arith::MaximumFOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (allModular)
 +        llvm_unreachable("unsupported operation: max_signed with modular int");
 +      if (allField)
@@ -189,11 +187,11 @@ index 8075df730ccc..7931924b8144 100644
 +      if (allECPoint)
 +        llvm_unreachable(
 +            "unsupported operation: max_signed with two EC points");
-       return builder.create<arith::MaxSIOp>(arg0.getLoc(), arg0, arg1);
+       return arith::MaxSIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::min_signed:
        assert(!allComplex);
        if (allFloatingPoint)
-         return builder.create<arith::MinimumFOp>(arg0.getLoc(), arg0, arg1);
+         return arith::MinimumFOp::create(builder, arg0.getLoc(), arg0, arg1);
 +      if (allModular)
 +        llvm_unreachable("unsupported operation: min_signed with modular int");
 +      if (allField)
@@ -205,11 +203,13 @@ index 8075df730ccc..7931924b8144 100644
 +      if (allECPoint)
 +        llvm_unreachable(
 +            "unsupported operation: min_signed with two EC points");
-       return builder.create<arith::MinSIOp>(arg0.getLoc(), arg0, arg1);
+       return arith::MinSIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::max_unsigned:
        assert(!allComplex);
-       if (allFloatingPoint)
-         return builder.create<arith::MaximumFOp>(arg0.getLoc(), arg0, arg1);
+@@ -594,6 +692,18 @@ public:
+         }
+         llvm_unreachable("unsupported operation: unsigned max not on uint");
+       }
 +      if (allModular)
 +        llvm_unreachable(
 +            "unsupported operation: max_unsigned with modular int");
@@ -222,11 +222,13 @@ index 8075df730ccc..7931924b8144 100644
 +      if (allECPoint)
 +        llvm_unreachable(
 +            "unsupported operation: max_unsigned with two EC points");
-       return builder.create<arith::MaxUIOp>(arg0.getLoc(), arg0, arg1);
+       return arith::MaxUIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::min_unsigned:
        assert(!allComplex);
-       if (allFloatingPoint)
-         return builder.create<arith::MinimumFOp>(arg0.getLoc(), arg0, arg1);
+@@ -604,6 +714,18 @@ public:
+         }
+         llvm_unreachable("unsupported operation: unsigned min not on uint");
+       }
 +      if (allModular)
 +        llvm_unreachable(
 +            "unsupported operation: min_unsigned with modular int");
@@ -239,10 +241,10 @@ index 8075df730ccc..7931924b8144 100644
 +      if (allECPoint)
 +        llvm_unreachable(
 +            "unsupported operation: min_unsigned with two EC points");
-       return builder.create<arith::MinUIOp>(arg0.getLoc(), arg0, arg1);
+       return arith::MinUIOp::create(builder, arg0.getLoc(), arg0, arg1);
      case BinaryFn::powf:
        assert(allFloatingPoint);
-@@ -627,6 +749,9 @@ public:
+@@ -635,6 +757,9 @@ public:
    // Build the type functions defined by OpDSL.
    Value buildTypeFn(TypeFn typeFn, Type toType, Value operand,
                      function_ref<InFlightDiagnostic()> emitError = {}) {
@@ -252,7 +254,7 @@ index 8075df730ccc..7931924b8144 100644
      switch (typeFn) {
      case TypeFn::cast_signed:
        return cast(toType, operand, false);
-@@ -696,6 +821,21 @@ private:
+@@ -705,6 +830,21 @@ private:
    bool isInteger(Value value) {
      return llvm::isa<IntegerType>(value.getType());
    }
@@ -275,10 +277,10 @@ index 8075df730ccc..7931924b8144 100644
    OpBuilder &builder;
    Block &block;
 diff --git a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-index 7543739b3a44..35bf41aa5f3a 100644
+index 78af34cb7d1c..58e2add8d2fb 100644
 --- a/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
 +++ b/utils/bazel/llvm-project-overlay/mlir/BUILD.bazel
-@@ -10544,6 +10544,9 @@ cc_library(
+@@ -11315,6 +11315,9 @@ cc_library(
          ":ValueBoundsOpInterface",
          ":ViewLikeInterface",
          "//llvm:Support",

@@ -131,7 +131,7 @@ LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
     entryValues.reserve(numResults);
     for (size_t i = 0; i < numResults; ++i) {
       flatOperands.back() =
-          rewriter.create<arith::ConstantIndexOp>(op->getLoc(), i);
+          arith::ConstantIndexOp::create(rewriter, op->getLoc(), i);
       Value valueAtIndex =
           rewriter
               .create(OperationState(
@@ -170,7 +170,7 @@ LogicalResult convertAnyOperand(const TypeConverter *typeConverter,
       newOperands[1] = container;
       std::copy(indices.begin(), indices.end(), newOperands.begin() + 2);
       newOperands.back() =
-          rewriter.create<arith::ConstantIndexOp>(op->getLoc(), i);
+          arith::ConstantIndexOp::create(rewriter, op->getLoc(), i);
       newOp = rewriter.create(OperationState(
           op->getLoc(), op->getName().getStringRef(), newOperands,
           newResultTypes, op->getAttrs(), op->getSuccessors(), regions));
@@ -238,7 +238,7 @@ Value emitAOTFuncCall(Operation *op, StringRef funcName, Type resultType,
     if (auto tensorType = dyn_cast<RankedTensorType>(operand.getType())) {
       if (tensorType.getRank() == 0) {
         operand =
-            rewriter.create<tensor::ExtractOp>(loc, operand, ValueRange{});
+            tensor::ExtractOp::create(rewriter, loc, operand, ValueRange{});
       }
     }
     scalarOperands.push_back(operand);
@@ -261,17 +261,17 @@ Value emitAOTFuncCall(Operation *op, StringRef funcName, Type resultType,
   if (!moduleOp.lookupSymbol<func::FuncOp>(funcName)) {
     OpBuilder::InsertionGuard guard(rewriter);
     rewriter.setInsertionPointToStart(moduleOp.getBody());
-    auto funcDecl = rewriter.create<func::FuncOp>(loc, funcName, funcType);
+    auto funcDecl = func::FuncOp::create(rewriter, loc, funcName, funcType);
     funcDecl.setPrivate();
   }
-  auto callOp = rewriter.create<func::CallOp>(loc, funcName, scalarResultType,
-                                              scalarOperands);
+  auto callOp = func::CallOp::create(rewriter, loc, funcName, scalarResultType,
+                                     scalarOperands);
   Value result = callOp.getResult(0);
 
   // Wrap scalar result back into 0-rank tensor.
   if (wrapResult) {
-    result = rewriter.create<tensor::FromElementsOp>(
-        loc, cast<RankedTensorType>(resultType), result);
+    result = tensor::FromElementsOp::create(
+        rewriter, loc, cast<RankedTensorType>(resultType), result);
   }
   return result;
 }

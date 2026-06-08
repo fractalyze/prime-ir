@@ -32,7 +32,7 @@ namespace mlir::prime_ir::mod_arith {
 inline unsigned getIntOrModArithBitWidth(Type type) {
   assert((llvm::isa<ModArithType, IntegerType>(type)));
   if (auto modArithType = dyn_cast<ModArithType>(type)) {
-    return modArithType.getStorageBitWidth();
+    return modArithType.getTypeSizeInBits();
   }
   return cast<IntegerType>(type).getWidth();
 }

@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 
+#include <cstring>
+
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldOperation.h"
@@ -22,6 +24,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/TowerFieldConfig.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
+#include "prime_ir/IR/DenseElementBytes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
 
 namespace mlir::prime_ir::field {
@@ -39,7 +42,7 @@ bool isMontgomery(Type type) {
 unsigned getIntOrPrimeFieldBitWidth(Type type) {
   assert((llvm::isa<PrimeFieldType, IntegerType>(type)));
   if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
-    return pfType.getStorageBitWidth();
+    return pfType.getTypeSizeInBits();
   }
   return cast<IntegerType>(type).getWidth();
 }
@@ -105,7 +108,7 @@ Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
                           uint64_t value) {
   auto constantLike = cast<ConstantLikeInterface>(fieldType);
   TypedAttr attr = constantLike.createConstantAttr(static_cast<int64_t>(value));
-  return builder.create<ConstantOp>(fieldType, attr)->getResult(0);
+  return ConstantOp::create(builder, fieldType, attr)->getResult(0);
 }
 
 Attribute maybeToStandard(Type type, Attribute attr) {
@@ -145,7 +148,7 @@ void PrimeFieldType::print(AsmPrinter &printer) const {
 
 llvm::TypeSize PrimeFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getStorageBitWidth());
+  return llvm::TypeSize::getFixed(getTypeSizeInBits());
 }
 
 uint64_t PrimeFieldType::getABIAlignment(
@@ -221,7 +224,7 @@ void BinaryFieldType::print(AsmPrinter &printer) const {
 
 llvm::TypeSize BinaryFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getBitWidth());
+  return llvm::TypeSize::getFixed(getTypeSizeInBits());
 }
 
 uint64_t BinaryFieldType::getABIAlignment(
@@ -510,8 +513,7 @@ void ExtensionFieldType::print(AsmPrinter &printer) const {
 
 llvm::TypeSize ExtensionFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
-  return llvm::TypeSize::getFixed(getDegreeOverPrime() *
-                                  getBasePrimeField().getStorageBitWidth());
+  return llvm::TypeSize::getFixed(getTypeSizeInBits());
 }
 
 uint64_t ExtensionFieldType::getABIAlignment(
@@ -533,7 +535,7 @@ TypedAttr ExtensionFieldType::createConstantAttr(int64_t c) const {
   PrimeFieldType pfType = getBasePrimeField();
   PrimeFieldOperation pfOp(c, pfType); // Handles Montgomery conversion
   unsigned degreeOverPrime = getDegreeOverPrime();
-  unsigned bitWidth = pfType.getStorageBitWidth();
+  unsigned bitWidth = pfType.getTypeSizeInBits();
 
   SmallVector<APInt> coeffs(degreeOverPrime, APInt::getZero(bitWidth));
   coeffs[0] = static_cast<APInt>(pfOp);
@@ -547,6 +549,61 @@ ExtensionFieldType::createConstantAttrFromValues(ArrayRef<APInt> coeffs) const {
 
 ShapedType ExtensionFieldType::overrideShapedType(ShapedType type) const {
   return type;
+}
+
+size_t ExtensionFieldType::getDenseElementBitSize() const {
+  return getTypeSizeInBits();
+}
+
+// An EF element serializes as its `degreeOverPrime` prime-field coefficients,
+// each a storage-int's worth of little-endian bytes. The (de)serialization is
+// symmetric with the `tensor<degree x iStorage>` cover the AsmPrinter walks.
+Attribute
+ExtensionFieldType::convertToAttribute(::llvm::ArrayRef<char> rawData) const {
+  PrimeFieldType pfType = getBasePrimeField();
+  unsigned primeBits = pfType.getTypeSizeInBits();
+  // Sub-byte prime storage isn't supported — would need bit-packing per coeff.
+  if (primeBits % 8 != 0)
+    return Attribute{};
+  unsigned primeBytes = primeBits / 8;
+  unsigned degree = getDegreeOverPrime();
+  if (rawData.size() != degree * primeBytes)
+    return Attribute{};
+
+  auto tensorTy = RankedTensorType::get({static_cast<int64_t>(degree)},
+                                        pfType.getStorageType());
+  return DenseElementsAttr::getFromRawBuffer(tensorTy, rawData);
+}
+
+::llvm::LogicalResult ExtensionFieldType::convertFromAttribute(
+    Attribute attr, ::llvm::SmallVectorImpl<char> &result) const {
+  PrimeFieldType pfType = getBasePrimeField();
+  unsigned primeBits = pfType.getTypeSizeInBits();
+  if (primeBits % 8 != 0)
+    return failure();
+  unsigned primeBytes = primeBits / 8;
+  unsigned degree = getDegreeOverPrime();
+
+  auto denseAttr = dyn_cast<DenseElementsAttr>(attr);
+  if (!denseAttr)
+    return failure();
+  if (denseAttr.getNumElements() != static_cast<int64_t>(degree))
+    return failure();
+
+  ArrayRef<char> raw = denseAttr.getRawData();
+  size_t want = static_cast<size_t>(degree) * primeBytes;
+  if (denseAttr.isSplat()) {
+    if (raw.size() != primeBytes)
+      return failure();
+    result.reserve(result.size() + want);
+    for (unsigned i = 0; i < degree; ++i)
+      result.append(raw.begin(), raw.end());
+  } else {
+    if (raw.size() != want)
+      return failure();
+    result.append(raw.begin(), raw.end());
+  }
+  return success();
 }
 
 unsigned ExtensionFieldType::getDegreeOverPrime() const {
@@ -597,8 +654,8 @@ Value ExtensionFieldType::createNonResidueValue(
   // Montgomery), so we use it directly without conversion.
   if (auto pfType = dyn_cast<PrimeFieldType>(baseFieldType)) {
     auto intAttr = cast<IntegerAttr>(nonResidueAttr);
-    return builder.create<mod_arith::ConstantOp>(convertPrimeFieldType(pfType),
-                                                 intAttr);
+    return mod_arith::ConstantOp::create(builder, convertPrimeFieldType(pfType),
+                                         intAttr);
   }
 
   // Extension field base: use ConstantLikeInterface for proper embedding
@@ -636,12 +693,12 @@ ExtensionFieldType::extractCoeffsFromStruct(ImplicitLocOpBuilder &builder,
 Operation::result_range ExtensionFieldType::toCoeffs(ImplicitLocOpBuilder &b,
                                                      Value val) const {
   SmallVector<Type> resultTypes(getDegree(), getBaseField());
-  return b.create<ExtToCoeffsOp>(resultTypes, val).getResults();
+  return ExtToCoeffsOp::create(b, resultTypes, val).getResults();
 }
 
 Value ExtensionFieldType::fromCoeffs(ImplicitLocOpBuilder &b,
                                      ValueRange coeffs) const {
-  return b.create<ExtFromCoeffsOp>(*this, coeffs);
+  return ExtFromCoeffsOp::create(b, *this, coeffs);
 }
 
 Value ExtensionFieldType::fromPrimeCoeffs(ImplicitLocOpBuilder &b,
@@ -681,7 +738,7 @@ Value fromPrimeCoeffs(ImplicitLocOpBuilder &b, ExtensionFieldType efType,
 Value createFieldConstant(PrimeFieldType pfType, ImplicitLocOpBuilder &builder,
                           const APInt &value) {
   auto attr = IntegerAttr::get(pfType.getStorageType(), value);
-  return builder.create<ConstantOp>(pfType, attr);
+  return ConstantOp::create(builder, pfType, attr);
 }
 
 } // namespace mlir::prime_ir::field

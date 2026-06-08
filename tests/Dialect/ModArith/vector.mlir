@@ -20,8 +20,8 @@
 // CHECK-LABEL: @test_vector_splat
 // CHECK-SAME: (%[[INPUT:.*]]: [[INPUT_TYPE:.*]]) -> [[VEC:.*]] {
 func.func @test_vector_splat(%input : !mod) -> vector<4x!mod> {
-  // CHECK: %[[SPLAT:.*]] = vector.splat %[[INPUT]] : [[VEC]]
-  %splat = vector.splat %input : vector<4x!mod>
+  // CHECK: %[[SPLAT:.*]] = vector.broadcast %[[INPUT]] : [[INPUT_TYPE]] to [[VEC]]
+  %splat = vector.broadcast %input : !mod to vector<4x!mod>
   // CHECK: return %[[SPLAT]] : [[VEC]]
   return %splat : vector<4x!mod>
 }

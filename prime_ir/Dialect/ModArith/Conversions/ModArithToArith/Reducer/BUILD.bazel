@@ -32,3 +32,30 @@ prime_ir_cc_library(
         "@llvm-project//mlir:TensorDialect",
     ],
 )
+
+prime_ir_cc_library(
+    name = "BarrettReducer",
+    srcs = ["BarrettReducer.cpp"],
+    hdrs = ["BarrettReducer.h"],
+    deps = [
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LinalgDialect",
+        "@llvm-project//mlir:Support",
+        "@llvm-project//mlir:TensorDialect",
+    ],
+)
+
+prime_ir_cc_library(
+    name = "SolinasReducer",
+    srcs = ["SolinasReducer.cpp"],
+    hdrs = ["SolinasReducer.h"],
+    deps = [
+        "//prime_ir/Dialect/ModArith/IR:ModArith",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@zk_dtypes//zk_dtypes:goldilocks",
+    ],
+)

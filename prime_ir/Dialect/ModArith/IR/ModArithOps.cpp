@@ -276,7 +276,7 @@ LogicalResult MontReduceOp::verify() {
       cast<IntegerType>(getElementTypeOrSelf(getLow().getType()));
   ModArithType modArithType = getResultModArithType(*this);
   unsigned intWidth = integerType.getWidth();
-  unsigned modWidth = modArithType.getStorageBitWidth();
+  unsigned modWidth = modArithType.getTypeSizeInBits();
   if (intWidth != modWidth)
     return emitOpError() << "Expected operand width to be " << modWidth
                          << ", but got " << intWidth << " instead.";
@@ -311,9 +311,9 @@ ConstantOp ConstantOp::materialize(OpBuilder &builder, Attribute value,
   }
 
   if (auto intAttr = dyn_cast<IntegerAttr>(value)) {
-    return builder.create<ConstantOp>(loc, type, intAttr);
+    return ConstantOp::create(builder, loc, type, intAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
-    return builder.create<ConstantOp>(loc, type, denseElementsAttr);
+    return ConstantOp::create(builder, loc, type, denseElementsAttr);
   }
   return nullptr;
 }
@@ -322,29 +322,18 @@ Operation *ModArithDialect::materializeConstant(OpBuilder &builder,
                                                 Attribute value, Type type,
                                                 Location loc) {
   if (auto boolAttr = dyn_cast<BoolAttr>(value)) {
-    return builder.create<arith::ConstantOp>(loc, boolAttr);
+    return arith::ConstantOp::create(builder, loc, boolAttr);
   } else if (auto denseElementsAttr = dyn_cast<DenseIntElementsAttr>(value)) {
     if (!isa<ModArithType>(getElementTypeOrSelf(type))) {
       // This could be a folding result of CmpOp.
-      return builder.create<arith::ConstantOp>(loc, denseElementsAttr);
+      return arith::ConstantOp::create(builder, loc, denseElementsAttr);
     }
   }
   return ConstantOp::materialize(builder, value, type, loc);
 }
 
 OpFoldResult BitcastOp::fold(FoldAdaptor adaptor) {
-  OpFoldResult result = foldBitcast(*this, adaptor);
-  if (result)
-    return result;
-
-  // Fold constant bitcast.
-  // Bitcasting a constant is a no-op since only the type interpretation
-  // changes, not the underlying data.
-  if (isa_and_present<IntegerAttr>(adaptor.getInput()) ||
-      isa_and_present<DenseIntElementsAttr>(adaptor.getInput())) {
-    return adaptor.getInput();
-  }
-  return {};
+  return foldBitcast(*this, adaptor);
 }
 
 LogicalResult BitcastOp::canonicalize(BitcastOp op, PatternRewriter &rewriter) {
@@ -502,7 +491,7 @@ void setCanonicalRange(Value result, SetIntRangeFn setResultRange) {
 // etc.). Requires 2p - 1 to fit in w bits.
 void setLazyRedcRange(Value result, SetIntRangeFn setResultRange) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(result.getType()));
-  unsigned w = modType.getStorageBitWidth();
+  unsigned w = modType.getTypeSizeInBits();
   APInt p = modType.getModulus().getValue().zext(w);
   APInt twoPMinusOne = p.zext(w + 1) * APInt(w + 1, 2) - 1;
   assert(twoPMinusOne.getActiveBits() <= w &&
@@ -515,7 +504,7 @@ void setLazyRedcRange(Value result, SetIntRangeFn setResultRange) {
 
 ConstantIntRanges getCanonicalRange(Type type) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(type));
-  unsigned w = modType.getStorageBitWidth();
+  unsigned w = modType.getTypeSizeInBits();
   APInt p = modType.getModulus().getValue().zext(w);
   return ConstantIntRanges::fromUnsigned(APInt::getZero(w), p - 1);
 }
@@ -523,7 +512,7 @@ ConstantIntRanges getCanonicalRange(Type type) {
 void ConstantOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
                                    SetIntRangeFn setResultRange) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
-  unsigned w = modType.getStorageBitWidth();
+  unsigned w = modType.getTypeSizeInBits();
   auto attr = dyn_cast<IntegerAttr>(getValue());
   if (attr) {
     APInt val = attr.getValue().zext(w);
@@ -583,7 +572,7 @@ void NegateOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
 void DoubleOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                                  SetIntRangeFn setResultRange) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
-  unsigned w = modType.getStorageBitWidth();
+  unsigned w = modType.getTypeSizeInBits();
   // double(x) = 2x, so umax = 2 * input.umax. May exceed w bits for lazy
   // inputs (e.g., BabyBear with 32-bit storage and input in [0, 2p)).
   // Clamping to maxValue(w) is conservative; the lowering's pre-reduce guard
@@ -617,7 +606,7 @@ void MontInverseOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
 void AddOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                               SetIntRangeFn setResultRange) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
-  unsigned w = modType.getStorageBitWidth();
+  unsigned w = modType.getTypeSizeInBits();
   // Sum of two unsigned ranges, clamped to w bits.
   APInt sumMax =
       argRanges[0].umax().zext(w + 1) + argRanges[1].umax().zext(w + 1);
@@ -629,7 +618,7 @@ void AddOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
 void SubOp::inferResultRanges(ArrayRef<ConstantIntRanges> argRanges,
                               SetIntRangeFn setResultRange) {
   auto modType = cast<ModArithType>(getElementTypeOrSelf(getType()));
-  unsigned w = modType.getStorageBitWidth();
+  unsigned w = modType.getTypeSizeInBits();
   APInt p = modType.getModulus().getValue().zext(w);
   // lhs + correction - rhs where correction = rhsBound * p,
   // rhsBound = ceil((rhs.umax + 1) / p). Must match ConvertSub lowering.
@@ -651,6 +640,12 @@ void MulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
 void MontMulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
                                   SetIntRangeFn setResultRange) {
   setLazyRedcRange(getResult(), setResultRange);
+}
+
+void BarrettMulOp::inferResultRanges(ArrayRef<ConstantIntRanges> /*argRanges*/,
+                                     SetIntRangeFn setResultRange) {
+  // Barrett reduction returns the canonical residue in [0, p).
+  setCanonicalRange(getResult(), setResultRange);
 }
 
 ParseResult ConstantOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -761,6 +756,20 @@ bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
                               const ModArithOperation &b) { return a == b; });
 }
 
+// DRR constant helper: builds a zero attribute matching `type` — the element
+// type's scalar attr for scalar results, a storage-int splat over the result
+// shape for shaped ones.
+TypedAttr createZeroAttr(Type type) {
+  auto modArithType = cast<ModArithType>(getElementTypeOrSelf(type));
+  auto zero = cast<IntegerAttr>(modArithType.createConstantAttr(0));
+  auto shapedTy = dyn_cast<ShapedType>(type);
+  if (!shapedTy) {
+    return zero;
+  }
+  return DenseIntElementsAttr::get(
+      shapedTy.clone(modArithType.getStorageType()), zero.getValue());
+}
+
 } // namespace
 
 namespace {
@@ -820,9 +829,9 @@ struct MulOfConstantAndToMont : public OpRewritePattern<MulOp> {
 
     Location loc = op.getLoc();
     auto kAttr = IntegerAttr::get(modType.getStorageType(), k);
-    Value kConst = rewriter.create<ConstantOp>(loc, modType, kAttr);
+    Value kConst = ConstantOp::create(rewriter, loc, modType, kAttr);
     Value bBitcast =
-        rewriter.create<BitcastOp>(loc, modType, toMontOp.getInput());
+        BitcastOp::create(rewriter, loc, modType, toMontOp.getInput());
     rewriter.replaceOpWithNewOp<MontMulOp>(op, modType, bBitcast, kConst);
     return success();
   }

@@ -30,27 +30,27 @@ include "prime_ir/Dialect/Field/IR/FieldOps.td"
 def CreateAddOp : NativeCodeCall<"[&]{ "
     "Type resultType = castedOp0.getType(); "
     "ImplicitLocOpBuilder b(odsLoc, $_builder); "
-    "return b.create<AddOp>(resultType, $0, $1); "
+    "return AddOp::create(b, resultType, $0, $1); "
     "}()">;
 def CreateSubOp : NativeCodeCall<"[&]{ "
     "Type resultType = castedOp0.getType(); "
     "ImplicitLocOpBuilder b(odsLoc, $_builder); "
-    "return b.create<SubOp>(resultType, $0, $1); "
+    "return SubOp::create(b, resultType, $0, $1); "
     "}()">;
 def CreateScalarMulOp : NativeCodeCall<"[&]{ "
     "Type resultType = castedOp0.getType(); "
     "ImplicitLocOpBuilder b(odsLoc, $_builder); "
-    "return b.create<ScalarMulOp>(resultType, $0, $1); "
+    "return ScalarMulOp::create(b, resultType, $0, $1); "
     "}()">;
 def CreateNegOp : NativeCodeCall<"[&]{ "
     "Type resultType = castedOp0.getType(); "
     "ImplicitLocOpBuilder b(odsLoc, $_builder); "
-    "return b.create<NegateOp>(resultType, $0); "
+    "return NegateOp::create(b, resultType, $0); "
     "}()">;
 def CreateDoubleOp : NativeCodeCall<"[&]{ "
     "Type resultType = castedOp0.getType(); "
     "ImplicitLocOpBuilder b(odsLoc, $_builder); "
-    "return b.create<DoubleOp>(resultType, $0); "
+    "return DoubleOp::create(b, resultType, $0); "
     "}()">;
 
 //===----------------------------------------------------------------------===//

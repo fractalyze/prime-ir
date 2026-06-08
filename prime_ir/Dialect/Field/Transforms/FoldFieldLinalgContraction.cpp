@@ -41,23 +41,36 @@ unsigned getFieldDegree(Type elementType) {
 // Extract a scalar field element's attribute from a dense tensor attribute.
 // For tensor<MxN x PrimeField>: denseAttr has M*N elements
 // For tensor<MxN x ExtensionField<degree>>: denseAttr has M*N*degree elements
-TypedAttr extractFieldElementAttr(DenseIntElementsAttr denseAttr,
-                                  Type elementType, int64_t linearIndex) {
+TypedAttr extractFieldElementAttr(DenseElementsAttr denseAttr, Type elementType,
+                                  int64_t linearIndex) {
   unsigned degree = getFieldDegree(elementType);
-  auto values = denseAttr.getValues<APInt>();
+  PrimeFieldType pfType =
+      isa<PrimeFieldType>(elementType)
+          ? cast<PrimeFieldType>(elementType)
+          : cast<ExtensionFieldType>(elementType).getBasePrimeField();
+  unsigned primeBits = pfType.getTypeSizeInBits();
+  unsigned primeBytes = (primeBits + 7) / 8;
+  ArrayRef<char> raw = denseAttr.getRawData();
+  bool splat = denseAttr.isSplat();
+  unsigned available = raw.size() / primeBytes;
+  auto readCoeff = [&](unsigned idx) {
+    unsigned src = splat ? (idx % available) : idx;
+    unsigned numWords = (primeBits + 63) / 64;
+    SmallVector<uint64_t, 4> words(numWords, 0);
+    std::memcpy(words.data(), raw.data() + src * primeBytes, primeBytes);
+    return APInt(primeBits, words);
+  };
 
-  if (auto pfType = dyn_cast<PrimeFieldType>(elementType)) {
-    return IntegerAttr::get(pfType.getStorageType(), values[linearIndex]);
+  if (isa<PrimeFieldType>(elementType)) {
+    return IntegerAttr::get(pfType.getStorageType(), readCoeff(linearIndex));
   }
-
   auto efType = cast<ExtensionFieldType>(elementType);
   SmallVector<APInt> coeffs;
-  for (unsigned d = 0; d < degree; ++d) {
-    coeffs.push_back(values[linearIndex * degree + d]);
-  }
-  auto tensorType =
-      RankedTensorType::get({static_cast<int64_t>(degree)},
-                            efType.getBasePrimeField().getStorageType());
+  for (unsigned d = 0; d < degree; ++d)
+    coeffs.push_back(readCoeff(linearIndex * degree + d));
+  auto tensorType = RankedTensorType::get({static_cast<int64_t>(degree)},
+                                          pfType.getStorageType());
+  (void)efType;
   return DenseIntElementsAttr::get(tensorType, coeffs);
 }
 
@@ -66,8 +79,8 @@ TypedAttr extractFieldElementAttr(DenseIntElementsAttr denseAttr,
 Value createFieldZero(PatternRewriter &rewriter, Location loc,
                       Type elementType) {
   auto constantLike = cast<ConstantLikeInterface>(elementType);
-  return rewriter.create<ConstantOp>(loc, elementType,
-                                     constantLike.createConstantAttr(0));
+  return ConstantOp::create(rewriter, loc, elementType,
+                            constantLike.createConstantAttr(0));
 }
 
 // Pattern to fold linalg.matvec when the matrix operand is a field.constant.
@@ -91,7 +104,7 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
       return failure();
 
     // Get the dense attribute from the constant
-    auto denseAttr = dyn_cast<DenseIntElementsAttr>(matrixConst.getValue());
+    auto denseAttr = dyn_cast<DenseElementsAttr>(matrixConst.getValue());
     if (!denseAttr)
       return failure();
 
@@ -113,8 +126,8 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
     // Extract vector elements
     SmallVector<Value> vecElements;
     for (int64_t j = 0; j < numCols; ++j) {
-      Value idx = rewriter.create<arith::ConstantIndexOp>(loc, j);
-      Value elem = rewriter.create<tensor::ExtractOp>(loc, vec, idx);
+      Value idx = arith::ConstantIndexOp::create(rewriter, loc, j);
+      Value elem = tensor::ExtractOp::create(rewriter, loc, vec, idx);
       vecElements.push_back(elem);
     }
 
@@ -142,15 +155,15 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
         } else {
           // Create constant for coefficient
           Value coeffVal =
-              rewriter.create<ConstantOp>(loc, elementType, coeffAttr);
-          term = rewriter.create<MulOp>(loc, coeffVal, vecElements[j]);
+              ConstantOp::create(rewriter, loc, elementType, coeffAttr);
+          term = MulOp::create(rewriter, loc, coeffVal, vecElements[j]);
         }
 
         if (!hasTerms) {
           sum = term;
           hasTerms = true;
         } else {
-          sum = rewriter.create<AddOp>(loc, sum, term);
+          sum = AddOp::create(rewriter, loc, sum, term);
         }
       }
 
@@ -164,8 +177,8 @@ struct FoldMatvecWithConstantMatrix : OpRewritePattern<linalg::MatvecOp> {
 
     // Build result tensor using tensor.from_elements
     auto resultType = cast<RankedTensorType>(output.getType());
-    Value result = rewriter.create<tensor::FromElementsOp>(loc, resultType,
-                                                           resultElements);
+    Value result = tensor::FromElementsOp::create(rewriter, loc, resultType,
+                                                  resultElements);
 
     rewriter.replaceOp(op, result);
     return success();
@@ -204,12 +217,9 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
       return failure();
     }
 
-    // Get the dense attribute from the constant
-    auto denseAttr = dyn_cast<DenseIntElementsAttr>(constOp.getValue());
+    auto denseAttr = dyn_cast<DenseElementsAttr>(constOp.getValue());
     if (!denseAttr)
       return failure();
-
-    // Get vector shape
     auto vecType = cast<RankedTensorType>(constOp.getType());
     if (vecType.getRank() != 1)
       return failure();
@@ -237,8 +247,8 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
         continue;
 
       // Extract variable vector element
-      Value idx = rewriter.create<arith::ConstantIndexOp>(loc, i);
-      Value varElem = rewriter.create<tensor::ExtractOp>(loc, varVec, idx);
+      Value idx = arith::ConstantIndexOp::create(rewriter, loc, i);
+      Value varElem = tensor::ExtractOp::create(rewriter, loc, varVec, idx);
 
       Value term;
       if (coeffOp.isOne()) {
@@ -247,15 +257,15 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
       } else {
         // Create constant for coefficient
         Value coeffVal =
-            rewriter.create<ConstantOp>(loc, elementType, coeffAttr);
-        term = rewriter.create<MulOp>(loc, coeffVal, varElem);
+            ConstantOp::create(rewriter, loc, elementType, coeffAttr);
+        term = MulOp::create(rewriter, loc, coeffVal, varElem);
       }
 
       if (!hasTerms) {
         sum = term;
         hasTerms = true;
       } else {
-        sum = rewriter.create<AddOp>(loc, sum, term);
+        sum = AddOp::create(rewriter, loc, sum, term);
       }
     }
 
@@ -267,7 +277,7 @@ struct FoldDotWithConstantVector : OpRewritePattern<linalg::DotOp> {
     // Wrap the scalar result in a 0-D tensor
     auto resultType = cast<RankedTensorType>(op.getOutputs()[0].getType());
     Value result =
-        rewriter.create<tensor::FromElementsOp>(loc, resultType, sum);
+        tensor::FromElementsOp::create(rewriter, loc, resultType, sum);
 
     rewriter.replaceOp(op, result);
     return success();

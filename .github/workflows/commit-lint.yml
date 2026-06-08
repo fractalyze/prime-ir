@@ -1,0 +1,27 @@
+name: Commit Lint
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - synchronize
+
+jobs:
+  lint:
+    if: github.actor != 'fractalyze-dev'
+    runs-on: [self-hosted, cpu]
+    name: Commit Lint
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      # Hybrid mode runs fractal-commit-lint (the same tool as the local
+      # pre-commit hook) over each commit against .fractal-commit-lint.toml, so
+      # local and CI agree. Hybrid lints commit messages only, not the PR title.
+      - name: Validate commit messages
+        uses: fractalyze/github-actions/commit-lint@v1.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          scope_mode: hybrid
+          fractal_lint_version: v0.7.0

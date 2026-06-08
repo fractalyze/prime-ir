@@ -28,8 +28,8 @@ mlir::Value ControlFlowOperation<mlir::Value>::Equal(mlir::Value x,
   mlir::Type xType = getElementTypeOrSelf(x.getType());
   if (mlir::isa<mlir::prime_ir::field::PrimeFieldType,
                 mlir::prime_ir::field::ExtensionFieldType>(xType)) {
-    return b->create<mlir::prime_ir::field::CmpOp>(
-        mlir::arith::CmpIPredicate::eq, x, y);
+    return mlir::prime_ir::field::CmpOp::create(
+        *b, mlir::arith::CmpIPredicate::eq, x, y);
   }
   llvm_unreachable("Unsupported type for comparison");
   return nullptr;
@@ -42,8 +42,8 @@ mlir::Value ControlFlowOperation<mlir::Value>::NotEqual(mlir::Value x,
   mlir::Type xType = getElementTypeOrSelf(x.getType());
   if (mlir::isa<mlir::prime_ir::field::PrimeFieldType,
                 mlir::prime_ir::field::ExtensionFieldType>(xType)) {
-    return b->create<mlir::prime_ir::field::CmpOp>(
-        mlir::arith::CmpIPredicate::ne, x, y);
+    return mlir::prime_ir::field::CmpOp::create(
+        *b, mlir::arith::CmpIPredicate::ne, x, y);
   }
   llvm_unreachable("Unsupported type for comparison");
   return nullptr;
@@ -53,37 +53,37 @@ mlir::Value ControlFlowOperation<mlir::Value>::And(mlir::Value x,
                                                    mlir::Value y) {
   mlir::ImplicitLocOpBuilder *b =
       mlir::prime_ir::BuilderContext::GetInstance().Top();
-  return b->create<mlir::arith::AndIOp>(x, y);
+  return mlir::arith::AndIOp::create(*b, x, y);
 }
 
 mlir::Value ControlFlowOperation<mlir::Value>::Or(mlir::Value x,
                                                   mlir::Value y) {
   mlir::ImplicitLocOpBuilder *b =
       mlir::prime_ir::BuilderContext::GetInstance().Top();
-  return b->create<mlir::arith::OrIOp>(x, y);
+  return mlir::arith::OrIOp::create(*b, x, y);
 }
 
 mlir::Value ControlFlowOperation<mlir::Value>::Not(mlir::Value x) {
   mlir::ImplicitLocOpBuilder *b =
       mlir::prime_ir::BuilderContext::GetInstance().Top();
-  auto zero = b->create<mlir::arith::ConstantOp>(x.getLoc(), b->getI1Type(),
-                                                 b->getBoolAttr(false));
-  return b->create<mlir::arith::CmpIOp>(mlir::arith::CmpIPredicate::eq, x,
-                                        zero);
+  auto zero = mlir::arith::ConstantOp::create(*b, x.getLoc(), b->getI1Type(),
+                                              b->getBoolAttr(false));
+  return mlir::arith::CmpIOp::create(*b, mlir::arith::CmpIPredicate::eq, x,
+                                     zero);
 }
 
 mlir::Value ControlFlowOperation<mlir::Value>::True() {
   mlir::ImplicitLocOpBuilder *b =
       mlir::prime_ir::BuilderContext::GetInstance().Top();
-  return b->create<mlir::arith::ConstantOp>(b->getI1Type(),
-                                            b->getBoolAttr(true));
+  return mlir::arith::ConstantOp::create(*b, b->getI1Type(),
+                                         b->getBoolAttr(true));
 }
 
 mlir::Value ControlFlowOperation<mlir::Value>::False() {
   mlir::ImplicitLocOpBuilder *b =
       mlir::prime_ir::BuilderContext::GetInstance().Top();
-  return b->create<mlir::arith::ConstantOp>(b->getI1Type(),
-                                            b->getBoolAttr(false));
+  return mlir::arith::ConstantOp::create(*b, b->getI1Type(),
+                                         b->getBoolAttr(false));
 }
 
 } // namespace zk_dtypes

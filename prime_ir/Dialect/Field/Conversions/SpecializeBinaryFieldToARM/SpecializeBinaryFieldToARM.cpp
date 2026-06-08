@@ -68,13 +68,13 @@ Value emitPMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   // ARM GCC-style inline assembly
   // Input: two 64-bit values packed in 128-bit registers
   // Output: 128-bit result from polynomial multiplication
-  return b
-      .create<LLVM::InlineAsmOp>(
-          vecType, ValueRange{lhs, rhs}, "pmull $0.1q, $1.1d, $2.1d", "=w,w,w",
-          /*has_side_effects=*/false,
-          /*is_align_stack=*/false, LLVM::TailCallKind::None,
-          LLVM::AsmDialectAttr{},
-          /*operand_attrs=*/ArrayAttr())
+  return LLVM::InlineAsmOp::create(b, vecType, ValueRange{lhs, rhs},
+                                   "pmull $0.1q, $1.1d, $2.1d", "=w,w,w",
+                                   /*has_side_effects=*/false,
+                                   /*is_align_stack=*/false,
+                                   LLVM::TailCallKind::None,
+                                   LLVM::AsmDialectAttr{},
+                                   /*operand_attrs=*/ArrayAttr())
       .getResult(0);
 }
 
@@ -83,13 +83,13 @@ Value emitPMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 // result
 Value emitPMULL2(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   auto vecType = VectorType::get(2, b.getI64Type());
-  return b
-      .create<LLVM::InlineAsmOp>(
-          vecType, ValueRange{lhs, rhs}, "pmull2 $0.1q, $1.2d, $2.2d", "=w,w,w",
-          /*has_side_effects=*/false,
-          /*is_align_stack=*/false, LLVM::TailCallKind::None,
-          LLVM::AsmDialectAttr{},
-          /*operand_attrs=*/ArrayAttr())
+  return LLVM::InlineAsmOp::create(b, vecType, ValueRange{lhs, rhs},
+                                   "pmull2 $0.1q, $1.2d, $2.2d", "=w,w,w",
+                                   /*has_side_effects=*/false,
+                                   /*is_align_stack=*/false,
+                                   LLVM::TailCallKind::None,
+                                   LLVM::AsmDialectAttr{},
+                                   /*operand_attrs=*/ArrayAttr())
       .getResult(0);
 }
 
@@ -98,13 +98,13 @@ Value emitPMULL2(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 // Produces 8 16-bit results
 Value emitPMULL8(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   auto vecType = VectorType::get(8, b.getI16Type());
-  return b
-      .create<LLVM::InlineAsmOp>(
-          vecType, ValueRange{lhs, rhs}, "pmull $0.8h, $1.8b, $2.8b", "=w,w,w",
-          /*has_side_effects=*/false,
-          /*is_align_stack=*/false, LLVM::TailCallKind::None,
-          LLVM::AsmDialectAttr{},
-          /*operand_attrs=*/ArrayAttr())
+  return LLVM::InlineAsmOp::create(b, vecType, ValueRange{lhs, rhs},
+                                   "pmull $0.8h, $1.8b, $2.8b", "=w,w,w",
+                                   /*has_side_effects=*/false,
+                                   /*is_align_stack=*/false,
+                                   LLVM::TailCallKind::None,
+                                   LLVM::AsmDialectAttr{},
+                                   /*operand_attrs=*/ArrayAttr())
       .getResult(0);
 }
 
@@ -112,14 +112,13 @@ Value emitPMULL8(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 // pmull2 Vd.8h, Vn.16b, Vm.16b - multiply high 8 pairs of 8-bit polynomials
 Value emitPMULL2_8(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   auto vecType = VectorType::get(8, b.getI16Type());
-  return b
-      .create<LLVM::InlineAsmOp>(vecType, ValueRange{lhs, rhs},
-                                 "pmull2 $0.8h, $1.16b, $2.16b", "=w,w,w",
-                                 /*has_side_effects=*/false,
-                                 /*is_align_stack=*/false,
-                                 LLVM::TailCallKind::None,
-                                 LLVM::AsmDialectAttr{},
-                                 /*operand_attrs=*/ArrayAttr())
+  return LLVM::InlineAsmOp::create(b, vecType, ValueRange{lhs, rhs},
+                                   "pmull2 $0.8h, $1.16b, $2.16b", "=w,w,w",
+                                   /*has_side_effects=*/false,
+                                   /*is_align_stack=*/false,
+                                   LLVM::TailCallKind::None,
+                                   LLVM::AsmDialectAttr{},
+                                   /*operand_attrs=*/ArrayAttr())
       .getResult(0);
 }
 
@@ -134,13 +133,13 @@ Value emitPMULL2_8(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 // ext Vd.16b, Vn.16b, Vm.16b, #8 - extracts bytes from concatenation
 Value emitVEXT8(ImplicitLocOpBuilder &b, Value a) {
   auto vecType = VectorType::get(2, b.getI64Type());
-  return b
-      .create<LLVM::InlineAsmOp>(
-          vecType, ValueRange{a}, "ext $0.16b, $1.16b, $1.16b, #8", "=w,w",
-          /*has_side_effects=*/false,
-          /*is_align_stack=*/false, LLVM::TailCallKind::None,
-          LLVM::AsmDialectAttr{},
-          /*operand_attrs=*/ArrayAttr())
+  return LLVM::InlineAsmOp::create(b, vecType, ValueRange{a},
+                                   "ext $0.16b, $1.16b, $1.16b, #8", "=w,w",
+                                   /*has_side_effects=*/false,
+                                   /*is_align_stack=*/false,
+                                   LLVM::TailCallKind::None,
+                                   LLVM::AsmDialectAttr{},
+                                   /*operand_attrs=*/ArrayAttr())
       .getResult(0);
 }
 
@@ -152,10 +151,10 @@ Value getPolyvalConstant(ImplicitLocOpBuilder &b) {
   auto i64Type = b.getI64Type();
   auto vec2i64Type = VectorType::get(2, i64Type);
   // 0xE200000000000000 = (1ULL << 63) | (1ULL << 62) | (1ULL << 57)
-  Value polyVal = b.create<arith::ConstantOp>(
-      i64Type, b.getI64IntegerAttr(0xE200000000000000ULL));
-  return b.create<vector::FromElementsOp>(vec2i64Type,
-                                          ValueRange{polyVal, polyVal});
+  Value polyVal = arith::ConstantOp::create(
+      b, i64Type, b.getI64IntegerAttr(0xE200000000000000ULL));
+  return vector::FromElementsOp::create(b, vec2i64Type,
+                                        ValueRange{polyVal, polyVal});
 }
 
 // Montgomery reduction for Polyval field.
@@ -174,14 +173,14 @@ Value polyvalMontgomeryReduce(ImplicitLocOpBuilder &b, Value x23, Value x01) {
 
   // B = x01 XOR ext(a, 8) - swap halves of a and XOR with x01
   Value aSwapped = emitVEXT8(b, a);
-  Value bVal = b.create<arith::XOrIOp>(x01, aSwapped);
+  Value bVal = arith::XOrIOp::create(b, x01, aSwapped);
 
   // C = pmull2(b, poly) - multiply high halves
   Value c = emitPMULL2(b, bVal, poly);
 
   // Result = x23 XOR c XOR b
-  Value cXorB = b.create<arith::XOrIOp>(c, bVal);
-  return b.create<arith::XOrIOp>(x23, cXorB);
+  Value cXorB = arith::XOrIOp::create(b, c, bVal);
+  return arith::XOrIOp::create(b, x23, cXorB);
 }
 
 // Multiply two 128-bit Polyval field elements using PMULL with Montgomery.
@@ -196,8 +195,8 @@ Value mulBF128Polyval(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   // m = (x.hi ^ x.lo) * (y.hi ^ y.lo)
   Value lhsSwapped = emitVEXT8(b, lhs);
   Value rhsSwapped = emitVEXT8(b, rhs);
-  Value lhsXor = b.create<arith::XOrIOp>(lhs, lhsSwapped);
-  Value rhsXor = b.create<arith::XOrIOp>(rhs, rhsSwapped);
+  Value lhsXor = arith::XOrIOp::create(b, lhs, lhsSwapped);
+  Value rhsXor = arith::XOrIOp::create(b, rhs, rhsSwapped);
   Value m = emitPMULL(b, lhsXor, rhsXor);
 
   // h = x.hi * y.hi (pmull2)
@@ -208,27 +207,27 @@ Value mulBF128Polyval(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 
   // Karatsuba step 2: combine into 256-bit (x23, x01)
   // Extract 64-bit components (only those needed)
-  Value lLow = b.create<vector::ExtractOp>(l, ArrayRef<int64_t>{0});
-  Value lHigh = b.create<vector::ExtractOp>(l, ArrayRef<int64_t>{1});
-  Value hLow = b.create<vector::ExtractOp>(h, ArrayRef<int64_t>{0});
-  Value hHigh = b.create<vector::ExtractOp>(h, ArrayRef<int64_t>{1});
+  Value lLow = vector::ExtractOp::create(b, l, ArrayRef<int64_t>{0});
+  Value lHigh = vector::ExtractOp::create(b, l, ArrayRef<int64_t>{1});
+  Value hLow = vector::ExtractOp::create(b, h, ArrayRef<int64_t>{0});
+  Value hHigh = vector::ExtractOp::create(b, h, ArrayRef<int64_t>{1});
 
   // Combine middle term with h and l using vector ops
   // t = m ^ h ^ l
-  Value mXorH = b.create<arith::XOrIOp>(m, h);
-  Value t = b.create<arith::XOrIOp>(mXorH, l);
-  Value tLow = b.create<vector::ExtractOp>(t, ArrayRef<int64_t>{0});
-  Value tHigh = b.create<vector::ExtractOp>(t, ArrayRef<int64_t>{1});
+  Value mXorH = arith::XOrIOp::create(b, m, h);
+  Value t = arith::XOrIOp::create(b, mXorH, l);
+  Value tLow = vector::ExtractOp::create(b, t, ArrayRef<int64_t>{0});
+  Value tHigh = vector::ExtractOp::create(b, t, ArrayRef<int64_t>{1});
 
   // Build x01 = {lLow, lHigh ^ tLow}
-  Value x01High = b.create<arith::XOrIOp>(lHigh, tLow);
+  Value x01High = arith::XOrIOp::create(b, lHigh, tLow);
   Value x01 =
-      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{lLow, x01High});
+      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{lLow, x01High});
 
   // Build x23 = {hLow ^ tHigh, hHigh}
-  Value x23Low = b.create<arith::XOrIOp>(hLow, tHigh);
+  Value x23Low = arith::XOrIOp::create(b, hLow, tHigh);
   Value x23 =
-      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{x23Low, hHigh});
+      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{x23Low, hHigh});
 
   // Montgomery reduction: 256-bit -> 128-bit
   return polyvalMontgomeryReduce(b, x23, x01);
@@ -246,34 +245,40 @@ std::pair<Value, Value> reduceTowerLevel7(ImplicitLocOpBuilder &b, Value high) {
 
   // Compute shifts using constants from BinaryFieldTables.h
   // kTowerLevel7ReductionShifts = {7, 2, 1, 0}
-  Value h7 = b.create<arith::ShLIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[0])));
-  Value h2 = b.create<arith::ShLIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[1])));
-  Value h1 = b.create<arith::ShLIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[2])));
+  Value h7 = arith::ShLIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[0])));
+  Value h2 = arith::ShLIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[1])));
+  Value h1 = arith::ShLIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[2])));
 
   // XOR all together: h7 ^ h2 ^ h1 ^ high
-  Value reduction = b.create<arith::XOrIOp>(h7, h2);
-  reduction = b.create<arith::XOrIOp>(reduction, h1);
-  reduction = b.create<arith::XOrIOp>(reduction, high);
+  Value reduction = arith::XOrIOp::create(b, h7, h2);
+  reduction = arith::XOrIOp::create(b, reduction, h1);
+  reduction = arith::XOrIOp::create(b, reduction, high);
 
   // Compute overflow bits using kTowerLevel7OverflowShifts = {57, 62, 63}
-  Value h7_hi = b.create<arith::ShRUIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[0])));
-  Value h2_hi = b.create<arith::ShRUIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[1])));
-  Value h1_hi = b.create<arith::ShRUIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[2])));
+  Value h7_hi = arith::ShRUIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[0])));
+  Value h2_hi = arith::ShRUIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[1])));
+  Value h1_hi = arith::ShRUIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[2])));
 
-  Value overflow = b.create<arith::XOrIOp>(h7_hi, h2_hi);
-  overflow = b.create<arith::XOrIOp>(overflow, h1_hi);
+  Value overflow = arith::XOrIOp::create(b, h7_hi, h2_hi);
+  overflow = arith::XOrIOp::create(b, overflow, h1_hi);
 
   return {reduction, overflow};
 }
@@ -283,19 +288,22 @@ Value reduceTowerLevel6(ImplicitLocOpBuilder &b, Value high) {
   auto i64Type = b.getI64Type();
 
   // kTowerLevel6ReductionShifts = {4, 3, 1, 0}
-  Value h4 = b.create<arith::ShLIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[0])));
-  Value h3 = b.create<arith::ShLIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[1])));
-  Value h1 = b.create<arith::ShLIOp>(
-      high, b.create<arith::ConstantOp>(
-                i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[2])));
+  Value h4 = arith::ShLIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[0])));
+  Value h3 = arith::ShLIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[1])));
+  Value h1 = arith::ShLIOp::create(
+      b, high,
+      arith::ConstantOp::create(
+          b, i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[2])));
 
-  Value reduction = b.create<arith::XOrIOp>(h4, h3);
-  reduction = b.create<arith::XOrIOp>(reduction, h1);
-  reduction = b.create<arith::XOrIOp>(reduction, high);
+  Value reduction = arith::XOrIOp::create(b, h4, h3);
+  reduction = arith::XOrIOp::create(b, reduction, h1);
+  reduction = arith::XOrIOp::create(b, reduction, high);
 
   return reduction;
 }
@@ -311,22 +319,22 @@ Value mulBF64PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   auto vec2i64Type = VectorType::get(2, i64Type);
 
   // Pack inputs into 128-bit vectors (low 64 bits used)
-  Value zero = b.create<arith::ConstantOp>(i64Type, b.getI64IntegerAttr(0));
+  Value zero = arith::ConstantOp::create(b, i64Type, b.getI64IntegerAttr(0));
   Value lhsVec =
-      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{lhs, zero});
+      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{lhs, zero});
   Value rhsVec =
-      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{rhs, zero});
+      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{rhs, zero});
 
   // Carryless multiply using PMULL: produces 128-bit result
   Value product = emitPMULL(b, lhsVec, rhsVec);
 
   // Extract low and high 64-bit parts
-  Value prodLow = b.create<vector::ExtractOp>(product, ArrayRef<int64_t>{0});
-  Value prodHigh = b.create<vector::ExtractOp>(product, ArrayRef<int64_t>{1});
+  Value prodLow = vector::ExtractOp::create(b, product, ArrayRef<int64_t>{0});
+  Value prodHigh = vector::ExtractOp::create(b, product, ArrayRef<int64_t>{1});
 
   // Reduce using tower polynomial for level 6
   Value reduction = reduceTowerLevel6(b, prodHigh);
-  return b.create<arith::XOrIOp>(prodLow, reduction);
+  return arith::XOrIOp::create(b, prodLow, reduction);
 }
 
 // Multiply two 128-bit tower field elements using PMULL with Karatsuba.
@@ -345,21 +353,21 @@ Value mulBF128PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 
   // Cross products: need to extract halves and multiply
   // Extract individual 64-bit values
-  Value lhsLow = b.create<vector::ExtractOp>(lhs, ArrayRef<int64_t>{0});
-  Value lhsHigh = b.create<vector::ExtractOp>(lhs, ArrayRef<int64_t>{1});
-  Value rhsLow = b.create<vector::ExtractOp>(rhs, ArrayRef<int64_t>{0});
-  Value rhsHigh = b.create<vector::ExtractOp>(rhs, ArrayRef<int64_t>{1});
+  Value lhsLow = vector::ExtractOp::create(b, lhs, ArrayRef<int64_t>{0});
+  Value lhsHigh = vector::ExtractOp::create(b, lhs, ArrayRef<int64_t>{1});
+  Value rhsLow = vector::ExtractOp::create(b, rhs, ArrayRef<int64_t>{0});
+  Value rhsHigh = vector::ExtractOp::create(b, rhs, ArrayRef<int64_t>{1});
 
   // Pack for cross products
-  Value zero = b.create<arith::ConstantOp>(i64Type, b.getI64IntegerAttr(0));
+  Value zero = arith::ConstantOp::create(b, i64Type, b.getI64IntegerAttr(0));
   Value lhsLowVec =
-      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{lhsLow, zero});
+      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{lhsLow, zero});
   Value rhsHighVec =
-      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{rhsHigh, zero});
+      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{rhsHigh, zero});
   Value lhsHighVec =
-      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{lhsHigh, zero});
+      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{lhsHigh, zero});
   Value rhsLowVec =
-      b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{rhsLow, zero});
+      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{rhsLow, zero});
 
   // lhs_low * rhs_high
   Value lh = emitPMULL(b, lhsLowVec, rhsHighVec);
@@ -367,37 +375,37 @@ Value mulBF128PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   Value hl = emitPMULL(b, lhsHighVec, rhsLowVec);
 
   // Middle term = lh XOR hl
-  Value mid = b.create<arith::XOrIOp>(lh, hl);
+  Value mid = arith::XOrIOp::create(b, lh, hl);
 
   // Extract parts
-  Value llLow = b.create<vector::ExtractOp>(ll, ArrayRef<int64_t>{0});
-  Value llHigh = b.create<vector::ExtractOp>(ll, ArrayRef<int64_t>{1});
-  Value hhLow = b.create<vector::ExtractOp>(hh, ArrayRef<int64_t>{0});
-  Value hhHigh = b.create<vector::ExtractOp>(hh, ArrayRef<int64_t>{1});
-  Value midLow = b.create<vector::ExtractOp>(mid, ArrayRef<int64_t>{0});
-  Value midHigh = b.create<vector::ExtractOp>(mid, ArrayRef<int64_t>{1});
+  Value llLow = vector::ExtractOp::create(b, ll, ArrayRef<int64_t>{0});
+  Value llHigh = vector::ExtractOp::create(b, ll, ArrayRef<int64_t>{1});
+  Value hhLow = vector::ExtractOp::create(b, hh, ArrayRef<int64_t>{0});
+  Value hhHigh = vector::ExtractOp::create(b, hh, ArrayRef<int64_t>{1});
+  Value midLow = vector::ExtractOp::create(b, mid, ArrayRef<int64_t>{0});
+  Value midHigh = vector::ExtractOp::create(b, mid, ArrayRef<int64_t>{1});
 
   // Combine: result is 256-bit, we need to reduce mod tower polynomial
   // Bits 0-63: llLow, Bits 64-127: llHigh XOR midLow
   // Bits 128-191: hhLow XOR midHigh, Bits 192-255: hhHigh
   Value r0 = llLow;
-  Value r1 = b.create<arith::XOrIOp>(llHigh, midLow);
-  Value r2 = b.create<arith::XOrIOp>(hhLow, midHigh);
+  Value r1 = arith::XOrIOp::create(b, llHigh, midLow);
+  Value r2 = arith::XOrIOp::create(b, hhLow, midHigh);
   Value r3 = hhHigh;
 
   // Reduce 256-bit to 128-bit using tower polynomial for level 7
   // First reduce r3 (bits 192-255): r3 * x⁶⁴ * (x⁷ + x² + x + 1)
   auto [r3_red, r3_overflow] = reduceTowerLevel7(b, r3);
-  r1 = b.create<arith::XOrIOp>(r1, r3_red);
-  r2 = b.create<arith::XOrIOp>(r2, r3_overflow);
+  r1 = arith::XOrIOp::create(b, r1, r3_red);
+  r2 = arith::XOrIOp::create(b, r2, r3_overflow);
 
   // Now reduce r2 (bits 128-191): r2 * (x⁷ + x² + x + 1)
   auto [r2_red, r2_overflow] = reduceTowerLevel7(b, r2);
-  r0 = b.create<arith::XOrIOp>(r0, r2_red);
-  r1 = b.create<arith::XOrIOp>(r1, r2_overflow);
+  r0 = arith::XOrIOp::create(b, r0, r2_red);
+  r1 = arith::XOrIOp::create(b, r1, r2_overflow);
 
   // Pack result back into vector<2xi64>
-  return b.create<vector::FromElementsOp>(vec2i64Type, ValueRange{r0, r1});
+  return vector::FromElementsOp::create(b, vec2i64Type, ValueRange{r0, r1});
 }
 
 //===----------------------------------------------------------------------===//
@@ -417,17 +425,17 @@ Value reduceTowerLevel3Packed(ImplicitLocOpBuilder &b, Value highBits) {
   auto createShiftConst = [&](int64_t shift) {
     SmallVector<int16_t, 8> values(vecType.getNumElements(),
                                    static_cast<int16_t>(shift));
-    return b.create<arith::ConstantOp>(
-        DenseElementsAttr::get(vecType, ArrayRef<int16_t>(values)));
+    return arith::ConstantOp::create(
+        b, DenseElementsAttr::get(vecType, ArrayRef<int16_t>(values)));
   };
 
-  Value h4 = b.create<arith::ShLIOp>(highBits, createShiftConst(4));
-  Value h3 = b.create<arith::ShLIOp>(highBits, createShiftConst(3));
-  Value h1 = b.create<arith::ShLIOp>(highBits, createShiftConst(1));
+  Value h4 = arith::ShLIOp::create(b, highBits, createShiftConst(4));
+  Value h3 = arith::ShLIOp::create(b, highBits, createShiftConst(3));
+  Value h1 = arith::ShLIOp::create(b, highBits, createShiftConst(1));
 
-  Value reduction = b.create<arith::XOrIOp>(h4, h3);
-  reduction = b.create<arith::XOrIOp>(reduction, h1);
-  reduction = b.create<arith::XOrIOp>(reduction, highBits);
+  Value reduction = arith::XOrIOp::create(b, h4, h3);
+  reduction = arith::XOrIOp::create(b, reduction, h1);
+  reduction = arith::XOrIOp::create(b, reduction, highBits);
 
   return reduction;
 }
@@ -455,29 +463,29 @@ Value mulBF8PackedPMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs,
   // Extract high byte (bits 8-15) from each 16-bit element
   auto createMask = [&](uint16_t mask) {
     SmallVector<int16_t, 8> values(8, static_cast<int16_t>(mask));
-    return b.create<arith::ConstantOp>(
-        DenseElementsAttr::get(vec8i16Type, ArrayRef<int16_t>(values)));
+    return arith::ConstantOp::create(
+        b, DenseElementsAttr::get(vec8i16Type, ArrayRef<int16_t>(values)));
   };
 
   Value shiftConst8 = createMask(8);
   Value lowMask = createMask(0xFF);
 
   // For low product
-  Value lowHighBits = b.create<arith::ShRUIOp>(prodLow, shiftConst8);
-  Value lowLowBits = b.create<arith::AndIOp>(prodLow, lowMask);
+  Value lowHighBits = arith::ShRUIOp::create(b, prodLow, shiftConst8);
+  Value lowLowBits = arith::AndIOp::create(b, prodLow, lowMask);
   Value lowReduction = reduceTowerLevel3Packed(b, lowHighBits);
-  Value lowResult = b.create<arith::XOrIOp>(lowLowBits, lowReduction);
+  Value lowResult = arith::XOrIOp::create(b, lowLowBits, lowReduction);
 
   // For high product
-  Value highHighBits = b.create<arith::ShRUIOp>(prodHigh, shiftConst8);
-  Value highLowBits = b.create<arith::AndIOp>(prodHigh, lowMask);
+  Value highHighBits = arith::ShRUIOp::create(b, prodHigh, shiftConst8);
+  Value highLowBits = arith::AndIOp::create(b, prodHigh, lowMask);
   Value highReduction = reduceTowerLevel3Packed(b, highHighBits);
-  Value highResult = b.create<arith::XOrIOp>(highLowBits, highReduction);
+  Value highResult = arith::XOrIOp::create(b, highLowBits, highReduction);
 
   // Truncate i16 results to i8 and combine into 16-element vector
   auto vec8i8Type = VectorType::get(8, i8Type);
-  Value lowTrunc = b.create<arith::TruncIOp>(vec8i8Type, lowResult);
-  Value highTrunc = b.create<arith::TruncIOp>(vec8i8Type, highResult);
+  Value lowTrunc = arith::TruncIOp::create(b, vec8i8Type, lowResult);
+  Value highTrunc = arith::TruncIOp::create(b, vec8i8Type, highResult);
 
   // Concatenate low and high results using vector.shuffle
   SmallVector<int64_t, 16> indices;
@@ -486,7 +494,7 @@ Value mulBF8PackedPMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs,
   for (int64_t i = 0; i < 8; ++i)
     indices.push_back(8 + i);
 
-  return b.create<vector::ShuffleOp>(lowTrunc, highTrunc, indices);
+  return vector::ShuffleOp::create(b, lowTrunc, highTrunc, indices);
 }
 
 //===----------------------------------------------------------------------===//
@@ -527,14 +535,14 @@ struct ConvertBF64ToPMULL : public OpRewritePattern<OpTy> {
     // Use unrealized_conversion_cast from bf<6> to i64
     auto i64Type = b.getI64Type();
     Value lhsI64 =
-        b.create<UnrealizedConversionCastOp>(i64Type, lhs).getResult(0);
+        UnrealizedConversionCastOp::create(b, i64Type, lhs).getResult(0);
     Value rhsI64 =
-        b.create<UnrealizedConversionCastOp>(i64Type, rhs).getResult(0);
+        UnrealizedConversionCastOp::create(b, i64Type, rhs).getResult(0);
 
     Value result = mulBF64PMULL(b, lhsI64, rhsI64);
 
     Value resultBF =
-        b.create<UnrealizedConversionCastOp>(bfType, result).getResult(0);
+        UnrealizedConversionCastOp::create(b, bfType, result).getResult(0);
     rewriter.replaceOp(op, resultBF);
     return success();
   }
@@ -565,18 +573,18 @@ struct ConvertBF128ToARM : public OpRewritePattern<OpTy> {
     auto vec2i64Type = VectorType::get(2, i64Type);
 
     Value lhsI128 =
-        b.create<UnrealizedConversionCastOp>(i128Type, lhs).getResult(0);
+        UnrealizedConversionCastOp::create(b, i128Type, lhs).getResult(0);
     Value rhsI128 =
-        b.create<UnrealizedConversionCastOp>(i128Type, rhs).getResult(0);
+        UnrealizedConversionCastOp::create(b, i128Type, rhs).getResult(0);
 
-    Value lhsVec = b.create<LLVM::BitcastOp>(vec2i64Type, lhsI128);
-    Value rhsVec = b.create<LLVM::BitcastOp>(vec2i64Type, rhsI128);
+    Value lhsVec = LLVM::BitcastOp::create(b, vec2i64Type, lhsI128);
+    Value rhsVec = LLVM::BitcastOp::create(b, vec2i64Type, rhsI128);
 
     Value resultVec = mulFn(b, lhsVec, rhsVec);
 
-    Value resultI128 = b.create<LLVM::BitcastOp>(i128Type, resultVec);
+    Value resultI128 = LLVM::BitcastOp::create(b, i128Type, resultVec);
     Value resultBF =
-        b.create<UnrealizedConversionCastOp>(bfType, resultI128).getResult(0);
+        UnrealizedConversionCastOp::create(b, bfType, resultI128).getResult(0);
     rewriter.replaceOp(op, resultBF);
     return success();
   }
@@ -612,15 +620,15 @@ struct ConvertPackedBF8ToPMULL : public OpRewritePattern<OpTy> {
     auto [lhs, rhs] = getMulOperands(op);
     auto vecI8Type = VectorType::get(numElements, b.getI8Type());
     Value lhsI8 =
-        b.create<UnrealizedConversionCastOp>(vecI8Type, lhs).getResult(0);
+        UnrealizedConversionCastOp::create(b, vecI8Type, lhs).getResult(0);
     Value rhsI8 =
-        b.create<UnrealizedConversionCastOp>(vecI8Type, rhs).getResult(0);
+        UnrealizedConversionCastOp::create(b, vecI8Type, rhs).getResult(0);
 
     Value result = mulBF8PackedPMULL(b, lhsI8, rhsI8, numElements);
 
     // Cast result back
     Value resultCast =
-        b.create<UnrealizedConversionCastOp>(vecType, result).getResult(0);
+        UnrealizedConversionCastOp::create(b, vecType, result).getResult(0);
     rewriter.replaceOp(op, resultCast);
     return success();
   }

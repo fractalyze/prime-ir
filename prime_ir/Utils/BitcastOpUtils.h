@@ -74,6 +74,13 @@ LogicalResult canonicalizeBitcast(BitcastOpT op, PatternRewriter &rewriter) {
 // This function performs common bitcast folding optimizations:
 // 1. Fold bitcast with same input and output types
 // 2. Fold bitcast(bitcast(x)) -> x when final type matches original type
+// 3. Fold bitcast of a constant operand into a constant of the output type
+//    (raw bits preserved). Gated on the input attribute's shape matching
+//    the output type's shape directly so the dialect's materializeConstant
+//    hook can stamp it without reshape. Holds for IntegerType / PrimeField
+//    / BinaryField / ModArith outputs but NOT for ExtensionField, whose
+//    field.constant value attribute carries tower dimensions appended to
+//    the type's shape.
 //
 // Template parameters:
 // - BitcastOpT: The bitcast operation type (e.g., field::BitcastOp,
@@ -83,9 +90,14 @@ LogicalResult canonicalizeBitcast(BitcastOpT op, PatternRewriter &rewriter) {
 // - getInput() method returning the input value
 // - getOutput() method returning the output value
 // - FoldAdaptor type for accessing constant attributes
+// `inputOverride`, when non-null, replaces `adaptor.getInput()` as the
+// constant operand. Callers whose constant operand needs normalizing first
+// (e.g. a field-typed DenseElementsAttr demoted to its storage-int view)
+// pass the normalized attribute here.
 template <typename BitcastOpT>
 OpFoldResult foldBitcast(BitcastOpT op,
-                         typename BitcastOpT::FoldAdaptor adaptor) {
+                         typename BitcastOpT::FoldAdaptor adaptor,
+                         Attribute inputOverride = nullptr) {
   // Fold bitcast with same input and output types.
   if (op.getInput().getType() == op.getOutput().getType()) {
     return op.getInput();
@@ -95,6 +107,24 @@ OpFoldResult foldBitcast(BitcastOpT op,
   if (auto inputBitcast = op.getInput().template getDefiningOp<BitcastOpT>()) {
     if (inputBitcast.getInput().getType() == op.getOutput().getType()) {
       return inputBitcast.getInput();
+    }
+  }
+
+  // Fold bitcast of a constant operand. BitcastOp::verify already enforces
+  // matching storage widths, so the raw bits are reinterpretable without
+  // conversion.
+  Attribute input = inputOverride ? inputOverride : adaptor.getInput();
+  Type outputType = op.getOutput().getType();
+  if (auto intAttr = dyn_cast_if_present<IntegerAttr>(input)) {
+    if (!isa<ShapedType>(outputType)) {
+      return intAttr;
+    }
+  } else if (auto denseAttr =
+                 dyn_cast_if_present<DenseIntElementsAttr>(input)) {
+    auto outputShaped = dyn_cast<ShapedType>(outputType);
+    if (outputShaped && outputShaped.hasRank() &&
+        denseAttr.getType().getShape() == outputShaped.getShape()) {
+      return denseAttr;
     }
   }
 
