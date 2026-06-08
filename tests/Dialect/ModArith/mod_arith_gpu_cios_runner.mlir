@@ -18,7 +18,7 @@
 // issue #344). mont_mul operands are loaded from a memref so the op does NOT
 // constant-fold via zk_dtypes before lowering; the CIOS/wide-int arith is
 // actually emitted and executed. The same CHECK pins both the default
-// (wide-int REDC) and the target=gpu (32-bit-limb CIOS) lowerings, so a green
+// (wide-int REDC) and the limb-bits=32 (32-bit-limb CIOS) lowerings, so a green
 // run simultaneously proves the bInv fix (default path correct), proves the
 // CIOS lowering, and cross-checks the two against each other.
 //
@@ -45,7 +45,7 @@
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_MONT_MUL < %t
 
-// RUN: prime-ir-opt %s -mod-arith-to-arith=target=gpu -convert-elementwise-to-linalg -one-shot-bufferize -convert-linalg-to-parallel-loops -convert-scf-to-cf -convert-cf-to-llvm -convert-to-llvm -convert-vector-to-llvm \
+// RUN: prime-ir-opt %s -mod-arith-to-arith=limb-bits=32 -convert-elementwise-to-linalg -one-shot-bufferize -convert-linalg-to-parallel-loops -convert-scf-to-cf -convert-cf-to-llvm -convert-to-llvm -convert-vector-to-llvm \
 // RUN:   | mlir-runner -e test_bls377_mont_mul -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_MONT_MUL < %t
@@ -55,7 +55,7 @@
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_ROUNDTRIP < %t
 
-// RUN: prime-ir-opt %s -mod-arith-to-arith=target=gpu -convert-elementwise-to-linalg -one-shot-bufferize -convert-linalg-to-parallel-loops -convert-scf-to-cf -convert-cf-to-llvm -convert-to-llvm -convert-vector-to-llvm \
+// RUN: prime-ir-opt %s -mod-arith-to-arith=limb-bits=32 -convert-elementwise-to-linalg -one-shot-bufferize -convert-linalg-to-parallel-loops -convert-scf-to-cf -convert-cf-to-llvm -convert-to-llvm -convert-vector-to-llvm \
 // RUN:   | mlir-runner -e test_bls377_roundtrip -entry-point-result=void \
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_ROUNDTRIP < %t

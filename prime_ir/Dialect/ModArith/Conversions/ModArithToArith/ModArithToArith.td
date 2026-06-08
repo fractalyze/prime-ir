@@ -44,11 +44,18 @@ def ModArithToArith : Pass<"mod-arith-to-arith", "ModuleOp"> {
   let options = [
     Option<"lazyReduction", "lazy-reduction", "bool", "false",
       "Enable lazy reduction optimization via integer range analysis">,
-    Option<"target", "target", "std::string", /*default=*/"\"cpu\"",
-      "Lowering target: 'cpu' keeps the wide-int limb lowering (native "
-      "64-bit multiply); 'gpu' lowers multi-limb Montgomery multiplies "
-      "via 32-bit-limb CIOS (IMAD.WIDE). Sign-bit-set moduli always use "
-      "the cpu path.">,
+    Option<"limbBits", "limb-bits", "unsigned", /*default=*/"64",
+      "Montgomery-multiply limb width. 64 (default) keeps the wide-int "
+      "lowering, which LLVM legalizes to a native 64-bit-limb schoolbook "
+      "(mul.lo/hi + carry chains). 32 emits an explicit 32-bit-limb CIOS "
+      "(every limb product is a 32x32->64 widening multiply) for multi-limb "
+      "moduli. 32 is EXPERIMENTAL and off by default: it measured ~0.81x "
+      "(slower) than 64 on RTX 5090 (prime-ir#337 PR3) because the GPU has "
+      "a strong 64-bit multiply; it is intended for a target whose native "
+      "multiply is 32-bit (e.g. a 32-bit CPU), where the wide path emulates "
+      "64-bit products. No such target in the fleet today. Sign-bit-set and "
+      "single-limb moduli always keep the wide-int path. Values other than "
+      "32 keep the wide-int path.">,
   ];
 }
 

@@ -15,12 +15,12 @@
 
 // Verify that field.mul over a degree-2 extension of the BLS12-377 base field
 // (in Montgomery form) decomposes into base-field mont_muls that ride the
-// 32-bit-limb CIOS path under target=gpu.
+// 32-bit-limb CIOS path under limb-bits=32.
 //
 // BLS12-377 Fp2 = Fp[u] / (u^2 + 5).  The irreducible polynomial coefficient
 // stored in the ef type is beta = -5 mod p = p - 5.
 
-// RUN: prime-ir-opt -field-to-mod-arith '-mod-arith-to-arith=target=gpu' %s | FileCheck %s
+// RUN: prime-ir-opt -field-to-mod-arith -mod-arith-to-arith=limb-bits=32 %s | FileCheck %s
 
 !BLS377m = !field.pf<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
 // beta = p - 5

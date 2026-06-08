@@ -13,7 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// Lazy-reduction contract under target=gpu, multi-limb CIOS path.
+// Lazy-reduction contract under limb-bits=32, multi-limb CIOS path.
 //
 // BLS12-377 (p is 377-bit in i384, spare bit clear): setLazyRedcRange accepts
 // it because 2p < 2^384. The CIOS path applies: multi-limb, sign bit clear.
@@ -28,8 +28,8 @@
 // pair (getCanonicalFromExtended(., 2)).  Lazy elides the pair for non-final
 // results, so the count delta is 1 per elided intermediate.
 
-// RUN: prime-ir-opt '-mod-arith-to-arith=target=gpu lazy-reduction=true' -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=LAZY
-// RUN: prime-ir-opt -mod-arith-to-arith=target=gpu -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=EAGER
+// RUN: prime-ir-opt '-mod-arith-to-arith=limb-bits=32 lazy-reduction=true' -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=LAZY
+// RUN: prime-ir-opt -mod-arith-to-arith=limb-bits=32 -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=EAGER
 
 !Fpm = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
 

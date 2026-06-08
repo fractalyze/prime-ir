@@ -13,9 +13,12 @@
 // limitations under the License.
 // ==============================================================================
 
-// RUN: prime-ir-opt -mod-arith-to-arith=target=gpu -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=GPU
-// The default (no target) RUN proves the flag actually gates: the same
-// spare-bit BLS377 case keeps the wide-int path.
+// The experimental 32-bit-limb CIOS path is opt-in (limb-bits=32):
+// RUN: prime-ir-opt -mod-arith-to-arith=limb-bits=32 -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=GPU
+// limb-bits=64 keeps the wide-int path (no regression — the 64-bit-limb
+// schoolbook is the fastest montmul on a strong-64-bit-multiply target, #337 PR3):
+// RUN: prime-ir-opt -mod-arith-to-arith=limb-bits=64 -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=CPU
+// The default (no limb-bits) RUN keeps the wide-int path:
 // RUN: prime-ir-opt -mod-arith-to-arith -split-input-file %s | FileCheck %s -enable-var-scope --check-prefix=CPU
 
 !BLS377m = !mod_arith.int<258664426012969094010652733694893533536393512754914660539884262666720468348340822774968888139573360124440321458177 : i384, true>
@@ -36,7 +39,7 @@ func.func @gpu_mont_mul_multi_limb(%a : !BLS377m, %b : !BLS377m) -> !BLS377m {
 // -----
 
 // secp256k1 base field (p > 2^255, sign bit set): CIOS gate rejects sign-bit-set
-// moduli, so even under target=gpu this falls back to the wide-int path.
+// moduli, so even under limb-bits=32 this falls back to the wide-int path.
 !Secpm = !mod_arith.int<115792089237316195423570985008687907853269984665640564039457584007908834671663 : i256, true>
 
 // GPU-LABEL: @gpu_mont_mul_sign_bit_set
@@ -135,7 +138,7 @@ func.func @gpu_square_multi_limb(%a : !BLS377m) -> !BLS377m {
 
 // BabyBear (p = 2013265921, i32, Montgomery): single-limb type never routes
 // through the 12-limb CIOS path — reduceSingleLimb is used unchanged under
-// target=gpu. The lowering uses i32 extended multiplies, not the i64 limb
+// limb-bits=32. The lowering uses i32 extended multiplies, not the i64 limb
 // accumulations of CIOS.
 !BBm = !mod_arith.int<2013265921 : i32, true>
 
