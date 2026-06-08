@@ -28,9 +28,16 @@ jobs:
       # the base..head change; pushes to main run the full suite.
       - name: Run `bazel test` (diff only)
         if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BAZEL_DIFF=$(mktemp -t bazel-diff.XXXXXX.jar)
-          curl -Lo "$BAZEL_DIFF" https://github.com/Tinder/bazel-diff/releases/download/17.0.2/bazel-diff_deploy.jar
+          # Fetch via the release API rather than the browser-download CDN: the
+          # latter intermittently 504s and a bare `curl -Lo` would save the HTML
+          # error page as a corrupt jar. `gh` validates the asset and --clobber
+          # overwrites the mktemp placeholder.
+          gh release download 17.0.2 --repo Tinder/bazel-diff \
+            --pattern bazel-diff_deploy.jar --output "$BAZEL_DIFF" --clobber
           ./build_tools/github_actions/ci_build_bazel.sh "$BAZEL_DIFF" \
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}"
