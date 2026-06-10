@@ -19,6 +19,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Utils/ZkDtypes.h"
 #include "zk_dtypes/include/field/babybear/babybearx4.h"
+#include "zk_dtypes/include/field/goldilocks/goldilocks3_pil.h"
 #include "zk_dtypes/include/field/goldilocks/goldilocksx3.h"
 #include "zk_dtypes/include/field/mersenne31/mersenne31x2.h"
 #include "zk_dtypes/include/field/mersenne31/mersenne31x2x2.h"
@@ -97,6 +98,9 @@ using ExtensionFieldTypes = testing::Types<
     zk_dtypes::Mersenne31X2,
     // degree = 3
     zk_dtypes::GoldilocksX3,
+    // degree = 3, general monic modulus (x^3 - x - 1, pil2-stark's
+    // Goldilocks3): folds through the general-modulus operation variant
+    zk_dtypes::Goldilocks3Pil,
     // degree = 4
     zk_dtypes::BabybearX4,
     // degree = 2 x 2

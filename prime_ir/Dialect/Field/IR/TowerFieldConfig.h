@@ -101,6 +101,8 @@ inline SmallVector<unsigned, 4> getTowerSignature(ExtensionFieldType efType) {
                Quadratic##NON_TOWER_SUFFIX,                            \
                Cubic##NON_TOWER_SUFFIX,                                \
                Quartic##NON_TOWER_SUFFIX,                              \
+               /* General monic modulus (dense non-residue, prime base) */ \
+               CubicGeneralModulus##NON_TOWER_SUFFIX,                  \
                /* Depth-1 tower extension fields */                    \
                TowerQuadraticOverQuadratic##TOWER_SUFFIX,              \
                TowerCubicOverQuadratic##TOWER_SUFFIX,                  \

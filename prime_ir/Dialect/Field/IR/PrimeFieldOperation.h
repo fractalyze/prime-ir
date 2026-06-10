@@ -202,7 +202,7 @@ public:
 private:
   friend class FieldOperation;
   // PascalCase methods (zk_dtypes compatible)
-  template <size_t, typename>
+  template <size_t, typename, bool>
   friend class ExtensionFieldOperation;
   template <typename>
   friend class zk_dtypes::QuadraticExtensionFieldOperation;

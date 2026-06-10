@@ -38,7 +38,7 @@ class ExtensionFieldOperation;
 namespace mlir::prime_ir::field {
 
 class FieldCodeGen;
-template <size_t N, typename BaseFieldT>
+template <size_t N, typename BaseFieldT, bool GeneralModulus>
 class ExtensionFieldCodeGen;
 
 // NOTE(chokobole): This class is not used directly. It is used to generate
@@ -62,7 +62,7 @@ public:
 
 private:
   friend class FieldCodeGen;
-  template <size_t, typename>
+  template <size_t, typename, bool>
   friend class ExtensionFieldCodeGen;
   template <typename>
   friend class zk_dtypes::QuadraticExtensionFieldOperation;
