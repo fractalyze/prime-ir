@@ -86,7 +86,8 @@ class ExtensionFieldCodeGen
   using Base = typename ExtensionFieldOperationBase<
       N, BaseFieldT,
       ExtensionFieldCodeGen<N, BaseFieldT, GeneralModulus>>::Type;
-  static_assert(!GeneralModulus || std::is_same_v<BaseFieldT, PrimeFieldCodeGen>,
+  static_assert(!GeneralModulus ||
+                    std::is_same_v<BaseFieldT, PrimeFieldCodeGen>,
                 "general-modulus extension fields must have a prime base");
 
 public:

@@ -48,9 +48,9 @@ namespace zk_dtypes {
 
 // Traits specialization: supports both prime field base and tower extensions
 template <size_t N, typename BaseFieldT, bool GeneralModulus>
-class ExtensionFieldOperationTraits<mlir::prime_ir::field::
-                                        ExtensionFieldOperation<
-                                            N, BaseFieldT, GeneralModulus>> {
+class ExtensionFieldOperationTraits<
+    mlir::prime_ir::field::ExtensionFieldOperation<N, BaseFieldT,
+                                                   GeneralModulus>> {
 public:
   using BaseField = BaseFieldT;
   static constexpr size_t kDegree = N;
@@ -108,10 +108,9 @@ struct ZkDtypeToExtensionFieldOpImpl;
 template <typename ExtF>
 struct ZkDtypeToExtensionFieldOpImpl<ExtF, true> {
   static constexpr size_t N = ExtF::Config::kDegreeOverBaseField;
-  using type =
-      ExtensionFieldOperation<N, PrimeFieldOperation,
-                              zk_dtypes::internal::HasModulusLowCoeffs<
-                                  ExtF>::value>;
+  using type = ExtensionFieldOperation<
+      N, PrimeFieldOperation,
+      zk_dtypes::internal::HasModulusLowCoeffs<ExtF>::value>;
 };
 
 // Specialization for when BaseField is extension field (tower)
@@ -647,8 +646,8 @@ private:
   friend class VandermondeMatrix;
 
   template <size_t N2, typename B2, bool G2>
-  friend raw_ostream &operator<<(
-      raw_ostream &os, const ExtensionFieldOperation<N2, B2, G2> &op);
+  friend raw_ostream &operator<<(raw_ostream &os,
+                                 const ExtensionFieldOperation<N2, B2, G2> &op);
 
   const std::array<BaseFieldT, N> &ToCoeffs() const { return coeffs; }
 
