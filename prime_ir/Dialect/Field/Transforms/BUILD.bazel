@@ -61,3 +61,33 @@ gentbl_cc_library(
         "@llvm-project//mlir:PassBaseTdFiles",
     ],
 )
+
+prime_ir_cc_library(
+    name = "ReassociateFieldAdd",
+    srcs = ["ReassociateFieldAdd.cpp"],
+    hdrs = ["ReassociateFieldAdd.h"],
+    deps = [
+        ":reassociate_field_add_inc_gen",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:Pass",
+        "@llvm-project//mlir:Support",
+    ],
+)
+
+gentbl_cc_library(
+    name = "reassociate_field_add_inc_gen",
+    tbl_outs = {
+        "ReassociateFieldAdd.h.inc": [
+            "-gen-pass-decls",
+            "-name=ReassociateFieldAdd",
+        ],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "ReassociateFieldAdd.td",
+    deps = [
+        "@llvm-project//mlir:PassBaseTdFiles",
+    ],
+)
