@@ -78,7 +78,6 @@ prime_ir_cc_test(
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@zk_dtypes//zk_dtypes:babybearx4",
-        "@zk_dtypes//zk_dtypes:goldilocks3_pil",
         "@zk_dtypes//zk_dtypes:goldilocksx3",
         "@zk_dtypes//zk_dtypes:mersenne31x2",
         "@zk_dtypes//zk_dtypes:mersenne31x2x2",
