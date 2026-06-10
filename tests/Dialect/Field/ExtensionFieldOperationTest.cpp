@@ -95,7 +95,9 @@ MLIRContext ExtensionFieldOperationTest<F>::context;
 using ExtensionFieldTypes = testing::Types<
     // degree = 2
     zk_dtypes::Mersenne31X2,
-    // degree = 3
+    // degree = 3, general monic modulus (x^3 - x - 1, pil2-stark's
+    // Goldilocks3 since zk_dtypes#135): folds through the general-modulus
+    // operation variant
     zk_dtypes::GoldilocksX3,
     // degree = 4
     zk_dtypes::BabybearX4,

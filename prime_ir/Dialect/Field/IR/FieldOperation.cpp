@@ -85,8 +85,8 @@ R applyBinaryOp(const FieldOperation::OperationType &a,
 template <typename T>
 struct IsExtensionFieldOp : std::false_type {};
 
-template <size_t N, typename B>
-struct IsExtensionFieldOp<ExtensionFieldOperation<N, B>> : std::true_type {
+template <size_t N, typename B, bool G>
+struct IsExtensionFieldOp<ExtensionFieldOperation<N, B, G>> : std::true_type {
   using BaseFieldT = B;
 };
 

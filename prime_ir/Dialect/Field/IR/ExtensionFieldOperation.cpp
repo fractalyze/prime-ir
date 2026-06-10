@@ -21,10 +21,14 @@ namespace mlir::prime_ir::field {
 template class ExtensionFieldOperation<2, PrimeFieldOperation>;
 template class ExtensionFieldOperation<3, PrimeFieldOperation>;
 template class ExtensionFieldOperation<4, PrimeFieldOperation>;
+template class ExtensionFieldOperation<3, PrimeFieldOperation, true>;
 
 template raw_ostream &
 operator<<(raw_ostream &os,
            const ExtensionFieldOperation<2, PrimeFieldOperation> &op);
+template raw_ostream &
+operator<<(raw_ostream &os,
+           const ExtensionFieldOperation<3, PrimeFieldOperation, true> &op);
 template raw_ostream &
 operator<<(raw_ostream &os,
            const ExtensionFieldOperation<3, PrimeFieldOperation> &op);

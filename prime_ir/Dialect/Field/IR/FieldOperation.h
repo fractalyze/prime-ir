@@ -110,8 +110,11 @@ public:
     if constexpr (F::ExtensionDegree() == 1) {
       return PrimeFieldOperation::fromZkDtype(context, f);
     } else {
-      constexpr size_t N = F::Config::kDegreeOverBaseField;
-      return ExtensionFieldOperation<N>::fromZkDtype(context, f);
+      // ZkDtypeToExtensionFieldOp resolves tower structure AND the
+      // general-modulus variant (a modulus-registered zk_dtypes type must
+      // land on the variant whose arithmetic reads the dense modulus).
+      using OpT = typename detail::ZkDtypeToExtensionFieldOp<F>::type;
+      return OpT::fromZkDtype(context, f);
     }
   }
 
@@ -173,6 +176,16 @@ private:
 
   template <typename T>
   void createExtFieldOp(T &&value, ExtensionFieldType efType) {
+    // A dense non-residue on a prime base is the general-monic-modulus
+    // encoding; the tower-signature dispatch below would otherwise pick the
+    // binomial variant, whose arithmetic misreads the attribute.
+    if (efType.hasGeneralModulus()) {
+      assert(efType.getDegree() == 3 &&
+             "general-modulus arithmetic is cubic-only for now");
+      operation = CubicGeneralModulusExtensionFieldOperation(
+          std::forward<T>(value), efType);
+      return;
+    }
     auto sig = getTowerSignature(efType);
 #define CREATE_EXT_FIELD_OP(unused_sig, TypeName)                              \
   operation = TypeName(std::forward<T>(value), efType);
@@ -183,6 +196,13 @@ private:
 
   template <typename T>
   void createRawExtFieldOp(T &&value, ExtensionFieldType efType) {
+    if (efType.hasGeneralModulus()) {
+      assert(efType.getDegree() == 3 &&
+             "general-modulus arithmetic is cubic-only for now");
+      operation = CubicGeneralModulusExtensionFieldOperation::fromUnchecked(
+          std::forward<T>(value), efType);
+      return;
+    }
     auto sig = getTowerSignature(efType);
 #define CREATE_RAW_EXT_FIELD_OP(unused_sig, TypeName)                          \
   operation = TypeName::fromUnchecked(std::forward<T>(value), efType);

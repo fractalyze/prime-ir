@@ -31,8 +31,15 @@
 
 namespace mlir::prime_ir::field {
 
-// Forward declaration with default base field type
-template <size_t N, typename BaseFieldT = PrimeFieldOperation>
+// Forward declaration with default base field type. GeneralModulus selects
+// the general-monic-modulus variant (uᴺ ≡ Σⱼ mⱼ·uʲ, encoded as a
+// DenseIntElementsAttr non-residue on a prime base): it exposes
+// ModulusLowCoeffs(), which zk_dtypes' operation mixins detect to route
+// reduction/inverse through the general fold. The default (binomial) variant
+// must not expose it, or every binomial field would silently take the
+// general path.
+template <size_t N, typename BaseFieldT = PrimeFieldOperation,
+          bool GeneralModulus = false>
 class ExtensionFieldOperation;
 
 } // namespace mlir::prime_ir::field
@@ -40,9 +47,10 @@ class ExtensionFieldOperation;
 namespace zk_dtypes {
 
 // Traits specialization: supports both prime field base and tower extensions
-template <size_t N, typename BaseFieldT>
+template <size_t N, typename BaseFieldT, bool GeneralModulus>
 class ExtensionFieldOperationTraits<
-    mlir::prime_ir::field::ExtensionFieldOperation<N, BaseFieldT>> {
+    mlir::prime_ir::field::ExtensionFieldOperation<N, BaseFieldT,
+                                                   GeneralModulus>> {
 public:
   using BaseField = BaseFieldT;
   static constexpr size_t kDegree = N;
@@ -65,8 +73,8 @@ struct BaseFieldBitWidth<PrimeFieldOperation> {
   }
 };
 
-template <size_t M, typename InnerBaseT>
-struct BaseFieldBitWidth<ExtensionFieldOperation<M, InnerBaseT>> {
+template <size_t M, typename InnerBaseT, bool G>
+struct BaseFieldBitWidth<ExtensionFieldOperation<M, InnerBaseT, G>> {
   static unsigned get(ExtensionFieldType efType) {
     // For tower extensions, get the bit width from the underlying prime field
     return efType.getBasePrimeField().getTypeSizeInBits();
@@ -94,11 +102,15 @@ public:
 template <typename ExtF, bool IsPrime>
 struct ZkDtypeToExtensionFieldOpImpl;
 
-// Specialization for when BaseField is prime field (non-tower)
+// Specialization for when BaseField is prime field (non-tower). A zk_dtypes
+// type registered with a general monic modulus (it exposes
+// ModulusLowCoeffs()) maps to the general-modulus operation variant.
 template <typename ExtF>
 struct ZkDtypeToExtensionFieldOpImpl<ExtF, true> {
   static constexpr size_t N = ExtF::Config::kDegreeOverBaseField;
-  using type = ExtensionFieldOperation<N, PrimeFieldOperation>;
+  using type = ExtensionFieldOperation<
+      N, PrimeFieldOperation,
+      zk_dtypes::internal::HasModulusLowCoeffs<ExtF>::value>;
 };
 
 // Specialization for when BaseField is extension field (tower)
@@ -198,21 +210,42 @@ ExtensionFieldType convertExtFieldType(ExtensionFieldType ef) {
 // Extension field operation class for compile-time evaluation.
 // Inherits from zk_dtypes CRTP operations for Square/Inverse algorithms.
 // Supports tower extensions via the BaseFieldT template parameter.
-template <size_t N, typename BaseFieldT>
+template <size_t N, typename BaseFieldT, bool GeneralModulus>
 class ExtensionFieldOperation
     : public ExtensionFieldOperationSelector<N>::template Type<
-          ExtensionFieldOperation<N, BaseFieldT>>,
-      public VandermondeMatrix<ExtensionFieldOperation<N, BaseFieldT>> {
+          ExtensionFieldOperation<N, BaseFieldT, GeneralModulus>>,
+      public VandermondeMatrix<
+          ExtensionFieldOperation<N, BaseFieldT, GeneralModulus>> {
   using CRTPBase = typename ExtensionFieldOperationSelector<N>::template Type<
-      ExtensionFieldOperation<N, BaseFieldT>>;
+      ExtensionFieldOperation<N, BaseFieldT, GeneralModulus>>;
 
 public:
   // Override zk_dtypes::VandermondeMatrix::GetVandermondeInverseMatrix to avoid
   // static caching conflicts between Montgomery and standard domains.
-  using VandermondeMatrix<
-      ExtensionFieldOperation<N, BaseFieldT>>::GetVandermondeInverseMatrix;
+  using VandermondeMatrix<ExtensionFieldOperation<
+      N, BaseFieldT, GeneralModulus>>::GetVandermondeInverseMatrix;
   static constexpr bool kIsTower =
       !std::is_same_v<BaseFieldT, PrimeFieldOperation>;
+  // The general-modulus encoding lives on a prime base; a tower over a
+  // general-modulus field is future work.
+  static_assert(!GeneralModulus || !kIsTower,
+                "general-modulus extension fields must have a prime base");
+
+  // Present only on the general-modulus variant: the low coefficients of
+  // uᴺ ≡ Σⱼ mⱼ·uʲ, read off the type's DenseIntElementsAttr non-residue.
+  // zk_dtypes' operation mixins detect this member to route through the
+  // general fold instead of the ξ closed forms — it must stay public, or the
+  // detection trait (not a friend) would silently evaluate false.
+  template <bool G = GeneralModulus, std::enable_if_t<G> * = nullptr>
+  std::array<BaseFieldT, N> ModulusLowCoeffs() const {
+    auto denseAttr = cast<DenseIntElementsAttr>(efType.getNonResidue());
+    std::array<BaseFieldT, N> m;
+    size_t i = 0;
+    for (const APInt &c : denseAttr.getValues<APInt>()) {
+      m[i++] = createBaseFieldOpUnchecked(c, efType);
+    }
+    return m;
+  }
 
   ExtensionFieldOperation() = default;
 
@@ -297,15 +330,31 @@ public:
 
     if constexpr (detail::IsPrimeField<BaseF>::value) {
       // Non-tower: base is prime field
-      IntegerAttr nonResidue =
-          convertToIntegerAttr(context, ExtF::Config::kNonResidue.value());
       auto modulusBits = llvm::bit_ceil(BaseF::Config::kModulusBits);
       IntegerAttr modulus = IntegerAttr::get(
           IntegerType::get(context, modulusBits),
           convertToAPInt(BaseF::Config::kModulus, modulusBits));
       PrimeFieldType pfType =
           PrimeFieldType::get(context, modulus, ExtF::kUseMontgomery);
-      return ExtensionFieldType::get(context, N, pfType, nonResidue);
+      if constexpr (zk_dtypes::internal::HasModulusLowCoeffs<ExtF>::value) {
+        // General monic modulus: encode the low coefficients of
+        // uᴺ ≡ Σⱼ mⱼ·uʲ as a DenseIntElementsAttr (the prime-base dense
+        // encoding ExtensionFieldType reserves for this).
+        SmallVector<APInt> mCoeffs;
+        for (size_t i = 0; i < N; ++i) {
+          mCoeffs.push_back(
+              convertToAPInt(ExtF::Config::kModulusLowCoeffs[i].value()));
+        }
+        auto modulusLowCoeffs = DenseIntElementsAttr::get(
+            RankedTensorType::get({static_cast<int64_t>(N)},
+                                  pfType.getStorageType()),
+            mCoeffs);
+        return ExtensionFieldType::get(context, N, pfType, modulusLowCoeffs);
+      } else {
+        IntegerAttr nonResidue =
+            convertToIntegerAttr(context, ExtF::Config::kNonResidue.value());
+        return ExtensionFieldType::get(context, N, pfType, nonResidue);
+      }
     } else {
       // Tower: base is extension field
       // For tower extensions, non-residue is an element in the base extension
@@ -596,9 +645,9 @@ private:
   template <typename>
   friend class VandermondeMatrix;
 
-  template <size_t N2, typename B2>
+  template <size_t N2, typename B2, bool G2>
   friend raw_ostream &operator<<(raw_ostream &os,
-                                 const ExtensionFieldOperation<N2, B2> &op);
+                                 const ExtensionFieldOperation<N2, B2, G2> &op);
 
   const std::array<BaseFieldT, N> &ToCoeffs() const { return coeffs; }
 
@@ -766,9 +815,9 @@ private:
   ExtensionFieldType efType;
 };
 
-template <size_t N, typename BaseFieldT>
+template <size_t N, typename BaseFieldT, bool G>
 raw_ostream &operator<<(raw_ostream &os,
-                        const ExtensionFieldOperation<N, BaseFieldT> &op) {
+                        const ExtensionFieldOperation<N, BaseFieldT, G> &op) {
   llvm::interleaveComma(op.coeffs, os, [&](const BaseFieldT &c) { os << c; });
   return os;
 }
@@ -777,6 +826,7 @@ raw_ostream &operator<<(raw_ostream &os,
 extern template class ExtensionFieldOperation<2, PrimeFieldOperation>;
 extern template class ExtensionFieldOperation<3, PrimeFieldOperation>;
 extern template class ExtensionFieldOperation<4, PrimeFieldOperation>;
+extern template class ExtensionFieldOperation<3, PrimeFieldOperation, true>;
 
 extern template raw_ostream &
 operator<<(raw_ostream &os,
@@ -787,6 +837,9 @@ operator<<(raw_ostream &os,
 extern template raw_ostream &
 operator<<(raw_ostream &os,
            const ExtensionFieldOperation<4, PrimeFieldOperation> &op);
+extern template raw_ostream &
+operator<<(raw_ostream &os,
+           const ExtensionFieldOperation<3, PrimeFieldOperation, true> &op);
 
 // Type aliases for non-tower extension fields (backward compatible)
 using QuadraticExtensionFieldOperation =
@@ -795,6 +848,11 @@ using CubicExtensionFieldOperation =
     ExtensionFieldOperation<3, PrimeFieldOperation>;
 using QuarticExtensionFieldOperation =
     ExtensionFieldOperation<4, PrimeFieldOperation>;
+// General-monic-modulus cubic (e.g. pil2-stark's x³ - x - 1 Goldilocks
+// extension): same shape, general fold + matrix inverse instead of the ξ
+// closed forms.
+using CubicGeneralModulusExtensionFieldOperation =
+    ExtensionFieldOperation<3, PrimeFieldOperation, true>;
 
 // Type aliases for tower extension fields
 // Tower over quadratic: e.g., Fp4 = (Fp2)^2, Fp6 = (Fp2)^3

@@ -21,5 +21,6 @@ namespace mlir::prime_ir::field {
 template class ExtensionFieldCodeGen<2, PrimeFieldCodeGen>;
 template class ExtensionFieldCodeGen<3, PrimeFieldCodeGen>;
 template class ExtensionFieldCodeGen<4, PrimeFieldCodeGen>;
+template class ExtensionFieldCodeGen<3, PrimeFieldCodeGen, true>;
 
 } // namespace mlir::prime_ir::field

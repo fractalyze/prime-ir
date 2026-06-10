@@ -29,6 +29,18 @@ FieldCodeGen::FieldCodeGen(Type type, Value value,
 
   ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
   auto efType = cast<ExtensionFieldType>(type);
+
+  // A dense non-residue on a prime base is the general-monic-modulus
+  // encoding; the tower-signature dispatch below would otherwise pick the
+  // binomial variant, whose lowering misreads the attribute.
+  if (efType.hasGeneralModulus()) {
+    assert(efType.getDegree() == 3 &&
+           "general-modulus lowering is cubic-only for now");
+    codeGen = CubicGeneralModulusExtensionFieldCodeGen(
+        value, efType.createModulusLowCoeffValues(*b));
+    return;
+  }
+
   Value nonResidue = efType.createNonResidueValue(*b);
 
   auto sig = getTowerSignature(efType);
@@ -70,8 +82,9 @@ FieldCodeGen applyBinaryOp(const FieldCodeGen::CodeGenType &a,
 template <typename T>
 struct IsExtensionFieldCodeGen : std::false_type {};
 
-template <size_t N, typename B>
-struct IsExtensionFieldCodeGen<ExtensionFieldCodeGen<N, B>> : std::true_type {
+template <size_t N, typename B, bool G>
+struct IsExtensionFieldCodeGen<ExtensionFieldCodeGen<N, B, G>>
+    : std::true_type {
   using BaseFieldT = B;
 };
 

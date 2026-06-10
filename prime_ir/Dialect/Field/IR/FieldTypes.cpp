@@ -404,6 +404,22 @@ ExtensionFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
     return success();
   }
 
+  // A DenseIntElementsAttr on a prime base encodes a general monic modulus
+  // uᴺ ≡ Σⱼ mⱼ·uʲ (e.g. pil2-stark's x³ - x - 1 as [1, 1, 0]) rather than a
+  // binomial non-residue. The binomial power test below does not apply, and
+  // irreducibility of a general modulus has no comparably cheap check — it is
+  // the registrant's responsibility (the zk_dtypes dtype this mirrors is
+  // golden-tested against its reference implementation).
+  if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(nonResidue)) {
+    if (denseAttr.getNumElements() != static_cast<int64_t>(degree)) {
+      return emitError() << "modulus low-coefficient count ("
+                         << denseAttr.getNumElements()
+                         << ") must equal the extension degree (" << degree
+                         << ")";
+    }
+    return success();
+  }
+
   // For direct extensions over prime fields, validate that nonResidue is
   // actually a non-residue: nonResidue^((p - 1) / n) ≢ 1 (mod p)
   auto pfType = cast<PrimeFieldType>(baseField);
@@ -454,12 +470,32 @@ Type ExtensionFieldType::parse(AsmParser &parser) {
     return nullptr;
   }
 
-  // Parse non-residue
+  // Parse non-residue: a scalar IntegerAttr (binomial uᴺ - ξ), or on a prime
+  // base a DenseIntElementsAttr of the general monic modulus's low
+  // coefficients (uᴺ ≡ Σⱼ mⱼ·uʲ).
   if (failed(parser.parseComma())) {
     return nullptr;
   }
-  IntegerAttr nonResidue;
-  if (failed(parser.parseAttribute(nonResidue))) {
+  Attribute nonResidueAttr;
+  if (failed(parser.parseAttribute(nonResidueAttr))) {
+    return nullptr;
+  }
+  if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(nonResidueAttr)) {
+    if (auto pfType = dyn_cast<PrimeFieldType>(baseFieldType);
+        pfType && pfType.getIsMontgomery()) {
+      nonResidueAttr = mod_arith::getAttrAsMontgomeryForm(
+          pfType.getModulus(), cast<DenseIntElementsAttr>(nonResidueAttr));
+    }
+    if (failed(parser.parseGreater())) {
+      return nullptr;
+    }
+    return ExtensionFieldType::get(parser.getContext(), degree, baseFieldType,
+                                   nonResidueAttr);
+  }
+  IntegerAttr nonResidue = dyn_cast<IntegerAttr>(nonResidueAttr);
+  if (!nonResidue) {
+    parser.emitError(parser.getCurrentLocation(),
+                     "non-residue must be an integer or dense-int attribute");
     return nullptr;
   }
 
@@ -492,8 +528,15 @@ void ExtensionFieldType::print(AsmPrinter &printer) const {
 
   if (auto pfType = dyn_cast<PrimeFieldType>(baseField)) {
     if (pfType.getIsMontgomery()) {
-      nonResidue = mod_arith::getAttrAsStandardForm(
-          pfType.getModulus(), cast<IntegerAttr>(nonResidue));
+      // Scalar = binomial non-residue; dense = general monic modulus low
+      // coefficients (prime base only).
+      if (auto intAttr = dyn_cast<IntegerAttr>(nonResidue)) {
+        nonResidue =
+            mod_arith::getAttrAsStandardForm(pfType.getModulus(), intAttr);
+      } else {
+        nonResidue = mod_arith::getAttrAsStandardForm(
+            pfType.getModulus(), cast<DenseIntElementsAttr>(nonResidue));
+      }
     }
   } else {
     auto efType = cast<ExtensionFieldType>(baseField);
@@ -669,6 +712,28 @@ Value ExtensionFieldType::createNonResidueValue(
 
   return ConstantOp::materialize(builder, nonResidueAttr, baseEfType,
                                  builder.getLoc());
+}
+
+bool ExtensionFieldType::hasGeneralModulus() const {
+  return isa<PrimeFieldType>(getBaseField()) &&
+         isa<DenseIntElementsAttr>(getNonResidue());
+}
+
+SmallVector<Value> ExtensionFieldType::createModulusLowCoeffValues(
+    ImplicitLocOpBuilder &builder) const {
+  // General-monic-modulus counterpart of createNonResidueValue: one mod_arith
+  // constant per low coefficient of uᴺ ≡ Σⱼ mⱼ·uʲ. Prime base only — a tower
+  // over a general-modulus field is future work.
+  assert(hasGeneralModulus());
+  auto pfType = cast<PrimeFieldType>(getBaseField());
+  auto denseAttr = cast<DenseIntElementsAttr>(getNonResidue());
+  SmallVector<Value> coeffs;
+  for (const APInt &c : denseAttr.getValues<APInt>()) {
+    coeffs.push_back(mod_arith::ConstantOp::create(
+        builder, convertPrimeFieldType(pfType),
+        IntegerAttr::get(pfType.getStorageType(), c)));
+  }
+  return coeffs;
 }
 
 Value ExtensionFieldType::buildStructFromCoeffs(

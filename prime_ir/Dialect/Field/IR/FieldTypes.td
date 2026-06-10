@@ -197,7 +197,12 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
   let parameters = (ins
     "unsigned": $degree,
     "Type": $baseField,  // Can be PrimeFieldType or ExtensionFieldType
-    "Attribute": $nonResidue  // IntegerAttr for simple, DenseIntElementsAttr for tower
+    // IntegerAttr: binomial non-residue ξ (u^N = ξ).
+    // DenseIntElementsAttr on an extension base: tower non-residue element.
+    // DenseIntElementsAttr on a prime base: the low coefficients of a general
+    // monic modulus u^N = Σⱼ mⱼ·uʲ (e.g. pil2-stark's x³ - x - 1 as
+    // dense<[1, 1, 0]>) — see createModulusLowCoeffValues.
+    "Attribute": $nonResidue
   );
   let extraClassDeclaration = [{
     // Returns the underlying prime field at the base of the tower.
@@ -222,6 +227,16 @@ def Field_ExtensionFieldType : Field_Type<"ExtensionField", "ef", [
 
     // Creates a Value representing the non-residue constant in the base field.
     Value createNonResidueValue(ImplicitLocOpBuilder &builder) const;
+
+    // Returns true if the non-residue attribute encodes a general monic
+    // modulus (dense low coefficients on a prime base) rather than a
+    // binomial non-residue.
+    bool hasGeneralModulus() const;
+
+    // Creates one base-field constant per low coefficient of the general
+    // monic modulus u^N = Σⱼ mⱼ·uʲ. Only valid when hasGeneralModulus().
+    SmallVector<Value> createModulusLowCoeffValues(
+        ImplicitLocOpBuilder &builder) const;
 
     Value buildStructFromCoeffs(ImplicitLocOpBuilder &builder,
                                 Type structType,

@@ -35,8 +35,14 @@ limitations under the License.
 
 namespace mlir::prime_ir::field {
 
-// Forward declaration
-template <size_t N, typename BaseFieldT = PrimeFieldCodeGen>
+// Forward declaration. GeneralModulus selects the general-monic-modulus
+// variant (uᴺ ≡ Σⱼ mⱼ·uʲ, a DenseIntElementsAttr non-residue on a prime
+// base): it exposes ModulusLowCoeffs(), which zk_dtypes' operation mixins
+// detect to route reduction/inverse through the general fold. The binomial
+// variant must not expose it, or every binomial lowering would emit the
+// general fold's extra multiplies.
+template <size_t N, typename BaseFieldT = PrimeFieldCodeGen,
+          bool GeneralModulus = false>
 class ExtensionFieldCodeGen;
 
 // Helper to select the appropriate base operation class.
@@ -52,9 +58,10 @@ struct ExtensionFieldOperationBase {
 
 namespace zk_dtypes {
 
-template <size_t N, typename BaseFieldT>
+template <size_t N, typename BaseFieldT, bool GeneralModulus>
 class ExtensionFieldOperationTraits<
-    mlir::prime_ir::field::ExtensionFieldCodeGen<N, BaseFieldT>> {
+    mlir::prime_ir::field::ExtensionFieldCodeGen<N, BaseFieldT,
+                                                 GeneralModulus>> {
 public:
   using BaseField = BaseFieldT;
   static constexpr size_t kDegree = N;
@@ -67,14 +74,21 @@ namespace mlir::prime_ir::field {
 // NOTE(chokobole): This class is not used directly. It is used to generate
 // MLIR operations that implement extension field arithmetic. User should use
 // FieldCodeGen instead.
-template <size_t N, typename BaseFieldT>
+template <size_t N, typename BaseFieldT, bool GeneralModulus>
 class ExtensionFieldCodeGen
     : public ExtensionFieldOperationBase<
-          N, BaseFieldT, ExtensionFieldCodeGen<N, BaseFieldT>>::Type,
-      public VandermondeMatrix<ExtensionFieldCodeGen<N, BaseFieldT>>,
-      public FrobeniusCoeffs<ExtensionFieldCodeGen<N, BaseFieldT>, N> {
+          N, BaseFieldT,
+          ExtensionFieldCodeGen<N, BaseFieldT, GeneralModulus>>::Type,
+      public VandermondeMatrix<
+          ExtensionFieldCodeGen<N, BaseFieldT, GeneralModulus>>,
+      public FrobeniusCoeffs<
+          ExtensionFieldCodeGen<N, BaseFieldT, GeneralModulus>, N> {
   using Base = typename ExtensionFieldOperationBase<
-      N, BaseFieldT, ExtensionFieldCodeGen<N, BaseFieldT>>::Type;
+      N, BaseFieldT,
+      ExtensionFieldCodeGen<N, BaseFieldT, GeneralModulus>>::Type;
+  static_assert(!GeneralModulus ||
+                    std::is_same_v<BaseFieldT, PrimeFieldCodeGen>,
+                "general-modulus extension fields must have a prime base");
 
 public:
   // Bring base class operators into scope. Without these, the derived class's
@@ -84,15 +98,34 @@ public:
   using Base::operator-;
   // TODO(junbeomlee): Remove these using declarations after refactoring
   // zk_dtypes to not define these methods in QuarticExtensionFieldOperation.
-  using VandermondeMatrix<
-      ExtensionFieldCodeGen<N, BaseFieldT>>::GetVandermondeInverseMatrix;
-  using FrobeniusCoeffs<ExtensionFieldCodeGen<N, BaseFieldT>,
+  using VandermondeMatrix<ExtensionFieldCodeGen<
+      N, BaseFieldT, GeneralModulus>>::GetVandermondeInverseMatrix;
+  using FrobeniusCoeffs<ExtensionFieldCodeGen<N, BaseFieldT, GeneralModulus>,
                         N>::GetFrobeniusCoeffs;
 
   ExtensionFieldCodeGen() = default;
+  template <bool G = GeneralModulus, std::enable_if_t<!G> * = nullptr>
   ExtensionFieldCodeGen(Value value, Value nonResidue)
       : value(value), nonResidue(nonResidue) {}
+  // General-modulus variant: one base-field Value per low coefficient of
+  // uᴺ ≡ Σⱼ mⱼ·uʲ (from ExtensionFieldType::createModulusLowCoeffValues).
+  template <bool G = GeneralModulus, std::enable_if_t<G> * = nullptr>
+  ExtensionFieldCodeGen(Value value, SmallVector<Value, 4> modulusLowCoeffs)
+      : value(value), modulusLowCoeffs(std::move(modulusLowCoeffs)) {}
   ~ExtensionFieldCodeGen() = default;
+
+  // Present only on the general-modulus variant; zk_dtypes' operation mixins
+  // detect this member (it must stay public — the detection trait is not a
+  // friend) and route through the general fold.
+  template <bool G = GeneralModulus, std::enable_if_t<G> * = nullptr>
+  std::array<BaseFieldT, N> ModulusLowCoeffs() const {
+    assert(modulusLowCoeffs.size() == N);
+    std::array<BaseFieldT, N> m;
+    for (size_t i = 0; i < N; ++i) {
+      m[i] = createBaseFieldCodeGen(modulusLowCoeffs[i]);
+    }
+    return m;
+  }
 
   operator Value() const { return value; }
 
@@ -142,7 +175,7 @@ public:
     std::array<BaseFieldT, N> coeffs;
     coeffs[0] = baseConst;
     for (size_t i = 1; i < N; ++i) {
-      coeffs[i] = NonResidue().CreateConst(0);
+      coeffs[i] = baseHandle().CreateConst(0);
     }
     return FromCoeffs(coeffs);
   }
@@ -176,10 +209,21 @@ public:
       coeffs.push_back(static_cast<Value>(values[i]));
     }
     ImplicitLocOpBuilder *b = BuilderContext::GetInstance().Top();
-    return {fromCoeffs(*b, value.getType(), coeffs), nonResidue};
+    Value composed = fromCoeffs(*b, value.getType(), coeffs);
+    if constexpr (GeneralModulus) {
+      return {composed, modulusLowCoeffs};
+    } else {
+      return {composed, nonResidue};
+    }
   }
 
-  BaseFieldT NonResidue() const { return createBaseFieldCodeGen(nonResidue); }
+  // Binomial-only: a general-modulus field has no scalar ξ, and gating the
+  // accessor turns any stray binomial-path call into a compile error instead
+  // of arithmetic on a null Value.
+  template <bool G = GeneralModulus, std::enable_if_t<!G> * = nullptr>
+  BaseFieldT NonResidue() const {
+    return createBaseFieldCodeGen(nonResidue);
+  }
 
   // Limb-aware algorithm selection for quartic extensions.
   // ToomCook's naive Vandermonde 7×7 matrix multiply generates ~30+ non-trivial
@@ -213,17 +257,27 @@ public:
   // Delegates to BaseFieldT::CreateConst() which handles the type-specific
   // logic.
   BaseFieldT createConstBaseField(int64_t x) const {
-    return NonResidue().CreateConst(x);
+    return baseHandle().CreateConst(x);
   }
 
   // Create a rational constant (numerator/denominator) in the base field.
   // Delegates to BaseFieldT::CreateRationalConst() which computes num/denom
   // at compile-time and creates a single constant op.
   BaseFieldT createRationalConstBaseField(int64_t num, int64_t denom) const {
-    return NonResidue().CreateRationalConst(num, denom);
+    return baseHandle().CreateRationalConst(num, denom);
   }
 
 private:
+  // A base-field element usable as a constant-creation handle: the scalar
+  // non-residue for binomial fields, the first modulus coefficient otherwise.
+  BaseFieldT baseHandle() const {
+    if constexpr (GeneralModulus) {
+      return createBaseFieldCodeGen(modulusLowCoeffs[0]);
+    } else {
+      return createBaseFieldCodeGen(nonResidue);
+    }
+  }
+
   BaseFieldT createBaseFieldCodeGen(Value v) const {
     if constexpr (std::is_same_v<BaseFieldT, PrimeFieldCodeGen>) {
       return PrimeFieldCodeGen(v);
@@ -238,13 +292,18 @@ private:
   }
 
   Value value;
+  // Binomial: the scalar ξ constant. General modulus: empty.
   Value nonResidue;
+  // General modulus: one constant per low coefficient of uᴺ ≡ Σⱼ mⱼ·uʲ.
+  // Binomial: empty.
+  SmallVector<Value, 4> modulusLowCoeffs;
 };
 
 // Explicit instantiations for non-tower extension fields
 extern template class ExtensionFieldCodeGen<2, PrimeFieldCodeGen>;
 extern template class ExtensionFieldCodeGen<3, PrimeFieldCodeGen>;
 extern template class ExtensionFieldCodeGen<4, PrimeFieldCodeGen>;
+extern template class ExtensionFieldCodeGen<3, PrimeFieldCodeGen, true>;
 
 // Type aliases for non-tower extension fields (backward compatible)
 using QuadraticExtensionFieldCodeGen =
@@ -252,6 +311,10 @@ using QuadraticExtensionFieldCodeGen =
 using CubicExtensionFieldCodeGen = ExtensionFieldCodeGen<3, PrimeFieldCodeGen>;
 using QuarticExtensionFieldCodeGen =
     ExtensionFieldCodeGen<4, PrimeFieldCodeGen>;
+// General-monic-modulus cubic (e.g. pil2-stark's x³ - x - 1): the general
+// fold + matrix inverse instead of the ξ closed forms.
+using CubicGeneralModulusExtensionFieldCodeGen =
+    ExtensionFieldCodeGen<3, PrimeFieldCodeGen, true>;
 
 // Type aliases for tower extension fields
 // Tower over quadratic: e.g., Fp4 = (Fp2)^2, Fp6 = (Fp2)^3
