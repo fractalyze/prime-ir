@@ -329,7 +329,8 @@ func.func @test_lower_mul_goldilocks(%lhs : !Goldilocks, %rhs : !Goldilocks)
   // CHECK:      %[[T0RAW:.*]] = arith.subi %[[LO]], %[[HIHI]] : i64
   // CHECK:      %[[T0COR:.*]] = arith.subi %[[T0RAW]], %{{.*}} : i64
   // CHECK:      %[[T0:.*]] = arith.select %[[BORROW]], %[[T0COR]], %[[T0RAW]] : i64
-  // CHECK:      %[[T1:.*]] = arith.muli %[[HILO]], %{{.*}} : i64
+  // CHECK:      %[[T1SHL:.*]] = arith.shli %[[HILO]], %{{.*}} : i64
+  // CHECK:      %[[T1:.*]] = arith.subi %[[T1SHL]], %[[HILO]] : i64
   // CHECK:      %[[SUM:.*]], %[[CARRY:.*]] = arith.addui_extended %[[T0]], %[[T1]] : i64, i1
   // CHECK:      %[[T2COR:.*]] = arith.addi %[[SUM]], %{{.*}} : i64
   // CHECK:      %[[T2:.*]] = arith.select %[[CARRY]], %[[T2COR]], %[[SUM]] : i64
@@ -355,7 +356,8 @@ func.func @test_lower_square_goldilocks(%lhs : !Goldilocks) -> !Goldilocks {
   // CHECK:      %[[T0RAW:.*]] = arith.subi %[[LO]], %[[HIHI]] : i64
   // CHECK:      %[[T0COR:.*]] = arith.subi %[[T0RAW]], %{{.*}} : i64
   // CHECK:      %[[T0:.*]] = arith.select %[[BORROW]], %[[T0COR]], %[[T0RAW]] : i64
-  // CHECK:      %[[T1:.*]] = arith.muli %[[HILO]], %{{.*}} : i64
+  // CHECK:      %[[T1SHL:.*]] = arith.shli %[[HILO]], %{{.*}} : i64
+  // CHECK:      %[[T1:.*]] = arith.subi %[[T1SHL]], %[[HILO]] : i64
   // CHECK:      %[[SUM:.*]], %[[CARRY:.*]] = arith.addui_extended %[[T0]], %[[T1]] : i64, i1
   // CHECK:      %[[T2COR:.*]] = arith.addi %[[SUM]], %{{.*}} : i64
   // CHECK:      %[[T2:.*]] = arith.select %[[CARRY]], %[[T2COR]], %[[SUM]] : i64

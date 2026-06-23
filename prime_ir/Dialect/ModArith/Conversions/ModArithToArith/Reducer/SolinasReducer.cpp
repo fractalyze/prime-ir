@@ -55,9 +55,12 @@ Value SolinasReducer::reduce(Value lo, Value hi) {
   Value t0Corr = arith::SubIOp::create(b, t0Raw, epsilon);
   Value t0 = arith::SelectOp::create(b, borrow, t0Corr, t0Raw);
 
-  // t1 = hi_lo · ε < 2^64 (both factors < 2^32), so the narrow multiply is
-  // exact — no high half needed.
-  Value t1 = arith::MulIOp::create(b, hiLo, epsilon);
+  // t1 = hi_lo · ε. Since ε = 2^32 - 1 and hi_lo < 2^32, this is
+  // (hi_lo << 32) - hi_lo, exact in 64 bits (hi_lo << 32 < 2^64, no borrow).
+  // Strength-reduced to shift+sub: ptxas keeps the multiply-by-immediate as a
+  // 64-bit IMAD otherwise, paid on every Goldilocks field multiply.
+  Value t1 =
+      arith::SubIOp::create(b, arith::ShLIOp::create(b, hiLo, half), hiLo);
 
   // t2 = t0 + t1; an add carry again means a 2^64 ≡ ε wrap, corrected by +ε.
   auto add = arith::AddUIExtendedOp::create(b, t0, t1);
