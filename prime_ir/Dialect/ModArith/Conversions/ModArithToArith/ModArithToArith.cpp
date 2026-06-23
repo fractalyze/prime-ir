@@ -103,6 +103,16 @@ namespace {
 // kp = ceil((umax + 1) / p) is derived on-the-fly when needed.
 using BoundMap = DenseMap<Value, APInt>;
 
+// True for the Goldilocks prime p = 2⁶⁴ - 2³² + 1. Its Solinas reduce is
+// correct for any product < 2¹²⁸ and yields a result in [0, 2⁶⁴) (kp = 2,
+// since p < 2⁶⁴ < 2p) before the canonicalizing subtract — so a Goldilocks
+// value can stay "gl64-lazy" in [0, 2⁶⁴) and a multiply/square consumer
+// absorbs it directly.
+bool isGoldilocksModulus(const APInt &modulus) {
+  return modulus.getActiveBits() <= 64 &&
+         modulus.getZExtValue() == zk_dtypes::Goldilocks::Config::kModulus;
+}
+
 // Derive kp from umax: kp = ceil((umax + 1) / p).
 uint64_t kpFromUmax(const APInt &umax, const APInt &p) {
   APInt umaxP1 = umax + 1;
@@ -250,6 +260,12 @@ bool canAcceptLazy(Operation *user, Value val, const APInt &valUmax,
     return it != boundMap.end() ? it->second : p - 1;
   };
 
+  // Goldilocks gl64: a multiply/square consumer reduces via Solinas, which is
+  // correct for any product < 2¹²⁸. A [0, 2⁶⁴) operand (the squared umax is
+  // < 2¹²⁸) needs no pre-reduction, so the lazy value is absorbed directly.
+  if (isGoldilocksModulus(p) && isa<MulOp, SquareOp>(user))
+    return true;
+
   if (auto addOp = dyn_cast<AddOp>(user)) {
     Value other = (addOp.getLhs() == val) ? addOp.getRhs() : addOp.getLhs();
     return (valUmax + getUmax(other)).ule(wMax);
@@ -338,6 +354,10 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
         umax = getOpUmax(doubleOp.getInput()) * APInt(dw, 2);
       } else if (isa<MontMulOp, MontSquareOp, MontReduceOp>(op)) {
         umax = p * APInt(dw, 2) - 1;
+      } else if (isa<MulOp, SquareOp>(op) && isGoldilocksModulus(p)) {
+        // gl64-lazy: the Solinas reduce yields a value in [0, 2⁶⁴) before its
+        // canonicalizing subtract; skipping that leaves the result here.
+        umax = APInt::getMaxValue(w).zext(dw);
       } else if (isa<ConstantOp>(op)) {
         auto *lattice =
             solver.lookupState<dataflow::IntegerValueRangeLattice>(result);
@@ -888,11 +908,8 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
   }
 };
 
-struct ConvertMul : public OpConversionPattern<MulOp> {
-  explicit ConvertMul(MLIRContext *context)
-      : OpConversionPattern<MulOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+struct ConvertMul : public BoundMapPattern<MulOp> {
+  using BoundMapPattern::BoundMapPattern;
 
   LogicalResult
   matchAndRewrite(MulOp op, OpAdaptor adaptor,
@@ -1051,8 +1068,12 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
     if (isGoldilocks) {
       auto prod =
           arith::MulUIExtendedOp::create(b, adaptor.getLhs(), adaptor.getRhs());
-      rewriter.replaceOp(
-          op, SolinasReducer(b, modType).reduce(prod.getLow(), prod.getHigh()));
+      // gl64-lazy: when every consumer accepts a [0, 2⁶⁴) operand, skip the
+      // canonicalizing subtract (kp of the result is >= 2).
+      uint64_t resBound = lookupKp(op.getResult());
+      rewriter.replaceOp(op, SolinasReducer(b, modType)
+                                 .reduce(prod.getLow(), prod.getHigh(),
+                                         /*lazy=*/resBound >= 2));
       return success();
     }
 
@@ -1351,11 +1372,8 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
 
 } // namespace
 
-struct ConvertSquare : public OpConversionPattern<SquareOp> {
-  explicit ConvertSquare(MLIRContext *context)
-      : OpConversionPattern<SquareOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+struct ConvertSquare : public BoundMapPattern<SquareOp> {
+  using BoundMapPattern::BoundMapPattern;
 
   LogicalResult
   matchAndRewrite(SquareOp op, OpAdaptor adaptor,
@@ -1380,8 +1398,10 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
         modulus.getBitWidth() == 64 &&
         modulus == APInt(64, zk_dtypes::Goldilocks::Config::kModulus);
     if (isGoldilocks) {
+      uint64_t resBound = lookupKp(op.getResult());
       rewriter.replaceOp(
-          op, SolinasReducer(b, modType).reduce(result.lo, result.hi));
+          op, SolinasReducer(b, modType)
+                  .reduce(result.lo, result.hi, /*lazy=*/resBound >= 2));
       return success();
     }
 
@@ -1563,7 +1583,9 @@ void ModArithToArith::runOnOperation() {
       ConvertMontMul,
       ConvertMontReduce,
       ConvertMontSquare,
+      ConvertMul,
       ConvertNegate,
+      ConvertSquare,
       ConvertSub
       // clang-format on
       >(typeConverter, context, bm);
@@ -1574,8 +1596,6 @@ void ModArithToArith::runOnOperation() {
       ConvertBitcast,
       ConvertConstant,
       ConvertFromMont,
-      ConvertMul,
-      ConvertSquare,
       ConvertToMont
       // clang-format on
       >(typeConverter, context);

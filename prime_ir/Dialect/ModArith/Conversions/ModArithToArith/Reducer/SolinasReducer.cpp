@@ -35,7 +35,7 @@ SolinasReducer::SolinasReducer(ImplicitLocOpBuilder &b,
          "p = 2^64 - 2^32 + 1");
 }
 
-Value SolinasReducer::reduce(Value lo, Value hi) {
+Value SolinasReducer::reduce(Value lo, Value hi, bool lazy) {
   Type t = lo.getType();
   auto konst = [&](uint64_t v) {
     return arith::ConstantOp::create(b, t, b.getIntegerAttr(t, v));
@@ -69,6 +69,9 @@ Value SolinasReducer::reduce(Value lo, Value hi) {
       arith::SelectOp::create(b, add.getOverflow(), t2Corr, add.getSum());
 
   // t2 < 2^64 < 2p, but may be ≥ p; one conditional subtract canonicalizes.
+  // In lazy (gl64) mode we keep t2 in [0, 2^64) and let the consumer reduce.
+  if (lazy)
+    return t2;
   Value p = konst(modAttr.getValue().getZExtValue());
   Value ge = arith::CmpIOp::create(b, arith::CmpIPredicate::uge, t2, p);
   Value sub = arith::SubIOp::create(b, t2, p);

@@ -513,3 +513,38 @@ func.func @test_consumer_aware_add_mont_square(%a : !Zp, %b : !Zp) -> !Zp {
   %r = mod_arith.mont_square %sum : !Zp
   return %r : !Zp
 }
+
+// -----
+
+// Goldilocks gl64 lazy: p = 2⁶⁴ - 2³² + 1 uses the Solinas reducer, whose
+// output `t2` is already in [0, 2⁶⁴) before the final canonicalizing subtract.
+// Because the reduction is correct for any product < 2¹²⁸ (not just < p²), a
+// mul result feeding only another mul/square can stay in [0, 2⁶⁴): the
+// consuming multiply absorbs it directly, so the trailing `cmpi uge`/subtract
+// is dropped. Reduction is mod-p preserving, so the result is byte-identical.
+!Glz = !mod_arith.int<18446744069414584321 : i64>
+
+// First mul feeds only the second mul → lazy (no canonicalizing `cmpi uge`
+// between the two `mului_extended`s). Second mul feeds `return` → canonical.
+// LAZY-LABEL:     @test_lazy_mul_chain_goldilocks
+// LAZY:           arith.mului_extended
+// LAZY:           arith.addui_extended
+// LAZY:           arith.select
+// LAZY-NOT:       arith.cmpi uge
+// LAZY:           arith.mului_extended
+// LAZY:           arith.cmpi uge
+// LAZY:           arith.select
+// LAZY:           return
+
+// Eager: both muls canonicalize (a `cmpi uge` after each `mului_extended`).
+// EAGER-LABEL:    @test_lazy_mul_chain_goldilocks
+// EAGER:          arith.mului_extended
+// EAGER:          arith.cmpi uge
+// EAGER:          arith.mului_extended
+// EAGER:          arith.cmpi uge
+// EAGER:          return
+func.func @test_lazy_mul_chain_goldilocks(%a : !Glz, %b : !Glz) -> !Glz {
+  %p1 = mod_arith.mul %a, %b : !Glz
+  %p2 = mod_arith.mul %p1, %b : !Glz
+  return %p2 : !Glz
+}
