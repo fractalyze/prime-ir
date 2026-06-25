@@ -520,31 +520,63 @@ func.func @test_consumer_aware_add_mont_square(%a : !Zp, %b : !Zp) -> !Zp {
 // output `t2` is already in [0, 2⁶⁴) before the final canonicalizing subtract.
 // Because the reduction is correct for any product < 2¹²⁸ (not just < p²), a
 // mul result feeding only another mul/square can stay in [0, 2⁶⁴): the
-// consuming multiply absorbs it directly, so the trailing `cmpi uge`/subtract
-// is dropped. Reduction is mod-p preserving, so the result is byte-identical.
+// consuming multiply absorbs it directly, so the trailing canonicalizing
+// subtract (`subi` + `minui`) is dropped. Reduction is mod-p preserving, so the
+// result is byte-identical.
 !Glz = !mod_arith.int<18446744069414584321 : i64>
 
-// First mul feeds only the second mul → lazy (no canonicalizing `cmpi uge`
+// First mul feeds only the second mul → lazy (no canonicalizing `minui`
 // between the two `mului_extended`s). Second mul feeds `return` → canonical.
+// The Solinas tail canonicalizes via `subi` + `minui` (the `cmpi`+`select`
+// form costs one extra ALU op); the only `cmpi` inside the reduce body is the
+// `ult` borrow check, so `minui` uniquely marks canonicalization.
 // LAZY-LABEL:     @test_lazy_mul_chain_goldilocks
 // LAZY:           arith.mului_extended
 // LAZY:           arith.addui_extended
 // LAZY:           arith.select
-// LAZY-NOT:       arith.cmpi uge
+// LAZY-NOT:       arith.minui
 // LAZY:           arith.mului_extended
-// LAZY:           arith.cmpi uge
-// LAZY:           arith.select
+// LAZY:           arith.minui
 // LAZY:           return
 
-// Eager: both muls canonicalize (a `cmpi uge` after each `mului_extended`).
+// Eager: both muls canonicalize (a `minui` after each `mului_extended`).
 // EAGER-LABEL:    @test_lazy_mul_chain_goldilocks
 // EAGER:          arith.mului_extended
-// EAGER:          arith.cmpi uge
+// EAGER:          arith.minui
 // EAGER:          arith.mului_extended
-// EAGER:          arith.cmpi uge
+// EAGER:          arith.minui
 // EAGER:          return
 func.func @test_lazy_mul_chain_goldilocks(%a : !Glz, %b : !Glz) -> !Glz {
   %p1 = mod_arith.mul %a, %b : !Glz
   %p2 = mod_arith.mul %p1, %b : !Glz
   return %p2 : !Glz
+}
+
+// -----
+
+// Goldilocks gl64 lazy ADD: a full-width add (modWidth == storageWidth == 64)
+// can carry-fold its result into [0, 2^64) instead of canonicalizing, since
+// 2^64 ≡ ε (mod p). Valid when at most one operand is gl64 (so the +ε can't
+// double-overflow) and the consumer accepts a non-canonical operand. An add
+// feeding a multiply is lazy (carry-fold: addui_extended + select + addi, no
+// minui); an add feeding `return` stays canonical (subi + minui + select).
+!Gla = !mod_arith.int<18446744069414584321 : i64>
+
+// LAZY-LABEL:     @test_lazy_add_goldilocks
+// LAZY:           arith.addui_extended
+// LAZY:           arith.select
+// LAZY:           arith.addi
+// LAZY-NOT:       arith.minui
+// LAZY:           arith.mului_extended
+// LAZY:           return
+
+// EAGER-LABEL:    @test_lazy_add_goldilocks
+// EAGER:          arith.addui_extended
+// EAGER:          arith.subi
+// EAGER:          arith.minui
+// EAGER:          return
+func.func @test_lazy_add_goldilocks(%a : !Gla, %b : !Gla, %c : !Gla) -> !Gla {
+  %s = mod_arith.add %a, %b : !Gla
+  %r = mod_arith.mul %s, %c : !Gla
+  return %r : !Gla
 }

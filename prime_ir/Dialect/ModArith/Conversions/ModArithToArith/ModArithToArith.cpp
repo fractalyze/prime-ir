@@ -268,7 +268,15 @@ bool canAcceptLazy(Operation *user, Value val, const APInt &valUmax,
 
   if (auto addOp = dyn_cast<AddOp>(user)) {
     Value other = (addOp.getLhs() == val) ? addOp.getRhs() : addOp.getLhs();
-    return (valUmax + getUmax(other)).ule(wMax);
+    APInt total = valUmax + getUmax(other);
+    // Goldilocks full-width add carry-folds the result into [0, 2⁶⁴) instead of
+    // canonicalizing (2⁶⁴ ≡ ε mod p). That single fold is exact as long as the
+    // sum cannot double-overflow, i.e. total < 2⁶⁴ + p — which holds whenever at
+    // least one operand is canonical. So a gl64 value can stay lazy through an
+    // add with a canonical partner (but not through one with another gl64).
+    if (isGoldilocksModulus(p))
+      return total.ult(APInt::getOneBitSet(dw, w) + p);
+    return total.ule(wMax);
   }
   if (auto subOp = dyn_cast<SubOp>(user)) {
     if (subOp.getLhs() == val) {
@@ -345,10 +353,22 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
 
       APInt umax = defaultUmax;
       if (auto addOp = dyn_cast<AddOp>(op)) {
-        umax = getOpUmax(addOp.getLhs()) + getOpUmax(addOp.getRhs());
+        // Goldilocks full-width add carry-folds into [0, 2⁶⁴) (gl64-lazy), like
+        // the mul case; non-Goldilocks adds keep the raw lhs+rhs bound.
+        if (isGoldilocksModulus(p))
+          umax = APInt::getMaxValue(w).zext(dw);
+        else
+          umax = getOpUmax(addOp.getLhs()) + getOpUmax(addOp.getRhs());
       } else if (auto subOp = dyn_cast<SubOp>(op)) {
+        // Lazy sub computes lhs - rhs + rhsKp·p (a non-negative representative
+        // without a conditional subtract). That only fits in w bits when
+        // lhsUmax + rhsKp·p <= 2^w - 1. For full-width moduli (Goldilocks)
+        // lhs + p already overflows i64, so the result cannot stay lazy — record
+        // the canonical bound and let ConvertSub emit getCanonicalDiff.
         uint64_t rhsKp = kpFromUmax(getOpUmax(subOp.getRhs()), p);
-        umax = getOpUmax(subOp.getLhs()) + p * APInt(dw, rhsKp);
+        APInt lazyUmax = getOpUmax(subOp.getLhs()) + p * APInt(dw, rhsKp);
+        umax = lazyUmax.ule(APInt::getMaxValue(w).zext(dw)) ? lazyUmax
+                                                            : defaultUmax;
       } else if (isa<DoubleOp>(op)) {
         auto doubleOp = cast<DoubleOp>(op);
         umax = getOpUmax(doubleOp.getInput()) * APInt(dw, 2);
@@ -375,31 +395,53 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
   // field.ext_from_coeffs, func.return, mod_arith.inverse), the value must be
   // reduced — a lazy value would propagate unreduced through ext_from_coeffs →
   // ext_to_coeffs round-trips where the bound information is lost.
-  SmallVector<Value> toErase;
-  for (auto &[val, umax] : boundMap) {
-    Operation *defOp = val.getDefiningOp();
-    if (!defOp)
-      continue;
-    auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(val.getType()));
-    if (!modType)
-      continue;
-    unsigned w = modType.getTypeSizeInBits();
-    unsigned dw = 2 * w;
-    APInt p = modType.getModulus().getValue().zext(dw);
-    if (kpFromUmax(umax, p) <= 1)
-      continue;
-    bool allBenefit = true;
-    for (Operation *user : val.getUsers()) {
-      if (!canAcceptLazy(user, val, umax, boundMap, p, w)) {
-        allBenefit = false;
-        break;
+  //
+  // When two lazy values block each other (a value and its add partner are both
+  // gl64, so neither add can absorb the other), canonicalizing ONE unblocks the
+  // rest. The Goldilocks diffusion is the motivating case: one column-sum is
+  // shared by 16 adds, each pairing it with a distinct gl64 product. Erasing the
+  // single high-fanout sum (1 reduction) lets all 16 low-fanout products stay
+  // lazy; erasing the products instead would cost 16. So visit candidates by
+  // descending fanout and erase immediately: a widely-shared value is reduced
+  // first, and its now-canonical value lets its many partners pass their check.
+  SmallVector<Value> candidates;
+  for (auto &[val, umax] : boundMap)
+    if (val.getDefiningOp())
+      candidates.push_back(val);
+  llvm::stable_sort(candidates, [](Value a, Value b) {
+    return std::distance(a.user_begin(), a.user_end()) >
+           std::distance(b.user_begin(), b.user_end());
+  });
+
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (Value val : candidates) {
+      auto it = boundMap.find(val);
+      if (it == boundMap.end())
+        continue; // already forced canonical
+      auto modType =
+          dyn_cast<ModArithType>(getElementTypeOrSelf(val.getType()));
+      if (!modType)
+        continue;
+      unsigned w = modType.getTypeSizeInBits();
+      unsigned dw = 2 * w;
+      APInt p = modType.getModulus().getValue().zext(dw);
+      if (kpFromUmax(it->second, p) <= 1)
+        continue;
+      bool allBenefit = true;
+      for (Operation *user : val.getUsers()) {
+        if (!canAcceptLazy(user, val, it->second, boundMap, p, w)) {
+          allBenefit = false;
+          break;
+        }
+      }
+      if (!allBenefit) {
+        boundMap.erase(val);
+        changed = true;
       }
     }
-    if (!allBenefit)
-      toErase.push_back(val);
   }
-  for (Value v : toErase)
-    boundMap.erase(v);
 }
 
 } // namespace
@@ -725,7 +767,29 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     APInt wMax = APInt::getMaxValue(storageWidth).zext(dw);
     APInt p = modArithType.getModulus().getValue().zext(dw);
     APInt sumMax = lhsUmax + rhsUmax;
-    if (sumMax.ugt(wMax)) {
+
+    // Goldilocks full-width add can carry-fold its result into [0, 2⁶⁴)
+    // (gl64-lazy) when a consumer accepts a non-canonical operand (resBound > 1),
+    // skipping the canonicalizing subtract. 2⁶⁴ ≡ ε (mod p), so a single
+    // conditional +ε on the carry suffices — but only if the operands cannot
+    // double-overflow (total < 2⁶⁴ + p), i.e. at most one is gl64.
+    bool wantLazyGl64 =
+        modWidth == storageWidth && resBound > 1 && isGoldilocksModulus(p);
+
+    if (wantLazyGl64) {
+      // Pre-reduce ONLY to prevent double-overflow: if both operands are
+      // non-canonical, reduce one so the sum stays < 2⁶⁴ + p.
+      APInt dblOverflow = APInt::getOneBitSet(dw, storageWidth) + p; // 2⁶⁴ + p
+      if (sumMax.uge(dblOverflow)) {
+        uint64_t lhsKp = kpFromUmax(lhsUmax, p);
+        uint64_t rhsKp = kpFromUmax(rhsUmax, p);
+        if (rhsKp > 1)
+          rhs = montReducer.getCanonicalFromExtended(rhs, rhsKp);
+        else if (lhsKp > 1)
+          lhs = montReducer.getCanonicalFromExtended(lhs, lhsKp);
+      }
+    } else if (sumMax.ugt(wMax)) {
+      // Canonical path: pre-reduce lazy inputs whose umax sum overflows w bits.
       // Try reducing only one operand when that alone avoids overflow.
       uint64_t lhsKp = kpFromUmax(lhsUmax, p);
       uint64_t rhsKp = kpFromUmax(rhsUmax, p);
@@ -747,11 +811,25 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     Value result;
     if (modWidth == storageWidth) {
       auto add = arith::AddUIExtendedOp::create(b, lhs, rhs);
-      // In the full-width case (modWidth == storageWidth), A + B can exceed the
-      // storage type range, producing an overflow bit, so lazy reduction is not
-      // possible.
-      result =
-          montReducer.getCanonicalFromExtended(add.getSum(), add.getOverflow());
+      if (wantLazyGl64) {
+        // gl64-lazy: fold the carry as +ε (2⁶⁴ ≡ ε mod p), leaving the result in
+        // [0, 2⁶⁴). No compare-vs-p — a multiply or canonical-add consumer
+        // absorbs it. Pre-reduction above guarantees at most one gl64 operand,
+        // so the +ε never double-overflows.
+        APInt epsilon = APInt::getOneBitSet(storageWidth, storageWidth / 2) -
+                        APInt(storageWidth, 1); // 2³² - 1
+        Value eps = createScalarOrSplatConstant(b, b.getLoc(), lhs.getType(),
+                                                epsilon);
+        Value zero =
+            createScalarOrSplatConstant(b, b.getLoc(), lhs.getType(), 0);
+        Value corr = arith::SelectOp::create(b, add.getOverflow(), eps, zero);
+        result = arith::AddIOp::create(b, add.getSum(), corr);
+      } else {
+        // Full-width canonical: A + B can exceed the storage range, so fold the
+        // overflow bit into a canonical [0, p) result.
+        result = montReducer.getCanonicalFromExtended(add.getSum(),
+                                                      add.getOverflow());
+      }
     } else {
       // nuw (no unsigned wrap) is safe when storageWidth - modWidth >= 1.
       // nsw (no signed wrap) is only safe when storageWidth - modWidth >= 2,
@@ -862,6 +940,9 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
     unsigned dw = 2 * w;
     APInt wMax = APInt::getMaxValue(w).zext(dw);
     APInt p = modType.getModulus().getValue().zext(dw);
+    // For a full-width modulus (e.g. Goldilocks) the lazy sub's lhs + rhsKp·p
+    // already overflows w bits, so it cannot stay lazy — always canonicalize.
+    bool fullWidth = modType.getModulus().getValue().getActiveBits() == w;
     uint64_t lhsKp = kpFromUmax(lhsUmax, p);
     uint64_t rhsKp = kpFromUmax(rhsUmax, p);
     APInt resultMax = lhsUmax + p * APInt(dw, rhsKp);
@@ -884,7 +965,7 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
       }
     }
 
-    if (resBound > 1) {
+    if (resBound > 1 && !fullWidth) {
       // Lazy sub: (lhs - rhs + correction) without final conditional sub.
       // correction = rhsKp * p ensures lhs + correction - rhs >= 0.
       APInt modulus = modType.getModulus().getValue();
