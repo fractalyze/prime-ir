@@ -49,6 +49,13 @@ public:
   FieldCodeGen dbl() const;
   FieldCodeGen square() const;
   FieldCodeGen inverse() const;
+  // Exponentiation by a compile-time constant via MSB-first
+  // square-and-multiply. The exponent bits are known at build time, so this
+  // emits a fully unrolled, branch-free chain of squarings and multiplications
+  // (no data-dependent control flow). `exp` must be non-zero. Used to realize
+  // the Fermat's-little-theorem inverse (x^(p-2)), which is divergence-free on
+  // GPU unlike the Bernstein-Yang safegcd loop.
+  FieldCodeGen pow(const APInt &exp) const;
 
 private:
   CodeGenType codeGen;

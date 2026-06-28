@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldCodeGen.h"
 
+#include "llvm/ADT/APInt.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Utils/BuilderContext.h"
 
@@ -167,6 +168,21 @@ FieldCodeGen FieldCodeGen::square() const {
 
 FieldCodeGen FieldCodeGen::inverse() const {
   return applyUnaryOp(codeGen, [](const auto &v) { return v.Inverse(); });
+}
+
+FieldCodeGen FieldCodeGen::pow(const APInt &exp) const {
+  assert(!exp.isZero() && "pow() exponent must be non-zero");
+  // MSB-first square-and-multiply, seeded with the base so no multiplicative
+  // identity constant is needed. With `exp` known at build time the loop is
+  // fully unrolled into straight-line IR. Walk the bits below the MSB, high to
+  // low.
+  FieldCodeGen result = *this;
+  for (unsigned i = exp.getActiveBits() - 1; i-- > 0;) {
+    result = result.square();
+    if (exp[i])
+      result = result * (*this);
+  }
+  return result;
 }
 
 } // namespace mlir::prime_ir::field

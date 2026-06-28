@@ -56,6 +56,20 @@ def FieldToModArith : Pass<"field-to-mod-arith", "ModuleOp"> {
            "scalar inverse instead of Montgomery batch inverse. "
            "Preferred for GPU targets where parallel per-element inverse "
            "is faster than sequential batch inverse.">,
+    Option<"inverseAlgorithm", "inverse-algorithm", "std::string",
+           /*default=*/"\"bernstein-yang\"",
+           "Algorithm for prime-field scalar inverse:\n"
+           "  'bernstein-yang' (default) - safegcd loop (data-dependent "
+           "control flow), the device-neutral choice;\n"
+           "  'fermat'         - x^(p-2) as a fully unrolled, branch-free "
+           "square-and-multiply chain (divergence-free, but its cost grows "
+           "with field width);\n"
+           "  'auto'           - Fermat for small prime fields (modulus "
+           "<= 64 bits), Bernstein-Yang otherwise. The crossover is "
+           "GPU-specific (Fermat avoids warp divergence for small fields but "
+           "overtakes Bernstein-Yang's cost for wide ones), so a target that "
+           "benefits (e.g. the GPU backend) opts in rather than this being the "
+           "default. Extension-field inverse always uses Bernstein-Yang.">,
   ];
 }
 

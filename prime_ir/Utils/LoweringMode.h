@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef PRIME_IR_UTILS_LOWERINGMODE_H_
 #define PRIME_IR_UTILS_LOWERINGMODE_H_
 
+#include <optional>
+
 #include "llvm/ADT/StringRef.h"
 
 namespace mlir::prime_ir {
@@ -38,13 +40,16 @@ enum class LoweringMode {
 };
 
 /// Parse the lowering mode from a string.
-/// Returns LoweringMode::Inline for unrecognized values.
-inline LoweringMode parseLoweringMode(llvm::StringRef mode) {
+/// Returns std::nullopt for unrecognized values so the caller can fail fast
+/// instead of silently selecting a default.
+inline std::optional<LoweringMode> parseLoweringMode(llvm::StringRef mode) {
+  if (mode == "inline")
+    return LoweringMode::Inline;
   if (mode == "auto")
     return LoweringMode::Auto;
   if (mode == "aot_runtime")
     return LoweringMode::AOTRuntime;
-  return LoweringMode::Inline;
+  return std::nullopt;
 }
 
 /// Convert lowering mode to string for debugging/logging.

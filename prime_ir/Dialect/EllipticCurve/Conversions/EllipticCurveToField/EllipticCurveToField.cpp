@@ -836,7 +836,14 @@ void EllipticCurveToField::runOnOperation() {
   ModuleOp module = getOperation();
 
   // Parse lowering mode option
-  LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
+  std::optional<LoweringMode> parsedMode =
+      mlir::prime_ir::parseLoweringMode(loweringMode);
+  if (!parsedMode) {
+    module.emitError() << "invalid lowering-mode option: '" << loweringMode
+                       << "' (expected 'inline', 'auto', or 'aot_runtime')";
+    return signalPassFailure();
+  }
+  LoweringMode mode = *parsedMode;
 
   ConversionTarget target(*context);
   target.addIllegalOp<
