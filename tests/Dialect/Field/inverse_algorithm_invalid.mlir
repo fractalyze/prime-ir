@@ -18,6 +18,10 @@
 // RUN: not prime-ir-opt -field-to-mod-arith="inverse-algorithm=fermt" %s 2>&1 | FileCheck %s --check-prefix=BADINV
 // BADINV: invalid inverse-algorithm option: 'fermt'
 
+// Likewise for an unrecognized lowering-mode value.
+// RUN: not prime-ir-opt -field-to-mod-arith="lowering-mode=bogus" %s 2>&1 | FileCheck %s --check-prefix=BADMODE
+// BADMODE: invalid lowering-mode option: 'bogus'
+
 !PF = !field.pf<97:i32, true>
 
 func.func @inv(%arg0: !PF) -> !PF {

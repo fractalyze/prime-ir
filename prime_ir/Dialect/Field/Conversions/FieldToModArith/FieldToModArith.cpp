@@ -978,7 +978,14 @@ void FieldToModArith::runOnOperation() {
   ModuleOp module = getOperation();
   FieldToModArithTypeConverter typeConverter(context);
 
-  LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
+  std::optional<LoweringMode> parsedMode =
+      mlir::prime_ir::parseLoweringMode(loweringMode);
+  if (!parsedMode) {
+    module.emitError() << "invalid lowering-mode option: '" << loweringMode
+                       << "' (expected 'inline', 'auto', or 'aot_runtime')";
+    return signalPassFailure();
+  }
+  LoweringMode mode = *parsedMode;
 
   std::optional<InverseAlgorithm> inverseAlgo =
       parseInverseAlgorithm(inverseAlgorithm);
