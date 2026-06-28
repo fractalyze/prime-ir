@@ -61,6 +61,22 @@ namespace mlir::prime_ir::field {
 
 namespace {
 
+// Algorithm for a prime-field scalar inverse. Mirrors the `loweringMode`
+// string-option-to-enum idiom (see Utils/LoweringMode.h).
+enum class InverseAlgorithm { BernsteinYang, Fermat, Auto };
+
+// Returns std::nullopt for unrecognized values so the caller can fail fast
+// instead of silently selecting a default.
+std::optional<InverseAlgorithm> parseInverseAlgorithm(StringRef algorithm) {
+  if (algorithm == "bernstein-yang")
+    return InverseAlgorithm::BernsteinYang;
+  if (algorithm == "fermat")
+    return InverseAlgorithm::Fermat;
+  if (algorithm == "auto")
+    return InverseAlgorithm::Auto;
+  return std::nullopt;
+}
+
 // ---- AOT Runtime helpers ----
 
 // Check if AOTRuntime should be used for this extension field operation.
@@ -446,17 +462,43 @@ struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
   using Base = ConvertFieldOpBase<InverseOp, ConvertInverse>;
 
   ConvertInverse(const TypeConverter &converter, MLIRContext *context,
-                 AOTConfig aotConfig, bool useElementwiseInverse)
+                 AOTConfig aotConfig, bool useElementwiseInverse,
+                 InverseAlgorithm inverseAlgorithm)
       : Base(converter, context, aotConfig),
-        useElementwiseInverse(useElementwiseInverse) {}
+        useElementwiseInverse(useElementwiseInverse),
+        inverseAlgorithm(inverseAlgorithm) {}
 
   std::optional<std::string> getAOTFuncName(Type fieldType) const {
     return getFieldAOTFuncName("inverse", fieldType);
   }
   Value emitInlineCodeGen(InverseOp op, OpAdaptor adaptor) const {
     Type fieldType = getElementTypeOrSelf(op.getOutput());
-    return FieldCodeGen(fieldType, adaptor.getInput(), this->typeConverter)
-        .inverse();
+    return emitScalarInverse(fieldType, adaptor.getInput());
+  }
+
+  // Fermat's-little-theorem inverse (x^(p-2)) emits a fully unrolled,
+  // branch-free square-and-multiply chain, which is divergence-free on GPU but
+  // grows ~p_bits multiplications of p_bits/64-limb operands. It beats the
+  // Bernstein-Yang safegcd loop for small fields and loses for wide ones, so
+  // `auto` gates on modulus width. Fermat is implemented for prime fields
+  // only; extension fields always use Bernstein-Yang.
+  static constexpr unsigned kFermatMaxModulusBits = 64;
+
+  Value emitScalarInverse(Type fieldType, Value value) const {
+    FieldCodeGen cg(fieldType, value, this->typeConverter);
+    if (auto pf = dyn_cast<PrimeFieldType>(fieldType)) {
+      APInt modulus = pf.getModulus().getValue();
+      bool useFermat = inverseAlgorithm == InverseAlgorithm::Fermat ||
+                       (inverseAlgorithm == InverseAlgorithm::Auto &&
+                        modulus.getActiveBits() <= kFermatMaxModulusBits);
+      if (useFermat) {
+        // PrimeFieldType rejects power-of-2 moduli, so p >= 3 and the Fermat
+        // exponent p - 2 >= 1 — never zero, as pow() requires.
+        APInt exp = modulus - 2;
+        return cg.pow(exp);
+      }
+    }
+    return cg.inverse();
   }
 
   LogicalResult
@@ -599,7 +641,7 @@ private:
     if (rank == 0) {
       Value elem = tensor::ExtractOp::create(b, input, ValueRange{});
       ScopedBuilderContext scopedCtx(&b);
-      Value inv = FieldCodeGen(fieldType, elem, this->typeConverter).inverse();
+      Value inv = emitScalarInverse(fieldType, elem);
       Value result =
           tensor::FromElementsOp::create(b, convertedTensorType, inv);
       rewriter.replaceOp(op, result);
@@ -623,8 +665,7 @@ private:
         [&](OpBuilder &nestedBuilder, Location nestedLoc, ValueRange args) {
           ImplicitLocOpBuilder lb(nestedLoc, nestedBuilder);
           ScopedBuilderContext scopedCtx(&lb);
-          Value inv =
-              FieldCodeGen(fieldType, args[0], this->typeConverter).inverse();
+          Value inv = emitScalarInverse(fieldType, args[0]);
           linalg::YieldOp::create(lb, ValueRange{inv});
         });
     rewriter.replaceOp(op, genericOp.getResults());
@@ -632,6 +673,7 @@ private:
   }
 
   bool useElementwiseInverse;
+  InverseAlgorithm inverseAlgorithm;
 };
 
 struct ConvertNegate : ConvertFieldOpBase<NegateOp, ConvertNegate> {
@@ -938,6 +980,15 @@ void FieldToModArith::runOnOperation() {
 
   LoweringMode mode = mlir::prime_ir::parseLoweringMode(loweringMode);
 
+  std::optional<InverseAlgorithm> inverseAlgo =
+      parseInverseAlgorithm(inverseAlgorithm);
+  if (!inverseAlgo) {
+    module.emitError() << "invalid inverse-algorithm option: '"
+                       << inverseAlgorithm
+                       << "' (expected 'bernstein-yang', 'fermat', or 'auto')";
+    return signalPassFailure();
+  }
+
   ConversionTarget target(*context);
 
   // Mark field operations as dynamically legal if they contain BinaryFieldType
@@ -983,7 +1034,7 @@ void FieldToModArith::runOnOperation() {
       // clang-format on
       >(typeConverter, context, aotConfig);
   patterns.add<ConvertInverse>(typeConverter, context, aotConfig,
-                               useElementwiseInverse);
+                               useElementwiseInverse, *inverseAlgo);
 
   patterns.add<
       // clang-format off

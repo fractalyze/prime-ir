@@ -62,6 +62,7 @@ prime_ir_cc_library(
         ":PrimeFieldCodeGen",
         "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Utils:BuilderContext",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
         "@llvm-project//mlir:TransformUtils",
     ],
