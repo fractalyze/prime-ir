@@ -188,7 +188,9 @@ Value BinaryFieldCodeGen::mulTower(Value a, Value b,
   // m₁ = a₁*b₁
   // m₂ = (a₀+a₁)*(b₀+b₁)
   // result_lo = m₀ + m₁*α
-  // result_hi = m₂ + m₀ + m₁  (= a₀*b₁ + a₁*b₀ + a₁*b₁)
+  // result_hi = m₂ + m₀     (= a₀*b₁ + a₁*b₀ + a₁*b₁)
+  // Note m₂ + m₀ = a₀b₁ + a₁b₀ + a₁b₁, NOT m₂ + m₀ + m₁ (that cancels the
+  // a₁b₁ the x² = x + α fold contributes to the high term).
 
   unsigned halfBits = 1u << (towerLevel - 1);
   IntegerType halfType = IntegerType::get(builder_.getContext(), halfBits);
@@ -222,9 +224,8 @@ Value BinaryFieldCodeGen::mulTower(Value a, Value b,
   Value m1Alpha = mulTower(m1, alphaConst, towerLevel - 1);
   Value resultLo = arith::XOrIOp::create(builder_, m0, m1Alpha);
 
-  // result_hi = m₂ + m₀ + m₁
-  Value m2Xm0 = arith::XOrIOp::create(builder_, m2, m0);
-  Value resultHi = arith::XOrIOp::create(builder_, m2Xm0, m1);
+  // result_hi = m₂ + m₀
+  Value resultHi = arith::XOrIOp::create(builder_, m2, m0);
 
   // Combine: result = result_lo | (result_hi << halfBits)
   Value resultLoExt = arith::ExtUIOp::create(builder_, fullType, resultLo);
