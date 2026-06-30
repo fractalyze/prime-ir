@@ -21,7 +21,8 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s < %t
 
-!BF8 = !field.bf<3>  // GF(2^8) tower field
+!BF8 = !field.bf<3>     // GF(2^8) tower field
+!BF128 = !field.bf<7>   // GF(2^128) tower field
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
@@ -98,10 +99,63 @@ func.func @test_bf8_double() {
 }
 // CHECK: [0]
 
+// Test: BF8 self-multiply exercises the x² = x + α high-term fold.
+// 3 = ω+1 in the GF(4) subfield, so 3*3 = (ω+1)² = ω = 2 (= square(3)).
+// A wrong Karatsuba high term (m₂+m₀+m₁ instead of m₂+m₀) drops the a₁b₁
+// the fold contributes, making 3 a zero-divisor (3*3 = 0).
+func.func @test_bf8_mul_self() {
+  %a = field.constant 3 : !BF8
+  %c = field.mul %a, %a : !BF8
+
+  %result_i8 = field.bitcast %c : !BF8 -> i8
+  %result = arith.extui %result_i8 : i8 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: [2]
+
+// Test: BF128 (GF(2^128)) multiplication on the portable tower path.
+// 2 and 3 embed in the GF(4) subfield, so 2 * 3 = 1 at every tower level.
+func.func @test_bf128_mul() {
+  %a = field.constant 2 : !BF128
+  %b = field.constant 3 : !BF128
+  %c = field.mul %a, %b : !BF128
+
+  %result_i128 = field.bitcast %c : !BF128 -> i128
+  %result = arith.trunci %result_i128 : i128 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: [1]
+
+// Test: BF128 self-multiply — 3 * 3 = 2 (zero-divisor guard at the top level).
+func.func @test_bf128_mul_self() {
+  %a = field.constant 3 : !BF128
+  %c = field.mul %a, %a : !BF128
+
+  %result_i128 = field.bitcast %c : !BF128 -> i128
+  %result = arith.trunci %result_i128 : i128 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: [2]
+
 func.func @main() {
   func.call @test_bf8_add() : () -> ()
   func.call @test_bf8_mul() : () -> ()
   func.call @test_bf8_square() : () -> ()
   func.call @test_bf8_double() : () -> ()
+  func.call @test_bf8_mul_self() : () -> ()
+  func.call @test_bf128_mul() : () -> ()
+  func.call @test_bf128_mul_self() : () -> ()
   return
 }
