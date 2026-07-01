@@ -94,10 +94,39 @@ def get_cpu_features():
               break
       except (IOError, IndexError):
         pass
+    elif machine in ("aarch64", "arm64"):
+      # ARM: the "pmull" carryless-multiply lives behind the crypto/AES
+      # extension, reported as "pmull" in /proc/cpuinfo's Features line.
+      try:
+        with open("/proc/cpuinfo", "r") as f:
+          for line in f:
+            if line.startswith("Features"):
+              flags = line.split(":")[1].strip().split()
+              if "pmull" in flags:
+                features.add("pmull")
+              break
+      except (IOError, IndexError):
+        pass
+  elif system == "Darwin":
+    if machine == "arm64":
+      # macOS ARM: query the optional-feature flag via sysctl.
+      try:
+        out = subprocess.run(
+            ["sysctl", "-n", "hw.optional.arm.FEAT_PMULL"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if out.stdout.strip() == "1":
+          features.add("pmull")
+      except (OSError, ValueError):
+        pass
 
   # Add architecture features
   if machine in ("x86_64", "i686", "i386"):
     features.add("x86")
+  elif machine in ("aarch64", "arm64"):
+    features.add("arm")
 
   return features
 
