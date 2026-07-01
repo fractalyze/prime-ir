@@ -319,11 +319,15 @@ func.func @test_lower_sub_goldilocks(%lhs : !Gp, %rhs : !Gp) -> !Gp {
 func.func @test_lower_add_goldilocks(%lhs : !Gadd, %rhs : !Gadd) -> !Gadd {
   // CHECK-NOT: mod_arith.add
   // CHECK: %[[SUM:.*]], %[[OVF:.*]] = arith.addui_extended %[[LHS]], %[[RHS]] : [[T]], i1
+  // The old cmpi + ori canonicalize must not appear anywhere in the add slice.
+  // CHECK-NOT: arith.cmpi
+  // CHECK-NOT: arith.ori
   // CHECK: %[[CMOD:.*]] = arith.constant -4294967295 : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[SUM]], %[[CMOD]] : [[T]]
   // CHECK: %[[MIN:.*]] = arith.minui %[[SUB]], %[[SUM]] : [[T]]
   // CHECK: %[[RES:.*]] = arith.select %[[OVF]], %[[SUB]], %[[MIN]] : [[T]]
   // CHECK-NOT: arith.cmpi
+  // CHECK-NOT: arith.ori
   // CHECK: return %[[RES]] : [[T]]
   %res = mod_arith.add %lhs, %rhs : !Gadd
   return %res : !Gadd

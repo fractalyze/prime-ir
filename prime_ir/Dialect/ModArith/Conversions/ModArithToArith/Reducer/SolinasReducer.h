@@ -46,7 +46,9 @@ public:
 
   // Reduces the 128-bit product `hi·2^64 + lo` (each half a canonical-width
   // `k`-bit integer, e.g. from `arith.mului_extended`) to a `k`-bit residue.
-  // Precondition: `hi·2^64 + lo < p²`.
+  // Precondition: `hi·2^64 + lo < 2^128`; canonical callers naturally satisfy
+  // the tighter `< p²` bound, while gl64-lazy callers may use the full 64-bit
+  // operand range.
   //
   // When `lazy` is false, returns the canonical residue in `[0, p)`.
   // When `lazy` is true, skips the final conditional subtract of `p` and

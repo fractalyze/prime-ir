@@ -554,6 +554,34 @@ func.func @test_lazy_mul_chain_goldilocks(%a : !Glz, %b : !Glz) -> !Glz {
 
 // -----
 
+// A mul whose RHS is a constant takes ConvertMul's RHS-constant shortcuts, which
+// assume a canonical lhs in [0, p). So the producer feeding it must NOT stay
+// gl64: unlike @test_lazy_mul_chain_goldilocks (mul->mul stays lazy), the first
+// mul here canonicalizes (minui tail) because its only consumer is a mul-by-
+// constant. Guards against feeding a gl64 value (e.g. p) into the halve/degree
+// shortcuts, which would `lhs + p` overflow or `lhs >> d` a non-canonical lhs.
+!Glc = !mod_arith.int<18446744069414584321 : i64>
+
+// LAZY-LABEL:     @test_lazy_mul_const_rhs_forces_canonical
+// LAZY:           arith.mului_extended
+// LAZY:           arith.minui
+// LAZY:           arith.mului_extended
+// LAZY:           return
+
+// EAGER-LABEL:    @test_lazy_mul_const_rhs_forces_canonical
+// EAGER:          arith.mului_extended
+// EAGER:          arith.minui
+// EAGER:          arith.mului_extended
+// EAGER:          return
+func.func @test_lazy_mul_const_rhs_forces_canonical(%a : !Glc, %b : !Glc) -> !Glc {
+  %c = mod_arith.constant 3 : !Glc
+  %p1 = mod_arith.mul %a, %b : !Glc
+  %p2 = mod_arith.mul %p1, %c : !Glc
+  return %p2 : !Glc
+}
+
+// -----
+
 // Goldilocks gl64 lazy ADD: a full-width add (modWidth == storageWidth == 64)
 // can carry-fold its result into [0, 2^64) instead of canonicalizing, since
 // 2^64 ≡ ε (mod p). Valid when at most one operand is gl64 (so the +ε can't
@@ -564,8 +592,13 @@ func.func @test_lazy_mul_chain_goldilocks(%a : !Glz, %b : !Glz) -> !Glz {
 
 // LAZY-LABEL:     @test_lazy_add_goldilocks
 // LAZY:           arith.addui_extended
+// The eager canonicalize (subi + minui + select) must not appear in the add
+// slice — prove the whole add-to-mul handoff stays gl64 lazy.
+// LAZY-NOT:       arith.subi
+// LAZY-NOT:       arith.minui
 // LAZY:           arith.select
 // LAZY:           arith.addi
+// LAZY-NOT:       arith.subi
 // LAZY-NOT:       arith.minui
 // LAZY:           arith.mului_extended
 // LAZY:           return
