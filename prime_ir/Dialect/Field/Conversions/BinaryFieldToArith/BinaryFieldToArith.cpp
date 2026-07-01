@@ -349,11 +349,15 @@ std::pair<Value, Value> emitClmul64(ImplicitLocOpBuilder &b, Value a,
   Value lo = zero;
   Value hi = zero;
   for (unsigned i = 0; i < 64; ++i) {
-    Value bShifted =
-        i == 0 ? bv : arith::ShRUIOp::create(b, bv, i64Const(b, i));
+    Value bShifted = bv;
+    Value aShl = a;
+    if (i != 0) {
+      Value shiftI = i64Const(b, i);
+      bShifted = arith::ShRUIOp::create(b, bv, shiftI);
+      aShl = arith::ShLIOp::create(b, a, shiftI);
+    }
     Value bit = arith::AndIOp::create(b, bShifted, one);
     Value mask = arith::SubIOp::create(b, zero, bit); // 0 or all-ones
-    Value aShl = i == 0 ? a : arith::ShLIOp::create(b, a, i64Const(b, i));
     lo = arith::XOrIOp::create(b, lo, arith::AndIOp::create(b, mask, aShl));
     if (i != 0) {
       Value aShr = arith::ShRUIOp::create(b, a, i64Const(b, 64 - i));

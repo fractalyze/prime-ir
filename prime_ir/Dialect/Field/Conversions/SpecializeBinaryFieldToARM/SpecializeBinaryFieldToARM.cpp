@@ -128,54 +128,6 @@ Value emitPMULL2_8(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 }
 
 //===----------------------------------------------------------------------===//
-// GHASH Polynomial Reduction Helper
-//===----------------------------------------------------------------------===//
-
-// Compute the GHASH reduction high * (x⁷ + x² + x + 1) for a 64-bit limb:
-// returns the value to XOR into the low 64 bits, plus the overflow bits that
-// spill past bit 63 (to be XORed into the next limb up).
-std::pair<Value, Value> reduceGhash(ImplicitLocOpBuilder &b, Value high) {
-  auto i64Type = b.getI64Type();
-
-  Value h7 = arith::ShLIOp::create(
-      b, high,
-      arith::ConstantOp::create(b, i64Type,
-                                b.getI64IntegerAttr(kGhashReductionShifts[0])));
-  Value h2 = arith::ShLIOp::create(
-      b, high,
-      arith::ConstantOp::create(b, i64Type,
-                                b.getI64IntegerAttr(kGhashReductionShifts[1])));
-  Value h1 = arith::ShLIOp::create(
-      b, high,
-      arith::ConstantOp::create(b, i64Type,
-                                b.getI64IntegerAttr(kGhashReductionShifts[2])));
-
-  // XOR all together: h7 ^ h2 ^ h1 ^ high
-  Value reduction = arith::XOrIOp::create(b, h7, h2);
-  reduction = arith::XOrIOp::create(b, reduction, h1);
-  reduction = arith::XOrIOp::create(b, reduction, high);
-
-  // Overflow bits spilling past bit 63, using kGhashOverflowShifts = {57,62,63}
-  Value h7_hi = arith::ShRUIOp::create(
-      b, high,
-      arith::ConstantOp::create(b, i64Type,
-                                b.getI64IntegerAttr(kGhashOverflowShifts[0])));
-  Value h2_hi = arith::ShRUIOp::create(
-      b, high,
-      arith::ConstantOp::create(b, i64Type,
-                                b.getI64IntegerAttr(kGhashOverflowShifts[1])));
-  Value h1_hi = arith::ShRUIOp::create(
-      b, high,
-      arith::ConstantOp::create(b, i64Type,
-                                b.getI64IntegerAttr(kGhashOverflowShifts[2])));
-
-  Value overflow = arith::XOrIOp::create(b, h7_hi, h2_hi);
-  overflow = arith::XOrIOp::create(b, overflow, h1_hi);
-
-  return {reduction, overflow};
-}
-
-//===----------------------------------------------------------------------===//
 // PMULL-based GHASH Field Multiplication
 //===----------------------------------------------------------------------===//
 
