@@ -360,10 +360,10 @@ struct ConvertToMont : public OpConversionPattern<ToMontOp> {
 };
 
 struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
-  explicit ConvertFromMont(MLIRContext *context)
-      : OpConversionPattern<FromMontOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+  explicit ConvertFromMont(const TypeConverter &converter, MLIRContext *context,
+                           AOTConfig aotConfig)
+      : OpConversionPattern<FromMontOp>(converter, context),
+        aotConfig(aotConfig) {}
 
   LogicalResult
   matchAndRewrite(FromMontOp op, OpAdaptor adaptor,
@@ -371,6 +371,41 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
     Type fieldType = getElementTypeOrSelf(op.getOutput());
+
+    // Multi-element prime-field tensor under the AOT runtime (CPU): a
+    // whole-tensor mod_arith.from_mont lowers to whole-tensor i256 arith the
+    // CPU hero-emitter pipeline (LowerTensors, not bufferization) cannot
+    // scalarize. Scalarize via tensor.generate — a scalar from_mont per element
+    // — which lowers to an scf loop. GPU (Inline mode) keeps the vectorized
+    // whole-tensor reduction. (The scalar path below handles rank-0 / non-CPU.)
+    if (auto tensorType = dyn_cast<RankedTensorType>(op.getType());
+        tensorType && tensorType.getRank() >= 1 &&
+        isa<PrimeFieldType>(fieldType) &&
+        aotConfig.mode == LoweringMode::Auto) {
+      Type resultTensorType = typeConverter->convertType(op.getType());
+      Type elemResultType = getElementTypeOrSelf(resultTensorType);
+      SmallVector<Value> dynExtents;
+      for (int64_t d = 0, rank = tensorType.getRank(); d < rank; ++d)
+        if (tensorType.isDynamicDim(d))
+          dynExtents.push_back(tensor::DimOp::create(
+              b, adaptor.getInput(), arith::ConstantIndexOp::create(b, d)));
+      Value result =
+          tensor::GenerateOp::create(
+              b, cast<RankedTensorType>(resultTensorType),
+              ValueRange(dynExtents),
+              [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                ImplicitLocOpBuilder lb(loc, nb);
+                Value elem =
+                    tensor::ExtractOp::create(lb, adaptor.getInput(), ivs);
+                Value red =
+                    mod_arith::FromMontOp::create(lb, elemResultType, elem);
+                tensor::YieldOp::create(lb, red);
+              })
+              .getResult();
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
     if (isa<PrimeFieldType>(fieldType)) {
       Type resultType = typeConverter->convertType(op.getType());
       auto extracted =
@@ -394,6 +429,8 @@ struct ConvertFromMont : public OpConversionPattern<FromMontOp> {
     }
     return failure();
   }
+
+  AOTConfig aotConfig;
 };
 
 template <typename OpT, typename Derived>
@@ -1049,11 +1086,11 @@ void FieldToModArith::runOnOperation() {
       ConvertBitcast,
       ConvertConstant,
       ConvertCmp,
-      ConvertFromMont,
       ConvertPowUI,
       ConvertToMont
       // clang-format on
       >(typeConverter, context);
+  patterns.add<ConvertFromMont>(typeConverter, context, aotConfig);
 
   // Catch-all: converts any op whose operands/results carry field types.
   // Op-specific patterns above have root-op-name priority in the applicator.
