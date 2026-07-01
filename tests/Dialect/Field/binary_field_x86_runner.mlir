@@ -13,9 +13,12 @@
 // limitations under the License.
 // ==============================================================================
 
-// End-to-end test for binary field operations using x86 PCLMULQDQ
-// Tests bf<6> (64-bit) and bf<7> (128-bit) multiplication using carryless multiply
-// Requires: x86 CPU with PCLMULQDQ support
+// End-to-end test for the GHASH field (`!field.bf<7, ghash>`) multiplication lowered
+// to the x86 PCLMULQDQ specializer. The carryless-multiply specialization is
+// the GHASH field's CPU fast path; the tower bf<6>/bf<7> deliberately do NOT
+// specialize to a carryless multiply (that computes the flat GHASH product, not
+// the tower), so they lower via the portable recursive mulTower instead.
+// Requires: x86 CPU with PCLMULQDQ support.
 
 // REQUIRES: pclmulqdq
 
@@ -25,134 +28,78 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s < %t
 
-!BF64 = !field.bf<6>  // GF(2⁶⁴) tower field
-!BF128 = !field.bf<7>  // GF(2¹²⁸) tower field
+!G = !field.bf<7, ghash>   // GF(2^128), GHASH polynomial basis
 
-func.func private @printMemrefI64(memref<*xi64>) attributes { llvm.emit_c_interface }
+func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
-// Test: BF64 multiplication using PCLMULQDQ
-// In GF(2⁶⁴) tower: 2 * 3 = 1 (same as in GF(2⁸) since they embed in lower bits)
-func.func @test_bf64_mul() {
-  %a = field.constant 2 : !BF64
-  %b = field.constant 3 : !BF64
-  %c = field.mul %a, %b : !BF64
+// 2 * 3 = 6 in the GHASH basis (2 = x, 3 = x+1, so 2*3 = x^2 + x = 6).
+func.func @test_ghash_mul() {
+  %a = field.constant 2 : !G
+  %b = field.constant 3 : !G
+  %c = field.mul %a, %b : !G
 
-  // Use field.bitcast to convert to integer for printing
-  %result_i64 = field.bitcast %c : !BF64 -> i64
-  %tensor = tensor.from_elements %result_i64 : tensor<1xi64>
-  %buffer = bufferization.to_buffer %tensor : tensor<1xi64> to memref<1xi64>
-  %cast = memref.cast %buffer : memref<1xi64> to memref<*xi64>
-  func.call @printMemrefI64(%cast) : (memref<*xi64>) -> ()
+  %i = field.bitcast %c : !G -> i128
+  %r = arith.trunci %i : i128 to i32
+  %t = tensor.from_elements %r : tensor<1xi32>
+  %buf = bufferization.to_buffer %t : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buf : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [1]
+// CHECK: [6]
 
-// Test: BF64 squaring
-// 3² = 2 in tower field (since 3 = ω+1, (ω+1)² = ω² + 1 = ω = 2)
-func.func @test_bf64_square() {
-  %a = field.constant 3 : !BF64
-  %c = field.square %a : !BF64
+// 1 * x = x (identity).
+func.func @test_ghash_mul_identity() {
+  %a = field.constant 1 : !G
+  %b = field.constant 42 : !G
+  %c = field.mul %a, %b : !G
 
-  %result_i64 = field.bitcast %c : !BF64 -> i64
-  %tensor = tensor.from_elements %result_i64 : tensor<1xi64>
-  %buffer = bufferization.to_buffer %tensor : tensor<1xi64> to memref<1xi64>
-  %cast = memref.cast %buffer : memref<1xi64> to memref<*xi64>
-  func.call @printMemrefI64(%cast) : (memref<*xi64>) -> ()
-  return
-}
-// CHECK: [2]
-
-// Test: BF64 multiplication with identity
-// 1 * x = x for all x
-func.func @test_bf64_mul_identity() {
-  %a = field.constant 1 : !BF64
-  %b = field.constant 42 : !BF64
-  %c = field.mul %a, %b : !BF64
-
-  %result_i64 = field.bitcast %c : !BF64 -> i64
-  %tensor = tensor.from_elements %result_i64 : tensor<1xi64>
-  %buffer = bufferization.to_buffer %tensor : tensor<1xi64> to memref<1xi64>
-  %cast = memref.cast %buffer : memref<1xi64> to memref<*xi64>
-  func.call @printMemrefI64(%cast) : (memref<*xi64>) -> ()
+  %i = field.bitcast %c : !G -> i128
+  %r = arith.trunci %i : i128 to i32
+  %t = tensor.from_elements %r : tensor<1xi32>
+  %buf = bufferization.to_buffer %t : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buf : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
 // CHECK: [42]
 
-// Test: BF64 multiplication with zero
-// 0 * x = 0 for all x
-func.func @test_bf64_mul_zero() {
-  %a = field.constant 0 : !BF64
-  %b = field.constant 12345 : !BF64
-  %c = field.mul %a, %b : !BF64
+// 0 * x = 0.
+func.func @test_ghash_mul_zero() {
+  %a = field.constant 0 : !G
+  %b = field.constant 12345 : !G
+  %c = field.mul %a, %b : !G
 
-  %result_i64 = field.bitcast %c : !BF64 -> i64
-  %tensor = tensor.from_elements %result_i64 : tensor<1xi64>
-  %buffer = bufferization.to_buffer %tensor : tensor<1xi64> to memref<1xi64>
-  %cast = memref.cast %buffer : memref<1xi64> to memref<*xi64>
-  func.call @printMemrefI64(%cast) : (memref<*xi64>) -> ()
+  %i = field.bitcast %c : !G -> i128
+  %r = arith.trunci %i : i128 to i32
+  %t = tensor.from_elements %r : tensor<1xi32>
+  %buf = bufferization.to_buffer %t : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buf : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
 // CHECK: [0]
 
-// Test: BF128 multiplication using PCLMULQDQ
-// In GF(2¹²⁸) tower: 2 * 3 = 1 (same as lower levels since they embed in lower bits)
-func.func @test_bf128_mul() {
-  %a = field.constant 2 : !BF128
-  %b = field.constant 3 : !BF128
-  %c = field.mul %a, %b : !BF128
+// Reduction: x^64 * x^64 = x^128 = x^7 + x^2 + x + 1 = 0x87 = 135.
+func.func @test_ghash_reduce() {
+  %c64 = arith.constant 18446744073709551616 : i128   // 2^64 = x^64
+  %x64 = field.bitcast %c64 : i128 -> !G
+  %p = field.mul %x64, %x64 : !G
 
-  // Bitcast to i128 and truncate to i64 for printing (result fits in 64 bits)
-  %result_i128 = field.bitcast %c : !BF128 -> i128
-  %result_i64 = arith.trunci %result_i128 : i128 to i64
-  %tensor = tensor.from_elements %result_i64 : tensor<1xi64>
-  %buffer = bufferization.to_buffer %tensor : tensor<1xi64> to memref<1xi64>
-  %cast = memref.cast %buffer : memref<1xi64> to memref<*xi64>
-  func.call @printMemrefI64(%cast) : (memref<*xi64>) -> ()
+  %i = field.bitcast %p : !G -> i128
+  %r = arith.trunci %i : i128 to i32
+  %t = tensor.from_elements %r : tensor<1xi32>
+  %buf = bufferization.to_buffer %t : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buf : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [1]
-
-// Test: BF128 multiplication with identity
-// 1 * x = x for all x
-func.func @test_bf128_mul_identity() {
-  %a = field.constant 1 : !BF128
-  %b = field.constant 42 : !BF128
-  %c = field.mul %a, %b : !BF128
-
-  %result_i128 = field.bitcast %c : !BF128 -> i128
-  %result_i64 = arith.trunci %result_i128 : i128 to i64
-  %tensor = tensor.from_elements %result_i64 : tensor<1xi64>
-  %buffer = bufferization.to_buffer %tensor : tensor<1xi64> to memref<1xi64>
-  %cast = memref.cast %buffer : memref<1xi64> to memref<*xi64>
-  func.call @printMemrefI64(%cast) : (memref<*xi64>) -> ()
-  return
-}
-// CHECK: [42]
-
-// Test: BF128 multiplication with zero
-// 0 * x = 0 for all x
-func.func @test_bf128_mul_zero() {
-  %a = field.constant 0 : !BF128
-  %b = field.constant 12345 : !BF128
-  %c = field.mul %a, %b : !BF128
-
-  %result_i128 = field.bitcast %c : !BF128 -> i128
-  %result_i64 = arith.trunci %result_i128 : i128 to i64
-  %tensor = tensor.from_elements %result_i64 : tensor<1xi64>
-  %buffer = bufferization.to_buffer %tensor : tensor<1xi64> to memref<1xi64>
-  %cast = memref.cast %buffer : memref<1xi64> to memref<*xi64>
-  func.call @printMemrefI64(%cast) : (memref<*xi64>) -> ()
-  return
-}
-// CHECK: [0]
+// CHECK: [135]
 
 func.func @main() {
-  func.call @test_bf64_mul() : () -> ()
-  func.call @test_bf64_square() : () -> ()
-  func.call @test_bf64_mul_identity() : () -> ()
-  func.call @test_bf64_mul_zero() : () -> ()
-  func.call @test_bf128_mul() : () -> ()
-  func.call @test_bf128_mul_identity() : () -> ()
-  func.call @test_bf128_mul_zero() : () -> ()
+  func.call @test_ghash_mul() : () -> ()
+  func.call @test_ghash_mul_identity() : () -> ()
+  func.call @test_ghash_mul_zero() : () -> ()
+  func.call @test_ghash_reduce() : () -> ()
   return
 }

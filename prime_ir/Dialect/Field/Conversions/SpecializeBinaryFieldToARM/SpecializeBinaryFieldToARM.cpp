@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -50,10 +51,14 @@ void addARMCryptoTargetFeatures(Operation *op) {
   if (funcOp->hasAttr("llvm.target_features"))
     return;
 
-  // Add target features for ARM crypto extensions (PMULL)
-  // "+neon,+crypto" or "+neon,+aes" enables the PMULL instruction
-  funcOp->setAttr("llvm.target_features",
-                  StringAttr::get(funcOp.getContext(), "+neon,+crypto"));
+  // Add target features for ARM crypto extensions (PMULL).
+  // "+neon,+crypto" enables the PMULL instruction. This must be a
+  // TargetFeaturesAttr (not a plain StringAttr): convert-func-to-llvm moves
+  // the `llvm.target_features` attribute onto the llvm.func `target_features`
+  // property, whose conversion rejects a raw string.
+  funcOp->setAttr(
+      "llvm.target_features",
+      LLVM::TargetFeaturesAttr::get(funcOp.getContext(), "+neon,+crypto"));
 }
 
 //===----------------------------------------------------------------------===//
@@ -123,159 +128,46 @@ Value emitPMULL2_8(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
 }
 
 //===----------------------------------------------------------------------===//
-// Polyval Montgomery Reduction Helpers
-// Polyval uses polynomial: X¹²⁸ + X¹²⁷ + X¹²⁶ + X¹²¹ + 1
-// Montgomery reduction uses only 2 PMULL instructions for 256->128 bit
-// reduction
+// GHASH Polynomial Reduction Helper
 //===----------------------------------------------------------------------===//
 
-// Emit ARM ext instruction to swap halves of a 128-bit register.
-// ext Vd.16b, Vn.16b, Vm.16b, #8 - extracts bytes from concatenation
-Value emitVEXT8(ImplicitLocOpBuilder &b, Value a) {
-  auto vecType = VectorType::get(2, b.getI64Type());
-  return LLVM::InlineAsmOp::create(b, vecType, ValueRange{a},
-                                   "ext $0.16b, $1.16b, $1.16b, #8", "=w,w",
-                                   /*has_side_effects=*/false,
-                                   /*is_align_stack=*/false,
-                                   LLVM::TailCallKind::None,
-                                   LLVM::AsmDialectAttr{},
-                                   /*operand_attrs=*/ArrayAttr())
-      .getResult(0);
-}
-
-// Get Polyval polynomial constant packed as vector<2xi64>.
-// The constant represents bits for Montgomery reduction:
-// Low 64: (1 << 63) | (1 << 62) | (1 << 57) = 0xE200000000000000
-// High 64: same pattern (for pmull2)
-Value getPolyvalConstant(ImplicitLocOpBuilder &b) {
-  auto i64Type = b.getI64Type();
-  auto vec2i64Type = VectorType::get(2, i64Type);
-  // 0xE200000000000000 = (1ULL << 63) | (1ULL << 62) | (1ULL << 57)
-  Value polyVal = arith::ConstantOp::create(
-      b, i64Type, b.getI64IntegerAttr(0xE200000000000000ULL));
-  return vector::FromElementsOp::create(b, vec2i64Type,
-                                        ValueRange{polyVal, polyVal});
-}
-
-// Montgomery reduction for Polyval field.
-// Reduces 256-bit product (x23=high, x01=low) to 128-bit result.
-// Algorithm from binius (RFC 8452):
-//   [A1:A0] = X01 • poly (pmull low halves)
-//   [B1:B0] = [X01_lo ⊕ A1 : X01_hi ⊕ A0] (swap and xor)
-//   [C1:C0] = B • poly (pmull2 high halves)
-//   Output: X23 ⊕ C ⊕ B
-Value polyvalMontgomeryReduce(ImplicitLocOpBuilder &b, Value x23, Value x01) {
-  // Get polyval constant
-  Value poly = getPolyvalConstant(b);
-
-  // A = pmull(x01, poly) - multiply low halves
-  Value a = emitPMULL(b, x01, poly);
-
-  // B = x01 XOR ext(a, 8) - swap halves of a and XOR with x01
-  Value aSwapped = emitVEXT8(b, a);
-  Value bVal = arith::XOrIOp::create(b, x01, aSwapped);
-
-  // C = pmull2(b, poly) - multiply high halves
-  Value c = emitPMULL2(b, bVal, poly);
-
-  // Result = x23 XOR c XOR b
-  Value cXorB = arith::XOrIOp::create(b, c, bVal);
-  return arith::XOrIOp::create(b, x23, cXorB);
-}
-
-// Multiply two 128-bit Polyval field elements using PMULL with Montgomery.
-// This is faster than Tower reduction due to the sparse Polyval polynomial.
-// Note: Polyval uses different polynomial than Tower, producing different
-// results!
-Value mulBF128Polyval(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
-  auto i64Type = b.getI64Type();
-  auto vec2i64Type = VectorType::get(2, i64Type);
-
-  // Karatsuba step 1: decompose into h, m, l products
-  // m = (x.hi ^ x.lo) * (y.hi ^ y.lo)
-  Value lhsSwapped = emitVEXT8(b, lhs);
-  Value rhsSwapped = emitVEXT8(b, rhs);
-  Value lhsXor = arith::XOrIOp::create(b, lhs, lhsSwapped);
-  Value rhsXor = arith::XOrIOp::create(b, rhs, rhsSwapped);
-  Value m = emitPMULL(b, lhsXor, rhsXor);
-
-  // h = x.hi * y.hi (pmull2)
-  Value h = emitPMULL2(b, lhs, rhs);
-
-  // l = x.lo * y.lo (pmull)
-  Value l = emitPMULL(b, lhs, rhs);
-
-  // Karatsuba step 2: combine into 256-bit (x23, x01)
-  // Extract 64-bit components (only those needed)
-  Value lLow = vector::ExtractOp::create(b, l, ArrayRef<int64_t>{0});
-  Value lHigh = vector::ExtractOp::create(b, l, ArrayRef<int64_t>{1});
-  Value hLow = vector::ExtractOp::create(b, h, ArrayRef<int64_t>{0});
-  Value hHigh = vector::ExtractOp::create(b, h, ArrayRef<int64_t>{1});
-
-  // Combine middle term with h and l using vector ops
-  // t = m ^ h ^ l
-  Value mXorH = arith::XOrIOp::create(b, m, h);
-  Value t = arith::XOrIOp::create(b, mXorH, l);
-  Value tLow = vector::ExtractOp::create(b, t, ArrayRef<int64_t>{0});
-  Value tHigh = vector::ExtractOp::create(b, t, ArrayRef<int64_t>{1});
-
-  // Build x01 = {lLow, lHigh ^ tLow}
-  Value x01High = arith::XOrIOp::create(b, lHigh, tLow);
-  Value x01 =
-      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{lLow, x01High});
-
-  // Build x23 = {hLow ^ tHigh, hHigh}
-  Value x23Low = arith::XOrIOp::create(b, hLow, tHigh);
-  Value x23 =
-      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{x23Low, hHigh});
-
-  // Montgomery reduction: 256-bit -> 128-bit
-  return polyvalMontgomeryReduce(b, x23, x01);
-}
-
-//===----------------------------------------------------------------------===//
-// Tower Polynomial Reduction Helpers
-//===----------------------------------------------------------------------===//
-
-// Compute tower level 7 reduction: high * (x⁷ + x² + x + 1)
-// Returns the value to XOR with the low 64 bits.
-// Also computes overflow bits that need to be XORed with higher positions.
-std::pair<Value, Value> reduceTowerLevel7(ImplicitLocOpBuilder &b, Value high) {
+// Compute the GHASH reduction high * (x⁷ + x² + x + 1) for a 64-bit limb:
+// returns the value to XOR into the low 64 bits, plus the overflow bits that
+// spill past bit 63 (to be XORed into the next limb up).
+std::pair<Value, Value> reduceGhash(ImplicitLocOpBuilder &b, Value high) {
   auto i64Type = b.getI64Type();
 
-  // Compute shifts using constants from BinaryFieldTables.h
-  // kTowerLevel7ReductionShifts = {7, 2, 1, 0}
   Value h7 = arith::ShLIOp::create(
       b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[0])));
+      arith::ConstantOp::create(b, i64Type,
+                                b.getI64IntegerAttr(kGhashReductionShifts[0])));
   Value h2 = arith::ShLIOp::create(
       b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[1])));
+      arith::ConstantOp::create(b, i64Type,
+                                b.getI64IntegerAttr(kGhashReductionShifts[1])));
   Value h1 = arith::ShLIOp::create(
       b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel7ReductionShifts[2])));
+      arith::ConstantOp::create(b, i64Type,
+                                b.getI64IntegerAttr(kGhashReductionShifts[2])));
 
   // XOR all together: h7 ^ h2 ^ h1 ^ high
   Value reduction = arith::XOrIOp::create(b, h7, h2);
   reduction = arith::XOrIOp::create(b, reduction, h1);
   reduction = arith::XOrIOp::create(b, reduction, high);
 
-  // Compute overflow bits using kTowerLevel7OverflowShifts = {57, 62, 63}
+  // Overflow bits spilling past bit 63, using kGhashOverflowShifts = {57,62,63}
   Value h7_hi = arith::ShRUIOp::create(
       b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[0])));
+      arith::ConstantOp::create(b, i64Type,
+                                b.getI64IntegerAttr(kGhashOverflowShifts[0])));
   Value h2_hi = arith::ShRUIOp::create(
       b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[1])));
+      arith::ConstantOp::create(b, i64Type,
+                                b.getI64IntegerAttr(kGhashOverflowShifts[1])));
   Value h1_hi = arith::ShRUIOp::create(
       b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel7OverflowShifts[2])));
+      arith::ConstantOp::create(b, i64Type,
+                                b.getI64IntegerAttr(kGhashOverflowShifts[2])));
 
   Value overflow = arith::XOrIOp::create(b, h7_hi, h2_hi);
   overflow = arith::XOrIOp::create(b, overflow, h1_hi);
@@ -283,99 +175,32 @@ std::pair<Value, Value> reduceTowerLevel7(ImplicitLocOpBuilder &b, Value high) {
   return {reduction, overflow};
 }
 
-// Compute tower level 6 reduction: high * (x⁴ + x³ + x + 1)
-Value reduceTowerLevel6(ImplicitLocOpBuilder &b, Value high) {
-  auto i64Type = b.getI64Type();
-
-  // kTowerLevel6ReductionShifts = {4, 3, 1, 0}
-  Value h4 = arith::ShLIOp::create(
-      b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[0])));
-  Value h3 = arith::ShLIOp::create(
-      b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[1])));
-  Value h1 = arith::ShLIOp::create(
-      b, high,
-      arith::ConstantOp::create(
-          b, i64Type, b.getI64IntegerAttr(kTowerLevel6ReductionShifts[2])));
-
-  Value reduction = arith::XOrIOp::create(b, h4, h3);
-  reduction = arith::XOrIOp::create(b, reduction, h1);
-  reduction = arith::XOrIOp::create(b, reduction, high);
-
-  return reduction;
-}
-
 //===----------------------------------------------------------------------===//
-// PMULL-based Binary Field Multiplication
+// PMULL-based GHASH Field Multiplication
 //===----------------------------------------------------------------------===//
 
-// Multiply two 64-bit tower field elements using PMULL.
-// Returns 64-bit result after reduction.
-Value mulBF64PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
+// Multiply two GHASH-basis i128 values (as vector<2xi64>) using PMULL.
+// Karatsuba — 3 PMULL (the cross term a₀b₁ + a₁b₀ = (a₀+a₁)(b₀+b₁) + ll + hh),
+// then reduce mod x¹²⁸ + x⁷ + x² + x + 1.
+Value mulGhashPMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   auto i64Type = b.getI64Type();
   auto vec2i64Type = VectorType::get(2, i64Type);
 
-  // Pack inputs into 128-bit vectors (low 64 bits used)
-  Value zero = arith::ConstantOp::create(b, i64Type, b.getI64IntegerAttr(0));
-  Value lhsVec =
-      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{lhs, zero});
-  Value rhsVec =
-      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{rhs, zero});
+  // Swap the two 64-bit lanes so each lane of *Xor holds (lo ^ hi); then
+  // emitPMULL multiplies the low lanes, giving (a₀+a₁)·(b₀+b₁).
+  Value lhsSwapped =
+      vector::ShuffleOp::create(b, lhs, lhs, ArrayRef<int64_t>{1, 0});
+  Value rhsSwapped =
+      vector::ShuffleOp::create(b, rhs, rhs, ArrayRef<int64_t>{1, 0});
+  Value lhsXor = arith::XOrIOp::create(b, lhs, lhsSwapped);
+  Value rhsXor = arith::XOrIOp::create(b, rhs, rhsSwapped);
 
-  // Carryless multiply using PMULL: produces 128-bit result
-  Value product = emitPMULL(b, lhsVec, rhsVec);
+  Value ll = emitPMULL(b, lhs, rhs);      // low·low   = a₀·b₀
+  Value hh = emitPMULL2(b, lhs, rhs);     // high·high = a₁·b₁
+  Value m = emitPMULL(b, lhsXor, rhsXor); // (a₀+a₁)·(b₀+b₁)
 
-  // Extract low and high 64-bit parts
-  Value prodLow = vector::ExtractOp::create(b, product, ArrayRef<int64_t>{0});
-  Value prodHigh = vector::ExtractOp::create(b, product, ArrayRef<int64_t>{1});
-
-  // Reduce using tower polynomial for level 6
-  Value reduction = reduceTowerLevel6(b, prodHigh);
-  return arith::XOrIOp::create(b, prodLow, reduction);
-}
-
-// Multiply two 128-bit tower field elements using PMULL with Karatsuba.
-Value mulBF128PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
-  auto i64Type = b.getI64Type();
-  auto vec2i64Type = VectorType::get(2, i64Type);
-
-  // Karatsuba multiplication for 128-bit values
-  // Let a = a_h * x⁶⁴ + a_l, b = b_h * x⁶⁴ + b_l
-  // a * b = a_h*b_h * x¹²⁸ + (a_h*b_l + a_l*b_h) * x⁶⁴ + a_l*b_l
-
-  // Low-low product using pmull (low 64-bit halves)
-  Value ll = emitPMULL(b, lhs, rhs);
-  // High-high product using pmull2 (high 64-bit halves)
-  Value hh = emitPMULL2(b, lhs, rhs);
-
-  // Cross products: need to extract halves and multiply
-  // Extract individual 64-bit values
-  Value lhsLow = vector::ExtractOp::create(b, lhs, ArrayRef<int64_t>{0});
-  Value lhsHigh = vector::ExtractOp::create(b, lhs, ArrayRef<int64_t>{1});
-  Value rhsLow = vector::ExtractOp::create(b, rhs, ArrayRef<int64_t>{0});
-  Value rhsHigh = vector::ExtractOp::create(b, rhs, ArrayRef<int64_t>{1});
-
-  // Pack for cross products
-  Value zero = arith::ConstantOp::create(b, i64Type, b.getI64IntegerAttr(0));
-  Value lhsLowVec =
-      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{lhsLow, zero});
-  Value rhsHighVec =
-      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{rhsHigh, zero});
-  Value lhsHighVec =
-      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{lhsHigh, zero});
-  Value rhsLowVec =
-      vector::FromElementsOp::create(b, vec2i64Type, ValueRange{rhsLow, zero});
-
-  // lhs_low * rhs_high
-  Value lh = emitPMULL(b, lhsLowVec, rhsHighVec);
-  // lhs_high * rhs_low
-  Value hl = emitPMULL(b, lhsHighVec, rhsLowVec);
-
-  // Middle term = lh XOR hl
-  Value mid = arith::XOrIOp::create(b, lh, hl);
+  // mid = m ^ ll ^ hh = a₀b₁ + a₁b₀
+  Value mid = arith::XOrIOp::create(b, arith::XOrIOp::create(b, m, ll), hh);
 
   // Extract parts
   Value llLow = vector::ExtractOp::create(b, ll, ArrayRef<int64_t>{0});
@@ -385,22 +210,18 @@ Value mulBF128PMULL(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   Value midLow = vector::ExtractOp::create(b, mid, ArrayRef<int64_t>{0});
   Value midHigh = vector::ExtractOp::create(b, mid, ArrayRef<int64_t>{1});
 
-  // Combine: result is 256-bit, we need to reduce mod tower polynomial
-  // Bits 0-63: llLow, Bits 64-127: llHigh XOR midLow
-  // Bits 128-191: hhLow XOR midHigh, Bits 192-255: hhHigh
+  // 256-bit product as limbs r0..r3 (low to high).
   Value r0 = llLow;
   Value r1 = arith::XOrIOp::create(b, llHigh, midLow);
   Value r2 = arith::XOrIOp::create(b, hhLow, midHigh);
   Value r3 = hhHigh;
 
-  // Reduce 256-bit to 128-bit using tower polynomial for level 7
-  // First reduce r3 (bits 192-255): r3 * x⁶⁴ * (x⁷ + x² + x + 1)
-  auto [r3_red, r3_overflow] = reduceTowerLevel7(b, r3);
+  // Fold the high half down via x¹²⁸ == x⁷ + x² + x + 1.
+  auto [r3_red, r3_overflow] = reduceGhash(b, r3);
   r1 = arith::XOrIOp::create(b, r1, r3_red);
   r2 = arith::XOrIOp::create(b, r2, r3_overflow);
 
-  // Now reduce r2 (bits 128-191): r2 * (x⁷ + x² + x + 1)
-  auto [r2_red, r2_overflow] = reduceTowerLevel7(b, r2);
+  auto [r2_red, r2_overflow] = reduceGhash(b, r2);
   r0 = arith::XOrIOp::create(b, r0, r2_red);
   r1 = arith::XOrIOp::create(b, r1, r2_overflow);
 
@@ -510,68 +331,28 @@ std::pair<Value, Value> getMulOperands(OpTy op) {
     return {op.getInput(), op.getInput()};
 }
 
-// Pattern for 64-bit binary field mul/square using PMULL.
+// Pattern for GHASH-field mul/square using PMULL. (The tower bf<6>/bf<7> no
+// longer specialize to a carryless multiply -- that computes the flat GHASH
+// product, not the tower -- so they lower via the portable recursive mulTower.)
 template <typename OpTy>
-struct ConvertBF64ToPMULL : public OpRewritePattern<OpTy> {
+struct ConvertGhashToPMULL : public OpRewritePattern<OpTy> {
   using OpRewritePattern<OpTy>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(OpTy op,
                                 PatternRewriter &rewriter) const override {
-    Type resultType = op.getResult().getType();
-
-    // Check if this is bf<6> (64-bit binary field)
-    auto bfType = dyn_cast<BinaryFieldType>(resultType);
-    if (!bfType || bfType.getTowerLevel() != 6)
-      return failure();
-
-    // Add ARM crypto target features to parent function
-    addARMCryptoTargetFeatures(op);
-
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    // Get original operands (still BinaryFieldType)
-    auto [lhs, rhs] = getMulOperands(op);
-
-    // Use unrealized_conversion_cast from bf<6> to i64
-    auto i64Type = b.getI64Type();
-    Value lhsI64 =
-        UnrealizedConversionCastOp::create(b, i64Type, lhs).getResult(0);
-    Value rhsI64 =
-        UnrealizedConversionCastOp::create(b, i64Type, rhs).getResult(0);
-
-    Value result = mulBF64PMULL(b, lhsI64, rhsI64);
-
-    Value resultBF =
-        UnrealizedConversionCastOp::create(b, bfType, result).getResult(0);
-    rewriter.replaceOp(op, resultBF);
-    return success();
-  }
-};
-
-// Pattern for 128-bit binary field mul/square using PMULL.
-// Parameterized on the multiplication function (Tower vs Polyval reduction).
-using BF128MulFn = Value (*)(ImplicitLocOpBuilder &, Value, Value);
-
-template <typename OpTy, BF128MulFn mulFn>
-struct ConvertBF128ToARM : public OpRewritePattern<OpTy> {
-  using OpRewritePattern<OpTy>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(OpTy op,
-                                PatternRewriter &rewriter) const override {
-    Type resultType = op.getResult().getType();
-
-    auto bfType = dyn_cast<BinaryFieldType>(resultType);
-    if (!bfType || bfType.getTowerLevel() != 7)
+    Type ghashType = op.getResult().getType();
+    auto bfType = dyn_cast<BinaryFieldType>(ghashType);
+    if (!bfType || !bfType.isGhash())
       return failure();
 
     addARMCryptoTargetFeatures(op);
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-
-    auto [lhs, rhs] = getMulOperands(op);
-    auto i64Type = b.getI64Type();
     auto i128Type = b.getIntegerType(128);
-    auto vec2i64Type = VectorType::get(2, i64Type);
+    auto vec2i64Type = VectorType::get(2, b.getI64Type());
 
+    auto [lhs, rhs] = getMulOperands(op);
+
+    // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
     Value lhsI128 =
         UnrealizedConversionCastOp::create(b, i128Type, lhs).getResult(0);
     Value rhsI128 =
@@ -580,12 +361,13 @@ struct ConvertBF128ToARM : public OpRewritePattern<OpTy> {
     Value lhsVec = LLVM::BitcastOp::create(b, vec2i64Type, lhsI128);
     Value rhsVec = LLVM::BitcastOp::create(b, vec2i64Type, rhsI128);
 
-    Value resultVec = mulFn(b, lhsVec, rhsVec);
+    Value resultVec = mulGhashPMULL(b, lhsVec, rhsVec);
 
     Value resultI128 = LLVM::BitcastOp::create(b, i128Type, resultVec);
-    Value resultBF =
-        UnrealizedConversionCastOp::create(b, bfType, resultI128).getResult(0);
-    rewriter.replaceOp(op, resultBF);
+    Value resultGhash =
+        UnrealizedConversionCastOp::create(b, ghashType, resultI128)
+            .getResult(0);
+    rewriter.replaceOp(op, resultGhash);
     return success();
   }
 };
@@ -649,25 +431,15 @@ struct SpecializeBinaryFieldToARM
     RewritePatternSet patterns(context);
 
     if (usePMULL) {
-      // Always add bf<64> and packed bf<8> patterns
-      patterns.add<ConvertBF64ToPMULL<MulOp>, ConvertBF64ToPMULL<SquareOp>>(
-          context);
+      // Packed bf<3> keeps its PMULL fast path. The tower bf<6>/bf<7> no longer
+      // specialize -- a carryless multiply computes the flat GHASH product, not
+      // the recursive x²+x+α tower -- so they fall through to the portable
+      // mulTower in binary-field-to-arith. The GHASH field gets the carryless
+      // multiply as its CPU fast path instead.
       patterns.add<ConvertPackedBF8ToPMULL<MulOp>,
                    ConvertPackedBF8ToPMULL<SquareOp>>(context);
-
-      // For bf<128>, choose between Tower and Polyval polynomial
-      if (usePolyval) {
-        // Polyval: X¹²⁸ + X¹²⁷ + X¹²⁶ + X¹²¹ + 1
-        // Faster due to Montgomery reduction with only 2 PMULL instructions
-        // WARNING: Different field representation than Tower!
-        patterns.add<ConvertBF128ToARM<MulOp, mulBF128Polyval>,
-                     ConvertBF128ToARM<SquareOp, mulBF128Polyval>>(context);
-      } else {
-        // Tower: X¹²⁸ + X⁷ + X² + X + 1
-        // Standard tower field polynomial
-        patterns.add<ConvertBF128ToARM<MulOp, mulBF128PMULL>,
-                     ConvertBF128ToARM<SquareOp, mulBF128PMULL>>(context);
-      }
+      patterns.add<ConvertGhashToPMULL<MulOp>, ConvertGhashToPMULL<SquareOp>>(
+          context);
     }
 
     // Use greedy pattern rewriting (not partial conversion)
