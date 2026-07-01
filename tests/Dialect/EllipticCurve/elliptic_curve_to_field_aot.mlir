@@ -60,3 +60,17 @@ func.func @test_1x1_affine_to_jacobian_aot(%arg0: tensor<1x1x!affinem>) -> tenso
   %result = elliptic_curve.convert_point_type %arg0 : tensor<1x1x!affinem> -> tensor<1x1x!jacobianm>
   return %result : tensor<1x1x!jacobianm>
 }
+
+// A multi-element affine->jacobian convert has no batch (->affine only) or
+// single-element path, so it scalarizes via tensor.generate -- a scalar
+// convert per element takes the AOT path -- instead of emitting an
+// unresolvable tensor-signature ec_affine_to_jacobian call.
+// CHECK-LABEL: @test_batch_affine_to_jacobian_aot
+func.func @test_batch_affine_to_jacobian_aot(
+    %arg0: tensor<4x!affinem>) -> tensor<4x!jacobianm> {
+  // CHECK: tensor.generate
+  // CHECK: call @ec_affine_to_jacobian_bn254_g1_mont
+  %result = elliptic_curve.convert_point_type %arg0
+      : tensor<4x!affinem> -> tensor<4x!jacobianm>
+  return %result : tensor<4x!jacobianm>
+}

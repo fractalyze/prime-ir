@@ -349,6 +349,34 @@ struct ConvertConvertPointType
         return rewriteTensorToAffine(op, adaptor, rewriter, tensorType,
                                      inputPti, outputPti);
       }
+      // Any other multi-element convert (e.g. affine→jacobian) under the AOT
+      // runtime: the ec_* symbols are scalar, so the AOT path below would emit
+      // an unresolvable tensor-signature call. Scalarize via tensor.generate —
+      // a scalar convert_point_type per element re-enters this pattern and
+      // takes the scalar AOT path, lowering to an scf loop the CPU hero-emitter
+      // pipeline can legalize (the single-element path above handles N = 1).
+      if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
+                              aotConfig.inlineConstOps)) {
+        ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+        SmallVector<Value> dynExtents;
+        for (int64_t d = 0, rank = tensorType.getRank(); d < rank; ++d)
+          if (tensorType.isDynamicDim(d))
+            dynExtents.push_back(tensor::DimOp::create(
+                b, adaptor.getInput(), arith::ConstantIndexOp::create(b, d)));
+        Value result =
+            tensor::GenerateOp::create(
+                b, cast<RankedTensorType>(op.getType()), ValueRange(dynExtents),
+                [&](OpBuilder &nb, Location loc, ValueRange ivs) {
+                  ImplicitLocOpBuilder lb(loc, nb);
+                  Value pt =
+                      tensor::ExtractOp::create(lb, adaptor.getInput(), ivs);
+                  Value cvt = ConvertPointTypeOp::create(lb, outputType, pt);
+                  tensor::YieldOp::create(lb, cvt);
+                })
+                .getResult();
+        rewriter.replaceOp(op, result);
+        return success();
+      }
     }
 
     // AOT runtime path for point type conversions.
