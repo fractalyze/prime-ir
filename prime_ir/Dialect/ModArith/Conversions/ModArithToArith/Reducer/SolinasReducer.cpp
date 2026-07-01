@@ -35,7 +35,7 @@ SolinasReducer::SolinasReducer(ImplicitLocOpBuilder &b,
          "p = 2^64 - 2^32 + 1");
 }
 
-Value SolinasReducer::reduce(Value lo, Value hi) {
+Value SolinasReducer::reduce(Value lo, Value hi, bool lazy) {
   Type t = lo.getType();
   auto konst = [&](uint64_t v) {
     return arith::ConstantOp::create(b, t, b.getIntegerAttr(t, v));
@@ -69,10 +69,18 @@ Value SolinasReducer::reduce(Value lo, Value hi) {
       arith::SelectOp::create(b, add.getOverflow(), t2Corr, add.getSum());
 
   // t2 < 2^64 < 2p, but may be ≥ p; one conditional subtract canonicalizes.
+  // In lazy (gl64) mode we keep t2 in [0, 2^64) and let the consumer reduce.
+  if (lazy)
+    return t2;
   Value p = konst(modAttr.getValue().getZExtValue());
-  Value ge = arith::CmpIOp::create(b, arith::CmpIPredicate::uge, t2, p);
+  // Canonicalize with min instead of cmpi+select (2 ALU ops vs 3). Valid
+  // because t2 ∈ [0, 2^64) and 2^64 - p = ε: when t2 < p, `t2 - p` wraps to
+  // t2 + ε > t2 (no wrap of the sum since t2 + ε < 2^64), so min picks t2;
+  // when t2 ≥ p, `t2 - p` ∈ [0, ε) < t2, so min picks t2 - p. Matches the
+  // trick in MontReducer::getCanonicalFromExtended. (The subtract-of-p form
+  // is what makes min safe here; getCanonicalDiff adds p and so cannot.)
   Value sub = arith::SubIOp::create(b, t2, p);
-  return arith::SelectOp::create(b, ge, sub, t2);
+  return arith::MinUIOp::create(b, sub, t2);
 }
 
 } // namespace mlir::prime_ir::mod_arith

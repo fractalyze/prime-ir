@@ -103,6 +103,16 @@ namespace {
 // kp = ceil((umax + 1) / p) is derived on-the-fly when needed.
 using BoundMap = DenseMap<Value, APInt>;
 
+// True for the Goldilocks prime p = 2⁶⁴ - 2³² + 1. Its Solinas reduce is
+// correct for any product < 2¹²⁸ and yields a result in [0, 2⁶⁴) (kp = 2,
+// since p < 2⁶⁴ < 2p) before the canonicalizing subtract — so a Goldilocks
+// value can stay "gl64-lazy" in [0, 2⁶⁴) and a multiply/square consumer
+// absorbs it directly.
+bool isGoldilocksModulus(const APInt &modulus) {
+  return modulus.getActiveBits() <= 64 &&
+         modulus.getZExtValue() == zk_dtypes::Goldilocks::Config::kModulus;
+}
+
 // Derive kp from umax: kp = ceil((umax + 1) / p).
 uint64_t kpFromUmax(const APInt &umax, const APInt &p) {
   APInt umaxP1 = umax + 1;
@@ -250,9 +260,36 @@ bool canAcceptLazy(Operation *user, Value val, const APInt &valUmax,
     return it != boundMap.end() ? it->second : p - 1;
   };
 
+  // Goldilocks gl64: a multiply/square consumer reduces via Solinas, which is
+  // correct for any product < 2¹²⁸. A [0, 2⁶⁴) operand (the squared umax is
+  // < 2¹²⁸) needs no pre-reduction, so the lazy value is absorbed directly.
+  if (isGoldilocksModulus(p) && isa<SquareOp>(user))
+    return true;
+  if (auto mulOp = dyn_cast<MulOp>(user)) {
+    if (isGoldilocksModulus(p)) {
+      // ConvertMul's RHS-constant shortcuts (inverse-of-two-power halving and
+      // the shift/mask degree paths) run before the Solinas branch and assume a
+      // canonical lhs in [0, p): the halve does `lhs + p` (overflows i64 for a
+      // gl64 lhs such as p) and the degree path does `lhs >> d` / `lhs & mask`
+      // (wrong once lhs >= p). Keep the producer canonical for those; the plain
+      // Solinas mul path absorbs a gl64 operand directly.
+      if (mulOp.getRhs().getDefiningOp<ConstantOp>())
+        return false;
+      return true;
+    }
+  }
+
   if (auto addOp = dyn_cast<AddOp>(user)) {
     Value other = (addOp.getLhs() == val) ? addOp.getRhs() : addOp.getLhs();
-    return (valUmax + getUmax(other)).ule(wMax);
+    APInt total = valUmax + getUmax(other);
+    // Goldilocks full-width add carry-folds the result into [0, 2⁶⁴) instead of
+    // canonicalizing (2⁶⁴ ≡ ε mod p). That single fold is exact as long as the
+    // sum cannot double-overflow, i.e. total < 2⁶⁴ + p — which holds whenever
+    // at least one operand is canonical. So a gl64 value can stay lazy through
+    // an add with a canonical partner (but not through one with another gl64).
+    if (isGoldilocksModulus(p))
+      return total.ult(APInt::getOneBitSet(dw, w) + p);
+    return total.ule(wMax);
   }
   if (auto subOp = dyn_cast<SubOp>(user)) {
     if (subOp.getLhs() == val) {
@@ -329,15 +366,31 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
 
       APInt umax = defaultUmax;
       if (auto addOp = dyn_cast<AddOp>(op)) {
-        umax = getOpUmax(addOp.getLhs()) + getOpUmax(addOp.getRhs());
+        // Goldilocks full-width add carry-folds into [0, 2⁶⁴) (gl64-lazy), like
+        // the mul case; non-Goldilocks adds keep the raw lhs+rhs bound.
+        if (isGoldilocksModulus(p))
+          umax = APInt::getMaxValue(w).zext(dw);
+        else
+          umax = getOpUmax(addOp.getLhs()) + getOpUmax(addOp.getRhs());
       } else if (auto subOp = dyn_cast<SubOp>(op)) {
+        // Lazy sub computes lhs - rhs + rhsKp·p (a non-negative representative
+        // without a conditional subtract). That only fits in w bits when
+        // lhsUmax + rhsKp·p <= 2^w - 1. For full-width moduli (Goldilocks)
+        // lhs + p already overflows i64, so the result cannot stay lazy —
+        // record the canonical bound and let ConvertSub emit getCanonicalDiff.
         uint64_t rhsKp = kpFromUmax(getOpUmax(subOp.getRhs()), p);
-        umax = getOpUmax(subOp.getLhs()) + p * APInt(dw, rhsKp);
+        APInt lazyUmax = getOpUmax(subOp.getLhs()) + p * APInt(dw, rhsKp);
+        umax = lazyUmax.ule(APInt::getMaxValue(w).zext(dw)) ? lazyUmax
+                                                            : defaultUmax;
       } else if (isa<DoubleOp>(op)) {
         auto doubleOp = cast<DoubleOp>(op);
         umax = getOpUmax(doubleOp.getInput()) * APInt(dw, 2);
       } else if (isa<MontMulOp, MontSquareOp, MontReduceOp>(op)) {
         umax = p * APInt(dw, 2) - 1;
+      } else if (isa<MulOp, SquareOp>(op) && isGoldilocksModulus(p)) {
+        // gl64-lazy: the Solinas reduce yields a value in [0, 2⁶⁴) before its
+        // canonicalizing subtract; skipping that leaves the result here.
+        umax = APInt::getMaxValue(w).zext(dw);
       } else if (isa<ConstantOp>(op)) {
         auto *lattice =
             solver.lookupState<dataflow::IntegerValueRangeLattice>(result);
@@ -355,31 +408,58 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
   // field.ext_from_coeffs, func.return, mod_arith.inverse), the value must be
   // reduced — a lazy value would propagate unreduced through ext_from_coeffs →
   // ext_to_coeffs round-trips where the bound information is lost.
-  SmallVector<Value> toErase;
-  for (auto &[val, umax] : boundMap) {
-    Operation *defOp = val.getDefiningOp();
-    if (!defOp)
-      continue;
+  //
+  // When two lazy values block each other (a value and its add partner are both
+  // gl64, so neither add can absorb the other), canonicalizing ONE unblocks the
+  // rest. The Goldilocks diffusion is the motivating case: one column-sum is
+  // shared by 16 adds, each pairing it with a distinct gl64 product. Erasing
+  // the single high-fanout sum (1 reduction) lets all 16 low-fanout products
+  // stay lazy; erasing the products instead would cost 16. So visit candidates
+  // by descending fanout and erase immediately: a widely-shared value is
+  // reduced first, and its now-canonical value lets its many partners pass
+  // their check. Collect candidates in IR walk order — not DenseMap iteration
+  // order, which is nondeterministic — so equal-fanout ties in the stable_sort
+  // below break the same way across runs and builds (otherwise equal-fanout
+  // lazy cycles could lower differently).
+  SmallVector<Value> candidates;
+  funcOp.walk([&](Operation *op) {
+    for (Value val : op->getResults())
+      if (boundMap.find(val) != boundMap.end())
+        candidates.push_back(val);
+  });
+  llvm::stable_sort(candidates, [](Value a, Value b) {
+    return std::distance(a.user_begin(), a.user_end()) >
+           std::distance(b.user_begin(), b.user_end());
+  });
+
+  // A single descending-fanout pass suffices. Erasing a value only lowers its
+  // reported bound to p-1, which can only relax a partner's canAcceptLazy check
+  // (false -> true), never tighten it (canAcceptLazy is monotone in the operand
+  // bounds across every consumer kind). So a candidate that passes on this pass
+  // stays passing after later erasures, and one that fails is erased here — a
+  // second pass could never erase anything more.
+  for (Value val : candidates) {
+    auto it = boundMap.find(val);
+    if (it == boundMap.end())
+      continue; // already forced canonical
     auto modType = dyn_cast<ModArithType>(getElementTypeOrSelf(val.getType()));
     if (!modType)
       continue;
     unsigned w = modType.getTypeSizeInBits();
     unsigned dw = 2 * w;
     APInt p = modType.getModulus().getValue().zext(dw);
-    if (kpFromUmax(umax, p) <= 1)
+    if (kpFromUmax(it->second, p) <= 1)
       continue;
     bool allBenefit = true;
     for (Operation *user : val.getUsers()) {
-      if (!canAcceptLazy(user, val, umax, boundMap, p, w)) {
+      if (!canAcceptLazy(user, val, it->second, boundMap, p, w)) {
         allBenefit = false;
         break;
       }
     }
     if (!allBenefit)
-      toErase.push_back(val);
+      boundMap.erase(val);
   }
-  for (Value v : toErase)
-    boundMap.erase(v);
 }
 
 } // namespace
@@ -705,7 +785,29 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     APInt wMax = APInt::getMaxValue(storageWidth).zext(dw);
     APInt p = modArithType.getModulus().getValue().zext(dw);
     APInt sumMax = lhsUmax + rhsUmax;
-    if (sumMax.ugt(wMax)) {
+
+    // Goldilocks full-width add can carry-fold its result into [0, 2⁶⁴)
+    // (gl64-lazy) when a consumer accepts a non-canonical operand (resBound >
+    // 1), skipping the canonicalizing subtract. 2⁶⁴ ≡ ε (mod p), so a single
+    // conditional +ε on the carry suffices — but only if the operands cannot
+    // double-overflow (total < 2⁶⁴ + p), i.e. at most one is gl64.
+    bool wantLazyGl64 =
+        modWidth == storageWidth && resBound > 1 && isGoldilocksModulus(p);
+
+    if (wantLazyGl64) {
+      // Pre-reduce ONLY to prevent double-overflow: if both operands are
+      // non-canonical, reduce one so the sum stays < 2⁶⁴ + p.
+      APInt dblOverflow = APInt::getOneBitSet(dw, storageWidth) + p; // 2⁶⁴ + p
+      if (sumMax.uge(dblOverflow)) {
+        uint64_t lhsKp = kpFromUmax(lhsUmax, p);
+        uint64_t rhsKp = kpFromUmax(rhsUmax, p);
+        if (rhsKp > 1)
+          rhs = montReducer.getCanonicalFromExtended(rhs, rhsKp);
+        else if (lhsKp > 1)
+          lhs = montReducer.getCanonicalFromExtended(lhs, lhsKp);
+      }
+    } else if (sumMax.ugt(wMax)) {
+      // Canonical path: pre-reduce lazy inputs whose umax sum overflows w bits.
       // Try reducing only one operand when that alone avoids overflow.
       uint64_t lhsKp = kpFromUmax(lhsUmax, p);
       uint64_t rhsKp = kpFromUmax(rhsUmax, p);
@@ -727,11 +829,25 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     Value result;
     if (modWidth == storageWidth) {
       auto add = arith::AddUIExtendedOp::create(b, lhs, rhs);
-      // In the full-width case (modWidth == storageWidth), A + B can exceed the
-      // storage type range, producing an overflow bit, so lazy reduction is not
-      // possible.
-      result =
-          montReducer.getCanonicalFromExtended(add.getSum(), add.getOverflow());
+      if (wantLazyGl64) {
+        // gl64-lazy: fold the carry as +ε (2⁶⁴ ≡ ε mod p), leaving the result
+        // in [0, 2⁶⁴). No compare-vs-p — a multiply or canonical-add consumer
+        // absorbs it. Pre-reduction above guarantees at most one gl64 operand,
+        // so the +ε never double-overflows.
+        APInt epsilon = APInt::getOneBitSet(storageWidth, storageWidth / 2) -
+                        APInt(storageWidth, 1); // 2³² - 1
+        Value eps =
+            createScalarOrSplatConstant(b, b.getLoc(), lhs.getType(), epsilon);
+        Value zero =
+            createScalarOrSplatConstant(b, b.getLoc(), lhs.getType(), 0);
+        Value corr = arith::SelectOp::create(b, add.getOverflow(), eps, zero);
+        result = arith::AddIOp::create(b, add.getSum(), corr);
+      } else {
+        // Full-width canonical: A + B can exceed the storage range, so fold the
+        // overflow bit into a canonical [0, p) result.
+        result = montReducer.getCanonicalFromExtended(add.getSum(),
+                                                      add.getOverflow());
+      }
     } else {
       // nuw (no unsigned wrap) is safe when storageWidth - modWidth >= 1.
       // nsw (no signed wrap) is only safe when storageWidth - modWidth >= 2,
@@ -842,6 +958,9 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
     unsigned dw = 2 * w;
     APInt wMax = APInt::getMaxValue(w).zext(dw);
     APInt p = modType.getModulus().getValue().zext(dw);
+    // For a full-width modulus (e.g. Goldilocks) the lazy sub's lhs + rhsKp·p
+    // already overflows w bits, so it cannot stay lazy — always canonicalize.
+    bool fullWidth = modType.getModulus().getValue().getActiveBits() == w;
     uint64_t lhsKp = kpFromUmax(lhsUmax, p);
     uint64_t rhsKp = kpFromUmax(rhsUmax, p);
     APInt resultMax = lhsUmax + p * APInt(dw, rhsKp);
@@ -864,7 +983,7 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
       }
     }
 
-    if (resBound > 1) {
+    if (resBound > 1 && !fullWidth) {
       // Lazy sub: (lhs - rhs + correction) without final conditional sub.
       // correction = rhsKp * p ensures lhs + correction - rhs >= 0.
       APInt modulus = modType.getModulus().getValue();
@@ -888,11 +1007,8 @@ struct ConvertSub : public BoundMapPattern<SubOp> {
   }
 };
 
-struct ConvertMul : public OpConversionPattern<MulOp> {
-  explicit ConvertMul(MLIRContext *context)
-      : OpConversionPattern<MulOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+struct ConvertMul : public BoundMapPattern<MulOp> {
+  using BoundMapPattern::BoundMapPattern;
 
   LogicalResult
   matchAndRewrite(MulOp op, OpAdaptor adaptor,
@@ -1051,8 +1167,12 @@ struct ConvertMul : public OpConversionPattern<MulOp> {
     if (isGoldilocks) {
       auto prod =
           arith::MulUIExtendedOp::create(b, adaptor.getLhs(), adaptor.getRhs());
-      rewriter.replaceOp(
-          op, SolinasReducer(b, modType).reduce(prod.getLow(), prod.getHigh()));
+      // gl64-lazy: when every consumer accepts a [0, 2⁶⁴) operand, skip the
+      // canonicalizing subtract (kp of the result is >= 2).
+      uint64_t resBound = lookupKp(op.getResult());
+      rewriter.replaceOp(op, SolinasReducer(b, modType)
+                                 .reduce(prod.getLow(), prod.getHigh(),
+                                         /*lazy=*/resBound >= 2));
       return success();
     }
 
@@ -1351,11 +1471,8 @@ MulExtendedResult squareExtended(ImplicitLocOpBuilder &b, Op op, Value input) {
 
 } // namespace
 
-struct ConvertSquare : public OpConversionPattern<SquareOp> {
-  explicit ConvertSquare(MLIRContext *context)
-      : OpConversionPattern<SquareOp>(context) {}
-
-  using OpConversionPattern::OpConversionPattern;
+struct ConvertSquare : public BoundMapPattern<SquareOp> {
+  using BoundMapPattern::BoundMapPattern;
 
   LogicalResult
   matchAndRewrite(SquareOp op, OpAdaptor adaptor,
@@ -1380,8 +1497,10 @@ struct ConvertSquare : public OpConversionPattern<SquareOp> {
         modulus.getBitWidth() == 64 &&
         modulus == APInt(64, zk_dtypes::Goldilocks::Config::kModulus);
     if (isGoldilocks) {
+      uint64_t resBound = lookupKp(op.getResult());
       rewriter.replaceOp(
-          op, SolinasReducer(b, modType).reduce(result.lo, result.hi));
+          op, SolinasReducer(b, modType)
+                  .reduce(result.lo, result.hi, /*lazy=*/resBound >= 2));
       return success();
     }
 
@@ -1563,7 +1682,9 @@ void ModArithToArith::runOnOperation() {
       ConvertMontMul,
       ConvertMontReduce,
       ConvertMontSquare,
+      ConvertMul,
       ConvertNegate,
+      ConvertSquare,
       ConvertSub
       // clang-format on
       >(typeConverter, context, bm);
@@ -1574,8 +1695,6 @@ void ModArithToArith::runOnOperation() {
       ConvertBitcast,
       ConvertConstant,
       ConvertFromMont,
-      ConvertMul,
-      ConvertSquare,
       ConvertToMont
       // clang-format on
       >(typeConverter, context);

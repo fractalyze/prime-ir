@@ -96,15 +96,21 @@ Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
 
 Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
   auto cmod = createModulusConst(input.getType(), input);
-  // NOTE(chokobole): 'ult' is generally preferred over 'uge' for
-  // better performance. However, using 'ult' would require inverting the
-  // overflow check logic. Currently, 'uge' is used for clearer logic, but
-  // this choice should be re-evaluated after benchmarking. See
-  // https://github.com/fractalyze/prime-ir/pull/86/commits/10d3807
-  auto ifge = arith::CmpIOp::create(b, arith::CmpIPredicate::uge, input, cmod);
-  auto or_ = arith::OrIOp::create(b, ifge, overflow);
+  // Canonicalize the value `overflow·2^w + input` (input ∈ [0, 2p), so one
+  // subtract of p suffices) in 3 ALU ops instead of 4.
+  //
+  // `min(input - p, input)` folds the `input ≥ p` case without a compare: when
+  // input < p, `input - p` wraps to `input + (2^w - p) > input` (and < 2^w, no
+  // double wrap), so min keeps input; when input ≥ p, `input - p < input`, so
+  // min picks it. A carry into bit w (overflow) always means subtract p, so the
+  // select forces that branch. Byte-identical to the prior
+  // `(input >= p || overflow) ? input - p : input` for every input and any
+  // modulus: overflow ⟹ both yield `input - p`; otherwise min reproduces the
+  // compare. Drops the `cmpi` + `ori` for a single `minui`. The subtract form
+  // is what makes min safe here — getCanonicalDiff adds p and so cannot.
   auto sub = arith::SubIOp::create(b, input, cmod);
-  auto select = arith::SelectOp::create(b, or_, sub, input);
+  auto min = arith::MinUIOp::create(b, sub, input);
+  auto select = arith::SelectOp::create(b, overflow, sub, min);
   return select.getResult();
 }
 
