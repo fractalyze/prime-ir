@@ -103,43 +103,58 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   let hasCustomAssemblyFormat = 1;
 }
 
-// Binary tower field type definition.
-// This type represents an element in a binary tower field GF(2^(2^level)).
+// Binary field type: GF(2^(2^level)), in the recursive tower basis or (at
+// level 7 only) the flat GHASH polynomial basis.
 def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
   DeclareTypeInterfaceMethods<ConstantLikeInterface>
   ]> {
-  let summary = "Binary tower field element type";
+  let summary = "Binary field element type";
   let description = [{
-    `field.bf<level>` represents an element in a binary tower field GF(2^(2^level)).
-    Binary tower fields are constructed using degree-2 extensions at each level.
+    `field.bf<level>` is an element of the binary field GF(2^(2^level)).
 
-    Tower level mapping:
+    Level → field mapping:
     - level 0: GF(2)     = 1 bit
-    - level 1: GF(2^2)   = 2 bits
-    - level 2: GF(2^4)   = 4 bits
-    - level 3: GF(2^8)   = 8 bits
-    - level 4: GF(2^16)  = 16 bits
-    - level 5: GF(2^32)  = 32 bits
-    - level 6: GF(2^64)  = 64 bits
-    - level 7: GF(2^128) = 128 bits
+    - level 1: GF(2²)    = 2 bits
+    - level 2: GF(2⁴)    = 4 bits
+    - level 3: GF(2⁸)    = 8 bits
+    - level 4: GF(2¹⁶)   = 16 bits
+    - level 5: GF(2³²)   = 32 bits
+    - level 6: GF(2⁶⁴)   = 64 bits
+    - level 7: GF(2¹²⁸)  = 128 bits
 
-    Operations use XOR-based arithmetic (characteristic 2):
-    - Addition and subtraction are both XOR
-    - Negation is identity (-a = a)
-    - Doubling always yields zero (2a = 0)
+    Two bases are supported, selected by the `ghash` flag (valid at level 7
+    only, since GHASH is GF(2¹²⁸)):
+    - default (tower): the recursive x²+x+α tower basis (Fan–Paar). `2·3 = 1`.
+    - `ghash`: the flat GHASH/POLYVAL polynomial basis
+      GF(2)[x]/(x¹²⁸ + x⁷ + x² + x + 1) (reduction constant 0x87, natural
+      monomial bit order). `2·3 = 6` (2 = x, 3 = x+1, so 2·3 = x²+x). Same
+      abstract field as `bf<7>` but a different, NOT bit-compatible
+      representation — the one GHASH/AES-GCM uses, and that provers hashing raw
+      field bytes need byte-identity with. Only the multiply differs between the
+      two bases; add/sub/negate/double/cmp/constant are identical.
+
+    All operations are characteristic 2: add and sub are XOR, negation is
+    identity, doubling yields zero.
 
     Example:
     ```
-    !BF8 = !field.bf<3>   // GF(2^8), 8-bit elements
-    !BF128 = !field.bf<7> // GF(2^128), 128-bit elements
+    !BF8 = !field.bf<3>          // GF(2⁸), tower basis
+    !BF128 = !field.bf<7>        // GF(2¹²⁸), tower basis,  2·3 = 1
+    !G = !field.bf<7, ghash>     // GF(2¹²⁸), GHASH basis,  2·3 = 6
     ```
   }];
   let parameters = (ins
-    "unsigned": $towerLevel
+    "unsigned": $towerLevel,
+    DefaultValuedParameter<"bool", "false">: $isGhash
   );
+  let builders = [
+    TypeBuilder<(ins "unsigned":$towerLevel), [{
+      return $_get(context, towerLevel, /*isGhash=*/false);
+    }]>,
+  ];
   let extraClassDeclaration = [{
     /// Returns the bit width of elements in this field (2^towerLevel).
     unsigned getBitWidth() const { return 1u << getTowerLevel(); }
@@ -156,7 +171,13 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     [[deprecated("use getTypeSizeInBits() instead")]]
     unsigned getStorageBitWidth() const { return getTypeSizeInBits(); }
 
-    /// Maximum supported tower level (GF(2^128)).
+    /// True for the recursive tower basis (the default), false for GHASH.
+    bool isTower() const { return !getIsGhash(); }
+
+    /// True for the flat GHASH polynomial basis.
+    bool isGhash() const { return getIsGhash(); }
+
+    /// Maximum supported tower level (GF(2¹²⁸)).
     static constexpr unsigned kMaxTowerLevel = 7;
   }];
   let hasCustomAssemblyFormat = 1;

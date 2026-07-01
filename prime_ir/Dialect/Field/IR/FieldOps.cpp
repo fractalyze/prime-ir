@@ -1927,6 +1927,19 @@ ParseResult MulOp::parse(OpAsmParser &parser, OperationState &result) {
 
 //===----------------------------------------------------------------------===//
 
+// The GHASH basis (`bf<7, ghash>`) has no compile-time multiplicative
+// evaluator: zk_dtypes::BinaryMul/BinarySquare/BinaryInverse implement only the
+// recursive tower basis, and the flat GHASH product is defined solely by the
+// runtime shift-XOR lowering (emitGhashMul in BinaryFieldToArith). Folding
+// mul/square/inverse through the tower evaluator would silently emit tower
+// values (e.g. 2·3 = 1 instead of 6), so leave those ops for the lowering.
+// Additive ops (add/sub/negate/double) are basis-independent (XOR) and still
+// fold.
+static bool isGhashResult(Type type) {
+  auto bfType = dyn_cast<BinaryFieldType>(getElementTypeOrSelf(type));
+  return bfType && bfType.isGhash();
+}
+
 OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
   return foldUnaryOp(this, adaptor,
                      [](const FieldOperation &op) { return -op; });
@@ -1938,11 +1951,15 @@ OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
+  if (isGhashResult(getType()))
+    return {};
   return foldUnaryOp(this, adaptor,
                      [](const FieldOperation &op) { return op.square(); });
 }
 
 OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
+  if (isGhashResult(getType()))
+    return {};
   return foldUnaryOp(this, adaptor,
                      [](const FieldOperation &op) { return op.inverse(); });
 }
@@ -1982,6 +1999,8 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
+  if (isGhashResult(getType()))
+    return {};
   return foldMultiplicativeBinaryOp(
       this, adaptor,
       [](const FieldOperation &a, const FieldOperation &b) { return a * b; });
@@ -2088,13 +2107,28 @@ bool compareWithOffset(Attribute attr, Value val, uint32_t offset,
   return pred(valueOp, offsetOp);
 }
 
+// The small-multiplier strength-reduction patterns (x*n -> double/add chains,
+// x*(-n) -> -chain) assume the field element n equals n copies of 1 added up,
+// which holds only in characteristic != 2. A binary field is characteristic 2:
+// doubling is zero and the element n is unrelated to n*1, so those rewrites are
+// invalid. Refuse to match small multipliers for binary-field operands; 0 and 1
+// stay valid (they are the basis-independent identities). Such muls fall to the
+// tower / GHASH lowering instead. These helpers feed only those DRR matchers.
+bool isCharacteristicTwo(Value val) {
+  return isa<BinaryFieldType>(getElementTypeOrSelf(val.getType()));
+}
+
 bool isNegativeOf(Attribute attr, Value val, uint32_t offset) {
+  if (isCharacteristicTwo(val))
+    return false;
   return compareWithOffset(
       attr, val, offset,
       [](const FieldOperation &a, const FieldOperation &b) { return a == -b; });
 }
 
 bool isEqualTo(Attribute attr, Value val, uint32_t offset) {
+  if (offset >= 2 && isCharacteristicTwo(val))
+    return false;
   return compareWithOffset(
       attr, val, offset,
       [](const FieldOperation &a, const FieldOperation &b) { return a == b; });

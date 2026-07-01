@@ -185,9 +185,14 @@ ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
 
 LogicalResult
 BinaryFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
-                        unsigned towerLevel) {
+                        unsigned towerLevel, bool isGhash) {
   if (towerLevel > kMaxTowerLevel) {
     return emitError() << "binary field tower level must be between 0 and "
+                       << kMaxTowerLevel << ", got " << towerLevel;
+  }
+  if (isGhash && towerLevel != kMaxTowerLevel) {
+    return emitError() << "the ghash basis is GF(2¹²⁸), only valid at tower "
+                          "level "
                        << kMaxTowerLevel << ", got " << towerLevel;
   }
   return success();
@@ -211,15 +216,35 @@ Type BinaryFieldType::parse(AsmParser &parser) {
     return nullptr;
   }
 
+  // Optional ", ghash" selects the flat GHASH polynomial basis (level 7 only).
+  bool isGhash = false;
+  if (succeeded(parser.parseOptionalComma())) {
+    if (failed(parser.parseKeyword("ghash"))) {
+      return nullptr;
+    }
+    isGhash = true;
+    if (towerLevel != kMaxTowerLevel) {
+      parser.emitError(
+          parser.getCurrentLocation(),
+          "the ghash basis is GF(2¹²⁸), only valid at tower level ")
+          << kMaxTowerLevel;
+      return nullptr;
+    }
+  }
+
   if (failed(parser.parseGreater())) {
     return nullptr;
   }
 
-  return BinaryFieldType::get(parser.getContext(), towerLevel);
+  return BinaryFieldType::get(parser.getContext(), towerLevel, isGhash);
 }
 
 void BinaryFieldType::print(AsmPrinter &printer) const {
-  printer << "<" << getTowerLevel() << ">";
+  printer << "<" << getTowerLevel();
+  if (getIsGhash()) {
+    printer << ", ghash";
+  }
+  printer << ">";
 }
 
 llvm::TypeSize BinaryFieldType::getTypeSizeInBits(
