@@ -184,6 +184,10 @@ struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     if (bfType.isGhash()) {
+      // emitGhashMul is scalar-only (i64/i128 truncs and shifts); shaped GHASH
+      // is not lowered yet, so fail to legalize rather than emit invalid IR.
+      if (isa<ShapedType>(op.getType()))
+        return failure();
       rewriter.replaceOp(op,
                          emitGhashMul(b, adaptor.getLhs(), adaptor.getRhs()));
       return success();
@@ -209,6 +213,10 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     if (bfType.isGhash()) {
+      // emitGhashMul is scalar-only (i64/i128 truncs and shifts); shaped GHASH
+      // is not lowered yet, so fail to legalize rather than emit invalid IR.
+      if (isa<ShapedType>(op.getType()))
+        return failure();
       rewriter.replaceOp(
           op, emitGhashMul(b, adaptor.getInput(), adaptor.getInput()));
       return success();

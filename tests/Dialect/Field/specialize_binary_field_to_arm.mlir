@@ -72,8 +72,9 @@ func.func @test_bf128_mul(%a: !BF128, %b: !BF128) -> !BF128 {
 
 // CHECK-PMULL-LABEL: @test_ghash_mul
 // CHECK-PMULL: builtin.unrealized_conversion_cast
-// CHECK-PMULL: llvm.inline_asm{{.*}}pmull
+// CHECK-PMULL: llvm.inline_asm{{.*}}pmull{{[[:space:]]}}
 // CHECK-PMULL: llvm.inline_asm{{.*}}pmull2
+// CHECK-PMULL: llvm.inline_asm{{.*}}pmull{{[[:space:]]}}
 // CHECK-PMULL: builtin.unrealized_conversion_cast
 // CHECK-DISABLED-LABEL: @test_ghash_mul
 // CHECK-DISABLED: field.mul
@@ -85,8 +86,9 @@ func.func @test_ghash_mul(%a: !GHASH, %b: !GHASH) -> !GHASH {
 
 // CHECK-PMULL-LABEL: @test_ghash_square
 // CHECK-PMULL: builtin.unrealized_conversion_cast
-// CHECK-PMULL: llvm.inline_asm{{.*}}pmull
+// CHECK-PMULL: llvm.inline_asm{{.*}}pmull{{[[:space:]]}}
 // CHECK-PMULL: llvm.inline_asm{{.*}}pmull2
+// CHECK-PMULL: llvm.inline_asm{{.*}}pmull{{[[:space:]]}}
 // CHECK-PMULL: builtin.unrealized_conversion_cast
 // CHECK-DISABLED-LABEL: @test_ghash_square
 // CHECK-DISABLED: field.square
@@ -117,7 +119,8 @@ func.func @test_packed_bf8_mul_128(%a: vector<16x!BF8>, %b: vector<16x!BF8>) -> 
 // Vector square should use PMULL
 // CHECK-PMULL-LABEL: @test_packed_bf8_square_128
 // CHECK-PMULL: builtin.unrealized_conversion_cast
-// CHECK-PMULL: llvm.inline_asm{{.*}}pmull
+// CHECK-PMULL: llvm.inline_asm{{.*}}pmull{{[[:space:]]}}
+// CHECK-PMULL: llvm.inline_asm{{.*}}pmull2
 // CHECK-PMULL: builtin.unrealized_conversion_cast
 // CHECK-DISABLED-LABEL: @test_packed_bf8_square_128
 // CHECK-DISABLED: field.square

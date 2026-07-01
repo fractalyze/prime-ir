@@ -183,6 +183,7 @@ ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
 // BinaryFieldType
 //===----------------------------------------------------------------------===//
 
+// static
 LogicalResult
 BinaryFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
                         unsigned towerLevel, bool isGhash) {

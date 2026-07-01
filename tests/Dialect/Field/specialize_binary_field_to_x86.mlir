@@ -190,8 +190,12 @@ func.func @test_bf128_mul(%a: !BF128, %b: !BF128) -> !BF128 {
 // CHECK-PCLMULQDQ-LABEL: @test_ghash_mul
 // CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
 // CHECK-PCLMULQDQ: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-PCLMULQDQ: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-PCLMULQDQ: llvm.inline_asm{{.*}}vpclmulqdq
 // CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
 // CHECK-ALL-LABEL: @test_ghash_mul
+// CHECK-ALL: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-ALL: llvm.inline_asm{{.*}}vpclmulqdq
 // CHECK-ALL: llvm.inline_asm{{.*}}vpclmulqdq
 func.func @test_ghash_mul(%a: !GHASH, %b: !GHASH) -> !GHASH {
   %c = field.mul %a, %b : !GHASH
