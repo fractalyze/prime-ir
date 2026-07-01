@@ -70,11 +70,12 @@ Pippengers::Pippengers(Value scalarsIn, Value points, Type outputType,
 
   scalarFieldType = cast<field::PrimeFieldType>(
       field::getStandardFormType(scalarsType.getElementType()));
-  scalars = field::isMontgomery(scalarsType)
-                ? field::FromMontOp::create(
-                      b, field::getStandardFormType(scalarsType), scalarsIn)
-                      .getResult()
-                : scalarsIn;
+  // Keep the scalars in their incoming form (possibly Montgomery). Each is
+  // reduced to standard form per-element at extraction (Generic.cpp
+  // bucketSingleAcc), not here: a from_mont over the whole scalar tensor
+  // lowers to whole-tensor arith on tensor<Nxi256>, which the XLA CPU
+  // hero-emitter pipeline (LowerTensors, not bufferization) cannot scalarize.
+  scalars = scalarsIn;
 
   size_t scalarBitWidth = scalarFieldType.getTypeSizeInBits();
   bitsPerWindow =

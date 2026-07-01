@@ -104,7 +104,14 @@ void PippengersGeneric::scalarIsNotOneBranch(Value scalar, Value point,
 ValueRange PippengersGeneric::bucketSingleAcc(Value i, Value windowSum,
                                               Value buckets, Value windowOffset,
                                               ImplicitLocOpBuilder &b) {
-  auto scalar = tensor::ExtractOp::create(b, scalars, ValueRange{i});
+  Value scalarRaw = tensor::ExtractOp::create(b, scalars, ValueRange{i});
+  // Reduce this scalar to standard form per-element. The whole-tensor
+  // reduction is intentionally skipped in Pippengers so the CPU fusion
+  // pipeline can scalarize it; non-Montgomery scalars pass through unchanged.
+  Value scalar =
+      field::isMontgomery(scalarRaw.getType())
+          ? field::FromMontOp::create(b, scalarFieldType, scalarRaw).getResult()
+          : scalarRaw;
   auto point = tensor::ExtractOp::create(b, points, ValueRange{i});
 
   Value zeroSF = field::createFieldZero(scalarFieldType, b);
