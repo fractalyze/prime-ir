@@ -944,7 +944,8 @@ namespace rewrites {
 #include "prime_ir/Dialect/Field/Conversions/FieldToModArith/FieldToModArith.cpp.inc"
 } // namespace rewrites
 
-// Check if a type contains BinaryFieldType
+// Check if a type contains a binary field (tower `bf` or flat `ghash`). These
+// are left for the BinaryFieldToArith pass, not lowered to mod_arith here.
 bool containsBinaryFieldType(Type type) {
   Type elemType = getElementTypeOrSelf(type);
   return isa<BinaryFieldType>(elemType);

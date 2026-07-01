@@ -241,7 +241,7 @@ public:
     auto denseAttr = cast<DenseIntElementsAttr>(efType.getNonResidue());
     std::array<BaseFieldT, N> m;
     size_t i = 0;
-    for (const APInt &c : denseAttr.getValues<APInt>()) {
+    for (const APInt &c : denseAttr.template getValues<APInt>()) {
       m[i++] = createBaseFieldOpUnchecked(c, efType);
     }
     return m;
@@ -282,8 +282,8 @@ public:
 
   static ExtensionFieldOperation fromUnchecked(DenseIntElementsAttr attr,
                                                ExtensionFieldType efType) {
-    SmallVector<APInt> coeffs{attr.getValues<APInt>().begin(),
-                              attr.getValues<APInt>().end()};
+    SmallVector<APInt> coeffs{attr.template getValues<APInt>().begin(),
+                              attr.template getValues<APInt>().end()};
     return fromUnchecked(coeffs, efType);
   }
 

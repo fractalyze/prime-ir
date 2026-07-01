@@ -29,9 +29,10 @@
 // Test both enabled (default)
 // RUN: prime-ir-opt --specialize-binary-field-to-x86 %s | FileCheck %s --check-prefix=CHECK-ALL
 
-!BF8 = !field.bf<3>   // GF(2⁸)
-!BF64 = !field.bf<6>  // GF(2⁶⁴)
-!BF128 = !field.bf<7> // GF(2¹²⁸)
+!BF8 = !field.bf<3>          // GF(2⁸)
+!BF64 = !field.bf<6>         // GF(2⁶⁴)
+!BF128 = !field.bf<7>        // GF(2¹²⁸), tower basis
+!GHASH = !field.bf<7, ghash> // GF(2¹²⁸), flat GHASH polynomial basis
 
 //===----------------------------------------------------------------------===//
 // GFNI Tests (packed BF8 vectors)
@@ -145,37 +146,60 @@ func.func @test_packed_bf8_square_128(%a: vector<16x!BF8>) -> vector<16x!BF8> {
 }
 
 //===----------------------------------------------------------------------===//
-// PCLMULQDQ Tests (BF64/BF128 scalar)
+// PCLMULQDQ Tests
 //===----------------------------------------------------------------------===//
+//
+// PCLMULQDQ computes a carryless product, which realizes multiplication in the
+// flat GHASH polynomial basis (reduction x¹²⁸ + x⁷ + x² + x + 1). It does NOT
+// match the recursive tower basis, so the fast path applies only to
+// `bf<7, ghash>`; tower bf<6>/bf<7> stay portable (`field.mul`).
 
-// BF64 scalar multiplication should use PCLMULQDQ
+// BF64 (tower) scalar multiplication stays portable — no carryless fast path.
 // CHECK-GFNI-LABEL: @test_bf64_mul
 // CHECK-GFNI: field.mul
 // CHECK-GFNI-NOT: llvm.inline_asm
 // CHECK-PCLMULQDQ-LABEL: @test_bf64_mul
-// CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
-// CHECK-PCLMULQDQ: llvm.inline_asm{{.*}}vpclmulqdq
-// CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
+// CHECK-PCLMULQDQ: field.mul
+// CHECK-PCLMULQDQ-NOT: vpclmulqdq
 // CHECK-ALL-LABEL: @test_bf64_mul
-// CHECK-ALL: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-ALL: field.mul
 func.func @test_bf64_mul(%a: !BF64, %b: !BF64) -> !BF64 {
   %c = field.mul %a, %b : !BF64
   return %c : !BF64
 }
 
-// BF128 scalar multiplication should use PCLMULQDQ with Karatsuba
+// BF128 (tower) scalar multiplication stays portable — no carryless fast path.
 // CHECK-GFNI-LABEL: @test_bf128_mul
 // CHECK-GFNI: field.mul
 // CHECK-GFNI-NOT: llvm.inline_asm
 // CHECK-PCLMULQDQ-LABEL: @test_bf128_mul
-// CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
-// CHECK-PCLMULQDQ: llvm.inline_asm{{.*}}vpclmulqdq
-// CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
+// CHECK-PCLMULQDQ: field.mul
+// CHECK-PCLMULQDQ-NOT: vpclmulqdq
 // CHECK-ALL-LABEL: @test_bf128_mul
-// CHECK-ALL: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-ALL: field.mul
 func.func @test_bf128_mul(%a: !BF128, %b: !BF128) -> !BF128 {
   %c = field.mul %a, %b : !BF128
   return %c : !BF128
+}
+
+// GHASH-basis scalar multiplication should use PCLMULQDQ with Karatsuba
+// (3 vpclmulqdq: ll, hh, and the cross term via (a₀+a₁)(b₀+b₁)).
+// CHECK-GFNI-LABEL: @test_ghash_mul
+// CHECK-GFNI: field.mul
+// CHECK-GFNI-NOT: llvm.inline_asm
+// CHECK-PCLMULQDQ-LABEL: @test_ghash_mul
+// CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
+// CHECK-PCLMULQDQ: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-PCLMULQDQ: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-PCLMULQDQ: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
+// CHECK-ALL-LABEL: @test_ghash_mul
+// CHECK-ALL: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-ALL: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-ALL: llvm.inline_asm{{.*}}vpclmulqdq
+func.func @test_ghash_mul(%a: !GHASH, %b: !GHASH) -> !GHASH {
+  %c = field.mul %a, %b : !GHASH
+  return %c : !GHASH
 }
 
 // Vector of BF64 should NOT be specialized by this pass (use ARM pass for vectors)

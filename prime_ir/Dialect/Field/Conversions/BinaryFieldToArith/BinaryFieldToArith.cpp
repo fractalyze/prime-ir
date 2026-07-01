@@ -55,7 +55,8 @@ public:
   }
 };
 
-/// Check if a type contains BinaryFieldType
+/// Check if a type contains a binary field this pass lowers: the tower `bf` or
+/// the flat-basis `ghash` (both GF(2^n), both lowered here).
 bool containsBinaryFieldType(Type type) {
   Type elemType = getElementTypeOrSelf(type);
   return isa<BinaryFieldType>(elemType);
@@ -65,14 +66,19 @@ bool containsBinaryFieldType(Type type) {
 // Conversion Patterns
 //===----------------------------------------------------------------------===//
 
+// GHASH-basis multiply (`bf<7, ghash>`), defined below; used by the mul/square
+// patterns to split on basis.
+Value emitGhashMul(ImplicitLocOpBuilder &b, Value a, Value bv);
+
 struct ConvertBinaryFieldConstant : public OpConversionPattern<ConstantOp> {
   using OpConversionPattern::OpConversionPattern;
 
   LogicalResult
   matchAndRewrite(ConstantOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto bfType = dyn_cast<BinaryFieldType>(getElementTypeOrSelf(op.getType()));
-    if (!bfType) {
+    // bf and ghash constants both lower to an integer arith.constant of the
+    // storage type; only the multiply differs between the two bases.
+    if (!containsBinaryFieldType(op.getType())) {
       return failure();
     }
 
@@ -177,6 +183,15 @@ struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
     }
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    if (bfType.isGhash()) {
+      // emitGhashMul is scalar-only (i64/i128 truncs and shifts); shaped GHASH
+      // is not lowered yet, so fail to legalize rather than emit invalid IR.
+      if (isa<ShapedType>(op.getType()))
+        return failure();
+      rewriter.replaceOp(op,
+                         emitGhashMul(b, adaptor.getLhs(), adaptor.getRhs()));
+      return success();
+    }
     BinaryFieldCodeGen lhs(bfType, adaptor.getLhs(), b);
     BinaryFieldCodeGen rhs(bfType, adaptor.getRhs(), b);
     BinaryFieldCodeGen result = lhs * rhs;
@@ -197,6 +212,15 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
     }
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    if (bfType.isGhash()) {
+      // emitGhashMul is scalar-only (i64/i128 truncs and shifts); shaped GHASH
+      // is not lowered yet, so fail to legalize rather than emit invalid IR.
+      if (isa<ShapedType>(op.getType()))
+        return failure();
+      rewriter.replaceOp(
+          op, emitGhashMul(b, adaptor.getInput(), adaptor.getInput()));
+      return success();
+    }
     BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
     BinaryFieldCodeGen result = input.square();
     rewriter.replaceOp(op, result.getValue());
@@ -214,6 +238,11 @@ struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
     if (!bfType) {
       return failure();
     }
+    // GHASH-basis inverse is not yet lowered (the GPU prover path is
+    // mul/add-heavy); fail to legalize rather than apply the tower inverse.
+    if (bfType.isGhash()) {
+      return failure();
+    }
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
@@ -229,9 +258,7 @@ struct ConvertBinaryFieldCmp : public OpConversionPattern<CmpOp> {
   LogicalResult
   matchAndRewrite(CmpOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    auto bfType =
-        dyn_cast<BinaryFieldType>(getElementTypeOrSelf(op.getLhs().getType()));
-    if (!bfType) {
+    if (!containsBinaryFieldType(op.getLhs().getType())) {
       return failure();
     }
 
@@ -293,7 +320,7 @@ struct ConvertBinaryFieldBitcast : public OpConversionPattern<BitcastOp> {
     Type inputElemType = getElementTypeOrSelf(op.getInput().getType());
     Type outputElemType = getElementTypeOrSelf(op.getOutput().getType());
 
-    // Only handle bitcasts involving BinaryFieldType
+    // Only handle bitcasts involving a binary field type (tower bf or ghash)
     if (!isa<BinaryFieldType>(inputElemType) &&
         !isa<BinaryFieldType>(outputElemType)) {
       return failure();
@@ -304,6 +331,110 @@ struct ConvertBinaryFieldBitcast : public OpConversionPattern<BitcastOp> {
     return success();
   }
 };
+
+//===----------------------------------------------------------------------===//
+// GHASH-basis multiply (`bf<7, ghash>`)
+//===----------------------------------------------------------------------===//
+//
+// `bf<7, ghash>` is GF(2)[x]/(x¹²⁸ + x⁷ + x² + x + 1) in the monomial basis
+// (NOT the x²+x+α tower of the default `bf<7>`). Only the multiply differs;
+// it is a carryless product reduced mod the GHASH polynomial. This portable
+// lowering emits the carryless multiply as shift-XOR so it runs on targets
+// without a CLMUL instruction (e.g. GPU); the x86/ARM specializers swap in
+// PCLMULQDQ/PMULL.
+
+Value i64Const(ImplicitLocOpBuilder &b, uint64_t v) {
+  return arith::ConstantIntOp::create(b, static_cast<int64_t>(v), 64);
+}
+
+// Portable 64x64 -> (lo, hi) carryless (GF(2)[x]) product, bit-serial shift-XOR
+// (mirrors flock's software clmul64). For bit i of `bv`, XOR in `a << i` (low
+// limb) and `a >> (64 - i)` (high limb); i == 0 contributes nothing to `hi`.
+std::pair<Value, Value> emitClmul64(ImplicitLocOpBuilder &b, Value a,
+                                    Value bv) {
+  Value zero = i64Const(b, 0);
+  Value one = i64Const(b, 1);
+  Value lo = zero;
+  Value hi = zero;
+  for (unsigned i = 0; i < 64; ++i) {
+    Value bShifted = bv;
+    Value aShl = a;
+    if (i != 0) {
+      Value shiftI = i64Const(b, i);
+      bShifted = arith::ShRUIOp::create(b, bv, shiftI);
+      aShl = arith::ShLIOp::create(b, a, shiftI);
+    }
+    Value bit = arith::AndIOp::create(b, bShifted, one);
+    Value mask = arith::SubIOp::create(b, zero, bit); // 0 or all-ones
+    lo = arith::XOrIOp::create(b, lo, arith::AndIOp::create(b, mask, aShl));
+    if (i != 0) {
+      Value aShr = arith::ShRUIOp::create(b, a, i64Const(b, 64 - i));
+      hi = arith::XOrIOp::create(b, hi, arith::AndIOp::create(b, mask, aShr));
+    }
+  }
+  return {lo, hi};
+}
+
+// Reduce the 256-bit carryless product (r0..r3, low-to-high i64 limbs) modulo
+// x^128 + x^7 + x^2 + x + 1, returning the 128-bit result as (lo, hi). This is
+// flock's ghash_reduce: fold the high half via x^128 == x^7 + x^2 + x + 1, with
+// a 7-bit overflow correction for bits pushed past x^127.
+std::pair<Value, Value> emitGhashReduce(ImplicitLocOpBuilder &b, Value r0,
+                                        Value r1, Value r2, Value r3) {
+  auto shl = [&](Value v, unsigned s) {
+    return arith::ShLIOp::create(b, v, i64Const(b, s));
+  };
+  auto shr = [&](Value v, unsigned s) {
+    return arith::ShRUIOp::create(b, v, i64Const(b, s));
+  };
+  auto x = [&](Value p, Value q) { return arith::XOrIOp::create(b, p, q); };
+  auto orr = [&](Value p, Value q) { return arith::OrIOp::create(b, p, q); };
+
+  Value s1Lo = shl(r2, 1), s1Hi = orr(shl(r3, 1), shr(r2, 63));
+  Value s2Lo = shl(r2, 2), s2Hi = orr(shl(r3, 2), shr(r2, 62));
+  Value s7Lo = shl(r2, 7), s7Hi = orr(shl(r3, 7), shr(r2, 57));
+  Value foldLo = x(x(x(r2, s1Lo), s2Lo), s7Lo);
+  Value foldHi = x(x(x(r3, s1Hi), s2Hi), s7Hi);
+  Value ov = x(x(shr(r3, 63), shr(r3, 62)), shr(r3, 57));
+  Value corr = x(x(x(ov, shl(ov, 1)), shl(ov, 2)), shl(ov, 7));
+  return {x(x(r0, foldLo), corr), x(r1, foldHi)};
+}
+
+// Multiply two GHASH-basis i128 values: 128×128 carryless product reduced mod
+// x¹²⁸ + x⁷ + x² + x + 1. Karatsuba — 3 clmul64 (the middle cross term
+// a₀b₁ + a₁b₀ = (a₀+a₁)(b₀+b₁) + a₀b₀ + a₁b₁), which matters because clmul64 is
+// fully unrolled.
+Value emitGhashMul(ImplicitLocOpBuilder &b, Value a, Value bv) {
+  auto i64Ty = b.getI64Type();
+  auto i128Ty = b.getIntegerType(128);
+  Value sh64 = arith::ConstantIntOp::create(b, 64, 128);
+  Value a0 = arith::TruncIOp::create(b, i64Ty, a);
+  Value a1 =
+      arith::TruncIOp::create(b, i64Ty, arith::ShRUIOp::create(b, a, sh64));
+  Value b0 = arith::TruncIOp::create(b, i64Ty, bv);
+  Value b1 =
+      arith::TruncIOp::create(b, i64Ty, arith::ShRUIOp::create(b, bv, sh64));
+
+  Value aXor = arith::XOrIOp::create(b, a0, a1);
+  Value bXor = arith::XOrIOp::create(b, b0, b1);
+  auto [llLo, llHi] = emitClmul64(b, a0, b0);
+  auto [hhLo, hhHi] = emitClmul64(b, a1, b1);
+  auto [mLo, mHi] = emitClmul64(b, aXor, bXor);
+  // cross = m + ll + hh = a₀b₁ + a₁b₀
+  Value crLo =
+      arith::XOrIOp::create(b, arith::XOrIOp::create(b, mLo, llLo), hhLo);
+  Value crHi =
+      arith::XOrIOp::create(b, arith::XOrIOp::create(b, mHi, llHi), hhHi);
+  Value r0 = llLo;
+  Value r1 = arith::XOrIOp::create(b, llHi, crLo);
+  Value r2 = arith::XOrIOp::create(b, hhLo, crHi);
+  Value r3 = hhHi;
+  auto [lo, hi] = emitGhashReduce(b, r0, r1, r2, r3);
+
+  Value loExt = arith::ExtUIOp::create(b, i128Ty, lo);
+  Value hiExt = arith::ExtUIOp::create(b, i128Ty, hi);
+  return arith::OrIOp::create(b, loExt, arith::ShLIOp::create(b, hiExt, sh64));
+}
 
 //===----------------------------------------------------------------------===//
 // Pass Implementation
