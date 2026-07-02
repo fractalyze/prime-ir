@@ -420,16 +420,17 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
   // their check. Collect candidates in IR walk order — not DenseMap iteration
   // order, which is nondeterministic — so equal-fanout ties in the stable_sort
   // below break the same way across runs and builds (otherwise equal-fanout
-  // lazy cycles could lower differently).
-  SmallVector<Value> candidates;
+  // lazy cycles could lower differently). Cache each fanout once — the use-list
+  // walk (std::distance) is O(fanout), so precomputing keeps the comparator O(1).
+  SmallVector<std::pair<Value, size_t>> candidates;
   funcOp.walk([&](Operation *op) {
     for (Value val : op->getResults())
       if (boundMap.find(val) != boundMap.end())
-        candidates.push_back(val);
+        candidates.emplace_back(
+            val, std::distance(val.user_begin(), val.user_end()));
   });
-  llvm::stable_sort(candidates, [](Value a, Value b) {
-    return std::distance(a.user_begin(), a.user_end()) >
-           std::distance(b.user_begin(), b.user_end());
+  llvm::stable_sort(candidates, [](const auto &a, const auto &b) {
+    return a.second > b.second;
   });
 
   // A single descending-fanout pass suffices. Erasing a value only lowers its
@@ -438,7 +439,7 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
   // bounds across every consumer kind). So a candidate that passes on this pass
   // stays passing after later erasures, and one that fails is erased here — a
   // second pass could never erase anything more.
-  for (Value val : candidates) {
+  for (auto &[val, fanout] : candidates) {
     auto it = boundMap.find(val);
     if (it == boundMap.end())
       continue; // already forced canonical
