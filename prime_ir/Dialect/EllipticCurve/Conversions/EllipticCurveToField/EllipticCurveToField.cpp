@@ -341,7 +341,7 @@ struct ConvertConvertPointType
     // The batch inverse avoids per-element scalar inverse, enabling
     // Montgomery's trick (3(N-1) muls + 1 inverse instead of N inverses).
     if (auto tensorType = dyn_cast<RankedTensorType>(inputType);
-        tensorType && tensorType.getRank() > 0) {
+        tensorType && tensorType.getRank() == 1) {
       auto inputPti = cast<PointTypeInterface>(tensorType.getElementType());
       auto outputPti = cast<PointTypeInterface>(outputType);
       if (outputPti.getPointKind() == PointKind::kAffine &&
@@ -351,9 +351,41 @@ struct ConvertConvertPointType
       }
     }
 
-    // AOT runtime path for point type conversions.
-    // Use getElementTypeOrSelf for inputType: multi-element tensors that the
-    // batch path doesn't cover (e.g. affine input) can still reach here.
+    // Any remaining tensor form converts element-wise with the inline
+    // scalar codegen regardless of mode: unlike the ->affine batch above
+    // these directions share no work across elements (no inverse to
+    // amortize), so a per-point AOT call would be pure overhead — and
+    // jacobian<->xyzz have no runtime symbol to call anyway.
+    if (auto tensorType = dyn_cast<RankedTensorType>(inputType)) {
+      ImplicitLocOpBuilder b(loc, rewriter);
+      SmallVector<Value> dynExtents;
+      for (int64_t i = 0; i < tensorType.getRank(); ++i) {
+        if (tensorType.isDynamicDim(i)) {
+          Value idx = arith::ConstantIndexOp::create(b, i);
+          dynExtents.push_back(
+              tensor::DimOp::create(b, adaptor.getInput(), idx));
+        }
+      }
+      auto outputTensorType =
+          RankedTensorType::get(tensorType.getShape(), outputType);
+      PointKind outKind = cast<PointTypeInterface>(outputType).getPointKind();
+      Value result =
+          tensor::GenerateOp::create(
+              b, outputTensorType, dynExtents,
+              [&](OpBuilder &nb, Location nloc, ValueRange ivs) {
+                ImplicitLocOpBuilder lb(nloc, nb);
+                ScopedBuilderContext scopedBuilderContext(&lb);
+                Value pt =
+                    tensor::ExtractOp::create(lb, adaptor.getInput(), ivs);
+                PointCodeGen codeGen(tensorType.getElementType(), pt);
+                tensor::YieldOp::create(lb, codeGen.convert(outKind));
+              })
+              .getResult();
+      rewriter.replaceOp(op, result);
+      return success();
+    }
+
+    // AOT runtime path for scalar point type conversions.
     if (shouldUseAOTRuntime(op, outputType, aotConfig.mode,
                             aotConfig.inlineConstOps)) {
       auto inputPti = cast<PointTypeInterface>(getElementTypeOrSelf(inputType));

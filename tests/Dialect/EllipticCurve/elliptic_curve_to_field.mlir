@@ -252,3 +252,16 @@ func.func @test_1x1_jacobian_to_affine_inline(%arg0: tensor<1x1x!jacobianm>) -> 
   %result = elliptic_curve.convert_point_type %arg0 : tensor<1x1x!jacobianm> -> tensor<1x1x!affinem>
   return %result : tensor<1x1x!affinem>
 }
+
+// Multi-element tensors with no batch lowering (affine input) convert
+// element-wise inside tensor.generate (fractalyze/xla#165).
+// CHECK-LABEL: @test_4elem_affine_to_jacobian_inline
+func.func @test_4elem_affine_to_jacobian_inline(%arg0: tensor<4x!affinem>) -> tensor<4x!jacobianm> {
+  // CHECK-NOT: elliptic_curve.convert_point_type
+  // CHECK: tensor.generate
+  // CHECK: tensor.extract
+  // CHECK: elliptic_curve.from_coords
+  // CHECK: tensor.yield
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<4x!affinem> -> tensor<4x!jacobianm>
+  return %result : tensor<4x!jacobianm>
+}
