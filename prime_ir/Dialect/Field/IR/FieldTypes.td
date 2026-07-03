@@ -108,6 +108,7 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
 def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
+  DeclareTypeInterfaceMethods<FieldTypeInterface>,
   DeclareTypeInterfaceMethods<DataLayoutTypeInterface>,
   DeclareTypeInterfaceMethods<ConstantLikeInterface>
   ]> {
