@@ -29,6 +29,25 @@ class FieldTest(absltest.TestCase):
       self.assertEqual(int(pf.modulus), BABYBEAR_MODULUS)
       self.assertTrue(pf.is_montgomery)
 
+  def testBinaryFieldTypes(self):
+    with Context() as ctx, Location.unknown():
+      field.register_dialect(ctx)
+
+      bf8 = field.BinaryFieldType.get(3, context=ctx)
+      self.assertEqual(str(bf8), "!field.bf<3>")
+      self.assertEqual(bf8.tower_level, 3)
+      self.assertFalse(bf8.is_ghash)
+
+      # is_ghash selects the flat GHASH basis at level 7; the two level-7 types
+      # are distinct (tower 2*3 = 1 vs flat 2*3 = 6).
+      tower = field.BinaryFieldType.get(7, context=ctx)
+      ghash = field.BinaryFieldType.get(7, True, ctx)
+      self.assertEqual(str(tower), "!field.bf<7>")
+      self.assertEqual(str(ghash), "!field.bf<7, ghash>")
+      self.assertFalse(tower.is_ghash)
+      self.assertTrue(ghash.is_ghash)
+      self.assertNotEqual(tower, ghash)
+
   def testExtensionFieldTypes(self):
     with Context() as ctx, Location.unknown():
       field.register_dialect(ctx)

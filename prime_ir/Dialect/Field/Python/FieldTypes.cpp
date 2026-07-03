@@ -48,6 +48,34 @@ void PyPrimeFieldType::bindDerived(ClassTy &c) {
 }
 
 // static
+void PyBinaryFieldType::bindDerived(ClassTy &c) {
+  c.def_static(
+      "get",
+      [](unsigned towerLevel, bool isGhash,
+         DefaultingPyMlirContext context) -> PyBinaryFieldType {
+        MlirType t =
+            primeIRBinaryFieldTypeGet(context->get(), towerLevel, isGhash);
+        return PyBinaryFieldType(context->getRef(), t);
+      },
+      nb::arg("tower_level"), nb::arg("is_ghash") = false,
+      nb::arg("context") = nb::none(),
+      "Create a binary field type GF(2^(2^tower_level)); is_ghash selects the "
+      "flat GHASH basis (valid at tower_level 7 only)");
+  c.def_prop_ro(
+      "tower_level",
+      [](PyBinaryFieldType &self) -> unsigned {
+        return primeIRBinaryFieldTypeGetTowerLevel(self);
+      },
+      "Returns the tower level of the binary field type");
+  c.def_prop_ro(
+      "is_ghash",
+      [](PyBinaryFieldType &self) -> bool {
+        return primeIRBinaryFieldTypeIsGhash(self);
+      },
+      "Returns whether this uses the flat GHASH basis");
+}
+
+// static
 void PyExtensionFieldType::bindDerived(ClassTy &c) {
   c.def_static(
       "get",
@@ -112,6 +140,7 @@ void PyExtensionFieldType::bindDerived(ClassTy &c) {
 
 void populateIRTypes(nb::module_ &m) {
   PyPrimeFieldType::bind(m);
+  PyBinaryFieldType::bind(m);
   PyExtensionFieldType::bind(m);
 }
 

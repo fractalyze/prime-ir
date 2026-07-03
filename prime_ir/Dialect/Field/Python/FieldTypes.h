@@ -36,6 +36,19 @@ public:
   static void bindDerived(ClassTy &c);
 };
 
+class PyBinaryFieldType
+    : public mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<
+          PyBinaryFieldType> {
+public:
+  static constexpr IsAFunctionTy isaFunction = primeIRTypeIsABinaryField;
+  static constexpr GetTypeIDFunctionTy getTypeIdFunction =
+      primeIRBinaryFieldTypeGetTypeID;
+  static constexpr const char *pyClassName = "BinaryFieldType";
+  using PyConcreteType::PyConcreteType;
+
+  static void bindDerived(ClassTy &c);
+};
+
 class PyExtensionFieldType
     : public mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN::PyConcreteType<
           PyExtensionFieldType> {
