@@ -162,12 +162,35 @@ BinaryFieldCodeGen BinaryFieldCodeGen::one(BinaryFieldType bfType,
   return constant(bfType, 1, builder);
 }
 
-uint64_t BinaryFieldCodeGen::getTowerAlpha(unsigned towerLevel) const {
-  // Tower α constants are defined in BinaryFieldTables.h
-  // These are the elements satisfying x² + x + α = 0
-  // at each tower level. Level 0 has no α (it's GF(2)).
-  assert(towerLevel >= 1 && towerLevel <= 7 && "Tower level must be 1-7 for α");
-  return kTowerAlphas[towerLevel];
+Value BinaryFieldCodeGen::mulXTower(Value a, unsigned towerLevel) const {
+  // Multiply by the generator Xₖ of GF(2^(2ᵏ)) = subfield[X]/(X² + βₖ₋₁·X + 1):
+  //   (a₀ + a₁·X)·X = a₁ + (a₀ + βₖ₋₁·a₁)·X
+  // where βₖ₋₁·(·) recurses as mulXTower one level down. Base: the generator of
+  // GF(2) is 1, so multiply-by-generator is the identity.
+  if (towerLevel == 0) {
+    return a;
+  }
+
+  unsigned halfBits = 1u << (towerLevel - 1);
+  IntegerType halfType = IntegerType::get(builder_.getContext(), halfBits);
+  IntegerType fullType = IntegerType::get(builder_.getContext(), halfBits * 2);
+
+  Value a0 = arith::TruncIOp::create(builder_, halfType, a);
+  Value halfBitsConst = arith::ConstantIntOp::create(
+      builder_, static_cast<int64_t>(halfBits), fullType.getWidth());
+  Value a1 = arith::TruncIOp::create(
+      builder_, halfType, arith::ShRUIOp::create(builder_, a, halfBitsConst));
+
+  // lo = a₁,  hi = a₀ + βₖ₋₁·a₁
+  Value resultLo = a1;
+  Value resultHi =
+      arith::XOrIOp::create(builder_, a0, mulXTower(a1, towerLevel - 1));
+
+  Value resultLoExt = arith::ExtUIOp::create(builder_, fullType, resultLo);
+  Value resultHiExt = arith::ExtUIOp::create(builder_, fullType, resultHi);
+  Value resultHiShifted =
+      arith::ShLIOp::create(builder_, resultHiExt, halfBitsConst);
+  return arith::OrIOp::create(builder_, resultLoExt, resultHiShifted);
 }
 
 Value BinaryFieldCodeGen::mulTower(Value a, Value b,
@@ -177,20 +200,14 @@ Value BinaryFieldCodeGen::mulTower(Value a, Value b,
     return arith::AndIOp::create(builder_, a, b);
   }
 
-  // Recursive case: use Karatsuba-style multiplication
-  // For GF(2^(2^k)), we have elements a = a₀ + a₁*x and b = b₀ + b₁*x
-  // where x² + x + α = ₀
+  // Recursive case: Karatsuba over the Fan-Paar tower. For GF(2^(2ᵏ)) with
+  // a = a₀ + a₁*x, b = b₀ + b₁*x and reduction x² = βₖ₋₁*x + 1:
   //
-  // Product: a*b = (a₀*b₀ + a₁*b₁*α) + (a₀*b₁ + a₁*b₀ + a₁*b₁)*x
+  //   a*b = (a₀*b₀ + a₁*b₁) + (a₀*b₁ + a₁*b₀ + βₖ₋₁*a₁*b₁)*x
   //
-  // Using Karatsuba:
-  // m₀ = a₀*b₀
-  // m₁ = a₁*b₁
-  // m₂ = (a₀+a₁)*(b₀+b₁)
-  // result_lo = m₀ + m₁*α
-  // result_hi = m₂ + m₀     (= a₀*b₁ + a₁*b₀ + a₁*b₁)
-  // Note m₂ + m₀ = a₀b₁ + a₁b₀ + a₁b₁, NOT m₂ + m₀ + m₁ (that cancels the
-  // a₁b₁ the x² = x + α fold contributes to the high term).
+  // Using Karatsuba products m₀ = a₀*b₀, m₁ = a₁*b₁, m₂ = (a₀+a₁)*(b₀+b₁):
+  // result_lo = m₀ + m₁                    (constant term 1)
+  // result_hi = (m₂ + m₀ + m₁) + βₖ₋₁*m₁   (m₂+m₀+m₁ = a₀b₁+a₁b₀; βₖ₋₁* = mulX)
 
   unsigned halfBits = 1u << (towerLevel - 1);
   IntegerType halfType = IntegerType::get(builder_.getContext(), halfBits);
@@ -214,18 +231,14 @@ Value BinaryFieldCodeGen::mulTower(Value a, Value b,
   Value b0Xb1 = arith::XOrIOp::create(builder_, b0, b1);
   Value m2 = mulTower(a0Xa1, b0Xb1, towerLevel - 1);
 
-  // Get α for this tower level
-  // TowerAlpha<k> is the α used in GF(2^(2ᵏ))
-  uint64_t alpha = getTowerAlpha(towerLevel);
-  Value alphaConst = arith::ConstantIntOp::create(
-      builder_, static_cast<int64_t>(alpha), halfType.getWidth());
+  // result_lo = m₀ + m₁
+  Value resultLo = arith::XOrIOp::create(builder_, m0, m1);
 
-  // result_lo = m₀ + m₁*α
-  Value m1Alpha = mulTower(m1, alphaConst, towerLevel - 1);
-  Value resultLo = arith::XOrIOp::create(builder_, m0, m1Alpha);
-
-  // result_hi = m₂ + m₀
-  Value resultHi = arith::XOrIOp::create(builder_, m2, m0);
+  // result_hi = (m₂ + m₀ + m₁) + βₖ₋₁·m₁
+  Value m2Xm0 = arith::XOrIOp::create(builder_, m2, m0);
+  Value crossTerm = arith::XOrIOp::create(builder_, m2Xm0, m1);
+  Value resultHi =
+      arith::XOrIOp::create(builder_, crossTerm, mulXTower(m1, towerLevel - 1));
 
   // Combine: result = result_lo | (result_hi << halfBits)
   Value resultLoExt = arith::ExtUIOp::create(builder_, fullType, resultLo);
@@ -241,9 +254,9 @@ Value BinaryFieldCodeGen::squareTower(Value a, unsigned towerLevel) const {
     return a;
   }
 
-  // For GF(2^(2ᵏ)), element a = a₀ + a1*x where x² + x + α = 0
-  // a² = a₀² + a₁²*x² = a₀² + a₁²*(x + α)
-  //     = (a₀² + a₁²*α) + a₁²*x
+  // For GF(2^(2ᵏ)), element a = a₀ + a1*x where x² = βₖ₋₁*x + 1
+  // a² = a₀² + a₁²*x² = a₀² + a₁²*(βₖ₋₁*x + 1)
+  //     = (a₀² + a₁²) + βₖ₋₁*a₁²*x
 
   unsigned halfBits = 1u << (towerLevel - 1);
   IntegerType halfType = IntegerType::get(builder_.getContext(), halfBits);
@@ -260,18 +273,11 @@ Value BinaryFieldCodeGen::squareTower(Value a, unsigned towerLevel) const {
   Value a0Sq = squareTower(a0, towerLevel - 1);
   Value a1Sq = squareTower(a1, towerLevel - 1);
 
-  // Get α for this tower level
-  // TowerAlpha<k> is the α used in GF(2^(2ᵏ))
-  uint64_t alpha = getTowerAlpha(towerLevel);
-  Value alphaConst = arith::ConstantIntOp::create(
-      builder_, static_cast<int64_t>(alpha), halfType.getWidth());
+  // result_lo = a₀² + a₁²          (constant term 1)
+  Value resultLo = arith::XOrIOp::create(builder_, a0Sq, a1Sq);
 
-  // result_lo = a₀² + a1²*α
-  Value a1SqAlpha = mulTower(a1Sq, alphaConst, towerLevel - 1);
-  Value resultLo = arith::XOrIOp::create(builder_, a0Sq, a1SqAlpha);
-
-  // result_hi = a1²
-  Value resultHi = a1Sq;
+  // result_hi = βₖ₋₁·a₁²
+  Value resultHi = mulXTower(a1Sq, towerLevel - 1);
 
   // Combine: result = result_lo | (result_hi << halfBits)
   Value resultLoExt = arith::ExtUIOp::create(builder_, fullType, resultLo);

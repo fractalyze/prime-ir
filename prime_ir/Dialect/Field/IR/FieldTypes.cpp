@@ -248,6 +248,19 @@ void BinaryFieldType::print(AsmPrinter &printer) const {
   printer << ">";
 }
 
+// FieldTypeInterface. A binary field is a leaf in prime-ir's field-type
+// algebra: its GF(2^(2^level)) tower is internal to BinaryFieldToArith, not a
+// prime-field coefficient decomposition. So, like a prime field, attr-shape is
+// empty and degree over the prime field is 1 (keeping the invariant
+// getDegreeOverPrime == product(getAttrShape)). Declaring the interface is what
+// lets passes gated on it (e.g. stablehlo's ConvertFieldMul) treat a binary
+// multiply as a field op instead of skipping it.
+bool BinaryFieldType::isMontgomery() const { return false; }
+
+SmallVector<int64_t> BinaryFieldType::getAttrShape() const { return {}; }
+
+unsigned BinaryFieldType::getDegreeOverPrime() const { return 1; }
+
 llvm::TypeSize BinaryFieldType::getTypeSizeInBits(
     DataLayout const &, llvm::ArrayRef<DataLayoutEntryInterface>) const {
   return llvm::TypeSize::getFixed(getTypeSizeInBits());

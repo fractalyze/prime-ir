@@ -26,33 +26,19 @@ limitations under the License.
 namespace mlir::prime_ir::field {
 
 //===----------------------------------------------------------------------===//
-// Tower Alpha Constants
-//===----------------------------------------------------------------------===//
-//
-// Tower alpha constants from zk_dtypes.
-// These are the elements satisfying x² + x + α = 0 at each tower level.
-// Level 0 (GF(2)) has no α.
-
-constexpr uint64_t kTowerAlphas[8] = {
-    0,                      // Level 0: GF(2), no extension
-    1,                      // Level 1: x² + x + 1
-    2,                      // Level 2: x² + x + 2
-    8,                      // Level 3: x² + x + 8
-    128,                    // Level 4: x² + x + 128
-    32768,                  // Level 5: x² + x + 32768
-    2147483648ULL,          // Level 6: x² + x + 2³¹
-    9223372036854775808ULL, // Level 7: x² + x + 2⁶³
-};
-
-//===----------------------------------------------------------------------===//
 // Tower <-> AES Field Isomorphism Tables
 //===----------------------------------------------------------------------===//
 //
-// The AES field uses the irreducible polynomial x⁸ + x⁴ + x³ + x + 1 (0x11B)
-// Our binary tower field at level 3 uses recursive extension polynomials:
-//   Level 1: X² + X + 1 (α = 1)
-//   Level 2: X² + X + 2 (α = 2)
-//   Level 3: X² + X + 8 (α = 8)
+// The F₂-linear isomorphism between the Fan-Paar/Binius canonical GF(2^8) tower
+// (level k: subfield[X]/(X² + βₖ₋₁·X + 1)) and the standard AES field
+// (x⁸+x⁴+x³+x+1, 0x11B) — the field vgf2p8mulb multiplies in. These are lifted
+// from Binius, which uses this same canonical tower, so they already match the
+// generic BinaryFieldToArith lowering.
+//
+// Independently regenerated and verified against this tower: the full GFNI path
+// affine(gf2p8mul(affine(a), affine(b)), a2t) equals the tower product for all
+// 65536 (a,b) pairs on GFNI hardware; the matrices are byte-identical to these
+// Binius-sourced values.
 //
 // Source: Binius project
 // - binius/crates/field/src/arch/x86_64/gfni/gfni_arithmetics.rs
