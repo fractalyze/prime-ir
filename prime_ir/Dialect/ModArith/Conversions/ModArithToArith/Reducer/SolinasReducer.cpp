@@ -73,12 +73,9 @@ Value SolinasReducer::reduce(Value lo, Value hi, bool lazy) {
   if (lazy)
     return t2;
   Value p = konst(modAttr.getValue().getZExtValue());
-  // Canonicalize with min instead of cmpi+select (2 ALU ops vs 3). Valid
-  // because t2 ∈ [0, 2^64) and 2^64 - p = ε: when t2 < p, `t2 - p` wraps to
-  // t2 + ε > t2 (no wrap of the sum since t2 + ε < 2^64), so min picks t2;
-  // when t2 ≥ p, `t2 - p` ∈ [0, ε) < t2, so min picks t2 - p. Matches the
-  // trick in MontReducer::getCanonicalFromExtended. (The subtract-of-p form
-  // is what makes min safe here; getCanonicalDiff adds p and so cannot.)
+  // Canonicalize with min, not cmpi+select (2 ALU ops vs 3). t2 ∈ [0, 2^64),
+  // 2^64 - p = ε: `min(t2 - p, t2)` picks t2 when t2 < p (the subtract wraps
+  // up), else t2 - p. Same min trick as MontReducer::getCanonicalFromExtended.
   Value sub = arith::SubIOp::create(b, t2, p);
   return arith::MinUIOp::create(b, sub, t2);
 }

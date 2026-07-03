@@ -96,18 +96,12 @@ Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
 
 Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
   auto cmod = createModulusConst(input.getType(), input);
-  // Canonicalize the value `overflow·2^w + input` (input ∈ [0, 2p), so one
-  // subtract of p suffices) in 3 ALU ops instead of 4.
-  //
-  // `min(input - p, input)` folds the `input ≥ p` case without a compare: when
-  // input < p, `input - p` wraps to `input + (2^w - p) > input` (and < 2^w, no
-  // double wrap), so min keeps input; when input ≥ p, `input - p < input`, so
-  // min picks it. A carry into bit w (overflow) always means subtract p, so the
-  // select forces that branch. Byte-identical to the prior
-  // `(input >= p || overflow) ? input - p : input` for every input and any
-  // modulus: overflow ⟹ both yield `input - p`; otherwise min reproduces the
-  // compare. Drops the `cmpi` + `ori` for a single `minui`. The subtract form
-  // is what makes min safe here — getCanonicalDiff adds p and so cannot.
+  // Canonicalize `overflow·2^w + input` (input ∈ [0, 2p)) in 3 ALU ops, not 4.
+  // `min(input - p, input)` picks input when input < p (the subtract wraps up)
+  // and input - p when input ≥ p — folding the compare into a minui; overflow
+  // forces the subtract branch. Byte-identical to the old
+  // `(input >= p || overflow) ? input - p : input`, minus the cmpi+ori. Uses
+  // subtract-of-p, not getCanonicalDiff's add-of-p, so min stays safe.
   auto sub = arith::SubIOp::create(b, input, cmod);
   auto min = arith::MinUIOp::create(b, sub, input);
   auto select = arith::SelectOp::create(b, overflow, sub, min);

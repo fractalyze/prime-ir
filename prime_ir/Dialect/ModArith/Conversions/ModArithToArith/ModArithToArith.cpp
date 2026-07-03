@@ -267,12 +267,10 @@ bool canAcceptLazy(Operation *user, Value val, const APInt &valUmax,
     return true;
   if (auto mulOp = dyn_cast<MulOp>(user)) {
     if (isGoldilocksModulus(p)) {
-      // ConvertMul's RHS-constant shortcuts (inverse-of-two-power halving and
-      // the shift/mask degree paths) run before the Solinas branch and assume a
-      // canonical lhs in [0, p): the halve does `lhs + p` (overflows i64 for a
-      // gl64 lhs such as p) and the degree path does `lhs >> d` / `lhs & mask`
-      // (wrong once lhs >= p). Keep the producer canonical for those; the plain
-      // Solinas mul path absorbs a gl64 operand directly.
+      // ConvertMul's RHS-constant shortcuts (halving, shift/mask degree paths)
+      // run before Solinas and assume a canonical lhs in [0, p), so a gl64 lhs
+      // breaks them. Keep the producer canonical for those; the plain Solinas
+      // mul path absorbs a gl64 operand directly.
       if (mulOp.getRhs().getDefiningOp<ConstantOp>())
         return false;
       return true;
@@ -282,11 +280,10 @@ bool canAcceptLazy(Operation *user, Value val, const APInt &valUmax,
   if (auto addOp = dyn_cast<AddOp>(user)) {
     Value other = (addOp.getLhs() == val) ? addOp.getRhs() : addOp.getLhs();
     APInt total = valUmax + getUmax(other);
-    // Goldilocks full-width add carry-folds the result into [0, 2⁶⁴) instead of
-    // canonicalizing (2⁶⁴ ≡ ε mod p). That single fold is exact as long as the
-    // sum cannot double-overflow, i.e. total < 2⁶⁴ + p — which holds whenever
-    // at least one operand is canonical. So a gl64 value can stay lazy through
-    // an add with a canonical partner (but not through one with another gl64).
+    // Goldilocks add carry-folds into [0, 2⁶⁴) (2⁶⁴ ≡ ε mod p) instead of
+    // canonicalizing. That fold is exact only if the sum can't double-overflow
+    // (total < 2⁶⁴ + p), i.e. at most one operand is gl64 — so a gl64 value
+    // stays lazy through an add with a canonical partner, but not another gl64.
     if (isGoldilocksModulus(p))
       return total.ult(APInt::getOneBitSet(dw, w) + p);
     return total.ule(wMax);
@@ -373,11 +370,10 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
         else
           umax = getOpUmax(addOp.getLhs()) + getOpUmax(addOp.getRhs());
       } else if (auto subOp = dyn_cast<SubOp>(op)) {
-        // Lazy sub computes lhs - rhs + rhsKp·p (a non-negative representative
-        // without a conditional subtract). That only fits in w bits when
-        // lhsUmax + rhsKp·p <= 2^w - 1. For full-width moduli (Goldilocks)
-        // lhs + p already overflows i64, so the result cannot stay lazy —
-        // record the canonical bound and let ConvertSub emit getCanonicalDiff.
+        // Lazy sub computes lhs - rhs + rhsKp·p, which fits in w bits only when
+        // lhsUmax + rhsKp·p <= 2^w - 1. For Goldilocks lhs + p already
+        // overflows i64, so it can't stay lazy — record the canonical bound
+        // and let ConvertSub emit getCanonicalDiff.
         uint64_t rhsKp = kpFromUmax(getOpUmax(subOp.getRhs()), p);
         APInt lazyUmax = getOpUmax(subOp.getLhs()) + p * APInt(dw, rhsKp);
         umax = lazyUmax.ule(APInt::getMaxValue(w).zext(dw)) ? lazyUmax
@@ -409,19 +405,15 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
   // reduced — a lazy value would propagate unreduced through ext_from_coeffs →
   // ext_to_coeffs round-trips where the bound information is lost.
   //
-  // When two lazy values block each other (a value and its add partner are both
-  // gl64, so neither add can absorb the other), canonicalizing ONE unblocks the
-  // rest. The Goldilocks diffusion is the motivating case: one column-sum is
-  // shared by 16 adds, each pairing it with a distinct gl64 product. Erasing
-  // the single high-fanout sum (1 reduction) lets all 16 low-fanout products
-  // stay lazy; erasing the products instead would cost 16. So visit candidates
-  // by descending fanout and erase immediately: a widely-shared value is
-  // reduced first, and its now-canonical value lets its many partners pass
-  // their check. Collect candidates in IR walk order — not DenseMap iteration
-  // order, which is nondeterministic — so equal-fanout ties in the stable_sort
-  // below break the same way across runs and builds (otherwise equal-fanout
-  // lazy cycles could lower differently). Cache each fanout once — the use-list
-  // walk (std::distance) is O(fanout), so precomputing keeps the comparator O(1).
+  // When two lazy gl64 values block each other (add partners, neither add can
+  // absorb the other), canonicalizing ONE unblocks the rest. Motivating case:
+  // Goldilocks diffusion shares one column-sum across 16 adds — erasing that
+  // high-fanout sum (1 reduction) keeps all 16 low-fanout products lazy, vs 16
+  // if we erased the products. So visit high-fanout-first and erase in place:
+  // the shared value reduces first, letting its partners pass. Collect in IR
+  // walk order (DenseMap order is nondeterministic) so equal-fanout ties in the
+  // stable_sort break identically across builds. Cache each fanout once — the
+  // use-list walk (std::distance) is O(fanout), so keeps the comparator O(1).
   SmallVector<std::pair<Value, size_t>> candidates;
   funcOp.walk([&](Operation *op) {
     for (Value val : op->getResults())
@@ -433,12 +425,10 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
     return a.second > b.second;
   });
 
-  // A single descending-fanout pass suffices. Erasing a value only lowers its
-  // reported bound to p-1, which can only relax a partner's canAcceptLazy check
-  // (false -> true), never tighten it (canAcceptLazy is monotone in the operand
-  // bounds across every consumer kind). So a candidate that passes on this pass
-  // stays passing after later erasures, and one that fails is erased here — a
-  // second pass could never erase anything more.
+  // One pass suffices: erasing a value only drops its bound to p-1, which can
+  // only relax a partner's canAcceptLazy check, never tighten it (the check is
+  // monotone in operand bounds). So a passing candidate keeps passing after
+  // later erasures — a second pass could erase nothing more.
   for (auto &[val, fanout] : candidates) {
     auto it = boundMap.find(val);
     if (it == boundMap.end())
@@ -787,11 +777,10 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
     APInt p = modArithType.getModulus().getValue().zext(dw);
     APInt sumMax = lhsUmax + rhsUmax;
 
-    // Goldilocks full-width add can carry-fold its result into [0, 2⁶⁴)
-    // (gl64-lazy) when a consumer accepts a non-canonical operand (resBound >
-    // 1), skipping the canonicalizing subtract. 2⁶⁴ ≡ ε (mod p), so a single
-    // conditional +ε on the carry suffices — but only if the operands cannot
-    // double-overflow (total < 2⁶⁴ + p), i.e. at most one is gl64.
+    // Goldilocks add can carry-fold into [0, 2⁶⁴) (gl64-lazy) when the consumer
+    // accepts a non-canonical operand (resBound > 1): 2⁶⁴ ≡ ε mod p, so one
+    // conditional +ε on the carry replaces the canonicalizing subtract — valid
+    // only when operands can't double-overflow (total < 2⁶⁴ + p, ≤1 gl64).
     bool wantLazyGl64 =
         modWidth == storageWidth && resBound > 1 && isGoldilocksModulus(p);
 
@@ -832,9 +821,8 @@ struct ConvertAdd : public BoundMapPattern<AddOp> {
       auto add = arith::AddUIExtendedOp::create(b, lhs, rhs);
       if (wantLazyGl64) {
         // gl64-lazy: fold the carry as +ε (2⁶⁴ ≡ ε mod p), leaving the result
-        // in [0, 2⁶⁴). No compare-vs-p — a multiply or canonical-add consumer
-        // absorbs it. Pre-reduction above guarantees at most one gl64 operand,
-        // so the +ε never double-overflows.
+        // in [0, 2⁶⁴) with no compare-vs-p. Pre-reduction above bounds this to
+        // one gl64 operand, so the +ε never double-overflows.
         APInt epsilon = APInt::getOneBitSet(storageWidth, storageWidth / 2) -
                         APInt(storageWidth, 1); // 2³² - 1
         Value eps =
