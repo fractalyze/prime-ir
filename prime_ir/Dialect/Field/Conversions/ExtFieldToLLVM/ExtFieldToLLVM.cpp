@@ -144,6 +144,29 @@ struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
       rewriter.replaceOp(op, adaptor.getInput());
       return success();
     }
+
+    // Ranked-tensor reinterpret in a value path (e.g. the GPU MLIR emitter,
+    // which — unlike the CPU fusion compiler — has no bufferization stage that
+    // would turn this into a memref bitcast). LowerTensors has already backed
+    // the tensor by a raw !llvm.ptr through unrealized_conversion_cast on both
+    // ends, so a count-changing base<->EF bitcast is a pure buffer-identity
+    // reinterpret: the input holds N*degIn storage integers and the output the
+    // same N*degOut, sharing one base pointer. Forward the converted operand as
+    // an unrealized_conversion_cast to the converted output type; the
+    // reconcile-unrealized-casts finalization collapses the
+    //   ptr -> tensor<in> -> tensor<out> -> ptr
+    // chain back to the original pointer (same idiom as
+    // SpecializeBinaryFieldToX86). The memref path above is handled separately
+    // because it must rebuild the descriptor; a tensor in this value path
+    // carries no descriptor.
+    if (isa<RankedTensorType>(inputType)) {
+      Value cast = UnrealizedConversionCastOp::create(rewriter, op.getLoc(),
+                                                      convertedOutputType,
+                                                      adaptor.getInput())
+                       .getResult(0);
+      rewriter.replaceOp(op, cast);
+      return success();
+    }
     return failure();
   }
 
@@ -286,11 +309,21 @@ void populateExtFieldToLLVMTypeConversion(LLVMTypeConverter &typeConverter) {
   // ConvertBitcast rebuilds the descriptor with correct sizes/strides/offset.
   typeConverter.addConversion(
       [](RankedTensorType tensorType) -> std::optional<Type> {
-        auto efType = dyn_cast<ExtensionFieldType>(tensorType.getElementType());
-        if (!efType)
-          return std::nullopt;
-        return RankedTensorType::get(tensorType.getShape(),
-                                     convertExtFieldType(efType));
+        if (auto efType =
+                dyn_cast<ExtensionFieldType>(tensorType.getElementType()))
+          return RankedTensorType::get(tensorType.getShape(),
+                                       convertExtFieldType(efType));
+        // Integer-element tensors are the non-EF side of a count-changing
+        // reinterpret bitcast in the GPU value path (the packed constant pool:
+        // tensor<N*deg x iK> <-> tensor<N x !EF>). They carry no EF element to
+        // lower, but ConvertBitcast still needs its adaptor built, so map them
+        // to themselves. Without an identity conversion here the base
+        // ConvertOpToLLVMPattern bails ("failed to legalize") before the
+        // pattern runs. These tensors are backed by a raw pointer and are
+        // removed by reconcile-unrealized-casts after lowering (xla#163).
+        if (isa<IntegerType>(tensorType.getElementType()))
+          return tensorType;
+        return std::nullopt;
       });
   typeConverter.addConversion(
       [](UnrankedTensorType tensorType) -> std::optional<Type> {
