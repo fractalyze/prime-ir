@@ -92,9 +92,12 @@ private:
   // Recursive squaring for tower level k
   Value squareTower(Value a, unsigned towerLevel) const;
 
-  // Get the α constant for tower level k
-  // Alpha is the element satisfying x² + x + α = 0
-  uint64_t getTowerAlpha(unsigned towerLevel) const;
+  // Multiply a tower-level-k element by that level's generator βₖ (the root X
+  // of the level-k defining polynomial). This is the Fan-Paar tower's
+  // "multiply by βₖ₋₁" one level up: the linear coefficient of the reduction
+  // X² + βₖ₋₁·X + 1 is a subfield element, not a stored constant, so it is
+  // realized recursively rather than as a multiply by an α table entry.
+  Value mulXTower(Value a, unsigned towerLevel) const;
 
   // Lookup table-based inverse for bf<8> (tower level 3)
   // Uses O(1) table lookup instead of O(n) Fermat computation

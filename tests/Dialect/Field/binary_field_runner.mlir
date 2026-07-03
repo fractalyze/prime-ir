@@ -41,16 +41,13 @@ func.func @test_bf8_add() {
   func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [6]
+// CHECK: {{^}}[6]
 
-// Test: BF8 multiplication using tower field arithmetic
-// In tower field GF(2^8) with tower construction:
-//   Level 1: X² + X + 1 (α = 1), field GF(4)
-//   Level 2: X² + X + 2 (α = 2), field GF(16)
-//   Level 3: X² + X + 8 (α = 8), field GF(256)
-// In GF(4): 2 represents ω, 3 represents ω+1
-//   ω * (ω+1) = ω² + ω = (ω+1) + ω = 1
-// Since 2 and 3 embed in lower half of GF(256): 2 * 3 = 1
+// Test: BF8 multiplication using tower field arithmetic.
+// Fan-Paar/Binius canonical tower GF(2^8): each level GF(2^(2ᵏ)) =
+// subfield[X]/(X² + βₖ₋₁·X + 1), βₖ₋₁ the subfield generator.
+// 2 and 3 live in the GF(4) subfield (β₀ = 1 ⇒ X² + X + 1, unchanged across
+// towers): 2 = ω, 3 = ω+1, ω·(ω+1) = ω²+ω = (ω+1)+ω = 1. So 2 * 3 = 1.
 func.func @test_bf8_mul() {
   %a = field.constant 2 : !BF8
   %b = field.constant 3 : !BF8
@@ -64,7 +61,7 @@ func.func @test_bf8_mul() {
   func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [1]
+// CHECK: {{^}}[1]
 
 // Test: BF8 squaring
 // In GF(4): 3 = ω+1, and (ω+1)² = ω² + 1 = (ω+1) + 1 = ω = 2
@@ -81,7 +78,7 @@ func.func @test_bf8_square() {
   func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [2]
+// CHECK: {{^}}[2]
 
 // Test: BF8 double (should be 0 in characteristic 2)
 // 2 * x = x + x = 0 for all x in GF(2ⁿ)
@@ -97,12 +94,10 @@ func.func @test_bf8_double() {
   func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [0]
+// CHECK: {{^}}[0]
 
-// Test: BF8 self-multiply exercises the x² = x + α high-term fold.
-// 3 = ω+1 in the GF(4) subfield, so 3*3 = (ω+1)² = ω = 2 (= square(3)).
-// A wrong Karatsuba high term (m₂+m₀+m₁ instead of m₂+m₀) drops the a₁b₁
-// the fold contributes, making 3 a zero-divisor (3*3 = 0).
+// Test: BF8 self-multiply. 3 = ω+1 in the GF(4) subfield, so 3*3 = (ω+1)² =
+// ω = 2 (= square(3)). Subfield-only, so tower-independent.
 func.func @test_bf8_mul_self() {
   %a = field.constant 3 : !BF8
   %c = field.mul %a, %a : !BF8
@@ -115,7 +110,42 @@ func.func @test_bf8_mul_self() {
   func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [2]
+// CHECK: {{^}}[2]
+
+// Test: BF8 multiply where operands span tower level ≥ 2, so the result
+// distinguishes the Fan-Paar tower from the previous x²+x+α tower. 5 spans
+// GF(16); 5 * 3 = 15 (0x0f) in the canonical tower (the old tower gave 6).
+// This is the case that a bare zk_dtypes bump silently broke — every other
+// case here is subfield-only and agrees across towers.
+func.func @test_bf8_mul_cross() {
+  %a = field.constant 5 : !BF8
+  %b = field.constant 3 : !BF8
+  %c = field.mul %a, %b : !BF8
+
+  %result_i8 = field.bitcast %c : !BF8 -> i8
+  %result = arith.extui %result_i8 : i8 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[15]
+
+// Test: BF8 square spanning level ≥ 2. 5² = 8 in the canonical tower.
+func.func @test_bf8_square_cross() {
+  %a = field.constant 5 : !BF8
+  %c = field.square %a : !BF8
+
+  %result_i8 = field.bitcast %c : !BF8 -> i8
+  %result = arith.extui %result_i8 : i8 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[8]
 
 // Test: BF128 (GF(2^128)) multiplication on the portable tower path.
 // 2 and 3 embed in the GF(4) subfield, so 2 * 3 = 1 at every tower level.
@@ -132,7 +162,7 @@ func.func @test_bf128_mul() {
   func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [1]
+// CHECK: {{^}}[1]
 
 // Test: BF128 self-multiply — 3 * 3 = 2 (zero-divisor guard at the top level).
 func.func @test_bf128_mul_self() {
@@ -147,7 +177,24 @@ func.func @test_bf128_mul_self() {
   func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: [2]
+// CHECK: {{^}}[2]
+
+// Test: BF128 multiply spanning level ≥ 2 (5 and 3 embed in GF(16) ⊂ GF(2^128),
+// so 5 * 3 = 15 at the top level too — guards the full recursive tower).
+func.func @test_bf128_mul_cross() {
+  %a = field.constant 5 : !BF128
+  %b = field.constant 3 : !BF128
+  %c = field.mul %a, %b : !BF128
+
+  %result_i128 = field.bitcast %c : !BF128 -> i128
+  %result = arith.trunci %result_i128 : i128 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[15]
 
 func.func @main() {
   func.call @test_bf8_add() : () -> ()
@@ -155,7 +202,10 @@ func.func @main() {
   func.call @test_bf8_square() : () -> ()
   func.call @test_bf8_double() : () -> ()
   func.call @test_bf8_mul_self() : () -> ()
+  func.call @test_bf8_mul_cross() : () -> ()
+  func.call @test_bf8_square_cross() : () -> ()
   func.call @test_bf128_mul() : () -> ()
   func.call @test_bf128_mul_self() : () -> ()
+  func.call @test_bf128_mul_cross() : () -> ()
   return
 }

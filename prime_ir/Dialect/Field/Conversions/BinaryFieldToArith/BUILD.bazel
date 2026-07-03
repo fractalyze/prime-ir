@@ -54,6 +54,10 @@ prime_ir_cc_library(
 prime_ir_cc_library(
     name = "BinaryFieldTables",
     hdrs = ["BinaryFieldTables.h"],
+    deps = [
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+    ],
 )
 
 prime_ir_cc_library(

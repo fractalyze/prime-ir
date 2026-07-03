@@ -37,6 +37,17 @@ prime_ir_cc_test(
 )
 
 prime_ir_cc_test(
+    name = "BinaryFieldAesTablesTest",
+    srcs = ["BinaryFieldAesTablesTest.cpp"],
+    deps = [
+        "//prime_ir/Dialect/Field/Conversions/BinaryFieldToArith:BinaryFieldTables",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@zk_dtypes//zk_dtypes:binary_field",
+    ],
+)
+
+prime_ir_cc_test(
     name = "PrimeFieldOperationTest",
     srcs = ["PrimeFieldOperationTest.cpp"],
     deps = [
