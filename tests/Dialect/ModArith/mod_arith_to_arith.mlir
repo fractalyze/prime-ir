@@ -307,6 +307,34 @@ func.func @test_lower_sub_goldilocks(%lhs : !Gp, %rhs : !Gp) -> !Gp {
 
 // -----
 
+// Goldilocks add is full-width (modWidth == storageWidth == 64), so it carries
+// into an addui_extended overflow bit and canonicalizes via the overflow form
+// of getCanonicalFromExtended. That folds the `>= p` case with `minui` (no
+// `cmpi`/`ori`): subi + minui + select = 3 ALU ops. Byte-identical to the prior
+// cmpi + ori + subi + select (4 ops). p = 0xffffffff00000001 prints as
+// -4294967295 in signed i64.
+!Gadd = !mod_arith.int<18446744069414584321 : i64>
+// CHECK-LABEL: @test_lower_add_goldilocks
+// CHECK-SAME: (%[[LHS:.*]]: [[T:.*]], %[[RHS:.*]]: [[T]]) -> [[T]] {
+func.func @test_lower_add_goldilocks(%lhs : !Gadd, %rhs : !Gadd) -> !Gadd {
+  // CHECK-NOT: mod_arith.add
+  // CHECK: %[[SUM:.*]], %[[OVF:.*]] = arith.addui_extended %[[LHS]], %[[RHS]] : [[T]], i1
+  // The old cmpi + ori canonicalize must not appear anywhere in the add slice.
+  // CHECK-NOT: arith.cmpi
+  // CHECK-NOT: arith.ori
+  // CHECK: %[[CMOD:.*]] = arith.constant -4294967295 : [[T]]
+  // CHECK: %[[SUB:.*]] = arith.subi %[[SUM]], %[[CMOD]] : [[T]]
+  // CHECK: %[[MIN:.*]] = arith.minui %[[SUB]], %[[SUM]] : [[T]]
+  // CHECK: %[[RES:.*]] = arith.select %[[OVF]], %[[SUB]], %[[MIN]] : [[T]]
+  // CHECK-NOT: arith.cmpi
+  // CHECK-NOT: arith.ori
+  // CHECK: return %[[RES]] : [[T]]
+  %res = mod_arith.add %lhs, %rhs : !Gadd
+  return %res : !Gadd
+}
+
+// -----
+
 // Goldilocks p = 2^64 - 2^32 + 1 takes a 64-bit Solinas reduction path so the
 // CPU JIT runtime doesn't need libgcc's `__umodti3` (the generic
 // `arith.remui i128, i128` fallback is unsupported on that runtime). The whole
@@ -334,9 +362,8 @@ func.func @test_lower_mul_goldilocks(%lhs : !Goldilocks, %rhs : !Goldilocks)
   // CHECK:      %[[SUM:.*]], %[[CARRY:.*]] = arith.addui_extended %[[T0]], %[[T1]] : i64, i1
   // CHECK:      %[[T2COR:.*]] = arith.addi %[[SUM]], %{{.*}} : i64
   // CHECK:      %[[T2:.*]] = arith.select %[[CARRY]], %[[T2COR]], %[[SUM]] : i64
-  // CHECK:      %[[GE:.*]] = arith.cmpi uge, %[[T2]], %{{.*}} : i64
   // CHECK:      %[[PSUB:.*]] = arith.subi %[[T2]], %{{.*}} : i64
-  // CHECK:      %[[RES:.*]] = arith.select %[[GE]], %[[PSUB]], %[[T2]] : i64
+  // CHECK:      %[[RES:.*]] = arith.minui %[[PSUB]], %[[T2]] : i64
   // CHECK:      return %[[RES]] : i64
   %res = mod_arith.mul %lhs, %rhs : !Goldilocks
   return %res : !Goldilocks
@@ -361,10 +388,28 @@ func.func @test_lower_square_goldilocks(%lhs : !Goldilocks) -> !Goldilocks {
   // CHECK:      %[[SUM:.*]], %[[CARRY:.*]] = arith.addui_extended %[[T0]], %[[T1]] : i64, i1
   // CHECK:      %[[T2COR:.*]] = arith.addi %[[SUM]], %{{.*}} : i64
   // CHECK:      %[[T2:.*]] = arith.select %[[CARRY]], %[[T2COR]], %[[SUM]] : i64
-  // CHECK:      %[[GE:.*]] = arith.cmpi uge, %[[T2]], %{{.*}} : i64
   // CHECK:      %[[PSUB:.*]] = arith.subi %[[T2]], %{{.*}} : i64
-  // CHECK:      %[[RES:.*]] = arith.select %[[GE]], %[[PSUB]], %[[T2]] : i64
+  // CHECK:      %[[RES:.*]] = arith.minui %[[PSUB]], %[[T2]] : i64
   // CHECK:      return %[[RES]] : i64
   %res = mod_arith.square %lhs : !Goldilocks
   return %res : !Goldilocks
+}
+
+// -----
+
+// Regression: a Goldilocks (full-width) sub must never take the lazy
+// `lhs + p - rhs` path — lhs + p overflows i64, corrupting the residue. Even
+// when the result feeds a multiply (a lazy-accepting consumer), the sub must
+// canonicalize via getCanonicalDiff (subi + addi + cmpi + select).
+!Gsub = !mod_arith.int<18446744069414584321 : i64>
+// CHECK-LABEL: @test_lower_sub_goldilocks_feeds_mul
+func.func @test_lower_sub_goldilocks_feeds_mul(%a: !Gsub, %b: !Gsub, %c: !Gsub) -> !Gsub {
+  // CHECK:      %[[SUB:.*]] = arith.subi %[[A:.*]], %[[B:.*]] : i64
+  // CHECK:      %[[ADD:.*]] = arith.addi %[[SUB]], %{{.*}} : i64
+  // CHECK:      %[[CMP:.*]] = arith.cmpi ult, %[[A]], %[[B]] : i64
+  // CHECK:      %[[DIFF:.*]] = arith.select %[[CMP]], %[[ADD]], %[[SUB]] : i64
+  // CHECK:      arith.mului_extended %[[DIFF]], %{{.*}}
+  %s = mod_arith.sub %a, %b : !Gsub
+  %r = mod_arith.mul %s, %c : !Gsub
+  return %r : !Gsub
 }

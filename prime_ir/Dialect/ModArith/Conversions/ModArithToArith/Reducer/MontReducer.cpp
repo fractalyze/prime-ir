@@ -96,15 +96,15 @@ Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
 
 Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
   auto cmod = createModulusConst(input.getType(), input);
-  // NOTE(chokobole): 'ult' is generally preferred over 'uge' for
-  // better performance. However, using 'ult' would require inverting the
-  // overflow check logic. Currently, 'uge' is used for clearer logic, but
-  // this choice should be re-evaluated after benchmarking. See
-  // https://github.com/fractalyze/prime-ir/pull/86/commits/10d3807
-  auto ifge = arith::CmpIOp::create(b, arith::CmpIPredicate::uge, input, cmod);
-  auto or_ = arith::OrIOp::create(b, ifge, overflow);
+  // Canonicalize `overflow·2^w + input` (input ∈ [0, 2p)) in 3 ALU ops, not 4.
+  // `min(input - p, input)` picks input when input < p (the subtract wraps up)
+  // and input - p when input ≥ p — folding the compare into a minui; overflow
+  // forces the subtract branch. Byte-identical to the old
+  // `(input >= p || overflow) ? input - p : input`, minus the cmpi+ori. Uses
+  // subtract-of-p, not getCanonicalDiff's add-of-p, so min stays safe.
   auto sub = arith::SubIOp::create(b, input, cmod);
-  auto select = arith::SelectOp::create(b, or_, sub, input);
+  auto min = arith::MinUIOp::create(b, sub, input);
+  auto select = arith::SelectOp::create(b, overflow, sub, min);
   return select.getResult();
 }
 

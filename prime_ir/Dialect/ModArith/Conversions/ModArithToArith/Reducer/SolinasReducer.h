@@ -45,9 +45,18 @@ public:
   explicit SolinasReducer(ImplicitLocOpBuilder &b, ModArithType modArithType);
 
   // Reduces the 128-bit product `hi·2^64 + lo` (each half a canonical-width
-  // `k`-bit integer, e.g. from `arith.mului_extended`) to the canonical
-  // `k`-bit residue in `[0, p)`. Precondition: `hi·2^64 + lo < p²`.
-  Value reduce(Value lo, Value hi);
+  // `k`-bit integer, e.g. from `arith.mului_extended`) to a `k`-bit residue.
+  // Precondition: `hi·2^64 + lo < 2^128`; canonical callers naturally satisfy
+  // the tighter `< p²` bound, while gl64-lazy callers may use the full 64-bit
+  // operand range.
+  //
+  // When `lazy` is false, returns the canonical residue in `[0, p)`.
+  // When `lazy` is true, skips the final conditional subtract of `p` and
+  // returns the reduced-but-not-canonical value in `[0, 2^64)` (the gl64
+  // representation: still one ε wider than `[0, p)`, congruent mod p). A
+  // consumer that needs canonical form must reduce once — kp for such a value
+  // is 2 (since `p < 2^64 < 2p`), so a single conditional subtract suffices.
+  Value reduce(Value lo, Value hi, bool lazy = false);
 
 private:
   ImplicitLocOpBuilder &b;
