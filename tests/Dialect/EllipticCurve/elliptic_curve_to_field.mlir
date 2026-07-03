@@ -217,6 +217,22 @@ func.func @test_batch_xyzz_to_affine(%arg0: tensor<4x!xyzzm>) -> tensor<4x!affin
   return %result : tensor<4x!affinem>
 }
 
+// Rank-2 →affine keeps the single batch field.inverse: field.inverse
+// collapses the multi-dim column internally, so higher ranks don't degrade
+// to a per-element inverse.
+// CHECK-LABEL: @test_batch_rank2_jacobian_to_affine
+func.func @test_batch_rank2_jacobian_to_affine(%arg0: tensor<2x3x!jacobianm>) -> tensor<2x3x!affinem> {
+  // CHECK-NOT: elliptic_curve.convert_point_type
+  // CHECK: tensor.generate
+  // CHECK: elliptic_curve.to_coords
+  // CHECK: field.inverse
+  // CHECK-NOT: field.inverse
+  // CHECK: tensor.generate
+  // CHECK: elliptic_curve.from_coords
+  %result = elliptic_curve.convert_point_type %arg0 : tensor<2x3x!jacobianm> -> tensor<2x3x!affinem>
+  return %result : tensor<2x3x!affinem>
+}
+
 // Single-element tensor convert_point_type takes the scalar path in inline
 // mode too: extract, scalar conversion, wrap back. The batch field.inverse
 // path saves nothing at N = 1, and the inline scalar codegen cannot consume

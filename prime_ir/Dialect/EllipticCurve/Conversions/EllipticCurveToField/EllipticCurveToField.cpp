@@ -341,7 +341,7 @@ struct ConvertConvertPointType
     // The batch inverse avoids per-element scalar inverse, enabling
     // Montgomery's trick (3(N-1) muls + 1 inverse instead of N inverses).
     if (auto tensorType = dyn_cast<RankedTensorType>(inputType);
-        tensorType && tensorType.getRank() == 1) {
+        tensorType && tensorType.getRank() > 0) {
       auto inputPti = cast<PointTypeInterface>(tensorType.getElementType());
       auto outputPti = cast<PointTypeInterface>(outputType);
       if (outputPti.getPointKind() == PointKind::kAffine &&
@@ -428,26 +428,21 @@ private:
                                       RankedTensorType tensorType,
                                       PointTypeInterface inputPti,
                                       PointTypeInterface outputPti) const {
-    if (tensorType.getRank() != 1)
-      return rewriter.notifyMatchFailure(
-          op, "batch convert_point_type requires 1-D tensor");
-
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     Type fieldType = inputPti.getBaseFieldType();
-    int64_t n = tensorType.getDimSize(0); // may be kDynamic
-    bool isDynamic = n == ShapedType::kDynamic;
-
-    // Get N as Value.
-    Value c0val = arith::ConstantIndexOp::create(b, 0);
-    Value dimNval =
-        isDynamic
-            ? tensor::DimOp::create(b, adaptor.getInput(), c0val).getResult()
-            : arith::ConstantIndexOp::create(b, n).getResult();
-    SmallVector<Value, 1> dynExtentsStorage;
-    if (isDynamic)
-      dynExtentsStorage.push_back(dimNval);
+    // Shape-generic: field.inverse collapses the multi-dim column to 1-D
+    // internally, so any rank keeps the single batched inverse.
+    ArrayRef<int64_t> shape = tensorType.getShape();
+    SmallVector<Value> dynExtentsStorage;
+    for (int64_t i = 0; i < tensorType.getRank(); ++i) {
+      if (tensorType.isDynamicDim(i)) {
+        Value idx = arith::ConstantIndexOp::create(b, i);
+        dynExtentsStorage.push_back(
+            tensor::DimOp::create(b, adaptor.getInput(), idx));
+      }
+    }
     ValueRange dynExtents = dynExtentsStorage;
-    auto colType = RankedTensorType::get({n}, fieldType);
+    auto colType = RankedTensorType::get(shape, fieldType);
 
     PointKind inKind = inputPti.getPointKind();
     if (inKind != PointKind::kJacobian && inKind != PointKind::kXYZZ) {
@@ -473,7 +468,7 @@ private:
 
     // Fused output: batch inverse → single tensor.generate that computes
     // affine coordinates and assembles the output point in one pass.
-    auto outputTensorType = RankedTensorType::get({n}, cast<Type>(outputPti));
+    auto outputTensorType = RankedTensorType::get(shape, cast<Type>(outputPti));
     Value result;
     if (inKind == PointKind::kJacobian) {
       Value colZ = makeCol(2);
