@@ -504,6 +504,11 @@ struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
   LogicalResult
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    // Skip binary field operations - they are handled by BinaryFieldToArith
+    if (isa<BinaryFieldType>(getElementTypeOrSelf(op.getType()))) {
+      return failure();
+    }
+
     auto tensorType = dyn_cast<RankedTensorType>(op.getOutput().getType());
     if (!tensorType)
       return Base::matchAndRewrite(op, adaptor, rewriter);
@@ -1000,16 +1005,18 @@ void FieldToModArith::runOnOperation() {
   ConversionTarget target(*context);
 
   // Mark field operations as dynamically legal if they contain BinaryFieldType
-  // (those will be handled by BinaryFieldToArith pass instead)
-  target.addDynamicallyLegalOp<ConstantOp, CmpOp, PowUIOp>(
+  // (those will be handled by BinaryFieldToArith pass instead). InverseOp is
+  // included: FieldCodeGen only models prime/extension fields, so a
+  // binary-field inverse reaching ConvertInverse would assert.
+  target.addDynamicallyLegalOp<ConstantOp, CmpOp, PowUIOp, InverseOp>(
       [](Operation *op) { return operationContainsBinaryFieldType(op); });
 
   // ConvertFieldOpBase patterns cannot inline-codegen shaped extension field
   // types. ElementwiseMappable ops (add, sub, ...) are scalarized by
   // convert-elementwise-to-linalg. Mark them as legal here so
   // field-to-mod-arith passes through these ops without failing.
-  // Note: InverseOp is NOT listed — ConvertInverse handles all tensor inverses
-  // via Montgomery's batch inversion trick.
+  // Note: InverseOp is NOT listed — ConvertInverse handles all (non-binary)
+  // tensor inverses via Montgomery's batch inversion trick.
   target
       .addDynamicallyLegalOp<AddOp, SubOp, MulOp, NegateOp, DoubleOp, SquareOp>(
           [](Operation *op) {
