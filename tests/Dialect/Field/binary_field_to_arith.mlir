@@ -18,6 +18,7 @@
 // Test binary field to arith lowering
 
 !BF8 = !field.bf<3>  // GF(2^8)
+!GHASH = !field.bf<7, ghash>  // GF(2^128), flat GHASH basis
 
 // CHECK-LABEL: @test_bf_constant
 // CHECK-SAME: () -> i8
@@ -79,4 +80,23 @@ func.func @test_bf_square(%a: !BF8) -> !BF8 {
   // CHECK: arith.ori
   %c = field.square %a : !BF8
   return %c : !BF8
+}
+
+// arith.select can carry binary-field types (e.g. from a fused HLO select);
+// it must be retyped onto the storage int.
+// CHECK-LABEL: @test_bf_select
+// CHECK-SAME: (%arg0: i1, %arg1: i8, %arg2: i8) -> i8
+func.func @test_bf_select(%c: i1, %a: !BF8, %b: !BF8) -> !BF8 {
+  // CHECK: arith.select %arg0, %arg1, %arg2 : i8
+  %s = arith.select %c, %a, %b : !BF8
+  return %s : !BF8
+}
+
+// Same, on the flat GHASH basis — i128 storage.
+// CHECK-LABEL: @test_bf_ghash_select
+// CHECK-SAME: (%arg0: i1, %arg1: i128, %arg2: i128) -> i128
+func.func @test_bf_ghash_select(%c: i1, %a: !GHASH, %b: !GHASH) -> !GHASH {
+  // CHECK: arith.select %arg0, %arg1, %arg2 : i128
+  %s = arith.select %c, %a, %b : !GHASH
+  return %s : !GHASH
 }

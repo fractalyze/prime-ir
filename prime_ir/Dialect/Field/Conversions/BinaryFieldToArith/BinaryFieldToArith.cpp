@@ -477,8 +477,9 @@ struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
              !isa<BinaryFieldType>(outputElemType);
     });
 
-    // Arith dialect is legal
-    target.addLegalDialect<arith::ArithDialect>();
+    // scf is blanket-legal: the structural patterns only carve in the scf
+    // ops they retype; region ops outside that set (scf.parallel, scf.forall)
+    // are not converted here.
     target.addLegalDialect<scf::SCFDialect>();
 
     // Unrealized casts involving binary field types need to be converted.
