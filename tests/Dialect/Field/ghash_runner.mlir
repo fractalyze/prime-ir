@@ -92,10 +92,99 @@ func.func @test_ghash_reduce() {
 }
 // CHECK: [135]
 
+// The linearized squaring must hit the same reduction as the multiply:
+// (x^64)^2 = x^128 = 0x87 = 135 (test_ghash_square's 2^2 = 4 never reduces).
+func.func @test_ghash_square_reduce() {
+  %c64 = arith.constant 18446744073709551616 : i128   // 2^64 = x^64
+  %x64 = field.bitcast %c64 : i128 -> !G
+  %p = field.square %x64 : !G
+
+  %i = field.bitcast %p : !G -> i128
+  %r = arith.trunci %i : i128 to i32
+  %t = tensor.from_elements %r : tensor<1xi32>
+  %buf = bufferization.to_buffer %t : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buf : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: [135]
+
+// Print 1 iff the full 128-bit value equals `expected` — the i32 print used
+// above only shows the low 32 bits, which is too lossy to pin an inverse.
+func.func @check_i128_eq(%v: i128, %expected: i128) {
+  %eq = arith.cmpi eq, %v, %expected : i128
+  %r = arith.extui %eq : i1 to i32
+  %t = tensor.from_elements %r : tensor<1xi32>
+  %buf = bufferization.to_buffer %t : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buf : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+
+// inverse(1) = 1 (the identity is its own inverse in any basis).
+func.func @test_ghash_inverse_one() {
+  %a = field.constant 1 : !G
+  %inv = field.inverse %a : !G
+
+  %i = field.bitcast %inv : !G -> i128
+  %one = arith.constant 1 : i128
+  func.call @check_i128_eq(%i, %one) : (i128, i128) -> ()
+  return
+}
+// CHECK: [1]
+
+// a * a⁻¹ = 1 for a low-half value. The multiply is independently covered
+// above, so a wrong inverse cannot cancel into a spurious 1.
+func.func @test_ghash_inverse_roundtrip() {
+  %a = field.constant 12345 : !G
+  %inv = field.inverse %a : !G
+  %p = field.mul %a, %inv : !G
+
+  %i = field.bitcast %p : !G -> i128
+  %one = arith.constant 1 : i128
+  func.call @check_i128_eq(%i, %one) : (i128, i128) -> ()
+  return
+}
+// CHECK: [1]
+
+// a * a⁻¹ = 1 with all 128 bits set — the Fermat chain then exercises every
+// carry/overflow path of the reduction (mirrors flock's inverse tests on
+// high-half and near-max values).
+func.func @test_ghash_inverse_all_ones() {
+  %cmax = arith.constant -1 : i128                    // 2^128 - 1: all bits set
+  %a = field.bitcast %cmax : i128 -> !G
+  %inv = field.inverse %a : !G
+  %p = field.mul %a, %inv : !G
+
+  %i = field.bitcast %p : !G -> i128
+  %one = arith.constant 1 : i128
+  func.call @check_i128_eq(%i, %one) : (i128, i128) -> ()
+  return
+}
+// CHECK: [1]
+
+// inverse(0) = 0: Fermat's 0^(2^128 − 2) keeps the tower lowering's 0 ↦ 0
+// convention.
+func.func @test_ghash_inverse_zero() {
+  %a = field.constant 0 : !G
+  %inv = field.inverse %a : !G
+
+  %i = field.bitcast %inv : !G -> i128
+  %zero = arith.constant 0 : i128
+  func.call @check_i128_eq(%i, %zero) : (i128, i128) -> ()
+  return
+}
+// CHECK: [1]
+
 func.func @main() {
   func.call @test_ghash_mul() : () -> ()
   func.call @test_ghash_square() : () -> ()
   func.call @test_ghash_one() : () -> ()
   func.call @test_ghash_reduce() : () -> ()
+  func.call @test_ghash_square_reduce() : () -> ()
+  func.call @test_ghash_inverse_one() : () -> ()
+  func.call @test_ghash_inverse_roundtrip() : () -> ()
+  func.call @test_ghash_inverse_all_ones() : () -> ()
+  func.call @test_ghash_inverse_zero() : () -> ()
   return
 }

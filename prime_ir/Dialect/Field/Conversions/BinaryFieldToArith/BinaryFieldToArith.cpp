@@ -66,9 +66,11 @@ bool containsBinaryFieldType(Type type) {
 // Conversion Patterns
 //===----------------------------------------------------------------------===//
 
-// GHASH-basis multiply (`bf<7, ghash>`), defined below; used by the mul/square
-// patterns to split on basis.
+// GHASH-basis multiply/square/inverse (`bf<7, ghash>`), defined below; used by
+// the mul/square/inverse patterns to split on basis.
 Value emitGhashMul(ImplicitLocOpBuilder &b, Value a, Value bv);
+Value emitGhashSquare(ImplicitLocOpBuilder &b, Value a);
+Value emitGhashInverse(ImplicitLocOpBuilder &b, Value a);
 
 struct ConvertBinaryFieldConstant : public OpConversionPattern<ConstantOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -213,12 +215,12 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     if (bfType.isGhash()) {
-      // emitGhashMul is scalar-only (i64/i128 truncs and shifts); shaped GHASH
-      // is not lowered yet, so fail to legalize rather than emit invalid IR.
+      // emitGhashSquare is scalar-only (i64/i128 truncs and shifts); shaped
+      // GHASH is not lowered yet, so fail to legalize rather than emit invalid
+      // IR.
       if (isa<ShapedType>(op.getType()))
         return failure();
-      rewriter.replaceOp(
-          op, emitGhashMul(b, adaptor.getInput(), adaptor.getInput()));
+      rewriter.replaceOp(op, emitGhashSquare(b, adaptor.getInput()));
       return success();
     }
     BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
@@ -238,13 +240,16 @@ struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
     if (!bfType) {
       return failure();
     }
-    // GHASH-basis inverse is not yet lowered (the GPU prover path is
-    // mul/add-heavy); fail to legalize rather than apply the tower inverse.
-    if (bfType.isGhash()) {
-      return failure();
-    }
-
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    if (bfType.isGhash()) {
+      // emitGhashInverse is scalar-only (i64/i128 truncs and shifts); shaped
+      // GHASH is not lowered yet, so fail to legalize rather than emit invalid
+      // IR.
+      if (isa<ShapedType>(op.getType()))
+        return failure();
+      rewriter.replaceOp(op, emitGhashInverse(b, adaptor.getInput()));
+      return success();
+    }
     BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
     BinaryFieldCodeGen result = input.inverse();
     rewriter.replaceOp(op, result.getValue());
@@ -434,6 +439,81 @@ Value emitGhashMul(ImplicitLocOpBuilder &b, Value a, Value bv) {
   Value loExt = arith::ExtUIOp::create(b, i128Ty, lo);
   Value hiExt = arith::ExtUIOp::create(b, i128Ty, hi);
   return arith::OrIOp::create(b, loExt, arith::ShLIOp::create(b, hiExt, sh64));
+}
+
+// Interleave zeros into the low 32 bits of an i64 (bit i -> bit 2i), the
+// classic mask-shift bit-spread.
+Value emitSpreadEven32(ImplicitLocOpBuilder &b, Value x) {
+  struct Step {
+    unsigned shift;
+    uint64_t mask;
+  };
+  constexpr Step kSteps[] = {{16, 0x0000FFFF0000FFFFULL},
+                             {8, 0x00FF00FF00FF00FFULL},
+                             {4, 0x0F0F0F0F0F0F0F0FULL},
+                             {2, 0x3333333333333333ULL},
+                             {1, 0x5555555555555555ULL}};
+  for (auto [shift, mask] : kSteps) {
+    Value shifted = arith::ShLIOp::create(b, x, i64Const(b, shift));
+    x = arith::AndIOp::create(b, arith::OrIOp::create(b, x, shifted),
+                              i64Const(b, mask));
+  }
+  return x;
+}
+
+// Spread an i64 limb into two even-bit i64 limbs (bit i -> bit 2i across the
+// 128-bit result).
+std::pair<Value, Value> emitSpreadEven64(ImplicitLocOpBuilder &b, Value a) {
+  Value lo32 = arith::AndIOp::create(b, a, i64Const(b, 0xFFFFFFFFULL));
+  Value hi32 = arith::ShRUIOp::create(b, a, i64Const(b, 32));
+  return {emitSpreadEven32(b, lo32), emitSpreadEven32(b, hi32)};
+}
+
+// Square a GHASH-basis i128 value. Squaring is linear in GF(2)[x] — the
+// carryless square of a(x) has bit i of `a` at bit 2i and no cross terms — so
+// it is a bit-spread of each 64-bit limb into the 256-bit product followed by
+// the shared reduction: ~40 arith ops instead of a full carryless multiply.
+Value emitGhashSquare(ImplicitLocOpBuilder &b, Value a) {
+  auto i64Ty = b.getI64Type();
+  auto i128Ty = b.getIntegerType(128);
+  Value sh64 = arith::ConstantIntOp::create(b, 64, 128);
+  Value a0 = arith::TruncIOp::create(b, i64Ty, a);
+  Value a1 =
+      arith::TruncIOp::create(b, i64Ty, arith::ShRUIOp::create(b, a, sh64));
+  auto [r0, r1] = emitSpreadEven64(b, a0);
+  auto [r2, r3] = emitSpreadEven64(b, a1);
+  auto [lo, hi] = emitGhashReduce(b, r0, r1, r2, r3);
+
+  Value loExt = arith::ExtUIOp::create(b, i128Ty, lo);
+  Value hiExt = arith::ExtUIOp::create(b, i128Ty, hi);
+  return arith::OrIOp::create(b, loExt, arith::ShLIOp::create(b, hiExt, sh64));
+}
+
+// Invert a GHASH-basis i128 value via Fermat: a⁻¹ = a^(2¹²⁸ − 2) (and 0 maps
+// to 0, matching the tower lowering). Uses the Itoh–Tsujii addition chain
+// t_k = a^(2^k − 1), t_{j+k} = t_j^(2^k) · t_k over
+// 1→2→3→6→7→14→28→56→63→126→127, then a⁻¹ = t₁₂₇². That is 127 squarings plus
+// 10 multiplies; the naive ∏ a^(2^i) form (flock's runtime inv) would emit 127
+// multiplies, and each multiply is a fully-unrolled ~1.2k-op carryless product
+// while the linearized squaring above is ~40 ops.
+Value emitGhashInverse(ImplicitLocOpBuilder &b, Value a) {
+  auto pow2k = [&](Value v, unsigned k) {
+    for (unsigned i = 0; i < k; ++i)
+      v = emitGhashSquare(b, v);
+    return v;
+  };
+  Value t1 = a;
+  Value t2 = emitGhashMul(b, pow2k(t1, 1), t1);
+  Value t3 = emitGhashMul(b, pow2k(t2, 1), t1);
+  Value t6 = emitGhashMul(b, pow2k(t3, 3), t3);
+  Value t7 = emitGhashMul(b, pow2k(t6, 1), t1);
+  Value t14 = emitGhashMul(b, pow2k(t7, 7), t7);
+  Value t28 = emitGhashMul(b, pow2k(t14, 14), t14);
+  Value t56 = emitGhashMul(b, pow2k(t28, 28), t28);
+  Value t63 = emitGhashMul(b, pow2k(t56, 7), t7);
+  Value t126 = emitGhashMul(b, pow2k(t63, 63), t63);
+  Value t127 = emitGhashMul(b, pow2k(t126, 1), t1);
+  return emitGhashSquare(b, t127);
 }
 
 //===----------------------------------------------------------------------===//
