@@ -36,3 +36,12 @@ func.func @vector_ghash_square(%a: vector<4x!G>) -> vector<4x!G> {
   %c = field.square %a : vector<4x!G>
   return %c : vector<4x!G>
 }
+
+// -----
+
+!G = !field.bf<7, ghash>
+func.func @tensor_ghash_inverse(%a: tensor<4x!G>) -> tensor<4x!G> {
+  // expected-error @+1 {{operand #0 must be field-like}}
+  %c = field.inverse %a : tensor<4x!G>
+  return %c : tensor<4x!G>
+}

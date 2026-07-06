@@ -100,3 +100,17 @@ func.func @test_bf_ghash_select(%c: i1, %a: !GHASH, %b: !GHASH) -> !GHASH {
   %s = arith.select %c, %a, %b : !GHASH
   return %s : !GHASH
 }
+
+// Scalar GHASH inverse lowers to the Fermat chain (linearized squares +
+// carryless multiplies) on the i128 storage — no field ops survive.
+// CHECK-LABEL: @test_bf_ghash_inverse
+// CHECK-SAME: (%arg0: i128) -> i128
+func.func @test_bf_ghash_inverse(%a: !GHASH) -> !GHASH {
+  // CHECK: arith.trunci
+  // CHECK: arith.shrui
+  // CHECK: arith.xori
+  // CHECK: arith.ori
+  // CHECK-NOT: field.inverse
+  %c = field.inverse %a : !GHASH
+  return %c : !GHASH
+}
