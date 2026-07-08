@@ -187,8 +187,8 @@ constexpr unsigned kGhashOverflowShifts[] = {57, 62, 63}; // 64 - shift
 // Compute the GHASH reduction high * (x⁷ + x² + x + 1) for a 64-bit limb:
 // returns the value to XOR into the low 64 bits, plus the overflow bits that
 // spill past bit 63 (to be XORed into the next limb up). Shared by the x86
-// (PCLMULQDQ) and ARM (PMULL) specializers so the two carryless-multiply
-// backends can never drift apart.
+// (PCLMULQDQ), ARM (PMULL), and NVPTX (clmad) specializers so the
+// carryless-multiply backends can never drift apart.
 inline std::pair<Value, Value> reduceGhash(ImplicitLocOpBuilder &b,
                                            Value high) {
   auto i64Type = b.getI64Type();
