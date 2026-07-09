@@ -1927,17 +1927,17 @@ ParseResult MulOp::parse(OpAsmParser &parser, OperationState &result) {
 
 //===----------------------------------------------------------------------===//
 
-// The GHASH basis (`bf<7, ghash>`) has no compile-time multiplicative
-// evaluator: zk_dtypes::BinaryMul/BinarySquare/BinaryInverse implement only the
-// recursive tower basis, and the flat GHASH product is defined solely by the
-// runtime shift-XOR lowering (emitGhashMul in BinaryFieldToArith). Folding
-// mul/square/inverse through the tower evaluator would silently emit tower
-// values (e.g. 2·3 = 1 instead of 6), so leave those ops for the lowering.
-// Additive ops (add/sub/negate/double) are basis-independent (XOR) and still
-// fold.
-static bool isGhashResult(Type type) {
+// The flat bases (`bf<7, ghash>`, `bf<3, aes>`) have no compile-time
+// multiplicative evaluator: zk_dtypes::BinaryMul/BinarySquare/BinaryInverse
+// implement only the recursive tower basis, and the flat products are defined
+// solely by the runtime shift-XOR lowerings (emitGhashMul/emitAesMul in
+// BinaryFieldToArith). Folding mul/square/inverse through the tower evaluator
+// would silently emit tower values (e.g. ghash 2·3 = 1 instead of 6, aes
+// 2·2 = 3 instead of 4), so leave those ops for the lowering. Additive ops
+// (add/sub/negate/double) are basis-independent (XOR) and still fold.
+static bool isFlatBasisResult(Type type) {
   auto bfType = dyn_cast<BinaryFieldType>(getElementTypeOrSelf(type));
-  return bfType && bfType.isGhash();
+  return bfType && !bfType.isTower();
 }
 
 OpFoldResult NegateOp::fold(FoldAdaptor adaptor) {
@@ -1951,14 +1951,14 @@ OpFoldResult DoubleOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult SquareOp::fold(FoldAdaptor adaptor) {
-  if (isGhashResult(getType()))
+  if (isFlatBasisResult(getType()))
     return {};
   return foldUnaryOp(this, adaptor,
                      [](const FieldOperation &op) { return op.square(); });
 }
 
 OpFoldResult InverseOp::fold(FoldAdaptor adaptor) {
-  if (isGhashResult(getType()))
+  if (isFlatBasisResult(getType()))
     return {};
   return foldUnaryOp(this, adaptor,
                      [](const FieldOperation &op) { return op.inverse(); });
@@ -1999,7 +1999,7 @@ OpFoldResult SubOp::fold(FoldAdaptor adaptor) {
 }
 
 OpFoldResult MulOp::fold(FoldAdaptor adaptor) {
-  if (isGhashResult(getType()))
+  if (isFlatBasisResult(getType()))
     return {};
   return foldMultiplicativeBinaryOp(
       this, adaptor,

@@ -54,18 +54,22 @@ MLIR_CAPI_EXPORTED MlirTypeID primeIRBinaryFieldTypeGetTypeID(void);
 // Checks whether the given type is a binary field type.
 MLIR_CAPI_EXPORTED bool primeIRTypeIsABinaryField(MlirType type);
 
-// Creates a binary field type GF(2^(2^towerLevel)) in the context. When isGhash
-// is true (valid only at towerLevel 7) the type selects the flat GHASH/POLYVAL
-// basis instead of the recursive tower basis. The type is owned by the context.
+// Creates a binary field type GF(2^(2^towerLevel)) in the context. When isFlat
+// is true the type selects the flat polynomial basis of that level instead of
+// the recursive tower basis: GHASH/POLYVAL at towerLevel 7, AES at towerLevel 3
+// (other levels have no flat basis). The type is owned by the context.
 MLIR_CAPI_EXPORTED MlirType primeIRBinaryFieldTypeGet(MlirContext ctx,
                                                       unsigned towerLevel,
-                                                      bool isGhash);
+                                                      bool isFlat);
 
 // Returns the tower level of the given binary field type.
 MLIR_CAPI_EXPORTED unsigned primeIRBinaryFieldTypeGetTowerLevel(MlirType type);
 
 // Checks whether the given binary field type uses the flat GHASH basis.
 MLIR_CAPI_EXPORTED bool primeIRBinaryFieldTypeIsGhash(MlirType type);
+
+// Checks whether the given binary field type uses the flat AES basis.
+MLIR_CAPI_EXPORTED bool primeIRBinaryFieldTypeIsAes(MlirType type);
 
 //===----------------------------------------------------------------------===//
 // ExtensionField types.

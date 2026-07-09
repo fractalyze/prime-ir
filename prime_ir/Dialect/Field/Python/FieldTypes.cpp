@@ -51,16 +51,18 @@ void PyPrimeFieldType::bindDerived(ClassTy &c) {
 void PyBinaryFieldType::bindDerived(ClassTy &c) {
   c.def_static(
       "get",
-      [](unsigned towerLevel, bool isGhash,
+      [](unsigned towerLevel, bool isFlat,
          DefaultingPyMlirContext context) -> PyBinaryFieldType {
         MlirType t =
-            primeIRBinaryFieldTypeGet(context->get(), towerLevel, isGhash);
+            primeIRBinaryFieldTypeGet(context->get(), towerLevel, isFlat);
         return PyBinaryFieldType(context->getRef(), t);
       },
-      nb::arg("tower_level"), nb::arg("is_ghash") = false,
+      nb::arg("tower_level"), nb::arg("is_flat") = false,
       nb::arg("context") = nb::none(),
-      "Create a binary field type GF(2^(2^tower_level)); is_ghash selects the "
-      "flat GHASH basis (valid at tower_level 7 only)");
+      "Create a binary field type GF(2^(2^tower_level)); is_flat selects the "
+      "flat polynomial basis of that level instead of the recursive tower: "
+      "GHASH at tower_level 7, AES at tower_level 3 (other levels have no "
+      "flat basis)");
   c.def_prop_ro(
       "tower_level",
       [](PyBinaryFieldType &self) -> unsigned {
@@ -73,6 +75,12 @@ void PyBinaryFieldType::bindDerived(ClassTy &c) {
         return primeIRBinaryFieldTypeIsGhash(self);
       },
       "Returns whether this uses the flat GHASH basis");
+  c.def_prop_ro(
+      "is_aes",
+      [](PyBinaryFieldType &self) -> bool {
+        return primeIRBinaryFieldTypeIsAes(self);
+      },
+      "Returns whether this uses the flat AES basis");
 }
 
 // static

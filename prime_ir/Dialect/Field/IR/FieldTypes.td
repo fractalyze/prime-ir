@@ -103,8 +103,8 @@ def Field_PrimeFieldType : Field_Type<"PrimeField", "pf", [
   let hasCustomAssemblyFormat = 1;
 }
 
-// Binary field type: GF(2^(2^level)), in the recursive tower basis or (at
-// level 7 only) the flat GHASH polynomial basis.
+// Binary field type: GF(2^(2^level)), in the recursive tower basis or a flat
+// polynomial basis (GHASH at level 7, AES at level 3).
 def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
   MemRefElementTypeInterface,
   VectorElementTypeInterface,
@@ -126,34 +126,39 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     - level 6: GF(2⁶⁴)   = 64 bits
     - level 7: GF(2¹²⁸)  = 128 bits
 
-    Two bases are supported, selected by the `ghash` flag (valid at level 7
-    only, since GHASH is GF(2¹²⁸)):
-    - default (tower): the recursive x²+x+α tower basis (Fan–Paar). `2·3 = 1`.
-    - `ghash`: the flat GHASH/POLYVAL polynomial basis
+    Each level uses the recursive x²+x+α tower basis (Fan–Paar) by default;
+    two levels additionally support a FLAT polynomial basis, selected by the
+    flat flag and named in the assembly by its polynomial:
+    - `ghash` (level 7 only): the flat GHASH/POLYVAL polynomial basis
       GF(2)[x]/(x¹²⁸ + x⁷ + x² + x + 1) (reduction constant 0x87, natural
       monomial bit order). `2·3 = 6` (2 = x, 3 = x+1, so 2·3 = x²+x). Same
       abstract field as `bf<7>` but a different, NOT bit-compatible
       representation — the one GHASH/AES-GCM uses, and that provers hashing raw
-      field bytes need byte-identity with. Only the multiply differs between the
-      two bases; add/sub/negate/double/cmp/constant are identical.
+      field bytes need byte-identity with.
+    - `aes` (level 3 only): the flat AES/Rijndael polynomial basis
+      GF(2)[x]/(x⁸ + x⁴ + x³ + x + 1) (0x11B, reduction constant 0x1B, natural
+      monomial bit order). `2·2 = 4` where the tower `bf<3>` gives 3.
+    Only the multiply differs between a flat basis and the tower;
+    add/sub/negate/double/cmp/constant are identical.
 
     All operations are characteristic 2: add and sub are XOR, negation is
     identity, doubling yields zero.
 
     Example:
     ```
-    !BF8 = !field.bf<3>          // GF(2⁸), tower basis
+    !BF8 = !field.bf<3>          // GF(2⁸), tower basis,    2·2 = 3
     !BF128 = !field.bf<7>        // GF(2¹²⁸), tower basis,  2·3 = 1
     !G = !field.bf<7, ghash>     // GF(2¹²⁸), GHASH basis,  2·3 = 6
+    !A = !field.bf<3, aes>       // GF(2⁸), AES basis,      2·2 = 4
     ```
   }];
   let parameters = (ins
     "unsigned": $towerLevel,
-    DefaultValuedParameter<"bool", "false">: $isGhash
+    DefaultValuedParameter<"bool", "false">: $isFlat
   );
   let builders = [
     TypeBuilder<(ins "unsigned":$towerLevel), [{
-      return $_get(context, towerLevel, /*isGhash=*/false);
+      return $_get(context, towerLevel, /*isFlat=*/false);
     }]>,
   ];
   let extraClassDeclaration = [{
@@ -172,14 +177,20 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     [[deprecated("use getTypeSizeInBits() instead")]]
     unsigned getStorageBitWidth() const { return getTypeSizeInBits(); }
 
-    /// True for the recursive tower basis (the default), false for GHASH.
-    bool isTower() const { return !getIsGhash(); }
+    /// True for the recursive tower basis (the default).
+    bool isTower() const { return !getIsFlat(); }
 
-    /// True for the flat GHASH polynomial basis.
-    bool isGhash() const { return getIsGhash(); }
+    /// True for the flat GHASH polynomial basis (flat GF(2¹²⁸)).
+    bool isGhash() const { return getIsFlat() && getTowerLevel() == 7; }
+
+    /// True for the flat AES polynomial basis (flat GF(2⁸)).
+    bool isAes() const { return getIsFlat() && getTowerLevel() == 3; }
 
     /// Maximum supported tower level (GF(2¹²⁸)).
     static constexpr unsigned kMaxTowerLevel = 7;
+
+    /// Tower level of the flat AES basis (GF(2⁸)).
+    static constexpr unsigned kAesTowerLevel = 3;
   }];
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
