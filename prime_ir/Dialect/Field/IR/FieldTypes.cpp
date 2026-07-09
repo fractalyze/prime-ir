@@ -186,15 +186,15 @@ ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
 // static
 LogicalResult
 BinaryFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
-                        unsigned towerLevel, bool isGhash) {
+                        unsigned towerLevel, bool isFlat) {
   if (towerLevel > kMaxTowerLevel) {
     return emitError() << "binary field tower level must be between 0 and "
                        << kMaxTowerLevel << ", got " << towerLevel;
   }
-  if (isGhash && towerLevel != kMaxTowerLevel) {
-    return emitError() << "the ghash basis is GF(2¹²⁸), only valid at tower "
-                          "level "
-                       << kMaxTowerLevel << ", got " << towerLevel;
+  if (isFlat && towerLevel != kMaxTowerLevel && towerLevel != kAesTowerLevel) {
+    return emitError() << "a flat basis exists only at tower level "
+                       << kMaxTowerLevel << " (ghash) or " << kAesTowerLevel
+                       << " (aes), got " << towerLevel;
   }
   return success();
 }
@@ -217,33 +217,51 @@ Type BinaryFieldType::parse(AsmParser &parser) {
     return nullptr;
   }
 
-  // Optional ", ghash" selects the flat GHASH polynomial basis (level 7 only).
-  bool isGhash = false;
+  // Optional ", ghash" / ", aes" selects the flat polynomial basis at the
+  // level the polynomial defines (ghash: GF(2¹²⁸), aes: GF(2⁸)).
+  bool isFlat = false;
   if (succeeded(parser.parseOptionalComma())) {
-    if (failed(parser.parseKeyword("ghash"))) {
+    StringRef basis;
+    if (failed(parser.parseKeyword(&basis))) {
       return nullptr;
     }
-    isGhash = true;
-    if (towerLevel != kMaxTowerLevel) {
-      parser.emitError(
-          parser.getCurrentLocation(),
-          "the ghash basis is GF(2¹²⁸), only valid at tower level ")
-          << kMaxTowerLevel;
+    if (basis == "ghash") {
+      if (towerLevel != kMaxTowerLevel) {
+        parser.emitError(
+            parser.getCurrentLocation(),
+            "the ghash basis is GF(2¹²⁸), only valid at tower level ")
+            << kMaxTowerLevel;
+        return nullptr;
+      }
+    } else if (basis == "aes") {
+      if (towerLevel != kAesTowerLevel) {
+        parser.emitError(parser.getCurrentLocation(),
+                         "the aes basis is GF(2⁸), only valid at tower level ")
+            << kAesTowerLevel;
+        return nullptr;
+      }
+    } else {
+      parser.emitError(parser.getCurrentLocation(),
+                       "expected 'ghash' or 'aes', got '")
+          << basis << "'";
       return nullptr;
     }
+    isFlat = true;
   }
 
   if (failed(parser.parseGreater())) {
     return nullptr;
   }
 
-  return BinaryFieldType::get(parser.getContext(), towerLevel, isGhash);
+  return BinaryFieldType::get(parser.getContext(), towerLevel, isFlat);
 }
 
 void BinaryFieldType::print(AsmPrinter &printer) const {
   printer << "<" << getTowerLevel();
-  if (getIsGhash()) {
+  if (isGhash()) {
     printer << ", ghash";
+  } else if (isAes()) {
+    printer << ", aes";
   }
   printer << ">";
 }

@@ -38,15 +38,24 @@ class FieldTest(absltest.TestCase):
       self.assertEqual(bf8.tower_level, 3)
       self.assertFalse(bf8.is_ghash)
 
-      # is_ghash selects the flat GHASH basis at level 7; the two level-7 types
-      # are distinct (tower 2*3 = 1 vs flat 2*3 = 6).
+      # is_flat selects the flat basis of the level: GHASH at level 7, AES at
+      # level 3. Each flat type is distinct from its tower sibling
+      # (tower 2*3 = 1 vs ghash 2*3 = 6; tower 2*2 = 3 vs aes 2*2 = 4).
       tower = field.BinaryFieldType.get(7, context=ctx)
       ghash = field.BinaryFieldType.get(7, True, ctx)
       self.assertEqual(str(tower), "!field.bf<7>")
       self.assertEqual(str(ghash), "!field.bf<7, ghash>")
       self.assertFalse(tower.is_ghash)
       self.assertTrue(ghash.is_ghash)
+      self.assertFalse(ghash.is_aes)
       self.assertNotEqual(tower, ghash)
+
+      aes = field.BinaryFieldType.get(3, is_flat=True, context=ctx)
+      self.assertEqual(str(aes), "!field.bf<3, aes>")
+      self.assertEqual(aes.tower_level, 3)
+      self.assertTrue(aes.is_aes)
+      self.assertFalse(aes.is_ghash)
+      self.assertNotEqual(bf8, aes)
 
   def testExtensionFieldTypes(self):
     with Context() as ctx, Location.unknown():

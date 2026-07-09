@@ -56,7 +56,7 @@ public:
 };
 
 /// Check if a type contains a binary field this pass lowers: the tower `bf` or
-/// the flat-basis `ghash` (both GF(2^n), both lowered here).
+/// a flat basis (`ghash`, `aes` — both GF(2^n), both lowered here).
 bool containsBinaryFieldType(Type type) {
   Type elemType = getElementTypeOrSelf(type);
   return isa<BinaryFieldType>(elemType);
@@ -66,11 +66,14 @@ bool containsBinaryFieldType(Type type) {
 // Conversion Patterns
 //===----------------------------------------------------------------------===//
 
-// GHASH-basis multiply/square/inverse (`bf<7, ghash>`), defined below; used by
-// the mul/square/inverse patterns to split on basis.
+// Flat-basis multiply/square/inverse (`bf<7, ghash>` and `bf<3, aes>`),
+// defined below; used by the mul/square/inverse patterns to split on basis.
 Value emitGhashMul(ImplicitLocOpBuilder &b, Value a, Value bv);
 Value emitGhashSquare(ImplicitLocOpBuilder &b, Value a);
 Value emitGhashInverse(ImplicitLocOpBuilder &b, Value a);
+Value emitAesMul(ImplicitLocOpBuilder &b, Value a, Value bv);
+Value emitAesSquare(ImplicitLocOpBuilder &b, Value a);
+Value emitAesInverse(ImplicitLocOpBuilder &b, Value a);
 
 struct ConvertBinaryFieldConstant : public OpConversionPattern<ConstantOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -185,13 +188,16 @@ struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
     }
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    if (bfType.isGhash()) {
-      // emitGhashMul is scalar-only (i64/i128 truncs and shifts); shaped GHASH
-      // is not lowered yet, so fail to legalize rather than emit invalid IR.
+    if (!bfType.isTower()) {
+      // The flat-basis emitters are scalar-only (integer truncs and shifts);
+      // shaped flat values are not lowered yet, so fail to legalize rather
+      // than emit invalid IR.
       if (isa<ShapedType>(op.getType()))
         return failure();
-      rewriter.replaceOp(op,
-                         emitGhashMul(b, adaptor.getLhs(), adaptor.getRhs()));
+      rewriter.replaceOp(
+          op, bfType.isGhash()
+                  ? emitGhashMul(b, adaptor.getLhs(), adaptor.getRhs())
+                  : emitAesMul(b, adaptor.getLhs(), adaptor.getRhs()));
       return success();
     }
     BinaryFieldCodeGen lhs(bfType, adaptor.getLhs(), b);
@@ -214,13 +220,15 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
     }
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    if (bfType.isGhash()) {
-      // emitGhashSquare is scalar-only (i64/i128 truncs and shifts); shaped
-      // GHASH is not lowered yet, so fail to legalize rather than emit invalid
-      // IR.
+    if (!bfType.isTower()) {
+      // The flat-basis emitters are scalar-only (integer truncs and shifts);
+      // shaped flat values are not lowered yet, so fail to legalize rather
+      // than emit invalid IR.
       if (isa<ShapedType>(op.getType()))
         return failure();
-      rewriter.replaceOp(op, emitGhashSquare(b, adaptor.getInput()));
+      rewriter.replaceOp(op, bfType.isGhash()
+                                 ? emitGhashSquare(b, adaptor.getInput())
+                                 : emitAesSquare(b, adaptor.getInput()));
       return success();
     }
     BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
@@ -241,13 +249,15 @@ struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
       return failure();
     }
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    if (bfType.isGhash()) {
-      // emitGhashInverse is scalar-only (i64/i128 truncs and shifts); shaped
-      // GHASH is not lowered yet, so fail to legalize rather than emit invalid
-      // IR.
+    if (!bfType.isTower()) {
+      // The flat-basis emitters are scalar-only (integer truncs and shifts);
+      // shaped flat values are not lowered yet, so fail to legalize rather
+      // than emit invalid IR.
       if (isa<ShapedType>(op.getType()))
         return failure();
-      rewriter.replaceOp(op, emitGhashInverse(b, adaptor.getInput()));
+      rewriter.replaceOp(op, bfType.isGhash()
+                                 ? emitGhashInverse(b, adaptor.getInput())
+                                 : emitAesInverse(b, adaptor.getInput()));
       return success();
     }
     BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
@@ -514,6 +524,111 @@ Value emitGhashInverse(ImplicitLocOpBuilder &b, Value a) {
   Value t126 = emitGhashMul(b, pow2k(t63, 63), t63);
   Value t127 = emitGhashMul(b, pow2k(t126, 1), t1);
   return emitGhashSquare(b, t127);
+}
+
+//===----------------------------------------------------------------------===//
+// AES-basis multiply (`bf<3, aes>`)
+//===----------------------------------------------------------------------===//
+//
+// `bf<3, aes>` is GF(2)[x]/(x⁸ + x⁴ + x³ + x + 1) (0x11B) in the monomial
+// basis (NOT the x²+x+α tower of the default `bf<3>`). Only the multiply
+// differs; it is an 8-bit carryless product reduced mod the AES polynomial.
+// The whole product fits in i16, so the lowering works in i16 throughout and
+// truncates back to the i8 storage at the end. Portable shift-XOR (GPU-safe);
+// no host clmul specialization — at 8 bits it would not pay for itself.
+
+Value i16Const(ImplicitLocOpBuilder &b, uint64_t v) {
+  return arith::ConstantIntOp::create(b, static_cast<int64_t>(v), 16);
+}
+
+// Portable 8x8 -> 15-bit carryless (GF(2)[x]) product in i16, bit-serial
+// shift-XOR (mirrors zk_dtypes' Gf8AesMul).
+Value emitClmul8(ImplicitLocOpBuilder &b, Value a16, Value b16) {
+  Value zero = i16Const(b, 0);
+  Value one = i16Const(b, 1);
+  Value acc = zero;
+  for (unsigned i = 0; i < 8; ++i) {
+    Value bShifted = b16;
+    Value aShl = a16;
+    if (i != 0) {
+      Value shiftI = i16Const(b, i);
+      bShifted = arith::ShRUIOp::create(b, b16, shiftI);
+      aShl = arith::ShLIOp::create(b, a16, shiftI);
+    }
+    Value bit = arith::AndIOp::create(b, bShifted, one);
+    Value mask = arith::SubIOp::create(b, zero, bit); // 0 or all-ones
+    acc = arith::XOrIOp::create(b, acc, arith::AndIOp::create(b, mask, aShl));
+  }
+  return acc;
+}
+
+// Reduce a degree-<=14 carryless product (i16) mod x⁸ + x⁴ + x³ + x + 1,
+// returning the low byte still in i16. Two folds via x⁸ == x⁴ + x³ + x + 1;
+// the first fold can re-overflow bit 8, so a second pass is required
+// (mirrors zk_dtypes' Gf8AesReduce).
+Value emitAesReduce(ImplicitLocOpBuilder &b, Value p) {
+  auto shl = [&](Value v, unsigned s) {
+    return arith::ShLIOp::create(b, v, i16Const(b, s));
+  };
+  auto shr = [&](Value v, unsigned s) {
+    return arith::ShRUIOp::create(b, v, i16Const(b, s));
+  };
+  auto x = [&](Value p, Value q) { return arith::XOrIOp::create(b, p, q); };
+  Value mask = i16Const(b, 0xFF);
+
+  Value h = shr(p, 8);
+  Value t =
+      x(x(x(x(arith::AndIOp::create(b, p, mask), h), shl(h, 1)), shl(h, 3)),
+        shl(h, 4));
+  Value h2 = shr(t, 8);
+  Value r = x(x(x(x(t, h2), shl(h2, 1)), shl(h2, 3)), shl(h2, 4));
+  return arith::AndIOp::create(b, r, mask);
+}
+
+// Multiply two AES-basis i8 values: 8×8 carryless product reduced mod 0x11B.
+Value emitAesMul(ImplicitLocOpBuilder &b, Value a, Value bv) {
+  auto i16Ty = b.getIntegerType(16);
+  Value a16 = arith::ExtUIOp::create(b, i16Ty, a);
+  Value b16 = arith::ExtUIOp::create(b, i16Ty, bv);
+  Value r = emitAesReduce(b, emitClmul8(b, a16, b16));
+  return arith::TruncIOp::create(b, b.getI8Type(), r);
+}
+
+// Square an AES-basis i8 value. Squaring is linear in GF(2)[x] — bit i of `a`
+// lands at bit 2i with no cross terms — so it is a mask-shift bit-spread of
+// the byte into i16 followed by the shared reduction.
+Value emitAesSquare(ImplicitLocOpBuilder &b, Value a) {
+  auto i16Ty = b.getIntegerType(16);
+  Value x = arith::ExtUIOp::create(b, i16Ty, a);
+  struct Step {
+    unsigned shift;
+    uint64_t mask;
+  };
+  constexpr Step kSteps[] = {{4, 0x0F0F}, {2, 0x3333}, {1, 0x5555}};
+  for (auto [shift, mask] : kSteps) {
+    Value shifted = arith::ShLIOp::create(b, x, i16Const(b, shift));
+    x = arith::AndIOp::create(b, arith::OrIOp::create(b, x, shifted),
+                              i16Const(b, mask));
+  }
+  Value r = emitAesReduce(b, x);
+  return arith::TruncIOp::create(b, b.getI8Type(), r);
+}
+
+// Invert an AES-basis i8 value via Fermat: a⁻¹ = a^(2⁸ − 2) = a²⁵⁴ (and 0 maps
+// to 0, matching the tower lowering). Itoh–Tsujii chain t_k = a^(2^k − 1) over
+// 1→2→3→6→7, then a⁻¹ = t₇² — 7 squarings plus 4 multiplies.
+Value emitAesInverse(ImplicitLocOpBuilder &b, Value a) {
+  auto pow2k = [&](Value v, unsigned k) {
+    for (unsigned i = 0; i < k; ++i)
+      v = emitAesSquare(b, v);
+    return v;
+  };
+  Value t1 = a;
+  Value t2 = emitAesMul(b, pow2k(t1, 1), t1);
+  Value t3 = emitAesMul(b, pow2k(t2, 1), t1);
+  Value t6 = emitAesMul(b, pow2k(t3, 3), t3);
+  Value t7 = emitAesMul(b, pow2k(t6, 1), t1);
+  return emitAesSquare(b, t7);
 }
 
 //===----------------------------------------------------------------------===//

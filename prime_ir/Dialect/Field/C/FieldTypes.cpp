@@ -61,8 +61,8 @@ bool primeIRTypeIsABinaryField(MlirType type) {
 }
 
 MlirType primeIRBinaryFieldTypeGet(MlirContext ctx, unsigned towerLevel,
-                                   bool isGhash) {
-  return wrap(BinaryFieldType::get(unwrap(ctx), towerLevel, isGhash));
+                                   bool isFlat) {
+  return wrap(BinaryFieldType::get(unwrap(ctx), towerLevel, isFlat));
 }
 
 unsigned primeIRBinaryFieldTypeGetTowerLevel(MlirType type) {
@@ -71,6 +71,10 @@ unsigned primeIRBinaryFieldTypeGetTowerLevel(MlirType type) {
 
 bool primeIRBinaryFieldTypeIsGhash(MlirType type) {
   return llvm::cast<BinaryFieldType>(unwrap(type)).isGhash();
+}
+
+bool primeIRBinaryFieldTypeIsAes(MlirType type) {
+  return llvm::cast<BinaryFieldType>(unwrap(type)).isAes();
 }
 
 //===----------------------------------------------------------------------===//
