@@ -28,15 +28,17 @@ namespace {
 // Rebuild `like`'s shape (if any) around a new integer element type.
 Type cloneWithElementType(Type like, IntegerType elementType) {
   if (auto shaped = dyn_cast<ShapedType>(like)) {
-    return shaped.clone(shaped.getShape(), elementType);
+    return shaped.clone(elementType);
   }
   return elementType;
 }
 
 } // namespace
 
+// static
 IntegerType BinaryFieldCodeGen::getCarrierType(BinaryFieldType type) {
-  return IntegerType::get(type.getContext(), std::max(type.getBitWidth(), 8u));
+  return IntegerType::get(type.getContext(),
+                          std::max(type.getStorageType().getWidth(), 8u));
 }
 
 BinaryFieldCodeGen::BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
