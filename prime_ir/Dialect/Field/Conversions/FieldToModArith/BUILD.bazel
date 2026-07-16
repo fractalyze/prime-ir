@@ -136,6 +136,7 @@ prime_ir_cc_library(
     deps = [
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "//prime_ir/Utils:BuilderContext",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:IR",
     ],
 )

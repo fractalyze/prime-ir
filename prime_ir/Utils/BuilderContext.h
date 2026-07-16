@@ -33,10 +33,16 @@ public:
   void Pop() { builders.pop_back(); }
   ImplicitLocOpBuilder *Top() { return builders.back(); }
 
+  // Set from the inverse-algorithm option, so that inverses emitted deep inside
+  // an extension lowering — which never see the pass option — can honor it.
+  void SetPreferFermatChain(bool v) { preferFermatChain = v; }
+  bool PreferFermatChain() const { return preferFermatChain; }
+
 private:
   BuilderContext() = default;
 
   SmallVector<ImplicitLocOpBuilder *> builders;
+  bool preferFermatChain = false;
 };
 
 class ScopedBuilderContext {
@@ -45,6 +51,20 @@ public:
     BuilderContext::GetInstance().Push(b);
   }
   ~ScopedBuilderContext() { BuilderContext::GetInstance().Pop(); }
+};
+
+class ScopedPreferFermatChain {
+public:
+  explicit ScopedPreferFermatChain(bool v)
+      : prev(BuilderContext::GetInstance().PreferFermatChain()) {
+    BuilderContext::GetInstance().SetPreferFermatChain(v);
+  }
+  ~ScopedPreferFermatChain() {
+    BuilderContext::GetInstance().SetPreferFermatChain(prev);
+  }
+
+private:
+  bool prev;
 };
 
 } // namespace mlir::prime_ir
