@@ -22,6 +22,7 @@
 // RUN: FileCheck %s < %t
 
 !BF8 = !field.bf<3>     // GF(2^8) tower field
+!BF64 = !field.bf<6>    // GF(2^64) tower field
 !BF128 = !field.bf<7>   // GF(2^128) tower field
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
@@ -196,6 +197,119 @@ func.func @test_bf128_mul_cross() {
 }
 // CHECK: {{^}}[15]
 
+// Test: BF64 inverse via tower descent. 2 = ω lives in the GF(4) subfield
+// (invariant across tower levels), and ω·(ω+1) = 1, so 2⁻¹ = 3 at every
+// level — an exact known value that exercises the full descent to the
+// level-3 lookup base.
+func.func @test_bf64_inverse_known() {
+  %a = field.constant 2 : !BF64
+  %c = field.inverse %a : !BF64
+
+  %result_i64 = field.bitcast %c : !BF64 -> i64
+  %result = arith.trunci %result_i64 : i64 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[3]
+
+// Test: BF64 full-width inverse round-trip — x·x⁻¹ = 1 for an x that fills
+// all 64 bits, so every descent level does real work. Prints the low i32 of
+// the product (1) then the folded-down high bits (0).
+func.func @test_bf64_inverse_roundtrip() {
+  %x = field.constant 0xDEADBEEFCAFEBABE : !BF64
+  %xinv = field.inverse %x : !BF64
+  %p = field.mul %x, %xinv : !BF64
+
+  %p_i64 = field.bitcast %p : !BF64 -> i64
+  %lo = arith.trunci %p_i64 : i64 to i32
+  %c32 = arith.constant 32 : i64
+  %hi64 = arith.shrui %p_i64, %c32 : i64
+  %hi = arith.trunci %hi64 : i64 to i32
+  %tensor = tensor.from_elements %lo, %hi : tensor<2xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<2xi32> to memref<2xi32>
+  %cast = memref.cast %buffer : memref<2xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[1, 0]
+
+// Test: BF128 inverse known value (same GF(4) embedding as BF64 above).
+func.func @test_bf128_inverse_known() {
+  %a = field.constant 2 : !BF128
+  %c = field.inverse %a : !BF128
+
+  %result_i128 = field.bitcast %c : !BF128 -> i128
+  %result = arith.trunci %result_i128 : i128 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[3]
+
+// Test: BF128 full-width inverse round-trip — prints all four 32-bit limbs
+// of x·x⁻¹ independently (an XOR-fold of the upper limbs could false-pass,
+// e.g. [1, e, e, 0]).
+func.func @test_bf128_inverse_roundtrip() {
+  %x = field.constant 0x0123456789ABCDEFFEDCBA9876543210 : !BF128
+  %xinv = field.inverse %x : !BF128
+  %p = field.mul %x, %xinv : !BF128
+
+  %p_i128 = field.bitcast %p : !BF128 -> i128
+  %lo = arith.trunci %p_i128 : i128 to i32
+  %c32 = arith.constant 32 : i128
+  %c64 = arith.constant 64 : i128
+  %c96 = arith.constant 96 : i128
+  %s1 = arith.shrui %p_i128, %c32 : i128
+  %s2 = arith.shrui %p_i128, %c64 : i128
+  %s3 = arith.shrui %p_i128, %c96 : i128
+  %h1 = arith.trunci %s1 : i128 to i32
+  %h2 = arith.trunci %s2 : i128 to i32
+  %h3 = arith.trunci %s3 : i128 to i32
+  %tensor = tensor.from_elements %lo, %h1, %h2, %h3 : tensor<4xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<4xi32> to memref<4xi32>
+  %cast = memref.cast %buffer : memref<4xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[1, 0, 0, 0]
+
+// Test: BF64 inverse of zero is zero (invert_or_zero, matching binius and
+// the level-3 lookup table's 0 → 0 entry).
+func.func @test_bf64_inverse_zero() {
+  %a = field.constant 0 : !BF64
+  %c = field.inverse %a : !BF64
+
+  %result_i64 = field.bitcast %c : !BF64 -> i64
+  %result = arith.trunci %result_i64 : i64 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[0]
+
+// Test: BF128 inverse of zero is zero — one more descent level of the
+// norm-zero propagation than the BF64 case.
+func.func @test_bf128_inverse_zero() {
+  %a = field.constant 0 : !BF128
+  %c = field.inverse %a : !BF128
+
+  %result_i128 = field.bitcast %c : !BF128 -> i128
+  %result = arith.trunci %result_i128 : i128 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[0]
+
 func.func @main() {
   func.call @test_bf8_add() : () -> ()
   func.call @test_bf8_mul() : () -> ()
@@ -207,5 +321,11 @@ func.func @main() {
   func.call @test_bf128_mul() : () -> ()
   func.call @test_bf128_mul_self() : () -> ()
   func.call @test_bf128_mul_cross() : () -> ()
+  func.call @test_bf64_inverse_known() : () -> ()
+  func.call @test_bf64_inverse_roundtrip() : () -> ()
+  func.call @test_bf128_inverse_known() : () -> ()
+  func.call @test_bf128_inverse_roundtrip() : () -> ()
+  func.call @test_bf64_inverse_zero() : () -> ()
+  func.call @test_bf128_inverse_zero() : () -> ()
   return
 }

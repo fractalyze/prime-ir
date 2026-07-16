@@ -36,7 +36,8 @@ namespace mlir::prime_ir::field {
 // - Doubling: Zero (2a = a + a = 0 in characteristic 2)
 // - Multiplication: Karatsuba tower multiplication
 // - Squaring: Optimized using Frobenius endomorphism
-// - Inverse: Fermat's little theorem: a⁻¹ = a^(2ⁿ - 2)
+// - Inverse: recursive tower descent via the subfield norm (levels ≥ 4),
+//   lookup table (level 3), Fermat's little theorem (levels ≤ 2)
 class BinaryFieldCodeGen {
 public:
   BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
@@ -99,9 +100,18 @@ private:
   // realized recursively rather than as a multiply by an α table entry.
   Value mulXTower(Value a, unsigned towerLevel) const;
 
+  // Recursive tower-descent inverse for tower level k ≥ 3: one inverse a
+  // level down plus a constant number of level-(k−1) muls/squares, so the
+  // generated IR grows linearly in level instead of the ~6ᵏ of an inlined
+  // Fermat chain. Bottoms out in the level-3 lookup table.
+  Value inverseTower(Value a, unsigned towerLevel) const;
+
   // Lookup table-based inverse for bf<8> (tower level 3)
   // Uses O(1) table lookup instead of O(n) Fermat computation
   BinaryFieldCodeGen inverseLookupTable() const;
+
+  // Same lookup on an explicit level-3 (i8) value — the descent base case.
+  Value inverseLookupTable8b(Value a) const;
 };
 
 } // namespace mlir::prime_ir::field
