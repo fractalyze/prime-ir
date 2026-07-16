@@ -476,27 +476,26 @@ struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
     return emitScalarInverse(fieldType, adaptor.getInput());
   }
 
-  // Fermat's-little-theorem inverse (x^(p-2)) emits a fully unrolled,
-  // branch-free square-and-multiply chain, which is divergence-free on GPU but
-  // grows ~p_bits multiplications of p_bits/64-limb operands. It beats the
-  // Bernstein-Yang safegcd loop for small fields and loses for wide ones, so
-  // `auto` gates on modulus width. Fermat is implemented for prime fields
-  // only; extension fields always use Bernstein-Yang.
+  // Past this width the chain loses to safegcd, so `auto` stops taking it.
   static constexpr unsigned kFermatMaxModulusBits = 64;
+
+  bool preferFermatChain(const APInt &modulus) const {
+    if (inverseAlgorithm == InverseAlgorithm::Fermat)
+      return true;
+    return inverseAlgorithm == InverseAlgorithm::Auto &&
+           PrimeFieldCodeGen::hasInverseChain(modulus) &&
+           modulus.getActiveBits() <= kFermatMaxModulusBits;
+  }
 
   Value emitScalarInverse(Type fieldType, Value value) const {
     FieldCodeGen cg(fieldType, value, this->typeConverter);
     if (auto pf = dyn_cast<PrimeFieldType>(fieldType)) {
       APInt modulus = pf.getModulus().getValue();
-      bool useFermat = inverseAlgorithm == InverseAlgorithm::Fermat ||
-                       (inverseAlgorithm == InverseAlgorithm::Auto &&
-                        modulus.getActiveBits() <= kFermatMaxModulusBits);
-      if (useFermat) {
-        // PrimeFieldType rejects power-of-2 moduli, so p >= 3 and the Fermat
-        // exponent p - 2 >= 1 — never zero, as pow() requires.
-        APInt exp = modulus - 2;
-        return cg.pow(exp);
-      }
+      // Chain-able primes route through cg.inverse() below. PrimeFieldType
+      // rejects power-of-2 moduli, so p - 2 >= 1 — never 0, as pow() requires.
+      if (inverseAlgorithm == InverseAlgorithm::Fermat &&
+          !PrimeFieldCodeGen::hasInverseChain(modulus))
+        return cg.pow(modulus - 2);
     }
     return cg.inverse();
   }
@@ -508,6 +507,13 @@ struct ConvertInverse : ConvertFieldOpBase<InverseOp, ConvertInverse> {
     if (isa<BinaryFieldType>(getElementTypeOrSelf(op.getType()))) {
       return failure();
     }
+
+    // Scalar, per-element, and extension lowerings all emit a base-field
+    // inverse internally; carry the choice, keyed on the base prime, to each.
+    APInt baseModulus = getBasePrimeField(getElementTypeOrSelf(op.getOutput()))
+                            .getModulus()
+                            .getValue();
+    ScopedPreferFermatChain preferFermat(preferFermatChain(baseModulus));
 
     auto tensorType = dyn_cast<RankedTensorType>(op.getOutput().getType());
     if (!tensorType)

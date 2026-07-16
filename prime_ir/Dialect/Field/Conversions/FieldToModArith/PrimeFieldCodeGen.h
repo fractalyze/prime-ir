@@ -16,6 +16,10 @@ limitations under the License.
 #ifndef PRIME_IR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_PRIMEFIELDCODEGEN_H_
 #define PRIME_IR_DIALECT_FIELD_CONVERSIONS_FIELDTOMODARITH_PRIMEFIELDCODEGEN_H_
 
+#include <optional>
+#include <utility>
+
+#include "llvm/ADT/APInt.h"
 #include "mlir/IR/Value.h"
 
 namespace zk_dtypes {
@@ -52,6 +56,10 @@ public:
 
   operator Value() const { return value; }
 
+  // Whether `modulus` is a Solinas prime p = 2^a - 2^b + 1, for which
+  // Inverse() emits an addition chain instead of a generic pow / safegcd.
+  static bool hasInverseChain(const APInt &modulus);
+
   PrimeFieldCodeGen operator+(const PrimeFieldCodeGen &other) const;
   PrimeFieldCodeGen &operator+=(const PrimeFieldCodeGen &other);
   PrimeFieldCodeGen operator-(const PrimeFieldCodeGen &other) const;
@@ -80,6 +88,14 @@ private:
   PrimeFieldCodeGen Double() const;
   PrimeFieldCodeGen Square() const;
   PrimeFieldCodeGen Inverse() const;
+
+  // If `modulus` is a Solinas prime p = 2^a - 2^b + 1, returns (a, b).
+  static std::optional<std::pair<unsigned, unsigned>>
+  detectSolinasForm(const APInt &modulus);
+
+  // x -> x^(p-2) for p = 2^a - 2^b + 1, as a branch-free addition chain.
+  PrimeFieldCodeGen solinasInverseChain(unsigned a, unsigned b) const;
+
   PrimeFieldCodeGen CreateConst(int64_t constant) const;
   PrimeFieldCodeGen CreateRationalConst(int64_t num, int64_t denom) const;
 
