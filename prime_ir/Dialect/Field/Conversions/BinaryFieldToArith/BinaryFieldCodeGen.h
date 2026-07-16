@@ -49,14 +49,6 @@ public:
   // Get the underlying value, widened back to the byte-rounded carrier.
   Value getValue() const;
 
-  // The integer type binary-field values are carried in at tensor/function
-  // boundaries: the logical storage type byte-rounded up (i8 for levels
-  // 0-2). XLA and zk_dtypes store sub-byte binary fields byte-per-element
-  // (PRED-style), and the shared sub-byte tensor packing in consumers keys
-  // on raw i2/i4 tensor element types — so those types must never appear at
-  // a buffer boundary.
-  static IntegerType getCarrierType(BinaryFieldType type);
-
   // Get the field type
   BinaryFieldType getType() const { return bfType_; }
 

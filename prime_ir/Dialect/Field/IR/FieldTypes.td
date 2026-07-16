@@ -163,15 +163,27 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
   ];
   let extraClassDeclaration = [{
     /// Returns the bit width of elements in this field (2^towerLevel).
+    /// This is the ELEMENT width; sub-byte fields are stored wider — use
+    /// getStorageType()/getTypeSizeInBits() for the storage.
     unsigned getBitWidth() const { return 1u << getTowerLevel(); }
 
-    /// Returns the integer type used to store elements.
+    /// Returns the integer type used to store elements: the element width
+    /// rounded up to a byte. Sub-byte fields (levels 0-2) are stored
+    /// byte-per-element everywhere (zk_dtypes uint8 backing, XLA
+    /// StorageBitWidth) — the same storage-wider-than-element contract as
+    /// a 31-bit prime field stored in i32. field.bitcast trades in this
+    /// storage width.
     IntegerType getStorageType() const {
-      return IntegerType::get(getContext(), getBitWidth());
+      return IntegerType::get(getContext(),
+                              getBitWidth() < 8 ? 8 : getBitWidth());
     }
 
-    /// Returns the bit width of an element in this type.
-    unsigned getTypeSizeInBits() const { return getBitWidth(); }
+    /// Returns the storage bit width (byte-rounded, matching
+    /// getStorageType and the PF convention where getTypeSizeInBits is
+    /// the i32 storage of a 31-bit field).
+    unsigned getTypeSizeInBits() const {
+      return getBitWidth() < 8 ? 8 : getBitWidth();
+    }
 
     /// Returns the storage bit width.
     [[deprecated("use getTypeSizeInBits() instead")]]

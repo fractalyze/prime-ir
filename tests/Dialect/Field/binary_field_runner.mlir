@@ -320,10 +320,10 @@ func.func @test_bf4_mul_nonfixed() {
   %aa = field.mul %a, %a : !BF4
   %ba = field.mul %b, %a : !BF4
 
-  %r0_i2 = field.bitcast %aa : !BF4 -> i2
-  %r1_i2 = field.bitcast %ba : !BF4 -> i2
-  %r0 = arith.extui %r0_i2 : i2 to i32
-  %r1 = arith.extui %r1_i2 : i2 to i32
+  %r0_i8 = field.bitcast %aa : !BF4 -> i8
+  %r1_i8 = field.bitcast %ba : !BF4 -> i8
+  %r0 = arith.extui %r0_i8 : i8 to i32
+  %r1 = arith.extui %r1_i8 : i8 to i32
   %tensor = tensor.from_elements %r0, %r1 : tensor<2xi32>
   %buffer = bufferization.to_buffer %tensor : tensor<2xi32> to memref<2xi32>
   %cast = memref.cast %buffer : memref<2xi32> to memref<*xi32>

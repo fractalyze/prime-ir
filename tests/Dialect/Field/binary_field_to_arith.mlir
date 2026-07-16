@@ -158,25 +158,25 @@ func.func @test_bf_subbyte_constant() -> !BF2E {
   return %c : !BF2E
 }
 
-// A bitcast whose integer side is the logical width (emitter-inserted
-// truncations produce these) widens back to the carrier instead of leaving
-// an unresolved i2->i8 materialization.
-// CHECK-LABEL: @test_bf_subbyte_bitcast_narrow_int
-// CHECK-SAME: (%arg0: i2) -> i8
-func.func @test_bf_subbyte_bitcast_narrow_int(%a: i2) -> !BF2E {
-  // CHECK: %[[R:.*]] = arith.extui %arg0 : i2 to i8
-  // CHECK: return %[[R]] : i8
-  %c = field.bitcast %a : i2 -> !BF2E
+// field.bitcast trades in the byte-rounded storage width (the verifier
+// rejects the bare i2 element width, matching the PF convention where a
+// 31-bit field bitcasts with its i32 storage) — both converted sides are
+// the same i8, so the retag is a no-op.
+// CHECK-LABEL: @test_bf_subbyte_bitcast_storage
+// CHECK-SAME: (%arg0: i8) -> i8
+func.func @test_bf_subbyte_bitcast_storage(%a: i8) -> !BF2E {
+  // CHECK-NOT: arith.extui
+  // CHECK-NOT: arith.trunci
+  // CHECK: return %arg0 : i8
+  %c = field.bitcast %a : i8 -> !BF2E
   return %c : !BF2E
 }
 
-// The reverse direction: a bf value on the i8 carrier bitcast to its exact
-// logical integer width truncates back down.
-// CHECK-LABEL: @test_bf_subbyte_bitcast_to_narrow_int
-// CHECK-SAME: (%arg0: i8) -> i2
-func.func @test_bf_subbyte_bitcast_to_narrow_int(%a: !BF2E) -> i2 {
-  // CHECK: %[[R:.*]] = arith.trunci %arg0 : i8 to i2
-  // CHECK: return %[[R]] : i2
-  %c = field.bitcast %a : !BF2E -> i2
-  return %c : i2
+// CHECK-LABEL: @test_bf_subbyte_bitcast_to_storage
+// CHECK-SAME: (%arg0: i8) -> i8
+func.func @test_bf_subbyte_bitcast_to_storage(%a: !BF2E) -> i8 {
+  // CHECK-NOT: arith.trunci
+  // CHECK: return %arg0 : i8
+  %c = field.bitcast %a : !BF2E -> i8
+  return %c : i8
 }

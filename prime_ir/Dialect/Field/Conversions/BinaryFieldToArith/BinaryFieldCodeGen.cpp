@@ -35,29 +35,26 @@ Type cloneWithElementType(Type like, IntegerType elementType) {
 
 } // namespace
 
-// static
-IntegerType BinaryFieldCodeGen::getCarrierType(BinaryFieldType type) {
-  return IntegerType::get(type.getContext(),
-                          std::max(type.getStorageType().getWidth(), 8u));
-}
-
 BinaryFieldCodeGen::BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
                                        ImplicitLocOpBuilder &builder)
     : bfType_(bfType), value_(value), builder_(builder) {
-  auto storageTy = bfType.getStorageType();
+  // Values arrive at the (byte-rounded) storage width; the tower algorithms
+  // run at the element width.
+  auto elementTy = IntegerType::get(bfType.getContext(), bfType.getBitWidth());
   auto valueTy = cast<IntegerType>(getElementTypeOrSelf(value.getType()));
-  if (valueTy.getWidth() > storageTy.getWidth()) {
+  if (valueTy.getWidth() > elementTy.getWidth()) {
     value_ = arith::TruncIOp::create(
-        builder, cloneWithElementType(value.getType(), storageTy), value);
+        builder, cloneWithElementType(value.getType(), elementTy), value);
   }
 }
 
 Value BinaryFieldCodeGen::getValue() const {
-  IntegerType carrierTy = getCarrierType(bfType_);
+  // Widen back from the element width to the storage width.
+  IntegerType storageTy = bfType_.getStorageType();
   auto valueTy = cast<IntegerType>(getElementTypeOrSelf(value_.getType()));
-  if (valueTy.getWidth() < carrierTy.getWidth()) {
+  if (valueTy.getWidth() < storageTy.getWidth()) {
     return arith::ExtUIOp::create(
-        builder_, cloneWithElementType(value_.getType(), carrierTy), value_);
+        builder_, cloneWithElementType(value_.getType(), storageTy), value_);
   }
   return value_;
 }
@@ -243,9 +240,8 @@ Value BinaryFieldCodeGen::inverseLookupTable8b(Value a) const {
 BinaryFieldCodeGen BinaryFieldCodeGen::constant(BinaryFieldType bfType,
                                                 uint64_t val,
                                                 ImplicitLocOpBuilder &builder) {
-  IntegerType intType = bfType.getStorageType();
   Value c = arith::ConstantIntOp::create(builder, static_cast<int64_t>(val),
-                                         intType.getWidth());
+                                         bfType.getBitWidth());
   return BinaryFieldCodeGen(bfType, c, builder);
 }
 
