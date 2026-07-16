@@ -40,11 +40,22 @@ namespace mlir::prime_ir::field {
 //   lookup table (level 3), Fermat's little theorem (levels ≤ 2)
 class BinaryFieldCodeGen {
 public:
+  // `value` may arrive on the byte-rounded carrier type (see getCarrierType);
+  // the constructor truncates it down to the logical storage width so the
+  // tower algorithms always run on i(2^level).
   BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
                      ImplicitLocOpBuilder &builder);
 
-  // Get the underlying value
-  Value getValue() const { return value_; }
+  // Get the underlying value, widened back to the byte-rounded carrier.
+  Value getValue() const;
+
+  // The integer type binary-field values are carried in at tensor/function
+  // boundaries: the logical storage type byte-rounded up (i8 for levels
+  // 0-2). XLA and zk_dtypes store sub-byte binary fields byte-per-element
+  // (PRED-style), and the shared sub-byte tensor packing in consumers keys
+  // on raw i2/i4 tensor element types — so those types must never appear at
+  // a buffer boundary.
+  static IntegerType getCarrierType(BinaryFieldType type);
 
   // Get the field type
   BinaryFieldType getType() const { return bfType_; }

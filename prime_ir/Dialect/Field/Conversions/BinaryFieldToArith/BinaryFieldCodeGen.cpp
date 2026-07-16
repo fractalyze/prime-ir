@@ -18,13 +18,47 @@ limitations under the License.
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
 
 namespace mlir::prime_ir::field {
 
+namespace {
+
+// Rebuild `like`'s shape (if any) around a new integer element type.
+Type cloneWithElementType(Type like, IntegerType elementType) {
+  if (auto shaped = dyn_cast<ShapedType>(like)) {
+    return shaped.clone(shaped.getShape(), elementType);
+  }
+  return elementType;
+}
+
+} // namespace
+
+IntegerType BinaryFieldCodeGen::getCarrierType(BinaryFieldType type) {
+  return IntegerType::get(type.getContext(), std::max(type.getBitWidth(), 8u));
+}
+
 BinaryFieldCodeGen::BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
                                        ImplicitLocOpBuilder &builder)
-    : bfType_(bfType), value_(value), builder_(builder) {}
+    : bfType_(bfType), value_(value), builder_(builder) {
+  auto storageTy = bfType.getStorageType();
+  auto valueTy = cast<IntegerType>(getElementTypeOrSelf(value.getType()));
+  if (valueTy.getWidth() > storageTy.getWidth()) {
+    value_ = arith::TruncIOp::create(
+        builder, cloneWithElementType(value.getType(), storageTy), value);
+  }
+}
+
+Value BinaryFieldCodeGen::getValue() const {
+  IntegerType carrierTy = getCarrierType(bfType_);
+  auto valueTy = cast<IntegerType>(getElementTypeOrSelf(value_.getType()));
+  if (valueTy.getWidth() < carrierTy.getWidth()) {
+    return arith::ExtUIOp::create(
+        builder_, cloneWithElementType(value_.getType(), carrierTy), value_);
+  }
+  return value_;
+}
 
 BinaryFieldCodeGen
 BinaryFieldCodeGen::operator+(const BinaryFieldCodeGen &other) const {

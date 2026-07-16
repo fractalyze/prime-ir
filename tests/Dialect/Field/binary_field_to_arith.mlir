@@ -19,6 +19,7 @@
 
 !BF8 = !field.bf<3>  // GF(2^8)
 !BF64 = !field.bf<6>  // GF(2^64) tower
+!BF2E = !field.bf<1>  // GF(4), 2-bit logical, i8 carrier
 !GHASH = !field.bf<7, ghash>  // GF(2^128), flat GHASH basis
 
 // CHECK-LABEL: @test_bf_constant
@@ -127,4 +128,55 @@ func.func @test_bf64_inverse_descent(%a: !BF64) -> !BF64 {
   // CHECK-NOT: field.inverse
   %c = field.inverse %a : !BF64
   return %c : !BF64
+}
+
+// -----
+
+// Sub-byte binary fields lower onto a byte-rounded i8 carrier (XLA stores
+// t0-t2 byte-per-element; raw i2/i4 tensor types would trigger downstream
+// sub-byte packing against unpacked buffers). Math still runs on the logical
+// width: trunc on entry, extui back to the carrier on exit.
+
+// CHECK-LABEL: @test_bf_subbyte_add
+// CHECK-SAME: (%arg0: i8, %arg1: i8) -> i8
+func.func @test_bf_subbyte_add(%a: !BF2E, %b: !BF2E) -> !BF2E {
+  // CHECK: %[[A:.*]] = arith.trunci %arg0 : i8 to i2
+  // CHECK: %[[B:.*]] = arith.trunci %arg1 : i8 to i2
+  // CHECK: %[[X:.*]] = arith.xori %[[A]], %[[B]] : i2
+  // CHECK: %[[R:.*]] = arith.extui %[[X]] : i2 to i8
+  // CHECK: return %[[R]] : i8
+  %c = field.add %a, %b : !BF2E
+  return %c : !BF2E
+}
+
+// Sub-byte constants re-type their i2 attribute onto the i8 carrier.
+// CHECK-LABEL: @test_bf_subbyte_constant
+// CHECK-SAME: () -> i8
+func.func @test_bf_subbyte_constant() -> !BF2E {
+  // CHECK: arith.constant 3 : i8
+  %c = field.constant 3 : !BF2E
+  return %c : !BF2E
+}
+
+// A bitcast whose integer side is the logical width (emitter-inserted
+// truncations produce these) widens back to the carrier instead of leaving
+// an unresolved i2->i8 materialization.
+// CHECK-LABEL: @test_bf_subbyte_bitcast_narrow_int
+// CHECK-SAME: (%arg0: i2) -> i8
+func.func @test_bf_subbyte_bitcast_narrow_int(%a: i2) -> !BF2E {
+  // CHECK: %[[R:.*]] = arith.extui %arg0 : i2 to i8
+  // CHECK: return %[[R]] : i8
+  %c = field.bitcast %a : i2 -> !BF2E
+  return %c : !BF2E
+}
+
+// The reverse direction: a bf value on the i8 carrier bitcast to its exact
+// logical integer width truncates back down.
+// CHECK-LABEL: @test_bf_subbyte_bitcast_to_narrow_int
+// CHECK-SAME: (%arg0: i8) -> i2
+func.func @test_bf_subbyte_bitcast_to_narrow_int(%a: !BF2E) -> i2 {
+  // CHECK: %[[R:.*]] = arith.trunci %arg0 : i8 to i2
+  // CHECK: return %[[R]] : i2
+  %c = field.bitcast %a : !BF2E -> i2
+  return %c : i2
 }

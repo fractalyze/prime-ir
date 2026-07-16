@@ -38,17 +38,25 @@ namespace mlir::prime_ir::field {
 namespace {
 
 /// Type converter for binary field to arith conversion.
-/// Converts BinaryFieldType to IntegerType with appropriate bit width.
+/// Converts BinaryFieldType to the byte-rounded carrier IntegerType (i8 for
+/// levels 0-2, the storage type above). XLA and zk_dtypes store sub-byte
+/// binary fields byte-per-element (PRED-style), and downstream sub-byte
+/// tensor packing keys on raw i2/i4 element types — converting to the
+/// logical i1/i2/i4 here made kernel layouts packed while every buffer is
+/// byte-per-element (jax#123 F4: GPU silently corrupted t1/t2 elements).
+/// Arithmetic still runs on the logical width; BinaryFieldCodeGen truncates
+/// on entry and widens back to the carrier on exit.
 class BinaryFieldToArithTypeConverter : public ShapedTypeConverter {
 public:
   explicit BinaryFieldToArithTypeConverter(MLIRContext *ctx) {
     addConversion([](Type type) { return type; });
-    addConversion(
-        [](BinaryFieldType type) -> Type { return type.getStorageType(); });
+    addConversion([](BinaryFieldType type) -> Type {
+      return BinaryFieldCodeGen::getCarrierType(type);
+    });
     addConversion([](ShapedType type) -> Type {
       if (auto bfType = dyn_cast<BinaryFieldType>(type.getElementType())) {
         return convertShapedType(type, type.getShape(),
-                                 bfType.getStorageType());
+                                 BinaryFieldCodeGen::getCarrierType(bfType));
       }
       return type;
     });
@@ -92,8 +100,23 @@ struct ConvertBinaryFieldConstant : public OpConversionPattern<ConstantOp> {
       return failure();
     }
 
-    rewriter.replaceOpWithNewOp<arith::ConstantOp>(
-        op, convertedType, cast<TypedAttr>(op.getValueAttr()));
+    // Sub-byte constants carry i1/i2/i4-typed attributes but lower onto the
+    // byte-rounded carrier — re-type the attribute to match.
+    auto attr = cast<TypedAttr>(op.getValueAttr());
+    auto carrierTy = cast<IntegerType>(getElementTypeOrSelf(convertedType));
+    if (auto intAttr = dyn_cast<IntegerAttr>(attr)) {
+      if (intAttr.getType() != carrierTy) {
+        attr = IntegerAttr::get(carrierTy,
+                                intAttr.getValue().zext(carrierTy.getWidth()));
+      }
+    } else if (auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr)) {
+      if (denseAttr.getElementType() != carrierTy) {
+        attr = denseAttr.mapValues(carrierTy, [&](const APInt &v) {
+          return v.zext(carrierTy.getWidth());
+        });
+      }
+    }
+    rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, convertedType, attr);
     return success();
   }
 };
@@ -341,8 +364,26 @@ struct ConvertBinaryFieldBitcast : public OpConversionPattern<BitcastOp> {
       return failure();
     }
 
-    // After type conversion, both sides are integers with same bitwidth (no-op)
-    rewriter.replaceOp(op, adaptor.getInput());
+    // The converted sides need not agree on bitwidth: the field side lowers
+    // to the byte-rounded carrier, while integer producers can be either the
+    // byte width (XLA constants, bitcast-convert output) or the logical
+    // width (emitter-inserted truncations). Reconcile explicitly — an
+    // unresolved i8->i2 materialization here is exactly jax#123 F4's
+    // "failed to legalize" crash.
+    Value input = adaptor.getInput();
+    Type resultTy = typeConverter->convertType(op.getOutput().getType());
+    if (!resultTy) {
+      return failure();
+    }
+    auto inTy = cast<IntegerType>(getElementTypeOrSelf(input.getType()));
+    auto outTy = cast<IntegerType>(getElementTypeOrSelf(resultTy));
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    if (inTy.getWidth() < outTy.getWidth()) {
+      input = arith::ExtUIOp::create(b, resultTy, input);
+    } else if (inTy.getWidth() > outTy.getWidth()) {
+      input = arith::TruncIOp::create(b, resultTy, input);
+    }
+    rewriter.replaceOp(op, input);
     return success();
   }
 };
