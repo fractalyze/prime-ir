@@ -182,7 +182,7 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     /// getStorageType and the PF convention where getTypeSizeInBits is
     /// the i32 storage of a 31-bit field).
     unsigned getTypeSizeInBits() const {
-      return getBitWidth() < 8 ? 8 : getBitWidth();
+      return getStorageType().getWidth();
     }
 
     /// Returns the storage bit width.
