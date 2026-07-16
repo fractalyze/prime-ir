@@ -251,8 +251,9 @@ func.func @test_bf128_inverse_known() {
 }
 // CHECK: {{^}}[3]
 
-// Test: BF128 full-width inverse round-trip — prints the low i32 of x·x⁻¹
-// (1) and the XOR-fold of the three upper 32-bit limbs (0).
+// Test: BF128 full-width inverse round-trip — prints all four 32-bit limbs
+// of x·x⁻¹ independently (an XOR-fold of the upper limbs could false-pass,
+// e.g. [1, e, e, 0]).
 func.func @test_bf128_inverse_roundtrip() {
   %x = field.constant 0x0123456789ABCDEFFEDCBA9876543210 : !BF128
   %xinv = field.inverse %x : !BF128
@@ -263,22 +264,19 @@ func.func @test_bf128_inverse_roundtrip() {
   %c32 = arith.constant 32 : i128
   %c64 = arith.constant 64 : i128
   %c96 = arith.constant 96 : i128
-  %l1 = arith.trunci %p_i128 : i128 to i32
   %s1 = arith.shrui %p_i128, %c32 : i128
   %s2 = arith.shrui %p_i128, %c64 : i128
   %s3 = arith.shrui %p_i128, %c96 : i128
   %h1 = arith.trunci %s1 : i128 to i32
   %h2 = arith.trunci %s2 : i128 to i32
   %h3 = arith.trunci %s3 : i128 to i32
-  %hx = arith.xori %h1, %h2 : i32
-  %hi = arith.xori %hx, %h3 : i32
-  %tensor = tensor.from_elements %lo, %hi : tensor<2xi32>
-  %buffer = bufferization.to_buffer %tensor : tensor<2xi32> to memref<2xi32>
-  %cast = memref.cast %buffer : memref<2xi32> to memref<*xi32>
+  %tensor = tensor.from_elements %lo, %h1, %h2, %h3 : tensor<4xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<4xi32> to memref<4xi32>
+  %cast = memref.cast %buffer : memref<4xi32> to memref<*xi32>
   func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
   return
 }
-// CHECK: {{^}}[1, 0]
+// CHECK: {{^}}[1, 0, 0, 0]
 
 // Test: BF64 inverse of zero is zero (invert_or_zero, matching binius and
 // the level-3 lookup table's 0 → 0 entry).
@@ -288,6 +286,22 @@ func.func @test_bf64_inverse_zero() {
 
   %result_i64 = field.bitcast %c : !BF64 -> i64
   %result = arith.trunci %result_i64 : i64 to i32
+  %tensor = tensor.from_elements %result : tensor<1xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
+  %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[0]
+
+// Test: BF128 inverse of zero is zero — one more descent level of the
+// norm-zero propagation than the BF64 case.
+func.func @test_bf128_inverse_zero() {
+  %a = field.constant 0 : !BF128
+  %c = field.inverse %a : !BF128
+
+  %result_i128 = field.bitcast %c : !BF128 -> i128
+  %result = arith.trunci %result_i128 : i128 to i32
   %tensor = tensor.from_elements %result : tensor<1xi32>
   %buffer = bufferization.to_buffer %tensor : tensor<1xi32> to memref<1xi32>
   %cast = memref.cast %buffer : memref<1xi32> to memref<*xi32>
@@ -312,5 +326,6 @@ func.func @main() {
   func.call @test_bf128_inverse_known() : () -> ()
   func.call @test_bf128_inverse_roundtrip() : () -> ()
   func.call @test_bf64_inverse_zero() : () -> ()
+  func.call @test_bf128_inverse_zero() : () -> ()
   return
 }
