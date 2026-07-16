@@ -18,13 +18,46 @@ limitations under the License.
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
 
 namespace mlir::prime_ir::field {
 
+namespace {
+
+// Rebuild `like`'s shape (if any) around a new integer element type.
+Type cloneWithElementType(Type like, IntegerType elementType) {
+  if (auto shaped = dyn_cast<ShapedType>(like)) {
+    return shaped.clone(elementType);
+  }
+  return elementType;
+}
+
+} // namespace
+
 BinaryFieldCodeGen::BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
                                        ImplicitLocOpBuilder &builder)
-    : bfType_(bfType), value_(value), builder_(builder) {}
+    : bfType_(bfType), value_(value), builder_(builder) {
+  // Values arrive at the (byte-rounded) storage width; the tower algorithms
+  // run at the element width.
+  auto elementTy = IntegerType::get(bfType.getContext(), bfType.getBitWidth());
+  auto valueTy = cast<IntegerType>(getElementTypeOrSelf(value.getType()));
+  if (valueTy.getWidth() > elementTy.getWidth()) {
+    value_ = arith::TruncIOp::create(
+        builder, cloneWithElementType(value.getType(), elementTy), value);
+  }
+}
+
+Value BinaryFieldCodeGen::getValue() const {
+  // Widen back from the element width to the storage width.
+  IntegerType storageTy = bfType_.getStorageType();
+  auto valueTy = cast<IntegerType>(getElementTypeOrSelf(value_.getType()));
+  if (valueTy.getWidth() < storageTy.getWidth()) {
+    return arith::ExtUIOp::create(
+        builder_, cloneWithElementType(value_.getType(), storageTy), value_);
+  }
+  return value_;
+}
 
 BinaryFieldCodeGen
 BinaryFieldCodeGen::operator+(const BinaryFieldCodeGen &other) const {
@@ -207,9 +240,8 @@ Value BinaryFieldCodeGen::inverseLookupTable8b(Value a) const {
 BinaryFieldCodeGen BinaryFieldCodeGen::constant(BinaryFieldType bfType,
                                                 uint64_t val,
                                                 ImplicitLocOpBuilder &builder) {
-  IntegerType intType = bfType.getStorageType();
   Value c = arith::ConstantIntOp::create(builder, static_cast<int64_t>(val),
-                                         intType.getWidth());
+                                         bfType.getBitWidth());
   return BinaryFieldCodeGen(bfType, c, builder);
 }
 

@@ -21,6 +21,7 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s < %t
 
+!BF4 = !field.bf<1>     // GF(4) tower field (sub-byte, i8 carrier)
 !BF8 = !field.bf<3>     // GF(2^8) tower field
 !BF64 = !field.bf<6>    // GF(2^64) tower field
 !BF128 = !field.bf<7>   // GF(2^128) tower field
@@ -310,6 +311,27 @@ func.func @test_bf128_inverse_zero() {
 }
 // CHECK: {{^}}[0]
 
+// Test: GF(4) sub-byte multiply with NON-fixed-point data on the i8 carrier
+// (2 = omega, 3 = omega+1: 2*2 = 3, 3*2 = 1). Fixed-point probe values masked
+// the packed-layout corruption this guards against (jax#123 F4).
+func.func @test_bf4_mul_nonfixed() {
+  %a = field.constant 2 : !BF4
+  %b = field.constant 3 : !BF4
+  %aa = field.mul %a, %a : !BF4
+  %ba = field.mul %b, %a : !BF4
+
+  %r0_i8 = field.bitcast %aa : !BF4 -> i8
+  %r1_i8 = field.bitcast %ba : !BF4 -> i8
+  %r0 = arith.extui %r0_i8 : i8 to i32
+  %r1 = arith.extui %r1_i8 : i8 to i32
+  %tensor = tensor.from_elements %r0, %r1 : tensor<2xi32>
+  %buffer = bufferization.to_buffer %tensor : tensor<2xi32> to memref<2xi32>
+  %cast = memref.cast %buffer : memref<2xi32> to memref<*xi32>
+  func.call @printMemrefI32(%cast) : (memref<*xi32>) -> ()
+  return
+}
+// CHECK: {{^}}[3, 1]
+
 func.func @main() {
   func.call @test_bf8_add() : () -> ()
   func.call @test_bf8_mul() : () -> ()
@@ -327,5 +349,6 @@ func.func @main() {
   func.call @test_bf128_inverse_roundtrip() : () -> ()
   func.call @test_bf64_inverse_zero() : () -> ()
   func.call @test_bf128_inverse_zero() : () -> ()
+  func.call @test_bf4_mul_nonfixed() : () -> ()
   return
 }

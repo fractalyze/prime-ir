@@ -40,11 +40,14 @@ namespace mlir::prime_ir::field {
 //   lookup table (level 3), Fermat's little theorem (levels ≤ 2)
 class BinaryFieldCodeGen {
 public:
+  // `value` may arrive on the byte-rounded carrier type (see getCarrierType);
+  // the constructor truncates it down to the logical storage width so the
+  // tower algorithms always run on i(2^level).
   BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
                      ImplicitLocOpBuilder &builder);
 
-  // Get the underlying value
-  Value getValue() const { return value_; }
+  // Get the underlying value, widened back to the byte-rounded carrier.
+  Value getValue() const;
 
   // Get the field type
   BinaryFieldType getType() const { return bfType_; }

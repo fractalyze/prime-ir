@@ -19,6 +19,7 @@
 
 !BF8 = !field.bf<3>  // GF(2^8)
 !BF64 = !field.bf<6>  // GF(2^64) tower
+!BF2E = !field.bf<1>  // GF(4), 2-bit logical, i8 carrier
 !GHASH = !field.bf<7, ghash>  // GF(2^128), flat GHASH basis
 
 // CHECK-LABEL: @test_bf_constant
@@ -127,4 +128,55 @@ func.func @test_bf64_inverse_descent(%a: !BF64) -> !BF64 {
   // CHECK-NOT: field.inverse
   %c = field.inverse %a : !BF64
   return %c : !BF64
+}
+
+// -----
+
+// Sub-byte binary fields lower onto a byte-rounded i8 carrier (XLA stores
+// t0-t2 byte-per-element; raw i2/i4 tensor types would trigger downstream
+// sub-byte packing against unpacked buffers). Math still runs on the logical
+// width: trunc on entry, extui back to the carrier on exit.
+
+// CHECK-LABEL: @test_bf_subbyte_add
+// CHECK-SAME: (%arg0: i8, %arg1: i8) -> i8
+func.func @test_bf_subbyte_add(%a: !BF2E, %b: !BF2E) -> !BF2E {
+  // CHECK: %[[A:.*]] = arith.trunci %arg0 : i8 to i2
+  // CHECK: %[[B:.*]] = arith.trunci %arg1 : i8 to i2
+  // CHECK: %[[X:.*]] = arith.xori %[[A]], %[[B]] : i2
+  // CHECK: %[[R:.*]] = arith.extui %[[X]] : i2 to i8
+  // CHECK: return %[[R]] : i8
+  %c = field.add %a, %b : !BF2E
+  return %c : !BF2E
+}
+
+// Sub-byte constants re-type their i2 attribute onto the i8 carrier.
+// CHECK-LABEL: @test_bf_subbyte_constant
+// CHECK-SAME: () -> i8
+func.func @test_bf_subbyte_constant() -> !BF2E {
+  // CHECK: arith.constant 3 : i8
+  %c = field.constant 3 : !BF2E
+  return %c : !BF2E
+}
+
+// field.bitcast trades in the byte-rounded storage width (the verifier
+// rejects the bare i2 element width, matching the PF convention where a
+// 31-bit field bitcasts with its i32 storage) — both converted sides are
+// the same i8, so the retag is a no-op.
+// CHECK-LABEL: @test_bf_subbyte_bitcast_storage
+// CHECK-SAME: (%arg0: i8) -> i8
+func.func @test_bf_subbyte_bitcast_storage(%a: i8) -> !BF2E {
+  // CHECK-NOT: arith.extui
+  // CHECK-NOT: arith.trunci
+  // CHECK: return %arg0 : i8
+  %c = field.bitcast %a : i8 -> !BF2E
+  return %c : !BF2E
+}
+
+// CHECK-LABEL: @test_bf_subbyte_bitcast_to_storage
+// CHECK-SAME: (%arg0: i8) -> i8
+func.func @test_bf_subbyte_bitcast_to_storage(%a: !BF2E) -> i8 {
+  // CHECK-NOT: arith.trunci
+  // CHECK: return %arg0 : i8
+  %c = field.bitcast %a : !BF2E -> i8
+  return %c : i8
 }

@@ -38,7 +38,10 @@ namespace mlir::prime_ir::field {
 namespace {
 
 /// Type converter for binary field to arith conversion.
-/// Converts BinaryFieldType to IntegerType with appropriate bit width.
+/// Converts BinaryFieldType to its storage IntegerType (byte-rounded for
+/// sub-byte fields — the type-level contract matching XLA/zk_dtypes
+/// byte-per-element storage). Arithmetic still runs at the element width;
+/// BinaryFieldCodeGen truncates on entry and widens back on exit.
 class BinaryFieldToArithTypeConverter : public ShapedTypeConverter {
 public:
   explicit BinaryFieldToArithTypeConverter(MLIRContext *ctx) {
@@ -341,7 +344,9 @@ struct ConvertBinaryFieldBitcast : public OpConversionPattern<BitcastOp> {
       return failure();
     }
 
-    // After type conversion, both sides are integers with same bitwidth (no-op)
+    // The bitcast verifier pins the integer side to the field's storage
+    // width, and the field side converts to that same storage type — both
+    // converted sides always agree, so the retag is a no-op.
     rewriter.replaceOp(op, adaptor.getInput());
     return success();
   }

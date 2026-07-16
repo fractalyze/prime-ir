@@ -183,8 +183,11 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
                << "binary field constant must have a single value, but got "
                << parsedInts.size();
       }
-      // Mask to valid bit range
-      APInt value = parsedInts[0].zextOrTrunc(bfType.getBitWidth());
+      // Mask to the element bit range, then widen to the storage width the
+      // attribute is typed at.
+      APInt value = parsedInts[0]
+                        .zextOrTrunc(bfType.getBitWidth())
+                        .zextOrTrunc(bfType.getTypeSizeInBits());
       result.addAttribute("value",
                           IntegerAttr::get(bfType.getStorageType(), value));
     } else if (auto efType = dyn_cast<ExtensionFieldType>(parsedType)) {
@@ -286,7 +289,8 @@ ParseResult parseFieldConstant(OpAsmParser &parser, OperationState &result) {
     SmallVector<APInt> adjustedInts;
     adjustedInts.reserve(parsedInts.size());
     for (const APInt &val : parsedInts)
-      adjustedInts.push_back(val.zextOrTrunc(bfType.getBitWidth()));
+      adjustedInts.push_back(val.zextOrTrunc(bfType.getBitWidth())
+                                 .zextOrTrunc(bfType.getTypeSizeInBits()));
     auto denseElementsAttr = DenseIntElementsAttr::get(
         shapedType.clone(bfType.getStorageType()), adjustedInts);
     result.addAttribute("value", denseElementsAttr);
@@ -775,7 +779,10 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
           return false;
         }
       }
-      return inputBF.getBitWidth() == outputInt.getWidth();
+      // Storage-width contract (PF precedent: koalabear pf<31-bit> bitcasts
+      // with its i32 storage): sub-byte fields trade with their byte-rounded
+      // storage int, never the bare element width.
+      return inputBF.getTypeSizeInBits() == outputInt.getWidth();
     }
   }
   if (auto inputInt = dyn_cast<IntegerType>(inputElementType)) {
@@ -788,7 +795,7 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
           return false;
         }
       }
-      return inputInt.getWidth() == outputBF.getBitWidth();
+      return inputInt.getWidth() == outputBF.getTypeSizeInBits();
     }
   }
 
@@ -1162,14 +1169,21 @@ public:
 
   APInt getNativeInput(IntegerAttr attr) const final { return attr.getValue(); }
 
+  // Fold arithmetic runs at the element width; attributes are typed at the
+  // (byte-rounded) storage width — widen on the way out.
   OpFoldResult getScalarAttr(const APInt &value) const final {
-    return IntegerAttr::get(bfType.getStorageType(), value);
+    return IntegerAttr::get(bfType.getStorageType(),
+                            value.zextOrTrunc(bfType.getTypeSizeInBits()));
   }
 
   OpFoldResult getTensorAttr(ShapedType type,
                              ArrayRef<APInt> values) const final {
+    SmallVector<APInt> widened;
+    widened.reserve(values.size());
+    for (const APInt &v : values)
+      widened.push_back(v.zextOrTrunc(bfType.getTypeSizeInBits()));
     return DenseIntElementsAttr::get(type.clone(bfType.getStorageType()),
-                                     values);
+                                     widened);
   }
 
 protected:
