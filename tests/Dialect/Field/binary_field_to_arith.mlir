@@ -18,6 +18,7 @@
 // Test binary field to arith lowering
 
 !BF8 = !field.bf<3>  // GF(2^8)
+!BF64 = !field.bf<6>  // GF(2^64) tower
 !GHASH = !field.bf<7, ghash>  // GF(2^128), flat GHASH basis
 
 // CHECK-LABEL: @test_bf_constant
@@ -113,4 +114,17 @@ func.func @test_bf_ghash_inverse(%a: !GHASH) -> !GHASH {
   // CHECK-NOT: field.inverse
   %c = field.inverse %a : !GHASH
   return %c : !GHASH
+}
+
+// Wide tower inverse lowers via recursive descent: the presence of the
+// level-3 lookup's scf.index_switch proves the descent reached its base
+// instead of unrolling a Fermat chain (which never emits a switch and is
+// ~0.5M ops at this width).
+// CHECK-LABEL: @test_bf64_inverse_descent
+// CHECK-SAME: (%arg0: i64) -> i64
+func.func @test_bf64_inverse_descent(%a: !BF64) -> !BF64 {
+  // CHECK: scf.index_switch
+  // CHECK-NOT: field.inverse
+  %c = field.inverse %a : !BF64
+  return %c : !BF64
 }

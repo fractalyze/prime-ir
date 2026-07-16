@@ -70,8 +70,18 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverse() const {
     return inverseLookupTable();
   }
 
-  // Use Fermat's little theorem: a⁻¹ = a^(2ⁿ - 2) in GF(2ⁿ)
-  // where n = 2^towerLevel
+  // Levels ≥ 4: recursive tower descent. An inlined Fermat chain here is
+  // (n−1) squares + (n−2) full Karatsuba muls and grows ~6× per level —
+  // GF(2⁶⁴) is ~0.5M arith ops per scalar inverse, which blows up compile
+  // time in every consumer pipeline. Descent is I(k) = I(k−1) + O(M(k−1)).
+  if (towerLevel >= 4) {
+    Value result = inverseTower(value_, towerLevel);
+    return BinaryFieldCodeGen(bfType_, result, builder_);
+  }
+
+  // Levels ≤ 2 (n ≤ 4 bits): Fermat's little theorem, a⁻¹ = a^(2ⁿ - 2).
+  // At these widths the chain is at most 3 squares + 2 muls — smaller than
+  // the descent's constant overhead.
   unsigned bitWidth = bfType_.getBitWidth();
 
   // Start with a²
@@ -88,7 +98,58 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverse() const {
   return BinaryFieldCodeGen(bfType_, result, builder_);
 }
 
+Value BinaryFieldCodeGen::inverseTower(Value a, unsigned towerLevel) const {
+  // Base case: GF(2⁸) table lookup (0 → 0, matching binius invert_or_zero).
+  if (towerLevel == 3) {
+    return inverseLookupTable8b(a);
+  }
+
+  // Fan-Paar descent for a = a₀ + a₁·X over GF(2^(2ᵏ⁻¹)), X² = β·X + 1:
+  // the Frobenius conjugate is ā = (a₀ + β·a₁) + a₁·X (X ↦ X + β, the other
+  // root), and the norm N = a·ā = a₀² + β·a₀·a₁ + a₁² lies in the subfield
+  // (its X coefficient cancels in characteristic 2). Then a⁻¹ = ā·N⁻¹, so
+  // one level costs 3 muls + 2 squares + 2 β-muls + one recursive inverse.
+  // a = 0 gives N = 0 and propagates 0 up from the base case.
+  unsigned halfBits = 1u << (towerLevel - 1);
+  IntegerType halfType = IntegerType::get(builder_.getContext(), halfBits);
+  IntegerType fullType = IntegerType::get(builder_.getContext(), halfBits * 2);
+
+  Value a0 = arith::TruncIOp::create(builder_, halfType, a);
+  Value halfBitsConst = arith::ConstantIntOp::create(
+      builder_, static_cast<int64_t>(halfBits), fullType.getWidth());
+  Value a1 = arith::TruncIOp::create(
+      builder_, halfType, arith::ShRUIOp::create(builder_, a, halfBitsConst));
+
+  // conj_lo = a₀ + β·a₁ (the conjugate's X coefficient is a₁ unchanged).
+  Value betaA1 = mulXTower(a1, towerLevel - 1);
+  Value conjLo = arith::XOrIOp::create(builder_, a0, betaA1);
+
+  // N = a₀² + β·(a₀·a₁) + a₁²
+  Value a0a1 = mulTower(a0, a1, towerLevel - 1);
+  Value betaA0a1 = mulXTower(a0a1, towerLevel - 1);
+  Value a0Sq = squareTower(a0, towerLevel - 1);
+  Value a1Sq = squareTower(a1, towerLevel - 1);
+  Value norm = arith::XOrIOp::create(
+      builder_, arith::XOrIOp::create(builder_, a0Sq, betaA0a1), a1Sq);
+
+  Value normInv = inverseTower(norm, towerLevel - 1);
+
+  // a⁻¹ = (a₀ + β·a₁)·N⁻¹ + a₁·N⁻¹·X
+  Value resultLo = mulTower(conjLo, normInv, towerLevel - 1);
+  Value resultHi = mulTower(a1, normInv, towerLevel - 1);
+
+  Value resultLoExt = arith::ExtUIOp::create(builder_, fullType, resultLo);
+  Value resultHiExt = arith::ExtUIOp::create(builder_, fullType, resultHi);
+  Value resultHiShifted =
+      arith::ShLIOp::create(builder_, resultHiExt, halfBitsConst);
+  return arith::OrIOp::create(builder_, resultLoExt, resultHiShifted);
+}
+
 BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
+  return BinaryFieldCodeGen(bfType_, inverseLookupTable8b(value_), builder_);
+}
+
+Value BinaryFieldCodeGen::inverseLookupTable8b(Value a) const {
   // Generate lookup table as a global constant memref and use it
   // For now, generate inline switch-case style code using arith ops
   // Future optimization: use LLVM global constant + load
@@ -106,7 +167,7 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
   // which will be lowered to an efficient jump table
 
   auto indexValue =
-      arith::IndexCastUIOp::create(builder_, builder_.getIndexType(), value_);
+      arith::IndexCastUIOp::create(builder_, builder_.getIndexType(), a);
 
   // Create switch with all 256 cases
   SmallVector<int64_t> caseValues;
@@ -140,7 +201,7 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
   // Move insertion point back after switch
   builder_.setInsertionPointAfter(switchOp);
 
-  return BinaryFieldCodeGen(bfType_, switchOp.getResult(0), builder_);
+  return switchOp.getResult(0);
 }
 
 BinaryFieldCodeGen BinaryFieldCodeGen::constant(BinaryFieldType bfType,
