@@ -1046,14 +1046,20 @@ struct ConvertMul : public BoundMapPattern<MulOp> {
               negRhsStd == montAttr.getInvTwoPowers()[i]) {
             bool isNegated = negRhsStd == montAttr.getInvTwoPowers()[i];
             if (i == 0) {
-              // Efficient halve: if odd, add modulus, then shift right by 1
+              // Halve: (lhs + modulus)/2 == (lhs >> 1) + (modulus+1)/2 for
+              // odd lhs. Adding the modulus before the shift would overflow
+              // the carrier for a headroom-free modulus (Goldilocks); this
+              // add is bounded by modulus - 1.
               Value lhs = adaptor.getLhs();
+              Value halfModPlusOne = createScalarOrSplatConstant(
+                  b, b.getLoc(), modAttr.getType(), modulus.lshr(1) + 1);
               auto lhsIsOdd = arith::AndIOp::create(b, lhs, one);
               auto needsAdd = arith::CmpIOp::create(b, arith::CmpIPredicate::ne,
                                                     lhsIsOdd, zero);
-              auto halvedInput = arith::SelectOp::create(
-                  b, needsAdd, arith::AddIOp::create(b, lhs, cmod), lhs);
-              auto halved = arith::ShRUIOp::create(b, halvedInput, one);
+              auto shifted = arith::ShRUIOp::create(b, lhs, one);
+              auto halved = arith::SelectOp::create(
+                  b, needsAdd,
+                  arith::AddIOp::create(b, shifted, halfModPlusOne), shifted);
               auto negatedHalved = arith::SubIOp::create(b, cmod, halved);
               rewriter.replaceOp(op, isNegated ? negatedHalved : halved);
               return success();
