@@ -51,8 +51,8 @@ unsigned getIntOrPrimeFieldBitWidth(Type type);
 mod_arith::ModArithType convertPrimeFieldType(PrimeFieldType type);
 
 ParseResult parseColonFieldType(AsmParser &parser, Type &type);
-ParseResult validateAttribute(AsmParser &parser, Type type, Attribute attr,
-                              std::string_view attrName);
+ParseResult validateAttribute(AsmParser &parser, SMLoc loc, Type type,
+                              Attribute attr, std::string_view attrName);
 Attribute maybeToMontgomery(Type type, Attribute attr);
 Attribute maybeToStandard(Type type, Attribute attr);
 
