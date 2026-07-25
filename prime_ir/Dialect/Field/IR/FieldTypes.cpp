@@ -65,20 +65,41 @@ ParseResult parseColonFieldType(AsmParser &parser, Type &type) {
       "expected prime field, binary field, or extension field type");
 }
 
-ParseResult validateAttribute(AsmParser &parser, Type type, Attribute attr,
-                              std::string_view attrName) {
-  if (auto pfType = dyn_cast<field::PrimeFieldType>(type)) {
-    if (!isa<IntegerAttr>(attr)) {
-      return parser.emitError(parser.getCurrentLocation(),
-                              "expected integer attribute for " +
-                                  std::string(attrName));
+ParseResult validateAttribute(AsmParser &parser, SMLoc loc, Type type,
+                              Attribute attr, std::string_view attrName) {
+  // Callers feed the validated attribute straight into field arithmetic, which
+  // compares APInts against the modulus and requires equal bit widths — a
+  // narrower or wider literal aborts rather than diagnosing. So the storage
+  // type has to be checked here, not just the attribute kind.
+  if (auto pfType = dyn_cast<PrimeFieldType>(type)) {
+    auto intAttr = dyn_cast<IntegerAttr>(attr);
+    if (!intAttr) {
+      return parser.emitError(loc, "expected integer attribute for " +
+                                       std::string(attrName));
+    }
+    if (intAttr.getType() != pfType.getStorageType()) {
+      return parser.emitError(loc)
+             << "expected " << pfType.getStorageType() << " attribute for "
+             << attrName << ", but got " << intAttr.getType();
     }
     return success();
   }
-  if (!isa<DenseIntElementsAttr>(attr)) {
-    return parser.emitError(parser.getCurrentLocation(),
-                            "expected dense int elements attribute for " +
-                                std::string(attrName));
+
+  auto denseAttr = dyn_cast<DenseIntElementsAttr>(attr);
+  if (!denseAttr) {
+    return parser.emitError(loc, "expected dense int elements attribute for " +
+                                     std::string(attrName));
+  }
+  if (auto efType = dyn_cast<ExtensionFieldType>(type)) {
+    Type storageType = efType.getBasePrimeField().getStorageType();
+    SmallVector<int64_t> expectedShape = efType.getAttrShape();
+    ShapedType attrType = denseAttr.getType();
+    if (attrType.getElementType() != storageType ||
+        attrType.getShape() != ArrayRef<int64_t>(expectedShape)) {
+      return parser.emitError(loc)
+             << "expected " << RankedTensorType::get(expectedShape, storageType)
+             << " attribute for " << attrName << ", but got " << attrType;
+    }
   }
   return success();
 }

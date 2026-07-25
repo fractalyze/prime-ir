@@ -22,8 +22,25 @@ limitations under the License.
 
 namespace mlir::prime_ir::elliptic_curve {
 
+namespace {
+// Curve arithmetic resolves coordinates through field::getBasePrimeField,
+// which only knows prime and extension fields; a binary-field base would
+// abort there instead of reporting. Reject it while a diagnostic is still
+// possible.
+ParseResult validateCurveBaseField(AsmParser &parser, SMLoc loc,
+                                   Type baseField) {
+  if (isa<field::PrimeFieldType, field::ExtensionFieldType>(baseField))
+    return success();
+  return parser.emitError(loc)
+         << "elliptic curve base field must be a prime or extension field, "
+            "but got "
+         << baseField;
+}
+} // namespace
+
 // static
 Attribute ShortWeierstrassAttr::parse(AsmParser &parser, Type odsType) {
+  SMLoc loc = parser.getCurrentLocation();
   Attribute a, b, gX, gY;
   Type baseField;
   if (failed(parser.parseLess()) || failed(parser.parseAttribute(a)) ||
@@ -35,10 +52,11 @@ Attribute ShortWeierstrassAttr::parse(AsmParser &parser, Type odsType) {
       failed(field::parseColonFieldType(parser, baseField)))
     return nullptr;
 
-  if (failed(field::validateAttribute(parser, baseField, a, "a")) ||
-      failed(field::validateAttribute(parser, baseField, b, "b")) ||
-      failed(field::validateAttribute(parser, baseField, gX, "gX")) ||
-      failed(field::validateAttribute(parser, baseField, gY, "gY")))
+  if (failed(validateCurveBaseField(parser, loc, baseField)) ||
+      failed(field::validateAttribute(parser, loc, baseField, a, "a")) ||
+      failed(field::validateAttribute(parser, loc, baseField, b, "b")) ||
+      failed(field::validateAttribute(parser, loc, baseField, gX, "gX")) ||
+      failed(field::validateAttribute(parser, loc, baseField, gY, "gY")))
     return nullptr;
 
   a = field::maybeToMontgomery(baseField, a);
@@ -46,9 +64,12 @@ Attribute ShortWeierstrassAttr::parse(AsmParser &parser, Type odsType) {
   gX = field::maybeToMontgomery(baseField, gX);
   gY = field::maybeToMontgomery(baseField, gY);
 
-  return ShortWeierstrassAttr::get(a.getContext(), baseField,
-                                   cast<TypedAttr>(a), cast<TypedAttr>(b),
-                                   cast<TypedAttr>(gX), cast<TypedAttr>(gY));
+  // getChecked, not get: an off-curve generator must surface as a parse error
+  // rather than tripping the uniquer's verifyInvariants assertion.
+  return ShortWeierstrassAttr::getChecked(
+      [&] { return parser.emitError(loc); }, parser.getContext(), baseField,
+      cast<TypedAttr>(a), cast<TypedAttr>(b), cast<TypedAttr>(gX),
+      cast<TypedAttr>(gY));
 }
 
 void ShortWeierstrassAttr::print(AsmPrinter &printer) const {
@@ -57,7 +78,7 @@ void ShortWeierstrassAttr::print(AsmPrinter &printer) const {
   Attribute gX = field::maybeToStandard(getBaseField(), getGx());
   Attribute gY = field::maybeToStandard(getBaseField(), getGy());
 
-  printer << '<' << a << ',' << b << ",(" << gX << ',' << gY
+  printer << '<' << a << ", " << b << ", (" << gX << ", " << gY
           << ")> : " << getBaseField();
 }
 
@@ -80,6 +101,7 @@ ShortWeierstrassAttr::verify(llvm::function_ref<InFlightDiagnostic()> emitError,
 
 // static
 Attribute TwistedEdwardsAttr::parse(AsmParser &parser, Type odsType) {
+  SMLoc loc = parser.getCurrentLocation();
   Attribute a, d, gX, gY;
   Type baseField;
   if (failed(parser.parseLess()) || failed(parser.parseAttribute(a)) ||
@@ -91,10 +113,11 @@ Attribute TwistedEdwardsAttr::parse(AsmParser &parser, Type odsType) {
       failed(field::parseColonFieldType(parser, baseField)))
     return nullptr;
 
-  if (failed(field::validateAttribute(parser, baseField, a, "a")) ||
-      failed(field::validateAttribute(parser, baseField, d, "d")) ||
-      failed(field::validateAttribute(parser, baseField, gX, "gX")) ||
-      failed(field::validateAttribute(parser, baseField, gY, "gY")))
+  if (failed(validateCurveBaseField(parser, loc, baseField)) ||
+      failed(field::validateAttribute(parser, loc, baseField, a, "a")) ||
+      failed(field::validateAttribute(parser, loc, baseField, d, "d")) ||
+      failed(field::validateAttribute(parser, loc, baseField, gX, "gX")) ||
+      failed(field::validateAttribute(parser, loc, baseField, gY, "gY")))
     return nullptr;
 
   a = field::maybeToMontgomery(baseField, a);
@@ -102,9 +125,12 @@ Attribute TwistedEdwardsAttr::parse(AsmParser &parser, Type odsType) {
   gX = field::maybeToMontgomery(baseField, gX);
   gY = field::maybeToMontgomery(baseField, gY);
 
-  return TwistedEdwardsAttr::get(a.getContext(), baseField, cast<TypedAttr>(a),
-                                 cast<TypedAttr>(d), cast<TypedAttr>(gX),
-                                 cast<TypedAttr>(gY));
+  // getChecked, not get: a generator off the curve must surface as a parse
+  // error rather than tripping the uniquer's verifyInvariants assertion.
+  return TwistedEdwardsAttr::getChecked(
+      [&] { return parser.emitError(loc); }, parser.getContext(), baseField,
+      cast<TypedAttr>(a), cast<TypedAttr>(d), cast<TypedAttr>(gX),
+      cast<TypedAttr>(gY));
 }
 
 void TwistedEdwardsAttr::print(AsmPrinter &printer) const {
@@ -113,7 +139,7 @@ void TwistedEdwardsAttr::print(AsmPrinter &printer) const {
   Attribute gX = field::maybeToStandard(getBaseField(), getGx());
   Attribute gY = field::maybeToStandard(getBaseField(), getGy());
 
-  printer << '<' << a << ',' << d << ",(" << gX << ',' << gY
+  printer << '<' << a << ", " << d << ", (" << gX << ", " << gY
           << ")> : " << getBaseField();
 }
 
