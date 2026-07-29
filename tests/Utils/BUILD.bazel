@@ -1,6 +1,19 @@
 load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_test")
 
 prime_ir_cc_test(
+    name = "FunctionOutlinerBaseTest",
+    srcs = ["FunctionOutlinerBaseTest.cpp"],
+    deps = [
+        "//prime_ir/Utils:FunctionOutlinerBase",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@llvm-project//mlir:FuncDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LLVMDialect",
+    ],
+)
+
+prime_ir_cc_test(
     name = "BitSerialAlgorithmTest",
     srcs = ["BitSerialAlgorithmTest.cpp"],
     deps = [
