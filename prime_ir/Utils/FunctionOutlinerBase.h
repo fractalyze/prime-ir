@@ -16,6 +16,8 @@ limitations under the License.
 #ifndef PRIME_IR_UTILS_FUNCTIONOUTLINERBASE_H_
 #define PRIME_IR_UTILS_FUNCTIONOUTLINERBASE_H_
 
+#include <cassert>
+
 #include "llvm/ADT/SmallVector.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
@@ -75,10 +77,16 @@ protected:
   func::FuncOp getOrCreateFunction(StringRef funcName, TypeRange inputs,
                                    TypeRange outputs,
                                    BodyGeneratorFn &&bodyGenerator) {
-    if (auto existing = symbolTable_.lookup<func::FuncOp>(funcName))
-      return existing;
-
     auto funcType = FunctionType::get(module_.getContext(), inputs, outputs);
+    if (auto existing = symbolTable_.lookup<func::FuncOp>(funcName)) {
+      // Dedup is by name only; a signature mismatch on the hit means the
+      // caller is about to bind a call to a helper with different types — a
+      // silent miscompile downstream (e.g. an outliner pass running twice
+      // around a partial lowering, fractalyze/prime-ir#407).
+      assert(existing.getFunctionType() == funcType &&
+             "outlined helper name reused with a different signature");
+      return existing;
+    }
 
     OpBuilder builder(module_.getContext());
     builder.setInsertionPointToEnd(module_.getBody());
