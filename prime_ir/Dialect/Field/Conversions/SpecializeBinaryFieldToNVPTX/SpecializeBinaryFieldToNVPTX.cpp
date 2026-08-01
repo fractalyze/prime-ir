@@ -22,6 +22,7 @@ limitations under the License.
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
+#include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToNVPTX/TowerFlatBasis.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -113,13 +114,74 @@ Value mulGhashClmad(ImplicitLocOpBuilder &b, Value lhsI128, Value rhsI128) {
 }
 
 //===----------------------------------------------------------------------===//
-// Conversion Pattern
+// clmad-based Tower Multiplication (via flat-basis conversion)
+//===----------------------------------------------------------------------===//
+
+// A raw carryless product does not compute a tower product, but the tower is
+// isomorphic to a flat polynomial basis and the isomorphism is GF(2)-linear
+// (TowerFlatBasis.h). Converting through it turns a tower multiply into the
+// same clmad + low-weight reduction shape as GHASH:
+//
+//   mul(a, b) = fromFlat(reduce(clmul(toFlat(a), toFlat(b))))
+//
+// The conversion ladders cost ~3n selects+xors for n-bit fields, against the
+// ~3^k-op recursive mulTower they displace (xla#392 measured the bf<5> NTT
+// ALU-bound on that recursion). Consumers that keep values in the flat basis
+// across many multiplies can hoist the ladders entirely.
+
+// Apply the GF(2)-linear map `cols` (column i = image of basis bit i) to an
+// n-bit value: XOR together the columns selected by the set bits.
+Value emitBitMatrix(ImplicitLocOpBuilder &b, Value x, ArrayRef<uint64_t> cols,
+                    unsigned n) {
+  Value zero = arith::ConstantIntOp::create(b, 0, n);
+  Value acc = zero;
+  for (unsigned i = 0; i < n; ++i) {
+    Value shifted = x;
+    if (i != 0) {
+      Value sh = arith::ConstantIntOp::create(b, i, n);
+      shifted = arith::ShRUIOp::create(b, x, sh);
+    }
+    Value bit = arith::TruncIOp::create(b, b.getI1Type(), shifted);
+    Value col =
+        arith::ConstantIntOp::create(b, static_cast<int64_t>(cols[i]), n);
+    Value sel = arith::SelectOp::create(b, bit, col, zero);
+    acc = arith::XOrIOp::create(b, acc, sel);
+  }
+  return acc;
+}
+
+// Multiply two flat-basis values of width n (16 or 32) held in i64, reducing
+// mod y^n + fLow. The product fits 2n-1 <= 63 bits, so one clmad.lo covers
+// it; two folds finish because fLow has degree < 8:
+//   p  = clmul(a, b)                      (bits 0 .. 2n-2)
+//   t1 = p ^ clmul(p >> n, fLow)          (bits 0..n-1 correct, junk above)
+//   h2 = (t1 >> n) ^ (p >> n)             (= fold1 >> n, the second fold input)
+//   t2 = t1 ^ clmul(h2, fLow)             (bits 0..n-1 are the result)
+// The final truncation to n bits discards the junk the folds leave above.
+Value mulFlatClmad(ImplicitLocOpBuilder &b, Value a64, Value b64, unsigned n,
+                   uint64_t fLow) {
+  Value z = arith::ConstantIntOp::create(b, 0, 64);
+  Value shN = arith::ConstantIntOp::create(b, n, 64);
+  Value fLowC = arith::ConstantIntOp::create(b, static_cast<int64_t>(fLow), 64);
+
+  Value p = emitClmad(b, a64, b64, z, /*isHi=*/false);
+  Value hi = arith::ShRUIOp::create(b, p, shN);
+  Value t1 = emitClmad(b, hi, fLowC, p, /*isHi=*/false);
+  Value h2 = arith::XOrIOp::create(b, arith::ShRUIOp::create(b, t1, shN), hi);
+  return emitClmad(b, h2, fLowC, t1, /*isHi=*/false);
+}
+
+//===----------------------------------------------------------------------===//
+// Conversion Patterns
 //===----------------------------------------------------------------------===//
 
 // Pattern for the GHASH-basis multiply (`bf<7, ghash>`) using clmad. As with
-// the x86 PCLMULQDQ path, tower bf<6>/bf<7> deliberately do NOT specialize --
-// the carryless product computes the flat GHASH product, not the tower -- so
-// they lower via the portable recursive mulTower in binary-field-to-arith.
+// the x86 PCLMULQDQ path, tower bf<6>/bf<7> do NOT specialize -- a carryless
+// product computes the flat GHASH product, not the tower -- so they lower via
+// the portable recursive mulTower in binary-field-to-arith. Tower bf<4>/bf<5>
+// DO specialize through the flat-basis conversion (ConvertTowerMulToClmad
+// below); extending that to bf<6> needs a clmad.hi limb and a degree-64
+// modulus in TowerFlatBasis.h.
 struct ConvertGhashMulToClmad : public OpRewritePattern<MulOp> {
   using OpRewritePattern<MulOp>::OpRewritePattern;
 
@@ -149,6 +211,59 @@ struct ConvertGhashMulToClmad : public OpRewritePattern<MulOp> {
   }
 };
 
+// Tower bf<4>/bf<5> multiply via flat-basis conversion + one clmad product.
+struct ConvertTowerMulToClmad : public OpRewritePattern<MulOp> {
+  using OpRewritePattern<MulOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MulOp op,
+                                PatternRewriter &rewriter) const override {
+    Type towerType = op.getResult().getType();
+    auto bfType = dyn_cast<BinaryFieldType>(towerType);
+    if (!bfType || !bfType.isTower())
+      return failure();
+    unsigned level = bfType.getTowerLevel();
+    if (level != 4 && level != 5)
+      return failure();
+    const unsigned n = 1u << level;
+
+    SmallVector<uint64_t, 32> toFlat, fromFlat;
+    uint64_t fLow;
+    if (level == 4) {
+      toFlat.assign(std::begin(kTowerToFlat16), std::end(kTowerToFlat16));
+      fromFlat.assign(std::begin(kFlatToTower16), std::end(kFlatToTower16));
+      fLow = kFlatModLow16;
+    } else {
+      toFlat.assign(std::begin(kTowerToFlat32), std::end(kTowerToFlat32));
+      fromFlat.assign(std::begin(kFlatToTower32), std::end(kFlatToTower32));
+      fLow = kFlatModLow32;
+    }
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    auto intNType = b.getIntegerType(n);
+    auto i64Type = b.getI64Type();
+
+    // Cast tower -> iN; BinaryFieldToArith later reconciles these casts.
+    Value lhsN = UnrealizedConversionCastOp::create(b, intNType, op.getLhs())
+                     .getResult(0);
+    Value rhsN = UnrealizedConversionCastOp::create(b, intNType, op.getRhs())
+                     .getResult(0);
+
+    Value lhsFlat =
+        arith::ExtUIOp::create(b, i64Type, emitBitMatrix(b, lhsN, toFlat, n));
+    Value rhsFlat =
+        arith::ExtUIOp::create(b, i64Type, emitBitMatrix(b, rhsN, toFlat, n));
+
+    Value prodFlat64 = mulFlatClmad(b, lhsFlat, rhsFlat, n, fLow);
+    Value prodFlat = arith::TruncIOp::create(b, intNType, prodFlat64);
+
+    Value resultN = emitBitMatrix(b, prodFlat, fromFlat, n);
+    Value resultTower =
+        UnrealizedConversionCastOp::create(b, towerType, resultN).getResult(0);
+    rewriter.replaceOp(op, resultTower);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -163,7 +278,7 @@ struct SpecializeBinaryFieldToNVPTX
 
     RewritePatternSet patterns(context);
     if (useClmad) {
-      patterns.add<ConvertGhashMulToClmad>(context);
+      patterns.add<ConvertGhashMulToClmad, ConvertTowerMulToClmad>(context);
     }
 
     // Greedy rewriting (not partial conversion) so unmatched field.mul ops
