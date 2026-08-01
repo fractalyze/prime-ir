@@ -33,10 +33,11 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
     specialize: a carryless product does not compute a tower product
     directly, so they convert through the isomorphic flat polynomial basis
     (constants in `TowerFlatBasis.h`), multiply with one `clmad.lo.u64`
-    plus a low-weight reduction, and convert back. The flat `bf<3, aes>`
-    (GF(2⁸)) multiply specializes too, with no basis conversion. Operations
-    not specialized fall through to the portable software carryless multiply
-    in `binary-field-to-arith`.
+    plus a low-weight reduction, and convert back. Native flat multiplies
+    (`bf<3, aes>` and `bf<4|5, flat>`) take the same clmad product with no
+    conversion at all — the fast path for emitters that hoist the basis
+    change out of a kernel. Operations not specialized fall through to the
+    portable software carryless multiply in `binary-field-to-arith`.
 
     The flat-basis multiplies (`bf<7, ghash>`, `bf<3, aes>`) also handle
     shaped (tensor/vector) operands: since `clmad` is scalar inline asm, a

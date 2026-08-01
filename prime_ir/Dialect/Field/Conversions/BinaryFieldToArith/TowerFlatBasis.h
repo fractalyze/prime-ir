@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef PRIME_IR_DIALECT_FIELD_CONVERSIONS_SPECIALIZEBINARYFIELDTONVPTX_TOWERFLATBASIS_H_
-#define PRIME_IR_DIALECT_FIELD_CONVERSIONS_SPECIALIZEBINARYFIELDTONVPTX_TOWERFLATBASIS_H_
+#ifndef PRIME_IR_DIALECT_FIELD_CONVERSIONS_BINARYFIELDTOARITH_TOWERFLATBASIS_H_
+#define PRIME_IR_DIALECT_FIELD_CONVERSIONS_BINARYFIELDTOARITH_TOWERFLATBASIS_H_
 
 #include <cstdint>
 
@@ -24,11 +24,15 @@ namespace mlir::prime_ir::field {
 // (BinaryFieldCodeGen.cpp: bit i of a bf<k> is the multilinear monomial
 // prod_j X_{j+1}^{i_j}) and an isomorphic flat polynomial basis
 // GF(2)[y]/(f_k), where a multiply is a single carry-less product plus a
-// low-weight reduction. Column i of kTowerToFlat* is the flat image of
-// tower basis monomial i; kFlatToTower* is the inverse matrix. Values fit
-// the field width; the tables are uint64_t so they feed the i64 clmad
-// domain without per-use widening. Generated and proven (irreducibility,
-// homomorphism on all basis pairs, inverse) by
+// low-weight reduction. The f_k here DEFINE the `bf<4|5, flat>` types'
+// semantics (FieldTypes.td isNarrowFlat) — every consumer of those types
+// (the portable BinaryFieldToArith lowering, the NVPTX clmad specializer,
+// and downstream emitters hoisting whole kernels into the flat basis) must
+// agree on them through this header. Column i of kTowerToFlat* is the flat
+// image of tower basis monomial i; kFlatToTower* is the inverse matrix.
+// Values fit the field width; the tables are uint64_t so they feed the i64
+// clmad domain without per-use widening. Generated and proven
+// (irreducibility, homomorphism on all basis pairs, inverse) by
 // tools/derive_tower_flat_basis.py.
 
 // bf<4>: f_4(y) = y^16 + y^5 + y^3 + y + 1. Low part (f_4 minus the y^16
@@ -65,4 +69,4 @@ inline constexpr uint64_t kFlatToTower32[32] = {
 } // namespace mlir::prime_ir::field
 
 // NOLINTNEXTLINE(whitespace/line_length)
-#endif // PRIME_IR_DIALECT_FIELD_CONVERSIONS_SPECIALIZEBINARYFIELDTONVPTX_TOWERFLATBASIS_H_
+#endif // PRIME_IR_DIALECT_FIELD_CONVERSIONS_BINARYFIELDTOARITH_TOWERFLATBASIS_H_

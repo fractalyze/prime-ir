@@ -37,6 +37,7 @@
 !BF128 = !field.bf<7>        // GF(2¹²⁸), tower basis
 !GHASH = !field.bf<7, ghash> // GF(2¹²⁸), flat GHASH polynomial basis
 !AES = !field.bf<3, aes>     // GF(2⁸), flat AES polynomial basis
+!F32 = !field.bf<5, flat>    // GF(2³²), flat polynomial basis
 
 // GHASH-basis scalar multiplication should use clmad: eight clmad.{lo,hi}.u64
 // build the 128×128 carryless product, then the shared GHASH reduction.
@@ -114,6 +115,21 @@ func.func @test_bf128_mul(%a: !BF128, %b: !BF128) -> !BF128 {
 func.func @test_bf64_mul(%a: !BF64, %b: !BF64) -> !BF64 {
   %c = field.mul %a, %b : !BF64
   return %c : !BF64
+}
+
+// Native flat bf<5, flat> multiply is the clmad product with NO conversion
+// ladders — no arith.select appears between the casts (the tower path above
+// emits 2n of them per conversion).
+// CHECK-CLMAD-LABEL: @test_f32_mul
+// CHECK-CLMAD-NOT: arith.select
+// CHECK-CLMAD-COUNT-3: llvm.inline_asm{{.*}}clmad.lo{{.*}}u64
+// CHECK-CLMAD-NOT: arith.select
+// CHECK-OFF-LABEL: @test_f32_mul
+// CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
+func.func @test_f32_mul(%a: !F32, %b: !F32) -> !F32 {
+  %c = field.mul %a, %b : !F32
+  return %c : !F32
 }
 
 // Square is not specialized (only MulOp patterns are registered); it stays on

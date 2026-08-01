@@ -24,6 +24,7 @@ limitations under the License.
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldCodeGen.h"
+#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/TowerFlatBasis.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -69,14 +70,30 @@ bool containsBinaryFieldType(Type type) {
 // Conversion Patterns
 //===----------------------------------------------------------------------===//
 
-// Flat-basis multiply/square/inverse (`bf<7, ghash>` and `bf<3, aes>`),
-// defined below; used by the mul/square/inverse patterns to split on basis.
+// Flat-basis multiply/square/inverse (`bf<7, ghash>`, `bf<3, aes>`, and the
+// narrow `bf<4|5, flat>`), defined below; used by the mul/square/inverse
+// patterns to split on basis.
 Value emitGhashMul(ImplicitLocOpBuilder &b, Value a, Value bv);
 Value emitGhashSquare(ImplicitLocOpBuilder &b, Value a);
 Value emitGhashInverse(ImplicitLocOpBuilder &b, Value a);
 Value emitAesMul(ImplicitLocOpBuilder &b, Value a, Value bv);
 Value emitAesSquare(ImplicitLocOpBuilder &b, Value a);
 Value emitAesInverse(ImplicitLocOpBuilder &b, Value a);
+Value emitFlatNarrowMul(ImplicitLocOpBuilder &b, Value a, Value bv, unsigned n);
+Value emitFlatNarrowSquare(ImplicitLocOpBuilder &b, Value a, unsigned n);
+Value emitFlatNarrowInverse(ImplicitLocOpBuilder &b, Value a, unsigned n);
+
+// Basis-split helper for the flat scalar paths: ghash and aes keep their
+// dedicated emitters, `bf<4|5, flat>` takes the width-parameterized ones.
+enum class FlatKind { kGhash, kAes, kNarrow };
+FlatKind flatKindOf(BinaryFieldType bfType) {
+  if (bfType.isGhash())
+    return FlatKind::kGhash;
+  if (bfType.isAes())
+    return FlatKind::kAes;
+  assert(bfType.isNarrowFlat() && "unhandled flat basis");
+  return FlatKind::kNarrow;
+}
 
 struct ConvertBinaryFieldConstant : public OpConversionPattern<ConstantOp> {
   using OpConversionPattern::OpConversionPattern;
@@ -197,10 +214,20 @@ struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
       // than emit invalid IR.
       if (isa<ShapedType>(op.getType()))
         return failure();
-      rewriter.replaceOp(
-          op, bfType.isGhash()
-                  ? emitGhashMul(b, adaptor.getLhs(), adaptor.getRhs())
-                  : emitAesMul(b, adaptor.getLhs(), adaptor.getRhs()));
+      Value result;
+      switch (flatKindOf(bfType)) {
+      case FlatKind::kGhash:
+        result = emitGhashMul(b, adaptor.getLhs(), adaptor.getRhs());
+        break;
+      case FlatKind::kAes:
+        result = emitAesMul(b, adaptor.getLhs(), adaptor.getRhs());
+        break;
+      case FlatKind::kNarrow:
+        result = emitFlatNarrowMul(b, adaptor.getLhs(), adaptor.getRhs(),
+                                   bfType.getBitWidth());
+        break;
+      }
+      rewriter.replaceOp(op, result);
       return success();
     }
     BinaryFieldCodeGen lhs(bfType, adaptor.getLhs(), b);
@@ -229,9 +256,20 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
       // than emit invalid IR.
       if (isa<ShapedType>(op.getType()))
         return failure();
-      rewriter.replaceOp(op, bfType.isGhash()
-                                 ? emitGhashSquare(b, adaptor.getInput())
-                                 : emitAesSquare(b, adaptor.getInput()));
+      Value result;
+      switch (flatKindOf(bfType)) {
+      case FlatKind::kGhash:
+        result = emitGhashSquare(b, adaptor.getInput());
+        break;
+      case FlatKind::kAes:
+        result = emitAesSquare(b, adaptor.getInput());
+        break;
+      case FlatKind::kNarrow:
+        result =
+            emitFlatNarrowSquare(b, adaptor.getInput(), bfType.getBitWidth());
+        break;
+      }
+      rewriter.replaceOp(op, result);
       return success();
     }
     BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
@@ -258,9 +296,20 @@ struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
       // than emit invalid IR.
       if (isa<ShapedType>(op.getType()))
         return failure();
-      rewriter.replaceOp(op, bfType.isGhash()
-                                 ? emitGhashInverse(b, adaptor.getInput())
-                                 : emitAesInverse(b, adaptor.getInput()));
+      Value result;
+      switch (flatKindOf(bfType)) {
+      case FlatKind::kGhash:
+        result = emitGhashInverse(b, adaptor.getInput());
+        break;
+      case FlatKind::kAes:
+        result = emitAesInverse(b, adaptor.getInput());
+        break;
+      case FlatKind::kNarrow:
+        result =
+            emitFlatNarrowInverse(b, adaptor.getInput(), bfType.getBitWidth());
+        break;
+      }
+      rewriter.replaceOp(op, result);
       return success();
     }
     BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
@@ -634,6 +683,92 @@ Value emitAesInverse(ImplicitLocOpBuilder &b, Value a) {
   Value t6 = emitAesMul(b, pow2k(t3, 3), t3);
   Value t7 = emitAesMul(b, pow2k(t6, 1), t1);
   return emitAesSquare(b, t7);
+}
+
+// The narrow flat bases `bf<4|5, flat>`: GF(2)[y]/(f_n) with the f_n of
+// TowerFlatBasis.h — the target of the tower->flat conversion, so a multiply
+// is one carry-less product plus two constant-tap folds. Values ride the
+// storage integer (i16/i32).
+
+// XOR of `v << tap` over the set bits of fLow — clmul by the constant low
+// part of the modulus, unrolled at emission time.
+Value emitFlatModTaps(ImplicitLocOpBuilder &b, Value v, unsigned n,
+                      uint64_t fLow) {
+  Value acc = nullptr;
+  for (unsigned tap = 0; tap < 64; ++tap) {
+    if (!(fLow >> tap & 1))
+      continue;
+    Value term = v;
+    if (tap != 0)
+      term = arith::ShLIOp::create(b, v, i64Const(b, tap));
+    acc = acc ? arith::XOrIOp::create(b, acc, term) : term;
+  }
+  return acc;
+}
+
+// Portable n x n (n = 16 or 32) carry-less multiply reduced mod y^n + fLow,
+// in one i64 limb (2n-1 <= 63 bits). Bit-serial product like emitClmul64,
+// then the two-fold reduction of SpecializeBinaryFieldToNVPTX's mulFlatClmad:
+//   t1 = p ^ (p>>n)*fLow;  h2 = (t1>>n) ^ (p>>n);  t2 = t1 ^ h2*fLow
+// with the final trunc discarding the junk above bit n-1.
+Value emitFlatNarrowMul(ImplicitLocOpBuilder &b, Value a, Value bv,
+                        unsigned n) {
+  const uint64_t fLow = n == 16 ? kFlatModLow16 : kFlatModLow32;
+  auto intNTy = b.getIntegerType(n);
+  auto i64Ty = b.getI64Type();
+  Value a64 = arith::ExtUIOp::create(b, i64Ty, a);
+  Value b64 = arith::ExtUIOp::create(b, i64Ty, bv);
+
+  Value zero = i64Const(b, 0);
+  Value one = i64Const(b, 1);
+  Value p = zero;
+  for (unsigned i = 0; i < n; ++i) {
+    Value bShifted = b64;
+    Value aShl = a64;
+    if (i != 0) {
+      Value shiftI = i64Const(b, i);
+      bShifted = arith::ShRUIOp::create(b, b64, shiftI);
+      aShl = arith::ShLIOp::create(b, a64, shiftI);
+    }
+    Value bit = arith::AndIOp::create(b, bShifted, one);
+    Value mask = arith::SubIOp::create(b, zero, bit); // 0 or all-ones
+    p = arith::XOrIOp::create(b, p, arith::AndIOp::create(b, mask, aShl));
+  }
+
+  Value shN = i64Const(b, n);
+  Value hi = arith::ShRUIOp::create(b, p, shN);
+  Value t1 = arith::XOrIOp::create(b, p, emitFlatModTaps(b, hi, n, fLow));
+  Value h2 = arith::XOrIOp::create(b, arith::ShRUIOp::create(b, t1, shN), hi);
+  Value t2 = arith::XOrIOp::create(b, t1, emitFlatModTaps(b, h2, n, fLow));
+  return arith::TruncIOp::create(b, intNTy, t2);
+}
+
+Value emitFlatNarrowSquare(ImplicitLocOpBuilder &b, Value a, unsigned n) {
+  return emitFlatNarrowMul(b, a, a, n);
+}
+
+// Fermat via the same Itoh-Tsujii ladder as emitAesInverse, extended to
+// t15 (n=16) / t31 (n=32): a^-1 = t_{n-1}^2, with 0 mapping to 0 like every
+// binary-field inverse here.
+Value emitFlatNarrowInverse(ImplicitLocOpBuilder &b, Value a, unsigned n) {
+  auto pow2k = [&](Value v, unsigned k) {
+    for (unsigned i = 0; i < k; ++i)
+      v = emitFlatNarrowSquare(b, v, n);
+    return v;
+  };
+  auto mul = [&](Value x, Value y) { return emitFlatNarrowMul(b, x, y, n); };
+  Value t1 = a;
+  Value t2 = mul(pow2k(t1, 1), t1);
+  Value t3 = mul(pow2k(t2, 1), t1);
+  Value t6 = mul(pow2k(t3, 3), t3);
+  Value t7 = mul(pow2k(t6, 1), t1);
+  Value t14 = mul(pow2k(t7, 7), t7);
+  Value t15 = mul(pow2k(t14, 1), t1);
+  if (n == 16)
+    return emitFlatNarrowSquare(b, t15, n);
+  Value t30 = mul(pow2k(t15, 15), t15);
+  Value t31 = mul(pow2k(t30, 1), t1);
+  return emitFlatNarrowSquare(b, t31, n);
 }
 
 //===----------------------------------------------------------------------===//

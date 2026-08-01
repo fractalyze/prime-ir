@@ -25,7 +25,7 @@ limitations under the License.
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
-#include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToNVPTX/TowerFlatBasis.h"
+#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/TowerFlatBasis.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -294,6 +294,44 @@ struct ConvertAesMulToClmad : public OpRewritePattern<MulOp> {
   }
 };
 
+// Native flat bf<4|5, flat> multiply: the value already lives in the flat
+// basis, so it is the clmad product + folds with no conversion ladders —
+// the shape a consumer gets by hoisting the basis change out of a kernel.
+struct ConvertFlatNarrowMulToClmad : public OpRewritePattern<MulOp> {
+  using OpRewritePattern<MulOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MulOp op,
+                                PatternRewriter &rewriter) const override {
+    Type flatType = op.getResult().getType();
+    auto bfType = dyn_cast<BinaryFieldType>(flatType);
+    if (!bfType || !bfType.isNarrowFlat())
+      return failure();
+    const unsigned n = bfType.getBitWidth();
+    const uint64_t fLow = n == 16 ? kFlatModLow16 : kFlatModLow32;
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    auto intNType = b.getIntegerType(n);
+    auto i64Type = b.getI64Type();
+
+    // Cast flat -> iN; BinaryFieldToArith later reconciles these casts.
+    Value lhs64 = arith::ExtUIOp::create(
+        b, i64Type,
+        UnrealizedConversionCastOp::create(b, intNType, op.getLhs())
+            .getResult(0));
+    Value rhs64 = arith::ExtUIOp::create(
+        b, i64Type,
+        UnrealizedConversionCastOp::create(b, intNType, op.getRhs())
+            .getResult(0));
+
+    Value prod = arith::TruncIOp::create(
+        b, intNType, mulFlatClmad(b, lhs64, rhs64, n, fLow));
+    Value result =
+        UnrealizedConversionCastOp::create(b, flatType, prod).getResult(0);
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -309,7 +347,7 @@ struct SpecializeBinaryFieldToNVPTX
     RewritePatternSet patterns(context);
     if (useClmad) {
       patterns.add<ConvertGhashMulToClmad, ConvertTowerMulToClmad,
-                   ConvertAesMulToClmad>(context);
+                   ConvertAesMulToClmad, ConvertFlatNarrowMulToClmad>(context);
     }
 
     // Greedy rewriting (not partial conversion) so unmatched field.mul ops

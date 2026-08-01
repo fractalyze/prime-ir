@@ -212,10 +212,11 @@ BinaryFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
     return emitError() << "binary field tower level must be between 0 and "
                        << kMaxTowerLevel << ", got " << towerLevel;
   }
-  if (isFlat && towerLevel != kMaxTowerLevel && towerLevel != kAesTowerLevel) {
+  if (isFlat && towerLevel != kMaxTowerLevel && towerLevel != kAesTowerLevel &&
+      towerLevel != 4 && towerLevel != 5) {
     return emitError() << "a flat basis exists only at tower level "
-                       << kMaxTowerLevel << " (ghash) or " << kAesTowerLevel
-                       << " (aes), got " << towerLevel;
+                       << kMaxTowerLevel << " (ghash), " << kAesTowerLevel
+                       << " (aes), 4 or 5 (flat), got " << towerLevel;
   }
   return success();
 }
@@ -261,9 +262,18 @@ Type BinaryFieldType::parse(AsmParser &parser) {
             << kAesTowerLevel;
         return nullptr;
       }
+    } else if (basis == "flat") {
+      // The generic flat polynomial basis at the clmul-friendly widths; the
+      // moduli are pinned in TowerFlatBasis.h. Levels 3/7 keep their named
+      // bases (aes/ghash) — 'flat' there would print back differently.
+      if (towerLevel != 4 && towerLevel != 5) {
+        parser.emitError(parser.getCurrentLocation(),
+                         "the flat basis is defined at tower level 4 or 5");
+        return nullptr;
+      }
     } else {
       parser.emitError(parser.getCurrentLocation(),
-                       "expected 'ghash' or 'aes', got '")
+                       "expected 'ghash', 'aes', or 'flat', got '")
           << basis << "'";
       return nullptr;
     }
@@ -283,6 +293,8 @@ void BinaryFieldType::print(AsmPrinter &printer) const {
     printer << ", ghash";
   } else if (isAes()) {
     printer << ", aes";
+  } else if (getIsFlat()) {
+    printer << ", flat";
   }
   printer << ">";
 }

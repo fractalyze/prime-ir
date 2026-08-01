@@ -198,6 +198,14 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     /// True for the flat AES polynomial basis (flat GF(2⁸)).
     bool isAes() const { return getIsFlat() && getTowerLevel() == 3; }
 
+    /// True for the flat polynomial basis at level 4/5 (`bf<4|5, flat>`):
+    /// GF(2)[y]/(f) with the low-weight moduli pinned in TowerFlatBasis.h —
+    /// the basis a bf<4>/bf<5> tower value converts into so its multiply is
+    /// one carry-less product.
+    bool isNarrowFlat() const {
+      return getIsFlat() && (getTowerLevel() == 4 || getTowerLevel() == 5);
+    }
+
     /// Maximum supported tower level (GF(2¹²⁸)).
     static constexpr unsigned kMaxTowerLevel = 7;
 
