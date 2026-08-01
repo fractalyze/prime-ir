@@ -29,8 +29,13 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
     `SpecializeBinaryFieldToARM` (PMULL): it rewrites `field.mul` on
     `bf<7, ghash>` into a 128x128 carryless product built from eight
     `clmad.{lo,hi}.u64`, then the shared GHASH polynomial reduction
-    (x¹²⁸ + x⁷ + x² + x + 1). Operations not specialized fall through to the
-    portable software carryless multiply in `binary-field-to-arith`.
+    (x¹²⁸ + x⁷ + x² + x + 1). Tower `bf<4>`/`bf<5>` multiplies also
+    specialize: a carryless product does not compute a tower product
+    directly, so they convert through the isomorphic flat polynomial basis
+    (constants in `TowerFlatBasis.h`), multiply with one `clmad.lo.u64`
+    plus a low-weight reduction, and convert back. Operations not
+    specialized fall through to the portable software carryless multiply
+    in `binary-field-to-arith`.
 
     This pass must run BEFORE `binary-field-to-arith`. On the GPU codegen path
     it is inserted directly ahead of `createBinaryFieldToArith` — the GPU
