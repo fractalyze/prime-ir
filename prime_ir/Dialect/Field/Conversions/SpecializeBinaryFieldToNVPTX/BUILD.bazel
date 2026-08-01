@@ -39,11 +39,11 @@ gentbl_cc_library(
 
 prime_ir_cc_library(
     name = "SpecializeBinaryFieldToNVPTX",
-    srcs = ["SpecializeBinaryFieldToNVPTX.cpp"],
-    hdrs = [
-        "SpecializeBinaryFieldToNVPTX.h",
+    srcs = [
+        "SpecializeBinaryFieldToNVPTX.cpp",
         "TowerFlatBasis.h",
     ],
+    hdrs = ["SpecializeBinaryFieldToNVPTX.h"],
     deps = [
         ":pass_inc_gen",
         "//prime_ir/Dialect/Field/Conversions/BinaryFieldToArith:BinaryFieldTables",

@@ -117,17 +117,10 @@ Value mulGhashClmad(ImplicitLocOpBuilder &b, Value lhsI128, Value rhsI128) {
 // clmad-based Tower Multiplication (via flat-basis conversion)
 //===----------------------------------------------------------------------===//
 
-// A raw carryless product does not compute a tower product, but the tower is
-// isomorphic to a flat polynomial basis and the isomorphism is GF(2)-linear
-// (TowerFlatBasis.h). Converting through it turns a tower multiply into the
-// same clmad + low-weight reduction shape as GHASH:
+// Tower bf<4>/bf<5> multiply through the isomorphic flat polynomial basis
+// (constants and rationale in TowerFlatBasis.h):
 //
 //   mul(a, b) = fromFlat(reduce(clmul(toFlat(a), toFlat(b))))
-//
-// The conversion ladders cost ~3n selects+xors for n-bit fields, against the
-// ~3^k-op recursive mulTower they displace (xla#392 measured the bf<5> NTT
-// ALU-bound on that recursion). Consumers that keep values in the flat basis
-// across many multiplies can hoist the ladders entirely.
 
 // Apply the GF(2)-linear map `cols` (column i = image of basis bit i) to an
 // n-bit value: XOR together the columns selected by the set bits.
@@ -176,12 +169,9 @@ Value mulFlatClmad(ImplicitLocOpBuilder &b, Value a64, Value b64, unsigned n,
 //===----------------------------------------------------------------------===//
 
 // Pattern for the GHASH-basis multiply (`bf<7, ghash>`) using clmad. As with
-// the x86 PCLMULQDQ path, tower bf<6>/bf<7> do NOT specialize -- a carryless
-// product computes the flat GHASH product, not the tower -- so they lower via
-// the portable recursive mulTower in binary-field-to-arith. Tower bf<4>/bf<5>
-// DO specialize through the flat-basis conversion (ConvertTowerMulToClmad
-// below); extending that to bf<6> needs a clmad.hi limb and a degree-64
-// modulus in TowerFlatBasis.h.
+// the x86 PCLMULQDQ path, tower bf<6>/bf<7> deliberately do NOT specialize --
+// the carryless product computes the flat GHASH product, not the tower -- so
+// they lower via the portable recursive mulTower in binary-field-to-arith.
 struct ConvertGhashMulToClmad : public OpRewritePattern<MulOp> {
   using OpRewritePattern<MulOp>::OpRewritePattern;
 
@@ -212,6 +202,7 @@ struct ConvertGhashMulToClmad : public OpRewritePattern<MulOp> {
 };
 
 // Tower bf<4>/bf<5> multiply via flat-basis conversion + one clmad product.
+// bf<6> would additionally need clmad.hi limbs and a degree-64 modulus.
 struct ConvertTowerMulToClmad : public OpRewritePattern<MulOp> {
   using OpRewritePattern<MulOp>::OpRewritePattern;
 
@@ -226,17 +217,11 @@ struct ConvertTowerMulToClmad : public OpRewritePattern<MulOp> {
       return failure();
     const unsigned n = 1u << level;
 
-    SmallVector<uint64_t, 32> toFlat, fromFlat;
-    uint64_t fLow;
-    if (level == 4) {
-      toFlat.assign(std::begin(kTowerToFlat16), std::end(kTowerToFlat16));
-      fromFlat.assign(std::begin(kFlatToTower16), std::end(kFlatToTower16));
-      fLow = kFlatModLow16;
-    } else {
-      toFlat.assign(std::begin(kTowerToFlat32), std::end(kTowerToFlat32));
-      fromFlat.assign(std::begin(kFlatToTower32), std::end(kFlatToTower32));
-      fLow = kFlatModLow32;
-    }
+    ArrayRef<uint64_t> toFlat =
+        level == 4 ? ArrayRef(kTowerToFlat16) : ArrayRef(kTowerToFlat32);
+    ArrayRef<uint64_t> fromFlat =
+        level == 4 ? ArrayRef(kFlatToTower16) : ArrayRef(kFlatToTower32);
+    uint64_t fLow = level == 4 ? kFlatModLow16 : kFlatModLow32;
 
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
     auto intNType = b.getIntegerType(n);

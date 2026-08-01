@@ -32,10 +32,10 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
     (x¹²⁸ + x⁷ + x² + x + 1). Tower `bf<4>`/`bf<5>` multiplies also
     specialize: a carryless product does not compute a tower product
     directly, so they convert through the isomorphic flat polynomial basis
-    (a GF(2)-linear select/xor ladder, constants in `TowerFlatBasis.h`),
-    multiply with one `clmad.lo.u64` plus a low-weight reduction, and
-    convert back. Operations not specialized fall through to the portable
-    software carryless multiply in `binary-field-to-arith`.
+    (constants in `TowerFlatBasis.h`), multiply with one `clmad.lo.u64`
+    plus a low-weight reduction, and convert back. Operations not
+    specialized fall through to the portable software carryless multiply
+    in `binary-field-to-arith`.
 
     This pass must run BEFORE `binary-field-to-arith`. On the GPU codegen path
     it is inserted directly ahead of `createBinaryFieldToArith` — the GPU
