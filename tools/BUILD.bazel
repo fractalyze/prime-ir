@@ -13,10 +13,21 @@
 # limitations under the License.
 # ==============================================================================
 
+load("@rules_python//python:defs.bzl", "py_test")
 load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_binary")
 
 package(
     default_visibility = ["//visibility:public"],
+)
+
+# Runs the derivation's proofs (irreducibility, homomorphism on all basis
+# pairs, inverse, clmad fold schedule) so a drifted TowerFlatBasis.h edit
+# without a rerun is at least caught on the math side.
+py_test(
+    name = "derive_tower_flat_basis_test",
+    size = "small",
+    srcs = ["derive_tower_flat_basis.py"],
+    main = "derive_tower_flat_basis.py",
 )
 
 prime_ir_cc_binary(

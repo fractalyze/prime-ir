@@ -1,20 +1,37 @@
-# Derive the tower<->flat basis-change constants for SpecializeBinaryFieldToNVPTX.
+# Copyright 2026 The PrimeIR Authors.
 #
-# The Fan-Paar tower (BinaryFieldCodeGen.cpp) is GF(2^(2^k)) =
-# subfield[X_k]/(X_k^2 + X_{k-1}*X_k + 1) with X_0 = 1; storage bit i of a
-# bf<k> encodes the multilinear monomial prod_j X_{j+1}^{i_j}. A flat
-# GF(2^(2^k)) = GF(2)[y]/(f_k(y)) is isomorphic to it, and the isomorphism is
-# GF(2)-linear, so it is a (2^k x 2^k) bit matrix M_k: flat(a) = M_k * a.
-# With M_k in hand, tower mul specializes to
-#   from_flat(clmul_reduce(to_flat(a), to_flat(b)))
-# where clmul_reduce is one carry-less product + reduction mod f_k -- the
-# same shape as the existing GHASH clmad path.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# This script constructs M_k for k in {4, 5} (bf<4>, bf<5>), checks the
-# isomorphism (dense grid + corner sweep for bf<4>, random samples for
-# bf<5>), and prints the matrices as C++ column tables.
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Run: python3 tools/derive_tower_flat_basis.py
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+"""Derive and prove the tower<->flat basis constants in TowerFlatBasis.h.
+
+The Fan-Paar tower (BinaryFieldCodeGen.cpp) is GF(2^(2^k)) =
+subfield[X_k]/(X_k^2 + X_{k-1}*X_k + 1) with X_0 = 1; storage bit i of a
+bf<k> encodes the multilinear monomial prod_j X_{j+1}^{i_j}. This script
+constructs, for k in {4, 5}, the GF(2)-linear isomorphism onto the flat
+basis GF(2)[y]/(f_k) as a bit-matrix pair, and proves it:
+
+  - f_k irreducibility (Rabin);
+  - the multiplication homomorphism on ALL basis pairs — by bilinearity of
+    both sides this certifies every input pair, unlike random sampling;
+  - the two matrices are mutually inverse on every basis vector;
+  - the two-fold clmad reduction schedule emitted by mulFlatClmad
+    (SpecializeBinaryFieldToNVPTX.cpp) against a plain long-division
+    reduction, on basis pairs plus random and all-ones operands.
+
+Prints the tables in the exact form TowerFlatBasis.h carries.
+
+Run: python3 tools/derive_tower_flat_basis.py
+"""
 
 import random
 
@@ -77,6 +94,24 @@ def flat_reduce(a: int, level: int) -> int:
 
 def mul_flat(a: int, b: int, level: int) -> int:
   return flat_reduce(clmul(a, b), level)
+
+
+def mul_flat_clmad_schedule(a: int, b: int, level: int) -> int:
+  """The exact fold schedule mulFlatClmad emits, in i64 semantics.
+
+  p = clmul(a,b); t1 = p ^ clmul(p>>n, fLow); h2 = (t1>>n) ^ (p>>n);
+  t2 = t1 ^ clmul(h2, fLow); result = trunc_n(t2). Every intermediate must
+  fit 64 bits or clmad.lo would truncate information.
+  """
+  n = 1 << level
+  f_low = FLAT_MODULUS[level] & ((1 << n) - 1)
+  p = clmul(a, b)
+  hi = p >> n
+  t1 = p ^ clmul(hi, f_low)
+  h2 = (t1 >> n) ^ hi
+  t2 = t1 ^ clmul(h2, f_low)
+  assert max(p, t1, t2).bit_length() <= 64
+  return t2 & ((1 << n) - 1)
 
 
 def pow_flat(a: int, e: int, level: int) -> int:
@@ -219,8 +254,9 @@ def invert_matrix(cols: list[int], n: int) -> list[int]:
 
 
 def dump(name: str, n: int, cols: list[int]) -> None:
-  ctype = f"uint{n}_t"
-  print(f"static constexpr {ctype} {name}[{n}] = {{")
+  # uint64_t regardless of field width: the consumer feeds the i64 clmad
+  # domain (TowerFlatBasis.h).
+  print(f"inline constexpr uint64_t {name}[{n}] = {{")
   for i in range(0, n, 4):
     print("    " + ", ".join(hex(c) for c in cols[i : i + 4]) + ",")
   print("};")
@@ -234,27 +270,32 @@ def main() -> None:
     cols = basis_matrix(level)
     inv = invert_matrix(cols, n)
 
-    if level == 4:
-      samples = [
-          (a, b) for a in range(0, 1 << 16, 251) for b in range(0, 1 << 16, 257)
-      ]
-      samples += [(a, b) for a in range(64) for b in range(64)]
-    else:
-      rng = random.Random(392)
-      samples = [
-          (rng.getrandbits(32), rng.getrandbits(32)) for _ in range(20000)
-      ]
-    for a, b in samples:
-      lhs = apply_matrix(cols, mul_tower(a, b, level))
-      rhs = mul_flat(apply_matrix(cols, a), apply_matrix(cols, b), level)
-      assert lhs == rhs, (level, a, b)
-    rng = random.Random(392 + level)
-    for _ in range(1000):
-      x = rng.getrandbits(n)
-      assert apply_matrix(inv, apply_matrix(cols, x)) == x
+    # Both mul_tower and flat-multiply-of-images are GF(2)-bilinear, so
+    # agreement on all n^2 basis pairs proves agreement on all 2^n x 2^n
+    # input pairs. (Random sampling cannot certify this: the difference is
+    # bilinear, not linear, in the pair.)
+    for i in range(n):
+      for j in range(n):
+        a, b = 1 << i, 1 << j
+        lhs = apply_matrix(cols, mul_tower(a, b, level))
+        rhs = mul_flat(apply_matrix(cols, a), apply_matrix(cols, b), level)
+        assert lhs == rhs, (level, i, j)
+    # Inverse on every basis vector; a square matrix with a one-sided
+    # inverse is invertible, so this is complete too.
+    for i in range(n):
+      assert apply_matrix(inv, apply_matrix(cols, 1 << i)) == 1 << i
 
-    print(f"// bf<{level}>: flat modulus f(y) = {hex(f)}, homomorphism and")
-    print(f"// inverse checked over {len(samples)} products.")
+    # The emitted fold schedule vs plain reduction: basis pairs, the
+    # all-ones worst case for intermediate widths, and random operands.
+    rng = random.Random(392 + level)
+    ops = [(1 << i, 1 << j) for i in range(n) for j in range(n)]
+    ops.append(((1 << n) - 1, (1 << n) - 1))
+    ops += [(rng.getrandbits(n), rng.getrandbits(n)) for _ in range(2000)]
+    for a, b in ops:
+      assert mul_flat_clmad_schedule(a, b, level) == mul_flat(a, b, level)
+
+    print(f"// bf<{level}>: flat modulus f(y) = {hex(f)}; homomorphism and")
+    print(f"// inverse proven on all basis pairs; fold schedule checked.")
     dump(f"kTowerToFlat{n}", n, cols)
     dump(f"kFlatToTower{n}", n, inv)
     print()
