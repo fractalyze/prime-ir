@@ -15,8 +15,12 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 
+#include <algorithm>
 #include <cstring>
 
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/bit.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/Field/IR/FieldOperation.h"
@@ -204,19 +208,102 @@ ShapedType PrimeFieldType::overrideShapedType(ShapedType type) const {
 // BinaryFieldType
 //===----------------------------------------------------------------------===//
 
+// GF(2)[y] helpers for the flat-modulus irreducibility check. Operands are
+// < 2^n with n <= 64, so products fit APInt(2n) and reduced values fit
+// uint64_t.
+static llvm::APInt polyClmul(uint64_t a, uint64_t b, unsigned n) {
+  llvm::APInt r(2 * n, 0);
+  llvm::APInt wide(2 * n, a);
+  for (unsigned i = 0; i < n; ++i) {
+    if (b >> i & 1)
+      r ^= wide.shl(i);
+  }
+  return r;
+}
+
+static uint64_t polyReduce(llvm::APInt p, uint64_t fLow, unsigned n) {
+  llvm::APInt low(p.getBitWidth(), fLow);
+  for (int i = static_cast<int>(p.getActiveBits()) - 1;
+       i >= static_cast<int>(n); i = static_cast<int>(p.getActiveBits()) - 1) {
+    p.clearBit(i);
+    p ^= low.shl(i - n);
+  }
+  return p.extractBitsAsZExtValue(std::min(64u, p.getBitWidth()), 0);
+}
+
+// Rabin for power-of-two degree n: f = y^n + fLow is irreducible over GF(2)
+// iff y^(2^n) == y (mod f) and gcd(y^(2^(n/2)) + y, f) == 1 (2 is the only
+// prime dividing n).
+static bool isIrreduciblePoly(uint64_t fLow, unsigned n) {
+  if (n == 1)
+    return fLow == 1; // y + 1
+  auto modmul = [&](uint64_t a, uint64_t b) {
+    return polyReduce(polyClmul(a, b, n), fLow, n);
+  };
+  auto yPow2Exp = [&](unsigned e) {
+    uint64_t r = 2;
+    for (unsigned i = 0; i < e; ++i)
+      r = modmul(r, r);
+    return r;
+  };
+  if (yPow2Exp(n) != 2)
+    return false;
+  // Euclid on GF(2)[y]: gcd(y^(2^(n/2)) + y, f).
+  llvm::APInt a(n + 1, yPow2Exp(n / 2) ^ 2);
+  llvm::APInt b(n + 1, fLow);
+  b.setBit(n);
+  while (!a.isZero()) {
+    while (!a.isZero() && a.getActiveBits() >= b.getActiveBits())
+      a ^= b.shl(a.getActiveBits() - b.getActiveBits());
+    std::swap(a, b);
+    if (b.getActiveBits() <= 1)
+      break;
+  }
+  return b.getActiveBits() == 1;
+}
+
 // static
 LogicalResult
 BinaryFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
-                        unsigned towerLevel, bool isFlat) {
+                        unsigned towerLevel, bool isFlat, uint64_t flatModLow) {
   if (towerLevel > kMaxTowerLevel) {
     return emitError() << "binary field tower level must be between 0 and "
                        << kMaxTowerLevel << ", got " << towerLevel;
   }
-  if (isFlat && towerLevel != kMaxTowerLevel && towerLevel != kAesTowerLevel &&
-      towerLevel != 4 && towerLevel != 5) {
-    return emitError() << "a flat basis exists only at tower level "
-                       << kMaxTowerLevel << " (ghash), " << kAesTowerLevel
-                       << " (aes), 4 or 5 (flat), got " << towerLevel;
+  if (!isFlat) {
+    if (flatModLow != 0) {
+      return emitError() << "the tower basis carries no flat modulus";
+    }
+    return success();
+  }
+  if (towerLevel == 0) {
+    return emitError() << "GF(2) has a single basis; a flat basis exists "
+                          "only at tower levels 1-"
+                       << kMaxTowerLevel;
+  }
+  const unsigned n = 1u << towerLevel;
+  // Level 7 admits only the canonical GHASH modulus: a wider low part needs
+  // a different reduction algorithm than the two-fold clmad schedule.
+  if (towerLevel == 7 && flatModLow != kCanonicalFlatModLow[7]) {
+    return emitError() << "level-7 flat modulus must be the canonical GHASH "
+                          "polynomial (low part 0x87)";
+  }
+  if ((flatModLow & 1) == 0) {
+    return emitError() << "flat modulus must have a constant term (bit 0), "
+                          "got low part 0x"
+                       << llvm::utohexstr(flatModLow);
+  }
+  const unsigned deg =
+      flatModLow == 0 ? 0 : 64 - llvm::countl_zero(flatModLow) - 1;
+  if (2 * deg > n) {
+    return emitError() << "flat modulus low part must satisfy 2*deg <= " << n
+                       << " so the two-fold reduction converges; 0x"
+                       << llvm::utohexstr(flatModLow) << " has degree " << deg;
+  }
+  if (towerLevel <= 6 && !isIrreduciblePoly(flatModLow, n)) {
+    return emitError() << "flat modulus y^" << n << " + 0x"
+                       << llvm::utohexstr(flatModLow)
+                       << " is reducible over GF(2)";
   }
   return success();
 }
@@ -239,41 +326,66 @@ Type BinaryFieldType::parse(AsmParser &parser) {
     return nullptr;
   }
 
-  // Optional ", ghash" / ", aes" selects the flat polynomial basis at the
-  // level the polynomial defines (ghash: GF(2¹²⁸), aes: GF(2⁸)).
+  // Optional basis selector: `flat` = the canonical modulus of the level,
+  // `ghash`/`aes` = canonical sugar at levels 7/3, `poly<f>` = an explicit
+  // modulus given as the full polynomial bitmask (bit i = coeff of y^i). A
+  // canonical modulus spelled via poly<> uniques to the same type and prints
+  // back under its canonical name.
   bool isFlat = false;
+  uint64_t flatModLow = 0;
   if (succeeded(parser.parseOptionalComma())) {
     StringRef basis;
+    llvm::SMLoc basisLoc = parser.getCurrentLocation();
     if (failed(parser.parseKeyword(&basis))) {
       return nullptr;
     }
     if (basis == "ghash") {
       if (towerLevel != kMaxTowerLevel) {
-        parser.emitError(
-            parser.getCurrentLocation(),
-            "the ghash basis is GF(2¹²⁸), only valid at tower level ")
+        parser.emitError(basisLoc,
+                         "the ghash basis is GF(2¹²⁸), only valid at tower "
+                         "level ")
             << kMaxTowerLevel;
         return nullptr;
       }
+      flatModLow = kCanonicalFlatModLow[towerLevel];
     } else if (basis == "aes") {
       if (towerLevel != kAesTowerLevel) {
-        parser.emitError(parser.getCurrentLocation(),
+        parser.emitError(basisLoc,
                          "the aes basis is GF(2⁸), only valid at tower level ")
             << kAesTowerLevel;
         return nullptr;
       }
+      flatModLow = kCanonicalFlatModLow[towerLevel];
     } else if (basis == "flat") {
-      // The generic flat polynomial basis at the clmul-friendly widths; the
-      // moduli are pinned in TowerFlatBasis.h. Levels 3/7 keep their named
-      // bases (aes/ghash) — 'flat' there would print back differently.
-      if (towerLevel != 4 && towerLevel != 5) {
-        parser.emitError(parser.getCurrentLocation(),
-                         "the flat basis is defined at tower level 4 or 5");
+      if (towerLevel == 0) {
+        parser.emitError(basisLoc, "GF(2) has a single basis");
         return nullptr;
       }
+      flatModLow = kCanonicalFlatModLow[towerLevel];
+    } else if (basis == "poly") {
+      llvm::APInt modulus;
+      if (failed(parser.parseLess())) {
+        return nullptr;
+      }
+      OptionalParseResult parsedInt = parser.parseOptionalInteger(modulus);
+      if (!parsedInt.has_value() || failed(*parsedInt) ||
+          failed(parser.parseGreater())) {
+        parser.emitError(basisLoc, "expected poly<modulus-bitmask>");
+        return nullptr;
+      }
+      const unsigned n = 1u << towerLevel;
+      if (modulus.getActiveBits() != n + 1) {
+        parser.emitError(basisLoc, "flat modulus must have degree exactly ")
+            << n << " (leading bit " << n << " set, none above)";
+        return nullptr;
+      }
+      flatModLow = modulus.extractBitsAsZExtValue(
+                       std::min(64u, modulus.getBitWidth()), 0) &
+                   (n >= 64 ? ~uint64_t{0} : (uint64_t{1} << n) - 1);
     } else {
-      parser.emitError(parser.getCurrentLocation(),
-                       "expected 'ghash', 'aes', or 'flat', got '")
+      parser.emitError(basisLoc,
+                       "expected 'ghash', 'aes', 'flat', or 'poly<...>', "
+                       "got '")
           << basis << "'";
       return nullptr;
     }
@@ -284,7 +396,11 @@ Type BinaryFieldType::parse(AsmParser &parser) {
     return nullptr;
   }
 
-  return BinaryFieldType::get(parser.getContext(), towerLevel, isFlat);
+  return BinaryFieldType::getChecked(
+      [&] {
+        return parser.emitError(parser.getNameLoc(), "invalid binary field: ");
+      },
+      parser.getContext(), towerLevel, isFlat, flatModLow);
 }
 
 void BinaryFieldType::print(AsmPrinter &printer) const {
@@ -293,8 +409,15 @@ void BinaryFieldType::print(AsmPrinter &printer) const {
     printer << ", ghash";
   } else if (isAes()) {
     printer << ", aes";
-  } else if (getIsFlat()) {
+  } else if (isCanonicalFlat()) {
     printer << ", flat";
+  } else if (getIsFlat()) {
+    const unsigned n = getBitWidth();
+    llvm::APInt modulus(n + 1, getFlatModLow());
+    modulus.setBit(n);
+    llvm::SmallString<40> hex;
+    modulus.toString(hex, /*Radix=*/16, /*Signed=*/false);
+    printer << ", poly<0x" << hex << ">";
   }
   printer << ">";
 }

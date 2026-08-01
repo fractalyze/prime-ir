@@ -79,20 +79,24 @@ Value emitGhashInverse(ImplicitLocOpBuilder &b, Value a);
 Value emitAesMul(ImplicitLocOpBuilder &b, Value a, Value bv);
 Value emitAesSquare(ImplicitLocOpBuilder &b, Value a);
 Value emitAesInverse(ImplicitLocOpBuilder &b, Value a);
-Value emitFlatNarrowMul(ImplicitLocOpBuilder &b, Value a, Value bv, unsigned n);
-Value emitFlatNarrowSquare(ImplicitLocOpBuilder &b, Value a, unsigned n);
-Value emitFlatNarrowInverse(ImplicitLocOpBuilder &b, Value a, unsigned n);
+Value emitFlatGenericMul(ImplicitLocOpBuilder &b, Value a, Value bv,
+                         BinaryFieldType bfType);
+Value emitFlatGenericSquare(ImplicitLocOpBuilder &b, Value a,
+                            BinaryFieldType bfType);
+Value emitFlatGenericInverse(ImplicitLocOpBuilder &b, Value a,
+                             BinaryFieldType bfType);
 
 // Basis-split helper for the flat scalar paths: ghash and aes keep their
-// dedicated emitters, `bf<4|5, flat>` takes the width-parameterized ones.
-enum class FlatKind { kGhash, kAes, kNarrow };
+// dedicated emitters, every other flat level takes the width-parameterized
+// generic ones.
+enum class FlatKind { kGhash, kAes, kGeneric };
 FlatKind flatKindOf(BinaryFieldType bfType) {
   if (bfType.isGhash())
     return FlatKind::kGhash;
   if (bfType.isAes())
     return FlatKind::kAes;
-  assert(bfType.isNarrowFlat() && "unhandled flat basis");
-  return FlatKind::kNarrow;
+  assert(bfType.isGenericFlat() && "unhandled flat basis");
+  return FlatKind::kGeneric;
 }
 
 struct ConvertBinaryFieldConstant : public OpConversionPattern<ConstantOp> {
@@ -222,9 +226,9 @@ struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
       case FlatKind::kAes:
         result = emitAesMul(b, adaptor.getLhs(), adaptor.getRhs());
         break;
-      case FlatKind::kNarrow:
-        result = emitFlatNarrowMul(b, adaptor.getLhs(), adaptor.getRhs(),
-                                   bfType.getBitWidth());
+      case FlatKind::kGeneric:
+        result =
+            emitFlatGenericMul(b, adaptor.getLhs(), adaptor.getRhs(), bfType);
         break;
       }
       rewriter.replaceOp(op, result);
@@ -264,9 +268,8 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
       case FlatKind::kAes:
         result = emitAesSquare(b, adaptor.getInput());
         break;
-      case FlatKind::kNarrow:
-        result =
-            emitFlatNarrowSquare(b, adaptor.getInput(), bfType.getBitWidth());
+      case FlatKind::kGeneric:
+        result = emitFlatGenericSquare(b, adaptor.getInput(), bfType);
         break;
       }
       rewriter.replaceOp(op, result);
@@ -304,9 +307,8 @@ struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
       case FlatKind::kAes:
         result = emitAesInverse(b, adaptor.getInput());
         break;
-      case FlatKind::kNarrow:
-        result =
-            emitFlatNarrowInverse(b, adaptor.getInput(), bfType.getBitWidth());
+      case FlatKind::kGeneric:
+        result = emitFlatGenericInverse(b, adaptor.getInput(), bfType);
         break;
       }
       rewriter.replaceOp(op, result);
@@ -685,15 +687,15 @@ Value emitAesInverse(ImplicitLocOpBuilder &b, Value a) {
   return emitAesSquare(b, t7);
 }
 
-// The narrow flat bases `bf<4|5, flat>`: GF(2)[y]/(f_n) with the f_n of
-// TowerFlatBasis.h — the target of the tower->flat conversion, so a multiply
-// is one carry-less product plus two constant-tap folds. Values ride the
-// storage integer (i16/i32).
+// The generic flat bases (every level but aes/ghash): GF(2)[y]/(f_k) with
+// the f_k of TowerFlatBasis.h — the target of the tower->flat conversion, so
+// a multiply is a carry-less product plus constant-tap folds. Values ride
+// the storage integer (i8 for the sub-byte levels, else the element width).
 
 // XOR of `v << tap` over the set bits of fLow — clmul by the constant low
-// part of the modulus, unrolled at emission time.
-Value emitFlatModTaps(ImplicitLocOpBuilder &b, Value v, unsigned n,
-                      uint64_t fLow) {
+// part of the modulus, unrolled at emission time. Truncating: taps pushed
+// past bit 63 are dropped (the n=64 caller recovers them via the >> path).
+Value emitFlatModTaps(ImplicitLocOpBuilder &b, Value v, uint64_t fLow) {
   Value acc = nullptr;
   for (unsigned tap = 0; tap < 64; ++tap) {
     if (!(fLow >> tap & 1))
@@ -706,18 +708,48 @@ Value emitFlatModTaps(ImplicitLocOpBuilder &b, Value v, unsigned n,
   return acc;
 }
 
-// Portable n x n (n = 16 or 32) carry-less multiply reduced mod y^n + fLow,
-// in one i64 limb (2n-1 <= 63 bits). Bit-serial product like emitClmul64,
-// then the two-fold reduction of SpecializeBinaryFieldToNVPTX's mulFlatClmad:
-//   t1 = p ^ (p>>n)*fLow;  h2 = (t1>>n) ^ (p>>n);  t2 = t1 ^ h2*fLow
-// with the final trunc discarding the junk above bit n-1.
-Value emitFlatNarrowMul(ImplicitLocOpBuilder &b, Value a, Value bv,
-                        unsigned n) {
-  const uint64_t fLow = n == 16 ? kFlatModLow16 : kFlatModLow32;
-  auto intNTy = b.getIntegerType(n);
+// The spill limb of clmul(v, fLow): bits 64.. of the product, i.e. XOR of
+// `v >> (64 - tap)` over the nonzero taps.
+Value emitFlatModTapsSpill(ImplicitLocOpBuilder &b, Value v, uint64_t fLow) {
+  Value acc = i64Const(b, 0);
+  for (unsigned tap = 1; tap < 64; ++tap) {
+    if (!(fLow >> tap & 1))
+      continue;
+    acc = arith::XOrIOp::create(
+        b, acc, arith::ShRUIOp::create(b, v, i64Const(b, 64 - tap)));
+  }
+  return acc;
+}
+
+// Portable n x n carry-less multiply reduced mod y^n + fLow. For n <= 32 the
+// product fits one i64 limb (2n-1 <= 63 bits) and the two-fold schedule of
+// SpecializeBinaryFieldToNVPTX's mulFlatClmad applies:
+//   t1 = p ^ (p>>n)*fLow;  h2 = (t1>>n) ^ (p>>n);  t2 = t1 ^ h2*fLow.
+// For n = 64 the product is two limbs and the fold is
+//   r = pLo ^ lo(pHi*fLow) ^ lo(hi(pHi*fLow)*fLow)
+// (the spill of the first fold is at most deg(fLow) bits, so one more fold
+// finishes). Both schedules are proven against long division by
+// tools/derive_tower_flat_basis.py. The final trunc to the STORAGE width
+// keeps the sub-byte levels (element 2/4 bits in an i8 carrier) on the
+// byte-per-element contract.
+Value emitFlatGenericMul(ImplicitLocOpBuilder &b, Value a, Value bv,
+                         BinaryFieldType bfType) {
+  const unsigned n = bfType.getBitWidth();
+  const uint64_t fLow = bfType.getFlatModLow();
+  auto storageTy = bfType.getStorageType();
   auto i64Ty = b.getI64Type();
-  Value a64 = arith::ExtUIOp::create(b, i64Ty, a);
-  Value b64 = arith::ExtUIOp::create(b, i64Ty, bv);
+  // Level 6 already rides an i64 carrier; extui i64->i64 is invalid.
+  Value a64 =
+      storageTy.getWidth() < 64 ? arith::ExtUIOp::create(b, i64Ty, a) : a;
+  Value b64 =
+      storageTy.getWidth() < 64 ? arith::ExtUIOp::create(b, i64Ty, bv) : bv;
+
+  if (n == 64) {
+    auto [pLo, pHi] = emitClmul64(b, a64, b64);
+    Value r = arith::XOrIOp::create(b, pLo, emitFlatModTaps(b, pHi, fLow));
+    Value spill = emitFlatModTapsSpill(b, pHi, fLow);
+    return arith::XOrIOp::create(b, r, emitFlatModTaps(b, spill, fLow));
+  }
 
   Value zero = i64Const(b, 0);
   Value one = i64Const(b, 1);
@@ -737,38 +769,50 @@ Value emitFlatNarrowMul(ImplicitLocOpBuilder &b, Value a, Value bv,
 
   Value shN = i64Const(b, n);
   Value hi = arith::ShRUIOp::create(b, p, shN);
-  Value t1 = arith::XOrIOp::create(b, p, emitFlatModTaps(b, hi, n, fLow));
+  Value t1 = arith::XOrIOp::create(b, p, emitFlatModTaps(b, hi, fLow));
   Value h2 = arith::XOrIOp::create(b, arith::ShRUIOp::create(b, t1, shN), hi);
-  Value t2 = arith::XOrIOp::create(b, t1, emitFlatModTaps(b, h2, n, fLow));
-  return arith::TruncIOp::create(b, intNTy, t2);
+  Value t2 = arith::XOrIOp::create(b, t1, emitFlatModTaps(b, h2, fLow));
+  // Junk above bit n-1 must not leak into a wider storage carrier.
+  if (storageTy.getWidth() > n) {
+    t2 = arith::AndIOp::create(b, t2, i64Const(b, (uint64_t{1} << n) - 1));
+  }
+  return arith::TruncIOp::create(b, storageTy, t2);
 }
 
-Value emitFlatNarrowSquare(ImplicitLocOpBuilder &b, Value a, unsigned n) {
-  return emitFlatNarrowMul(b, a, a, n);
+Value emitFlatGenericSquare(ImplicitLocOpBuilder &b, Value a,
+                            BinaryFieldType bfType) {
+  return emitFlatGenericMul(b, a, a, bfType);
 }
 
-// Fermat via the same Itoh-Tsujii ladder as emitAesInverse, extended to
-// t15 (n=16) / t31 (n=32): a^-1 = t_{n-1}^2, with 0 mapping to 0 like every
-// binary-field inverse here.
-Value emitFlatNarrowInverse(ImplicitLocOpBuilder &b, Value a, unsigned n) {
-  auto pow2k = [&](Value v, unsigned k) {
-    for (unsigned i = 0; i < k; ++i)
-      v = emitFlatNarrowSquare(b, v, n);
-    return v;
+// Fermat via the Itoh-Tsujii ladder driven by the binary expansion of n-1:
+// t_m = a^(2^m - 1) with t_{2m} = t_m^(2^m)*t_m and t_{2m+1} = t_{2m}^2*a;
+// a^-1 = t_{n-1}^2, with 0 mapping to 0 like every binary-field inverse
+// here. n-1 is all-ones for the power-of-two widths, so every step takes
+// the +1 branch — the same 1,2,3,6,7,... chain emitAesInverse hard-codes.
+Value emitFlatGenericInverse(ImplicitLocOpBuilder &b, Value a,
+                             BinaryFieldType bfType) {
+  const unsigned n = bfType.getBitWidth();
+  auto square = [&](Value v) { return emitFlatGenericSquare(b, v, bfType); };
+  auto mul = [&](Value x, Value y) {
+    return emitFlatGenericMul(b, x, y, bfType);
   };
-  auto mul = [&](Value x, Value y) { return emitFlatNarrowMul(b, x, y, n); };
-  Value t1 = a;
-  Value t2 = mul(pow2k(t1, 1), t1);
-  Value t3 = mul(pow2k(t2, 1), t1);
-  Value t6 = mul(pow2k(t3, 3), t3);
-  Value t7 = mul(pow2k(t6, 1), t1);
-  Value t14 = mul(pow2k(t7, 7), t7);
-  Value t15 = mul(pow2k(t14, 1), t1);
-  if (n == 16)
-    return emitFlatNarrowSquare(b, t15, n);
-  Value t30 = mul(pow2k(t15, 15), t15);
-  Value t31 = mul(pow2k(t30, 1), t1);
-  return emitFlatNarrowSquare(b, t31, n);
+  const unsigned e = n - 1;
+  const int top = 31 - __builtin_clz(e);
+  Value t = a;
+  unsigned m = 1;
+  for (int i = top - 1; i >= 0; --i) {
+    Value s = t;
+    for (unsigned k = 0; k < m; ++k)
+      s = square(s);
+    t = mul(s, t);
+    m *= 2;
+    if (e >> i & 1) {
+      t = mul(square(t), a);
+      m += 1;
+    }
+  }
+  assert(m == e && "Itoh-Tsujii ladder must land on n-1");
+  return square(t);
 }
 
 //===----------------------------------------------------------------------===//
