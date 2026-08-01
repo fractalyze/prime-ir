@@ -249,6 +249,44 @@ struct ConvertTowerMulToClmad : public OpRewritePattern<MulOp> {
   }
 };
 
+// AES-basis bf<3, aes> multiply via one clmad product. The AES basis is
+// already the flat monomial basis GF(2)[x]/(x⁸ + x⁴ + x³ + x + 1) (0x11B), so
+// -- unlike the tower path -- no toFlat/fromFlat bit-matrix is needed. The 8×8
+// product is 15-bit, so one clmad.lo covers it and two folds finish. Result is
+// byte-identical to BinaryFieldToArith's emitAesMul (the software fallback).
+struct ConvertAesMulToClmad : public OpRewritePattern<MulOp> {
+  using OpRewritePattern<MulOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(MulOp op,
+                                PatternRewriter &rewriter) const override {
+    Type aesType = op.getResult().getType();
+    auto bfType = dyn_cast<BinaryFieldType>(aesType);
+    if (!bfType || !bfType.isAes())
+      return failure();
+
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    auto i8Type = b.getI8Type();
+    auto i64Type = b.getI64Type();
+
+    // Cast aes -> i8; BinaryFieldToArith later reconciles these casts.
+    Value lhs8 =
+        UnrealizedConversionCastOp::create(b, i8Type, op.getLhs()).getResult(0);
+    Value rhs8 =
+        UnrealizedConversionCastOp::create(b, i8Type, op.getRhs()).getResult(0);
+
+    // 0x1b = x⁴ + x³ + x + 1, the low half of the AES modulus x⁸ + 0x1b.
+    Value prodFlat64 = mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhs8),
+                                    arith::ExtUIOp::create(b, i64Type, rhs8),
+                                    /*n=*/8, /*fLow=*/0x1b);
+    Value prod8 = arith::TruncIOp::create(b, i8Type, prodFlat64);
+
+    Value resultAes =
+        UnrealizedConversionCastOp::create(b, aesType, prod8).getResult(0);
+    rewriter.replaceOp(op, resultAes);
+    return success();
+  }
+};
+
 //===----------------------------------------------------------------------===//
 // Pass Implementation
 //===----------------------------------------------------------------------===//
@@ -263,7 +301,8 @@ struct SpecializeBinaryFieldToNVPTX
 
     RewritePatternSet patterns(context);
     if (useClmad) {
-      patterns.add<ConvertGhashMulToClmad, ConvertTowerMulToClmad>(context);
+      patterns.add<ConvertGhashMulToClmad, ConvertTowerMulToClmad,
+                   ConvertAesMulToClmad>(context);
     }
 
     // Greedy rewriting (not partial conversion) so unmatched field.mul ops

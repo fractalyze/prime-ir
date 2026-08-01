@@ -15,9 +15,10 @@
 
 // Test clmad specialization for binary field multiplication.
 //
-// clmad computes a carryless product: `bf<7, ghash>` multiplies directly,
-// tower bf<4>/bf<5> go through the flat-basis conversion (TowerFlatBasis.h),
-// and tower bf<6>/bf<7> stay portable (`field.mul`).
+// clmad computes a carryless product: `bf<7, ghash>` and `bf<3, aes>` are
+// already flat so they multiply directly, tower bf<4>/bf<5> go through the
+// flat-basis conversion (TowerFlatBasis.h), and tower bf<6>/bf<7> stay
+// portable (`field.mul`).
 
 // RUN: prime-ir-opt --specialize-binary-field-to-nvptx %s | FileCheck %s --check-prefix=CHECK-CLMAD
 
@@ -35,6 +36,7 @@
 !BF64 = !field.bf<6>         // GF(2⁶⁴), tower basis
 !BF128 = !field.bf<7>        // GF(2¹²⁸), tower basis
 !GHASH = !field.bf<7, ghash> // GF(2¹²⁸), flat GHASH polynomial basis
+!AES = !field.bf<3, aes>     // GF(2⁸), flat AES polynomial basis
 
 // GHASH-basis scalar multiplication should use clmad: eight clmad.{lo,hi}.u64
 // build the 128×128 carryless product, then the shared GHASH reduction.
@@ -75,6 +77,21 @@ func.func @test_bf32_mul(%a: !BF32, %b: !BF32) -> !BF32 {
 func.func @test_bf16_mul(%a: !BF16, %b: !BF16) -> !BF16 {
   %c = field.mul %a, %b : !BF16
   return %c : !BF16
+}
+
+// AES (flat) multiplies directly like GHASH, but the 8×8 product is 15-bit so
+// it needs no Karatsuba limbs: one clmad.lo product + two reduction folds =
+// three clmad.lo.u64, and no toFlat/fromFlat conversion.
+// CHECK-CLMAD-LABEL: @test_aes_mul
+// CHECK-CLMAD: builtin.unrealized_conversion_cast
+// CHECK-CLMAD-COUNT-3: llvm.inline_asm{{.*}}clmad.lo{{.*}}u64
+// CHECK-CLMAD: builtin.unrealized_conversion_cast
+// CHECK-OFF-LABEL: @test_aes_mul
+// CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
+func.func @test_aes_mul(%a: !AES, %b: !AES) -> !AES {
+  %c = field.mul %a, %b : !AES
+  return %c : !AES
 }
 
 // BF128 (tower) scalar multiplication stays portable — no carryless fast path.
