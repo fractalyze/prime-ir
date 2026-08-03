@@ -44,6 +44,7 @@ def SpecializeBinaryFieldToARM : Pass<"specialize-binary-field-to-arm", "ModuleO
   let dependentDialects = [
     "arith::ArithDialect",
     "LLVM::LLVMDialect",
+    "tensor::TensorDialect",
     "vector::VectorDialect",
   ];
 

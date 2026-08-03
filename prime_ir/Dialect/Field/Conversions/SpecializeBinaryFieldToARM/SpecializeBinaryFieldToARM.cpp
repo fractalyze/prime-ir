@@ -19,15 +19,18 @@ limitations under the License.
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMAttrs.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h" // IWYU pragma: keep
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/Utils/ShapedFieldMul.h"
 
 namespace mlir::prime_ir::field {
 
@@ -292,35 +295,36 @@ struct ConvertGhashToPMULL : public OpRewritePattern<OpTy> {
 
   LogicalResult matchAndRewrite(OpTy op,
                                 PatternRewriter &rewriter) const override {
-    Type ghashType = op.getResult().getType();
-    auto bfType = dyn_cast<BinaryFieldType>(ghashType);
+    // getElementTypeOrSelf so a shaped (tensor/vector) ghash mul/square matches
+    // too; replaceFlatFieldMul unrolls it lane by lane.
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
     if (!bfType || !bfType.isGhash())
       return failure();
+    Type ghashType = bfType;
 
+    // PMULL needs the ARM crypto features on the parent func; set them once,
+    // ahead of the (possibly unrolled) per-lane ladders.
     addARMCryptoTargetFeatures(op);
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    auto i128Type = b.getIntegerType(128);
-    auto vec2i64Type = VectorType::get(2, b.getI64Type());
-
     auto [lhs, rhs] = getMulOperands(op);
 
-    // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
-    Value lhsI128 =
-        UnrealizedConversionCastOp::create(b, i128Type, lhs).getResult(0);
-    Value rhsI128 =
-        UnrealizedConversionCastOp::create(b, i128Type, rhs).getResult(0);
-
-    Value lhsVec = LLVM::BitcastOp::create(b, vec2i64Type, lhsI128);
-    Value rhsVec = LLVM::BitcastOp::create(b, vec2i64Type, rhsI128);
-
-    Value resultVec = mulGhashPMULL(b, lhsVec, rhsVec);
-
-    Value resultI128 = LLVM::BitcastOp::create(b, i128Type, resultVec);
-    Value resultGhash =
-        UnrealizedConversionCastOp::create(b, ghashType, resultI128)
-            .getResult(0);
-    rewriter.replaceOp(op, resultGhash);
-    return success();
+    auto mulScalar = [ghashType](ImplicitLocOpBuilder &b, Value l,
+                                 Value r) -> Value {
+      auto i128Type = b.getIntegerType(128);
+      auto vec2i64Type = VectorType::get(2, b.getI64Type());
+      // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
+      Value lhsI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, l).getResult(0);
+      Value rhsI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, r).getResult(0);
+      Value lhsVec = LLVM::BitcastOp::create(b, vec2i64Type, lhsI128);
+      Value rhsVec = LLVM::BitcastOp::create(b, vec2i64Type, rhsI128);
+      Value resultVec = mulGhashPMULL(b, lhsVec, rhsVec);
+      Value resultI128 = LLVM::BitcastOp::create(b, i128Type, resultVec);
+      return UnrealizedConversionCastOp::create(b, ghashType, resultI128)
+          .getResult(0);
+    };
+    return replaceFlatFieldMul(rewriter, op, lhs, rhs, mulScalar);
   }
 };
 
