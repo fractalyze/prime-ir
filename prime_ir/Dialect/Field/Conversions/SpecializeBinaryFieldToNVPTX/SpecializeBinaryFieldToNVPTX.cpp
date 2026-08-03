@@ -316,47 +316,60 @@ struct ConvertFlatGenericMulToClmad : public OpRewritePattern<MulOp> {
 
   LogicalResult matchAndRewrite(MulOp op,
                                 PatternRewriter &rewriter) const override {
-    Type flatType = op.getResult().getType();
-    auto bfType = dyn_cast<BinaryFieldType>(flatType);
+    // getElementTypeOrSelf so a shaped (tensor/vector) flat mul matches too;
+    // replaceFlatFieldMul unrolls it lane by lane.
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
     if (!bfType || !bfType.isGenericFlat())
       return failure();
-    // The verifier caps generic flat at level 6, so n <= 64 always holds;
-    // n = 128 flat is canonical GHASH and takes its dedicated pattern.
+    // Verifier caps generic flat at level 6, so n <= 64.
     const unsigned n = bfType.getBitWidth();
     const uint64_t fLow = bfType.getFlatModLow();
-
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    Type flatType = bfType;
     // The storage carrier, not the element width: sub-byte levels ride i8.
     auto storageType = bfType.getStorageType();
-    auto i64Type = b.getI64Type();
 
-    // Cast flat -> storage int; BinaryFieldToArith later reconciles these
-    // casts.
-    Value lhsS = UnrealizedConversionCastOp::create(b, storageType, op.getLhs())
-                     .getResult(0);
-    Value rhsS = UnrealizedConversionCastOp::create(b, storageType, op.getRhs())
-                     .getResult(0);
-
-    Value prod;
-    if (n == 64) {
-      prod = mulFlat64Clmad(b, lhsS, rhsS, fLow);
-    } else {
-      Value prod64 =
-          mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhsS),
-                       arith::ExtUIOp::create(b, i64Type, rhsS), n, fLow);
-      // Junk above bit n-1 must not leak into a wider storage carrier.
+    auto mulScalar = [=](ImplicitLocOpBuilder &b, Value lhs,
+                         Value rhs) -> Value {
+      auto i64Type = b.getI64Type();
+      // Cast flat -> storage int; BinaryFieldToArith later reconciles these
+      // casts.
+      Value lhsS =
+          UnrealizedConversionCastOp::create(b, storageType, lhs).getResult(0);
+      Value rhsS =
+          UnrealizedConversionCastOp::create(b, storageType, rhs).getResult(0);
+      // Sub-byte elements sit in a wider carrier that field.bitcast retags
+      // without normalizing; clmad multiplies the whole carrier, so junk
+      // above bit n-1 would fold into the result.
       if (storageType.getWidth() > n) {
-        prod64 = arith::AndIOp::create(
-            b, prod64,
-            arith::ConstantIntOp::create(
-                b, static_cast<int64_t>((uint64_t{1} << n) - 1), 64));
+        Value mask = arith::ConstantIntOp::create(
+            b, static_cast<int64_t>((uint64_t{1} << n) - 1),
+            storageType.getWidth());
+        lhsS = arith::AndIOp::create(b, lhsS, mask);
+        rhsS = arith::AndIOp::create(b, rhsS, mask);
       }
-      prod = arith::TruncIOp::create(b, storageType, prod64);
-    }
-    Value result =
-        UnrealizedConversionCastOp::create(b, flatType, prod).getResult(0);
-    rewriter.replaceOp(op, result);
-    return success();
+
+      Value prod;
+      if (n == 64) {
+        prod = mulFlat64Clmad(b, lhsS, rhsS, fLow);
+      } else {
+        Value prod64 =
+            mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhsS),
+                         arith::ExtUIOp::create(b, i64Type, rhsS), n, fLow);
+        // Junk above bit n-1 must not leak into a wider storage carrier.
+        if (storageType.getWidth() > n) {
+          prod64 = arith::AndIOp::create(
+              b, prod64,
+              arith::ConstantIntOp::create(
+                  b, static_cast<int64_t>((uint64_t{1} << n) - 1), 64));
+        }
+        prod = arith::TruncIOp::create(b, storageType, prod64);
+      }
+      return UnrealizedConversionCastOp::create(b, flatType, prod)
+          .getResult(0);
+    };
+    return replaceFlatFieldMul(rewriter, op, op.getLhs(), op.getRhs(),
+                               mulScalar);
   }
 };
 

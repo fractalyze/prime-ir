@@ -44,8 +44,7 @@ C++ consumers (16/32 for the tower specialization and xla's additive-NTT
 hoist, 64/128 for the wide tower specializations — 128-bit as lo/hi
 uint64 pairs) and the per-level reduction constants. Levels 1..3 matrices
 are derived and proven but not emitted: they have no consumer (the tower
-recursion is cheaper than conversion at those widths), and this script
-regenerates them on demand.
+recursion is cheaper than conversion at those widths).
 
 Run: python3 tools/derive_tower_flat_basis.py
 """
@@ -240,10 +239,8 @@ def solve_artin_schreier(c: int, level: int) -> int:
 def generator_images(level: int) -> list[int]:
   """B[j] = flat image of X_{j+1}, satisfying B_1^2 + B_1 + 1 = 0 and
   B_j^2 + B_{j-1}*B_j + 1 = 0. Substituting B = prev*z turns each
-  quadratic into Artin-Schreier form z^2 + z = 1/prev^2. The relation
-  asserts here are the load-bearing proof: images satisfying the tower's
-  defining relations induce a field isomorphism by the universal property
-  of the iterated quadratic quotients."""
+  quadratic into Artin-Schreier form z^2 + z = 1/prev^2. The asserts here
+  are the proof (see module docstring)."""
   images = []
   prev = 1
   for _ in range(level):

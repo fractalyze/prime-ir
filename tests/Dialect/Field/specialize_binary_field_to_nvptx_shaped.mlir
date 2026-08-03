@@ -35,6 +35,7 @@
 
 !BF32 = !field.bf<5>
 !AES = !field.bf<3, aes>
+!F32 = !field.bf<5, flat>
 
 // CHECK-LABEL: @tensor_bf32_mul
 // CHECK: field.mul
@@ -60,4 +61,13 @@ func.func @vector_bf32_mul(%a: vector<4x!BF32>, %b: vector<4x!BF32>) -> vector<4
 func.func @dynamic_aes_mul(%a: tensor<?x!AES>, %b: tensor<?x!AES>) -> tensor<?x!AES> {
   %c = field.mul %a, %b : tensor<?x!AES>
   return %c : tensor<?x!AES>
+}
+
+// Same for the generic flat basis at another width.
+// CHECK-LABEL: @dynamic_f32_mul
+// CHECK: field.mul
+// CHECK-NOT: clmad
+func.func @dynamic_f32_mul(%a: tensor<?x!F32>, %b: tensor<?x!F32>) -> tensor<?x!F32> {
+  %c = field.mul %a, %b : tensor<?x!F32>
+  return %c : tensor<?x!F32>
 }

@@ -20,9 +20,9 @@ package(
     default_visibility = ["//visibility:public"],
 )
 
-# Runs the derivation's proofs (irreducibility, homomorphism on all basis
-# pairs, inverse, clmad fold schedule) so a drifted TowerFlatBasis.h edit
-# without a rerun is at least caught on the math side.
+# Runs the derivation's proofs (irreducibility, homomorphism, inverse, clmad
+# fold schedules) so a drifted TowerFlatBasis.h edit without a rerun is at
+# least caught on the math side.
 py_test(
     name = "derive_tower_flat_basis_test",
     size = "small",

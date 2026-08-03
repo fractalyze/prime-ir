@@ -24,7 +24,6 @@ limitations under the License.
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldCodeGen.h"
-#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/TowerFlatBasis.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -70,9 +69,7 @@ bool containsBinaryFieldType(Type type) {
 // Conversion Patterns
 //===----------------------------------------------------------------------===//
 
-// Flat-basis multiply/square/inverse (`bf<7, ghash>`, `bf<3, aes>`, and the
-// narrow `bf<4|5, flat>`), defined below; used by the mul/square/inverse
-// patterns to split on basis.
+// Flat-basis emitters, defined below; patterns split on basis via flatKindOf.
 Value emitGhashMul(ImplicitLocOpBuilder &b, Value a, Value bv);
 Value emitGhashSquare(ImplicitLocOpBuilder &b, Value a);
 Value emitGhashInverse(ImplicitLocOpBuilder &b, Value a);
@@ -83,10 +80,8 @@ Value emitFlatGenericSquare(ImplicitLocOpBuilder &b, Value a,
 Value emitFlatGenericInverse(ImplicitLocOpBuilder &b, Value a,
                              BinaryFieldType bfType);
 
-// Basis-split for the flat scalar paths: only GHASH needs dedicated
-// emitters (its 128-bit product exceeds the generic i64-limb path); every
-// other flat basis — canonical aes included — reads its modulus off the
-// type and takes the width-parameterized generic ones.
+// Only canonical GHASH has dedicated emitters (its 128-bit product exceeds
+// the generic i64-limb path); every other flat basis is generic.
 enum class FlatKind { kGhash, kGeneric };
 FlatKind flatKindOf(BinaryFieldType bfType) {
   return bfType.isGhash() ? FlatKind::kGhash : FlatKind::kGeneric;
@@ -573,11 +568,9 @@ Value emitGhashInverse(ImplicitLocOpBuilder &b, Value a) {
 // `bf<3, aes>` is GF(2)[x]/(x⁸ + x⁴ + x³ + x + 1) (0x11B) in the monomial
 // basis (NOT the x²+x+α tower of the default `bf<3>`). Only the multiply
 // differs; it is an 8-bit carryless product reduced mod the AES polynomial.
-// The generic flat bases (every flat basis but canonical GHASH, canonical
-// aes included): GF(2)[y]/(f) with the modulus read off the type — the
-// canonical ones are the targets of the tower->flat conversion, so a
-// multiply is a carry-less product plus constant-tap folds. Values ride
-// the storage integer (i8 for the sub-byte levels, else the element width).
+// Generic flat multiply: GF(2)[y]/(f) with the modulus on the type, a
+// carry-less product plus constant-tap folds. Values ride the storage
+// integer (i8 for the sub-byte levels, else the element width).
 
 // XOR of `v << tap` over the set bits of fLow — clmul by the constant low
 // part of the modulus, unrolled at emission time. Truncating: taps pushed
@@ -630,6 +623,14 @@ Value emitFlatGenericMul(ImplicitLocOpBuilder &b, Value a, Value bv,
       storageTy.getWidth() < 64 ? arith::ExtUIOp::create(b, i64Ty, a) : a;
   Value b64 =
       storageTy.getWidth() < 64 ? arith::ExtUIOp::create(b, i64Ty, bv) : bv;
+  // Sub-byte elements sit in a wider carrier and field.bitcast retags it
+  // without normalizing, so junk above bit n-1 can arrive here and would fold
+  // into the result. BinaryFieldCodeGen truncates for the tower path.
+  if (storageTy.getWidth() > n) {
+    Value mask = i64Const(b, (uint64_t{1} << n) - 1);
+    a64 = arith::AndIOp::create(b, a64, mask);
+    b64 = arith::AndIOp::create(b, b64, mask);
+  }
 
   if (n == 64) {
     auto [pLo, pHi] = emitClmul64(b, a64, b64);
@@ -686,7 +687,7 @@ Value emitFlatGenericInverse(ImplicitLocOpBuilder &b, Value a,
     return emitFlatGenericMul(b, x, y, bfType);
   };
   const unsigned e = n - 1;
-  const int top = 31 - __builtin_clz(e);
+  const int top = static_cast<int>(llvm::Log2_32(e));
   Value t = a;
   unsigned m = 1;
   for (int i = top - 1; i >= 0; --i) {

@@ -282,8 +282,7 @@ BinaryFieldType::verify(function_ref<InFlightDiagnostic()> emitError,
                        << kMaxTowerLevel;
   }
   const unsigned n = 1u << towerLevel;
-  // Level 7 admits only the canonical GHASH modulus: a wider low part needs
-  // a different reduction algorithm than the two-fold clmad schedule.
+  // A wider level-7 low part would need a different reduction schedule.
   if (towerLevel == 7 && flatModLow != kCanonicalFlatModLow[7]) {
     return emitError() << "level-7 flat modulus must be the canonical GHASH "
                           "polynomial (low part 0x87)";
@@ -326,11 +325,7 @@ Type BinaryFieldType::parse(AsmParser &parser) {
     return nullptr;
   }
 
-  // Optional basis selector: `flat` = the canonical modulus of the level,
-  // `ghash`/`aes` = canonical sugar at levels 7/3, `poly<f>` = an explicit
-  // modulus given as the full polynomial bitmask (bit i = coeff of y^i). A
-  // canonical modulus spelled via poly<> uniques to the same type and prints
-  // back under its canonical name.
+  // Basis selector: flat | ghash | aes | poly<bitmask>; see FieldTypes.td.
   bool isFlat = false;
   uint64_t flatModLow = 0;
   if (succeeded(parser.parseOptionalComma())) {
@@ -379,9 +374,19 @@ Type BinaryFieldType::parse(AsmParser &parser) {
             << n << " (leading bit " << n << " set, none above)";
         return nullptr;
       }
-      flatModLow = modulus.extractBitsAsZExtValue(
-                       std::min(64u, modulus.getBitWidth()), 0) &
-                   (n >= 64 ? ~uint64_t{0} : (uint64_t{1} << n) - 1);
+      // The type stores the low part in 64 bits, which verify()'s
+      // 2*deg <= n bound guarantees is lossless — but that runs after this
+      // narrowing, so reject a wider low part here; dropping those bits
+      // would silently substitute a different field.
+      llvm::APInt low = modulus;
+      low.clearBit(n);
+      if (low.getActiveBits() > 64) {
+        parser.emitError(basisLoc,
+                         "flat modulus low part must fit 64 bits, got degree ")
+            << (low.getActiveBits() - 1);
+        return nullptr;
+      }
+      flatModLow = low.getLimitedValue();
     } else {
       parser.emitError(basisLoc,
                        "expected 'ghash', 'aes', 'flat', or 'poly<...>', "

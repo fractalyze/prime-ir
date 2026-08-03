@@ -20,27 +20,13 @@ limitations under the License.
 
 namespace mlir::prime_ir::field {
 
-// Constants of the canonical flat polynomial bases GF(2)[y]/(f_k) and the
-// GF(2)-linear basis changes from the Fan-Paar tower
-// (BinaryFieldCodeGen.cpp: bit i of a bf<k> is the multilinear monomial
-// prod_j X_{j+1}^{i_j}). These f_k DEFINE the flat basis at every level
-// (FieldTypes.td): level 3's flat basis is the AES polynomial and level 7's
-// is GHASH, so `bf<3, flat>` / `bf<7, flat>` are the existing named bases;
-// the other levels use the low-weight irreducibles below. Every consumer —
-// the portable BinaryFieldToArith lowering, the NVPTX clmad specializer,
-// and downstream emitters hoisting whole kernels into the flat basis —
-// must agree on them through this header.
-//
-// The canonical reduction constants themselves live on the type
-// (BinaryFieldType::kCanonicalFlatModLow) — lowerings read the modulus off
-// the type value, so custom `poly<...>` bases work through the same code.
-// Column i of kTowerToFlat* is the flat image of tower basis
-// monomial i; kFlatToTower* is the inverse matrix. 128-bit columns are
-// split into Lo/Hi uint64 halves. Widths without a C++ consumer (2/4/8-bit
-// matrices — the tower recursion is cheaper than conversion there) are
-// derived and proven but not emitted. Generated and proven
-// (irreducibility, defining-relation construction, homomorphism, inverse,
-// clmad fold schedules) by tools/derive_tower_flat_basis.py.
+// Tower<->flat basis-change matrices for the canonical flat bases (moduli:
+// BinaryFieldType::kCanonicalFlatModLow). Tower side per
+// BinaryFieldCodeGen.cpp: bit i of a bf<k> is the monomial
+// prod_j X_{j+1}^{i_j}. Column i of kTowerToFlat* is the flat image of tower
+// monomial i; kFlatToTower* is the inverse. 128-bit columns split into Lo/Hi
+// uint64 halves; 2/4/8-bit matrices have no consumer and are not emitted.
+// Generated and proven by tools/derive_tower_flat_basis.py.
 
 inline constexpr uint64_t kTowerToFlat16[16] = {
     0x1,    0x732,  0xa785, 0x2f29, 0xf6bc, 0x2ee3, 0xb115, 0x46ff,

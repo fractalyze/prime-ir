@@ -60,9 +60,9 @@ void PyBinaryFieldType::bindDerived(ClassTy &c) {
       nb::arg("tower_level"), nb::arg("is_flat") = false,
       nb::arg("context") = nb::none(),
       "Create a binary field type GF(2^(2^tower_level)); is_flat selects the "
-      "flat polynomial basis of that level instead of the recursive tower: "
-      "GHASH at tower_level 7, AES at tower_level 3 (other levels have no "
-      "flat basis)");
+      "canonical flat polynomial basis of that level instead of the recursive "
+      "tower (GHASH at 7, AES at 3, a pinned low-weight modulus elsewhere; "
+      "levels 1-7 only)");
   c.def_prop_ro(
       "tower_level",
       [](PyBinaryFieldType &self) -> unsigned {

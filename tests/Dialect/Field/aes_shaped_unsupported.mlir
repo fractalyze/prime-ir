@@ -13,8 +13,7 @@
 // limitations under the License.
 // ==============================================================================
 
-// The portable AES multiply (`emitAesMul`) is scalar-only, like the GHASH one:
-// it hard-codes i8/i16 truncs, shifts, and constants. Shaped (tensor/vector)
+// The flat-basis emitters are scalar-only. Shaped (tensor/vector)
 // `bf<3, aes>` mul/square is not lowered yet, so the conversion must fail
 // cleanly instead of building invalid IR. Scalar AES is covered end-to-end by
 // aes_runner.mlir.

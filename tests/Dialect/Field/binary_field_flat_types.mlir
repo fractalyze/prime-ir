@@ -14,10 +14,7 @@
 // ==============================================================================
 
 // Round-trip, canonical normalization, and rejection for the binary-field
-// flat-basis syntax. `flat` is the canonical modulus of any level 1..7;
-// `poly<f>` gives an explicit modulus (full polynomial bitmask) and uniques
-// to the canonical spelling when it matches; custom moduli are limited to
-// levels 1..6 with 2*deg(f - y^n) <= n and must be irreducible.
+// flat-basis syntax (rules: BinaryFieldType description, FieldTypes.td).
 
 // RUN: prime-ir-opt %s --split-input-file --verify-diagnostics | FileCheck %s
 
@@ -53,6 +50,30 @@ func.func @canonical_normalization(
 // CHECK-LABEL: @custom_modulus
 // CHECK-SAME: !field.bf<3, poly<0x11D>>
 func.func @custom_modulus(%a: !field.bf<3, poly<0x11d>>) {
+  return
+}
+
+// -----
+
+// Wide canonical spellings: a 129-bit level-7 modulus and a 65-bit level-6
+// one both normalize.
+// CHECK-LABEL: @wide_canonical
+// CHECK-SAME: !field.bf<7, ghash>
+// CHECK-SAME: !field.bf<6, flat>
+func.func @wide_canonical(
+    %a: !field.bf<7, poly<0x100000000000000000000000000000087>>,
+    %b: !field.bf<6, poly<0x1000000000000001b>>) {
+  return
+}
+
+// -----
+
+// The low part is narrowed to 64 bits for storage, so a wider one must be
+// rejected rather than silently truncated into a different field — this
+// modulus agrees with GHASH below bit 64.
+// expected-error @+2 {{flat modulus low part must fit 64 bits}}
+func.func @level7_wide_low_part(
+    %a: !field.bf<7, poly<0x180000000000000000000000000000087>>) {
   return
 }
 

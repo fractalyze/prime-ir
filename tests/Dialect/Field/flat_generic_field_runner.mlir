@@ -13,14 +13,10 @@
 // limitations under the License.
 // ==============================================================================
 
-// End-to-end numeric test for the generic flat bases — GF(2)[y]/(f) with
-// the modulus carried on the type — through the portable lowering. Covers
-// canonical bases at several widths plus a custom `poly<...>` modulus: the
-// same operand bytes 0x53 * 0xca give 1 in the AES field (an inverse pair)
-// but 0x8f under poly<0x11d>, pinning that the modulus is part of the
-// type's semantics. Expected values computed by
-// tools/derive_tower_flat_basis.py's mul_flat/pow_flat (which the same
-// file proves against the tower reference and the clmad fold schedules).
+// End-to-end numeric test for the generic flat bases (modulus on the type)
+// through the portable lowering; canonical widths plus a custom poly<...>
+// modulus. Expected values from tools/derive_tower_flat_basis.py's
+// mul_flat/pow_flat.
 
 // RUN: prime-ir-opt %s --field-to-llvm \
 // RUN:   | mlir-runner -e main -entry-point-result=void \
@@ -30,6 +26,8 @@
 !F16 = !field.bf<4, flat>  // GF(2^16), y^16 + y^5 + y^3 + y + 1
 !F32 = !field.bf<5, flat>  // GF(2^32), y^32 + y^7 + y^3 + y^2 + 1
 !F64 = !field.bf<6, flat>  // GF(2^64), y^64 + y^4 + y^3 + y + 1
+!F4  = !field.bf<1, flat>  // GF(4), y^2 + y + 1 (2-bit element, i8 carrier)
+!F256 = !field.bf<2, flat> // GF(16), y^4 + y + 1 (4-bit element, i8 carrier)
 !RS8 = !field.bf<3, poly<0x11d>>  // GF(2^8), Reed-Solomon modulus
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
@@ -65,9 +63,7 @@ func.func @test_f32_mul() {
 }
 // CHECK: {{^}}[1903907536]
 
-// square(0x12345678) = 0x9e22a490; printed as the i32 bit pattern
-// (-1641896816 in two's complement is 2653070480 unsigned; extui-free print
-// keeps the signed rendering, so compare the signed value).
+// square(0x12345678) = 0x9e22a490, printed as signed i32 (-1641896816).
 func.func @test_f32_square() {
   %a = field.constant 0x12345678 : !F32
   %c = field.square %a : !F32
@@ -133,6 +129,55 @@ func.func @test_custom_modulus_inverse() {
 }
 // CHECK: {{^}}[1]
 
+// Sub-byte levels: the element is narrower than its i8 carrier, so these are
+// the only cases exercising the input/output junk masks. 2*2 = 3 in GF(4),
+// 0xb*0xd = 6 in GF(16) (the tower basis gives 0xa).
+func.func @test_f4_mul() {
+  %a = field.constant 2 : !F4
+  %c = field.mul %a, %a : !F4
+  %c8 = field.bitcast %c : !F4 -> i8
+  %c32 = arith.extui %c8 : i8 to i32
+  func.call @print_i32(%c32) : (i32) -> ()
+  return
+}
+// CHECK: {{^}}[3]
+
+func.func @test_f16_sub_byte_mul() {
+  %a = field.constant 0xb : !F256
+  %b = field.constant 0xd : !F256
+  %c = field.mul %a, %b : !F256
+  %c8 = field.bitcast %c : !F256 -> i8
+  %c32 = arith.extui %c8 : i8 to i32
+  func.call @print_i32(%c32) : (i32) -> ()
+  return
+}
+// CHECK: {{^}}[6]
+
+// A carrier holding junk above the element width must not change the result:
+// field.bitcast retags without normalizing, so the emitters mask.
+func.func @test_sub_byte_junk_carrier() {
+  %ai = arith.constant 6 : i8
+  %a = field.bitcast %ai : i8 -> !F4
+  %c = field.mul %a, %a : !F4
+  %c8 = field.bitcast %c : !F4 -> i8
+  %c32 = arith.extui %c8 : i8 to i32
+  func.call @print_i32(%c32) : (i32) -> ()
+  return
+}
+// CHECK: {{^}}[3]
+
+// 64-bit inverse drives the 63-step ladder over the two-limb fold.
+func.func @test_f64_inverse_roundtrip() {
+  %a = field.constant 0x123456789abcdef0 : !F64
+  %inv = field.inverse %a : !F64
+  %one = field.mul %a, %inv : !F64
+  %c64 = field.bitcast %one : !F64 -> i64
+  %lo = arith.trunci %c64 : i64 to i32
+  func.call @print_i32(%lo) : (i32) -> ()
+  return
+}
+// CHECK: {{^}}[1]
+
 func.func @main() {
   func.call @test_f16_mul() : () -> ()
   func.call @test_f32_mul() : () -> ()
@@ -141,5 +186,9 @@ func.func @main() {
   func.call @test_f64_mul() : () -> ()
   func.call @test_custom_modulus_mul() : () -> ()
   func.call @test_custom_modulus_inverse() : () -> ()
+  func.call @test_f4_mul() : () -> ()
+  func.call @test_f16_sub_byte_mul() : () -> ()
+  func.call @test_sub_byte_junk_carrier() : () -> ()
+  func.call @test_f64_inverse_roundtrip() : () -> ()
   return
 }

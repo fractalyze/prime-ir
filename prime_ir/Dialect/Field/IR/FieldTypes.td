@@ -176,8 +176,12 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     }]>,
     // Flat with the canonical modulus of the level; tower when !isFlat.
     TypeBuilder<(ins "unsigned":$towerLevel, "bool":$isFlat), [{
+      // Guard the table index: verify() runs after this (and not at all in
+      // NDEBUG), and the C API forwards an unvalidated level.
       return $_get(context, towerLevel, isFlat,
-                   isFlat ? kCanonicalFlatModLow[towerLevel] : uint64_t{0});
+                   isFlat && towerLevel <= kMaxTowerLevel
+                       ? kCanonicalFlatModLow[towerLevel]
+                       : uint64_t{0});
     }]>,
   ];
   let extraClassDeclaration = [{
@@ -237,11 +241,9 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
              getFlatModLow() == kCanonicalFlatModLow[getTowerLevel()];
     }
 
-    /// True for every flat basis the width-parameterized generic lowerings
-    /// handle (they read the modulus off the type) — everything but
-    /// canonical GHASH, whose 128-bit product needs its dedicated
-    /// Karatsuba/reduction emitters. Canonical AES is generic: its
-    /// lowering is exactly the generic path at level 3.
+    /// True for every flat basis but canonical GHASH (whose 128-bit product
+    /// has dedicated emitters); generic lowerings read the modulus off the
+    /// type.
     bool isGenericFlat() const { return getIsFlat() && !isGhash(); }
 
     /// Maximum supported tower level (GF(2¹²⁸)).

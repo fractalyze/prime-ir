@@ -15,11 +15,9 @@
 
 // Test clmad specialization for binary field multiplication.
 //
-// clmad computes a carryless product: canonical flat bases multiply
-// directly (`ghash` 8 clmads, `aes` 3, generic widths 3 or 5), custom
-// `poly<...>` moduli take the same generic path with the modulus read off
-// the type, and every tower level 4..7 converts through the canonical flat
-// basis of its width (TowerFlatBasis.h matrices) around the flat product.
+// clmad computes a carryless product: flat bases multiply directly (ghash 8
+// clmads, generic 3 or 5), and tower levels 4..7 convert through the
+// canonical flat basis of their width (TowerFlatBasis.h) around it.
 
 // RUN: prime-ir-opt --specialize-binary-field-to-nvptx %s | FileCheck %s --check-prefix=CHECK-CLMAD
 
@@ -131,6 +129,7 @@ func.func @test_bf64_mul(%a: !BF64, %b: !BF64) -> !BF64 {
 // CHECK-CLMAD-NOT: arith.select
 // CHECK-OFF-LABEL: @test_f64_mul
 // CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
 func.func @test_f64_mul(%a: !F64, %b: !F64) -> !F64 {
   %c = field.mul %a, %b : !F64
   return %c : !F64
@@ -142,6 +141,7 @@ func.func @test_f64_mul(%a: !F64, %b: !F64) -> !F64 {
 // CHECK-CLMAD-COUNT-3: llvm.inline_asm{{.*}}clmad.lo{{.*}}u64
 // CHECK-OFF-LABEL: @test_custom_poly_mul
 // CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
 func.func @test_custom_poly_mul(%a: !RS8, %b: !RS8) -> !RS8 {
   %c = field.mul %a, %b : !RS8
   return %c : !RS8

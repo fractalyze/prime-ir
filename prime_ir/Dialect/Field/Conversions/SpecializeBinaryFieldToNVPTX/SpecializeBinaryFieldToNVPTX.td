@@ -34,7 +34,7 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
     type), and 64-bit flat a 5-clmad two-limb product. Tower multiplies at
     levels 4..7 convert through the canonical flat basis of their width
     (matrices in `TowerFlatBasis.h`) around that same flat product —
-    native flat values skip the conversion entirely, the target for
+    native flat values skip the conversion entirely — the target for
     emitters that hoist the basis change out of a kernel. Operations not
     specialized fall through to the portable software carryless multiply
     in `binary-field-to-arith`.
