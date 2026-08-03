@@ -94,3 +94,27 @@ func.func @tensor2d_aes_mul(%a: tensor<2x3x!AES>, %b: tensor<2x3x!AES>) -> tenso
   %c = field.mul %a, %b : tensor<2x3x!AES>
   return %c : tensor<2x3x!AES>
 }
+
+// A static zero-element tensor unrolls to an empty `tensor.from_elements` (no
+// lanes -> no clmad) rather than being rejected: rejecting it would leave an
+// un-lowerable `field.mul` on the empty tensor, which the CHECK-PIPELINE run
+// (--binary-field-to-arith) above would fail to legalize. Both flat bases.
+// CHECK-CLMAD-LABEL: @tensor_aes_mul_empty
+// CHECK-CLMAD: tensor.from_elements
+// CHECK-CLMAD-NOT: clmad
+// CHECK-OFF-LABEL: @tensor_aes_mul_empty
+// CHECK-OFF: field.mul
+func.func @tensor_aes_mul_empty(%a: tensor<0x!AES>, %b: tensor<0x!AES>) -> tensor<0x!AES> {
+  %c = field.mul %a, %b : tensor<0x!AES>
+  return %c : tensor<0x!AES>
+}
+
+// CHECK-CLMAD-LABEL: @tensor_ghash_mul_empty
+// CHECK-CLMAD: tensor.from_elements
+// CHECK-CLMAD-NOT: clmad
+// CHECK-OFF-LABEL: @tensor_ghash_mul_empty
+// CHECK-OFF: field.mul
+func.func @tensor_ghash_mul_empty(%a: tensor<0x!GHASH>, %b: tensor<0x!GHASH>) -> tensor<0x!GHASH> {
+  %c = field.mul %a, %b : tensor<0x!GHASH>
+  return %c : tensor<0x!GHASH>
+}
