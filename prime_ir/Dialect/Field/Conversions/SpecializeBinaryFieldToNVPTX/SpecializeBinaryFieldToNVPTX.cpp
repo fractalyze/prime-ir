@@ -309,51 +309,8 @@ struct ConvertTowerMulToClmad : public OpRewritePattern<MulOp> {
   }
 };
 
-// AES-basis bf<3, aes> multiply via one clmad product. The AES basis is
-// already the flat monomial basis GF(2)[x]/(x⁸ + x⁴ + x³ + x + 1) (0x11B), so
-// -- unlike the tower path -- no toFlat/fromFlat bit-matrix is needed. The 8×8
-// product is 15-bit, so one clmad.lo covers it and two folds finish. Result is
-// byte-identical to BinaryFieldToArith's emitAesMul (the software fallback).
-struct ConvertAesMulToClmad : public OpRewritePattern<MulOp> {
-  using OpRewritePattern<MulOp>::OpRewritePattern;
-
-  LogicalResult matchAndRewrite(MulOp op,
-                                PatternRewriter &rewriter) const override {
-    // getElementTypeOrSelf so a shaped (tensor/vector) aes mul matches too;
-    // replaceFlatFieldMul unrolls it lane by lane.
-    auto bfType = dyn_cast<BinaryFieldType>(
-        getElementTypeOrSelf(op.getResult().getType()));
-    if (!bfType || !bfType.isAes())
-      return failure();
-    Type aesType = bfType;
-
-    auto mulScalar = [aesType](ImplicitLocOpBuilder &b, Value lhs,
-                               Value rhs) -> Value {
-      auto i8Type = b.getI8Type();
-      auto i64Type = b.getI64Type();
-      // Cast aes -> i8; BinaryFieldToArith later reconciles these casts.
-      Value lhs8 =
-          UnrealizedConversionCastOp::create(b, i8Type, lhs).getResult(0);
-      Value rhs8 =
-          UnrealizedConversionCastOp::create(b, i8Type, rhs).getResult(0);
-      // 0x1b = x⁴ + x³ + x + 1, the low half of the AES modulus x⁸ + 0x1b.
-      Value prodFlat64 =
-          mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhs8),
-                       arith::ExtUIOp::create(b, i64Type, rhs8),
-                       /*n=*/8, /*fLow=*/0x1b);
-      Value prod8 = arith::TruncIOp::create(b, i8Type, prodFlat64);
-      return UnrealizedConversionCastOp::create(b, aesType, prod8).getResult(0);
-    };
-    return replaceFlatFieldMul(rewriter, op, op.getLhs(), op.getRhs(),
-                               mulScalar);
-  }
-};
-
-// Generic flat multiply (any modulus, levels 1-6; canonical aes/ghash take
-// their dedicated patterns): the value already lives in a flat basis, so it
-// is the clmad product + folds with no conversion ladders — the shape a
-// consumer gets by hoisting the basis change out of a kernel. The modulus
-// comes off the type, so custom `poly<...>` bases specialize identically.
+// Generic flat multiply (isGenericFlat, levels 1-6): clmad product plus
+// constant-tap folds, modulus read off the type; no conversion ladders.
 struct ConvertFlatGenericMulToClmad : public OpRewritePattern<MulOp> {
   using OpRewritePattern<MulOp>::OpRewritePattern;
 
@@ -418,7 +375,7 @@ struct SpecializeBinaryFieldToNVPTX
     RewritePatternSet patterns(context);
     if (useClmad) {
       patterns.add<ConvertGhashMulToClmad, ConvertTowerMulToClmad,
-                   ConvertAesMulToClmad, ConvertFlatGenericMulToClmad>(context);
+                   ConvertFlatGenericMulToClmad>(context);
     }
 
     // Greedy rewriting (not partial conversion) so unmatched field.mul ops

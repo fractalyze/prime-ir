@@ -237,13 +237,12 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
              getFlatModLow() == kCanonicalFlatModLow[getTowerLevel()];
     }
 
-    /// True for a flat basis without a dedicated named lowering — any
-    /// modulus at any level except canonical-aes (3) and canonical-ghash
-    /// (7). Lowered by the width-parameterized generic emitters, which read
-    /// the modulus off the type.
-    bool isGenericFlat() const {
-      return getIsFlat() && !isAes() && !isGhash();
-    }
+    /// True for every flat basis the width-parameterized generic lowerings
+    /// handle (they read the modulus off the type) — everything but
+    /// canonical GHASH, whose 128-bit product needs its dedicated
+    /// Karatsuba/reduction emitters. Canonical AES is generic: its
+    /// lowering is exactly the generic path at level 3.
+    bool isGenericFlat() const { return getIsFlat() && !isGhash(); }
 
     /// Maximum supported tower level (GF(2¹²⁸)).
     static constexpr unsigned kMaxTowerLevel = 7;
