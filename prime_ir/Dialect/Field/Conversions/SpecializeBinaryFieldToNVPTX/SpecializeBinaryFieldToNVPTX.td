@@ -33,9 +33,18 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
     specialize: a carryless product does not compute a tower product
     directly, so they convert through the isomorphic flat polynomial basis
     (constants in `TowerFlatBasis.h`), multiply with one `clmad.lo.u64`
-    plus a low-weight reduction, and convert back. Operations not
-    specialized fall through to the portable software carryless multiply
+    plus a low-weight reduction, and convert back. The flat `bf<3, aes>`
+    (GF(2⁸)) multiply specializes too, with no basis conversion. Operations
+    not specialized fall through to the portable software carryless multiply
     in `binary-field-to-arith`.
+
+    The flat-basis multiplies (`bf<7, ghash>`, `bf<3, aes>`) also handle
+    shaped (tensor/vector) operands: since `clmad` is scalar inline asm, a
+    shaped `field.mul` is unrolled lane by lane into scalar clmad ladders
+    reassembled with `tensor.from_elements`/`vector.from_elements`. This is
+    what makes the batched gf8 additive-NTT butterfly multiply (flock
+    zerocheck) emit `clmad` rather than the software shift-XOR fallback.
+    Tower multiplies stay scalar-only.
 
     This pass must run BEFORE `binary-field-to-arith`. On the GPU codegen path
     it is inserted directly ahead of `createBinaryFieldToArith` — the GPU
@@ -49,6 +58,8 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
   let dependentDialects = [
     "arith::ArithDialect",
     "LLVM::LLVMDialect",
+    "tensor::TensorDialect",
+    "vector::VectorDialect",
   ];
 
   let options = [

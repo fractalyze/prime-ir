@@ -17,8 +17,11 @@ limitations under the License.
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
@@ -165,6 +168,79 @@ Value mulFlatClmad(ImplicitLocOpBuilder &b, Value a64, Value b64, unsigned n,
 }
 
 //===----------------------------------------------------------------------===//
+// Scalar-or-shaped elementwise driver
+//===----------------------------------------------------------------------===//
+
+// Extract the scalar field element at row-major linear index `linear` from a
+// static-shaped tensor/vector value. Delinearizes `linear` against the shape
+// so any rank works (tensor.extract wants per-dim `index` operands, while
+// vector.extract wants a static position array).
+Value extractElement(ImplicitLocOpBuilder &b, Value shapedVal, int64_t linear,
+                     ShapedType shapedType) {
+  ArrayRef<int64_t> shape = shapedType.getShape();
+  SmallVector<int64_t> multiIndex(shape.size());
+  int64_t rem = linear;
+  for (int d = static_cast<int>(shape.size()) - 1; d >= 0; --d) {
+    multiIndex[d] = rem % shape[d];
+    rem /= shape[d];
+  }
+
+  if (isa<VectorType>(shapedType))
+    return vector::ExtractOp::create(b, shapedVal, multiIndex);
+
+  SmallVector<Value> indices;
+  indices.reserve(multiIndex.size());
+  for (int64_t idx : multiIndex)
+    indices.push_back(arith::ConstantIndexOp::create(b, idx));
+  return tensor::ExtractOp::create(b, shapedVal, indices);
+}
+
+// Reassemble `elements` (row-major) into a value of the shaped `resultType`.
+Value buildFromElements(ImplicitLocOpBuilder &b, Type resultType,
+                        ValueRange elements) {
+  if (isa<VectorType>(resultType))
+    return vector::FromElementsOp::create(b, resultType, elements);
+  return tensor::FromElementsOp::create(b, resultType, elements);
+}
+
+// Replace a flat-basis `field.mul` with `mulScalar` applied per element.
+// `mulScalar` lowers one scalar field multiply (the clmad ladder). clmad is
+// scalar inline asm, so a shaped mul is unrolled lane by lane
+// (extract -> scalar clmad ladder -> from_elements); the field-typed
+// tensor/vector scaffolding is then converted to its integer storage form by
+// binary-field-to-arith downstream (its ConvertAny handles the extract/
+// from_elements, and the unrealized casts collapse to no-ops). Only static
+// shapes can be unrolled; dynamic ones fail to match so they fall through to
+// the portable elementwise software lowering — the same correct-but-slow path
+// as before.
+LogicalResult replaceFlatFieldMul(
+    MulOp op, PatternRewriter &rewriter,
+    llvm::function_ref<Value(ImplicitLocOpBuilder &, Value, Value)> mulScalar) {
+  ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+  Type resultType = op.getResult().getType();
+
+  auto shapedType = dyn_cast<ShapedType>(resultType);
+  if (!shapedType) {
+    rewriter.replaceOp(op, mulScalar(b, op.getLhs(), op.getRhs()));
+    return success();
+  }
+
+  if (!shapedType.hasStaticShape() || shapedType.getNumElements() == 0)
+    return failure();
+
+  int64_t numElements = shapedType.getNumElements();
+  SmallVector<Value> results;
+  results.reserve(numElements);
+  for (int64_t i = 0; i < numElements; ++i) {
+    Value lhs = extractElement(b, op.getLhs(), i, shapedType);
+    Value rhs = extractElement(b, op.getRhs(), i, shapedType);
+    results.push_back(mulScalar(b, lhs, rhs));
+  }
+  rewriter.replaceOp(op, buildFromElements(b, resultType, results));
+  return success();
+}
+
+//===----------------------------------------------------------------------===//
 // Conversion Patterns
 //===----------------------------------------------------------------------===//
 
@@ -177,27 +253,27 @@ struct ConvertGhashMulToClmad : public OpRewritePattern<MulOp> {
 
   LogicalResult matchAndRewrite(MulOp op,
                                 PatternRewriter &rewriter) const override {
-    Type ghashType = op.getResult().getType();
-    auto bfType = dyn_cast<BinaryFieldType>(ghashType);
+    // getElementTypeOrSelf so a shaped (tensor/vector) ghash mul matches too;
+    // replaceFlatFieldMul unrolls it lane by lane.
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
     if (!bfType || !bfType.isGhash())
       return failure();
+    Type ghashType = bfType;
 
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    auto i128Type = b.getIntegerType(128);
-
-    // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
-    Value lhsI128 = UnrealizedConversionCastOp::create(b, i128Type, op.getLhs())
-                        .getResult(0);
-    Value rhsI128 = UnrealizedConversionCastOp::create(b, i128Type, op.getRhs())
-                        .getResult(0);
-
-    Value resultI128 = mulGhashClmad(b, lhsI128, rhsI128);
-
-    Value resultGhash =
-        UnrealizedConversionCastOp::create(b, ghashType, resultI128)
-            .getResult(0);
-    rewriter.replaceOp(op, resultGhash);
-    return success();
+    auto mulScalar = [ghashType](ImplicitLocOpBuilder &b, Value lhs,
+                                 Value rhs) -> Value {
+      auto i128Type = b.getIntegerType(128);
+      // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
+      Value lhsI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, lhs).getResult(0);
+      Value rhsI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, rhs).getResult(0);
+      Value resultI128 = mulGhashClmad(b, lhsI128, rhsI128);
+      return UnrealizedConversionCastOp::create(b, ghashType, resultI128)
+          .getResult(0);
+    };
+    return replaceFlatFieldMul(op, rewriter, mulScalar);
   }
 };
 
@@ -259,31 +335,32 @@ struct ConvertAesMulToClmad : public OpRewritePattern<MulOp> {
 
   LogicalResult matchAndRewrite(MulOp op,
                                 PatternRewriter &rewriter) const override {
-    Type aesType = op.getResult().getType();
-    auto bfType = dyn_cast<BinaryFieldType>(aesType);
+    // getElementTypeOrSelf so a shaped (tensor/vector) aes mul matches too;
+    // replaceFlatFieldMul unrolls it lane by lane.
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
     if (!bfType || !bfType.isAes())
       return failure();
+    Type aesType = bfType;
 
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    auto i8Type = b.getI8Type();
-    auto i64Type = b.getI64Type();
-
-    // Cast aes -> i8; BinaryFieldToArith later reconciles these casts.
-    Value lhs8 =
-        UnrealizedConversionCastOp::create(b, i8Type, op.getLhs()).getResult(0);
-    Value rhs8 =
-        UnrealizedConversionCastOp::create(b, i8Type, op.getRhs()).getResult(0);
-
-    // 0x1b = x⁴ + x³ + x + 1, the low half of the AES modulus x⁸ + 0x1b.
-    Value prodFlat64 = mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhs8),
-                                    arith::ExtUIOp::create(b, i64Type, rhs8),
-                                    /*n=*/8, /*fLow=*/0x1b);
-    Value prod8 = arith::TruncIOp::create(b, i8Type, prodFlat64);
-
-    Value resultAes =
-        UnrealizedConversionCastOp::create(b, aesType, prod8).getResult(0);
-    rewriter.replaceOp(op, resultAes);
-    return success();
+    auto mulScalar = [aesType](ImplicitLocOpBuilder &b, Value lhs,
+                               Value rhs) -> Value {
+      auto i8Type = b.getI8Type();
+      auto i64Type = b.getI64Type();
+      // Cast aes -> i8; BinaryFieldToArith later reconciles these casts.
+      Value lhs8 =
+          UnrealizedConversionCastOp::create(b, i8Type, lhs).getResult(0);
+      Value rhs8 =
+          UnrealizedConversionCastOp::create(b, i8Type, rhs).getResult(0);
+      // 0x1b = x⁴ + x³ + x + 1, the low half of the AES modulus x⁸ + 0x1b.
+      Value prodFlat64 =
+          mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhs8),
+                       arith::ExtUIOp::create(b, i64Type, rhs8),
+                       /*n=*/8, /*fLow=*/0x1b);
+      Value prod8 = arith::TruncIOp::create(b, i8Type, prodFlat64);
+      return UnrealizedConversionCastOp::create(b, aesType, prod8).getResult(0);
+    };
+    return replaceFlatFieldMul(op, rewriter, mulScalar);
   }
 };
 
