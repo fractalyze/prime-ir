@@ -23,9 +23,33 @@ include "mlir/Pass/PassBase.td"
 def SpecializeArithToAVX : Pass<"specialize-arith-to-avx", "ModuleOp"> {
   let summary = "Specialize some `arith` ops to assembly";
   let description = [{
-    This pass specializes some `arith` ops to assembly.
+    This pass specializes some `arith` ops on `vector<16xi32>` to dual-lane
+    (even/odd) sequences. The `flavor` option selects the target ISA:
+
+    - `avx512` (default): 512-bit zmm inline asm using opmask-merged
+      `vmovsldup`/`vmovshdup` interleaves. Requires AVX-512F at runtime.
+    - `avx2`: the same dual-lane dataflow expressed as target-independent IR
+      that legalizes to 2x ymm on AVX2-only targets: extended products are
+      emitted as the masked 64-bit multiply idiom X86 selects to
+      `vpmuludq`/`vpmuldq`, and interleaves as `vector.shuffle`.
+
+    The caller is responsible for matching the flavor to the JIT/AOT target
+    features; the pass itself does not inspect the host CPU.
   }];
+  let options = [
+    Option<"flavor", "flavor", "mlir::prime_ir::arith_ext::AVXFlavor",
+           /*default=*/"mlir::prime_ir::arith_ext::AVXFlavor::kAVX512",
+           "Instruction-set flavor to specialize for",
+           [{::llvm::cl::values(
+             clEnumValN(mlir::prime_ir::arith_ext::AVXFlavor::kAVX512,
+                        "avx512",
+                        "512-bit zmm inline asm with opmask interleaves"),
+             clEnumValN(mlir::prime_ir::arith_ext::AVXFlavor::kAVX2, "avx2",
+                        "2x 256-bit ymm via pmuludq idiom and shuffles")
+           )}]>
+  ];
   let dependentDialects = [
+    "arith::ArithDialect",
     "LLVM::LLVMDialect",
     "vector::VectorDialect",
   ];

@@ -231,11 +231,214 @@ extractEvenOdd(ImplicitLocOpBuilder &b, Value value,
   return std::nullopt;
 }
 
+//===----------------------------------------------------------------------===//
+// AVX2 (2x ymm) helpers
+//===----------------------------------------------------------------------===//
+//
+// On AVX2, vector<16xi32> occupies two ymm registers and there are no opmask
+// registers, so the zmm inline asm above is not encodable. The same dual-lane
+// dataflow is expressed as target-independent IR instead:
+// - Extended products use the masked 64-bit multiply idiom that the X86
+//   backend selects to vpmuludq/vpmuldq (combineMulToPMULDQ; the
+//   llvm.x86.*.pmul[u].dq intrinsics were removed in LLVM 7 in favor of this
+//   form, which is also what clang emits for _mm256_mul_ep[iu]32).
+// - Low/high interleaves are vector.shuffle ops; LLVM lowers each to a short
+//   ymm sequence (e.g. vmovs[lh]dup + vpblendd) per half.
+// - Adds/subs on dual-lane values stay as plain integer ops; they legalize
+//   to vpaddd/vpsubd ymm pairs without help.
+// Keeping the ops transparent (no asm) lets LLVM schedule them freely.
+//
+// The arithmetic is emitted in the LLVM dialect rather than arith: the
+// conversion target only marks the LLVM and vector dialects legal, and ops
+// created by a conversion pattern must be legal or the whole rewrite is
+// rolled back. (arith.addi on vector<16xi32> also could not be marked legal
+// without disabling the dual-lane chain pattern that matches that very form.)
+
+// vector.shuffle masks implementing the interleaves documented on
+// gatherLowsInterleaved/gatherHighsInterleaved above, as 2-input shuffles of
+// (even, odd).
+inline constexpr int64_t kGatherLowsMask[16] = {0, 16, 2,  18, 4,  20, 6,  22,
+                                                8, 24, 10, 26, 12, 28, 14, 30};
+inline constexpr int64_t kGatherHighsMask[16] = {1, 17, 3,  19, 5,  21, 7,  23,
+                                                 9, 25, 11, 27, 13, 29, 15, 31};
+
+// Multiplies the even 32-bit lanes of the given vector<16xi32> operands into
+// 64-bit products, like mulExtendedByOddEven, but as the pmuludq/pmuldq IR
+// idiom instead of zmm inline asm.
+std::pair<Value, Value> mulExtendedByOddEvenAVX2(ImplicitLocOpBuilder &b,
+                                                 Value lhsEven, Value lhsOdd,
+                                                 Value rhsEven, Value rhsOdd,
+                                                 bool isSigned = false) {
+  auto vecI32Type = VectorType::get(16, b.getI32Type());
+  auto vecI64Type = VectorType::get(8, b.getI64Type());
+
+  // Reinterprets the vector as vector<8xi64> and extends each even i32 lane
+  // (the low half of every i64 lane) to the full 64 bits.
+  auto extendEvenLanes = [&](Value vec) -> Value {
+    Value vec64 = vector::BitCastOp::create(b, vecI64Type, vec);
+    if (isSigned) {
+      // sext_inreg as shifts; matched to vpmuldq.
+      Value c32 = LLVM::ConstantOp::create(
+          b, vecI64Type,
+          DenseElementsAttr::get(vecI64Type, b.getI64IntegerAttr(32)));
+      Value shifted = LLVM::ShlOp::create(b, vec64, c32);
+      return LLVM::AShrOp::create(b, shifted, c32);
+    }
+    // Zero-extend by masking; matched to vpmuludq.
+    Value mask = LLVM::ConstantOp::create(
+        b, vecI64Type,
+        DenseElementsAttr::get(vecI64Type, b.getI64IntegerAttr(0xFFFFFFFF)));
+    return LLVM::AndOp::create(b, vec64, mask);
+  };
+
+  Value prodEven64 = LLVM::MulOp::create(b, extendEvenLanes(lhsEven),
+                                         extendEvenLanes(rhsEven));
+  Value prodOdd64 =
+      LLVM::MulOp::create(b, extendEvenLanes(lhsOdd), extendEvenLanes(rhsOdd));
+
+  // cast them to vector<16xi32> so even lanes are the low parts and odd
+  // lanes are the high parts
+  auto prodEven32 = vector::BitCastOp::create(b, vecI32Type, prodEven64);
+  auto prodOdd32 = vector::BitCastOp::create(b, vecI32Type, prodOdd64);
+  return {prodEven32, prodOdd32};
+}
+
+// Shuffle-based equivalent of gatherLowsInterleaved.
+Value gatherLowsInterleavedAVX2(ImplicitLocOpBuilder &b, Value even,
+                                Value odd) {
+  auto vecI32Type = VectorType::get(16, b.getI32Type());
+  return vector::ShuffleOp::create(b, vecI32Type, even, odd,
+                                   b.getDenseI64ArrayAttr(kGatherLowsMask));
+}
+
+inline bool isGatherLowsResultAVX2(Value value) {
+  auto shuffleOp = value.getDefiningOp<vector::ShuffleOp>();
+  return shuffleOp && shuffleOp.getMask() == ArrayRef<int64_t>(kGatherLowsMask);
+}
+
+// Shuffle-based equivalent of gatherHighsInterleaved.
+Value gatherHighsInterleavedAVX2(ImplicitLocOpBuilder &b, Value even,
+                                 Value odd) {
+  auto vecI32Type = VectorType::get(16, b.getI32Type());
+  return vector::ShuffleOp::create(b, vecI32Type, even, odd,
+                                   b.getDenseI64ArrayAttr(kGatherHighsMask));
+}
+
+inline bool isGatherHighsResultAVX2(Value value) {
+  auto shuffleOp = value.getDefiningOp<vector::ShuffleOp>();
+  return shuffleOp &&
+         shuffleOp.getMask() == ArrayRef<int64_t>(kGatherHighsMask);
+}
+
+// Shuffle-based equivalent of extractEvenOdd.
+std::optional<std::pair<Value, Value>>
+extractEvenOddAVX2(ImplicitLocOpBuilder &b, Value value,
+                   bool duplicateForHighs = false,
+                   bool duplicateForDefault = true) {
+  if (isGatherLowsResultAVX2(value)) {
+    auto shuffleOp = value.getDefiningOp<vector::ShuffleOp>();
+    return {{shuffleOp.getV1(), shuffleOp.getV2()}};
+  }
+  if (isGatherHighsResultAVX2(value)) {
+    auto shuffleOp = value.getDefiningOp<vector::ShuffleOp>();
+    Value even = shuffleOp.getV1();
+    Value odd = shuffleOp.getV2();
+    if (duplicateForHighs) {
+      even = duplicateOddLanesToEven(b, even);
+      odd = duplicateOddLanesToEven(b, odd);
+    }
+    return {{even, odd}};
+  }
+  if (isConstantSplat(value)) {
+    return {{value, value}};
+  }
+  // Default case
+  if (duplicateForDefault) {
+    return {{value, duplicateOddLanesToEven(b, value)}};
+  }
+  return std::nullopt;
+}
+
+//===----------------------------------------------------------------------===//
+// Flavor traits
+//===----------------------------------------------------------------------===//
+
+// Dispatch tables between the AVX-512 and AVX2 lowerings of the dual-lane
+// building blocks. The conversion patterns below are templated over these.
+struct Avx512Flavor {
+  static bool matchGatherLows(Value value) { return isGatherLowsResult(value); }
+  static bool matchGatherHighs(Value value) {
+    return isGatherHighsResult(value);
+  }
+  static Value emitGatherLows(ImplicitLocOpBuilder &b, Value even, Value odd) {
+    return gatherLowsInterleaved(b, even, odd);
+  }
+  static Value emitGatherHighs(ImplicitLocOpBuilder &b, Value even, Value odd) {
+    return gatherHighsInterleaved(b, even, odd);
+  }
+  static std::optional<std::pair<Value, Value>>
+  splitEvenOdd(ImplicitLocOpBuilder &b, Value value, bool duplicateForHighs,
+               bool duplicateForDefault) {
+    return extractEvenOdd(b, value, duplicateForHighs, duplicateForDefault);
+  }
+  static std::pair<Value, Value> emitMulExtended(ImplicitLocOpBuilder &b,
+                                                 Value lhsEven, Value lhsOdd,
+                                                 Value rhsEven, Value rhsOdd,
+                                                 bool isSigned) {
+    return mulExtendedByOddEven(b, lhsEven, lhsOdd, rhsEven, rhsOdd, isSigned);
+  }
+  template <typename OpType>
+  static std::pair<Value, Value> emitAddSub(ImplicitLocOpBuilder &b,
+                                            Value lhsEven, Value lhsOdd,
+                                            Value rhsEven, Value rhsOdd) {
+    return addSubByOddEven<OpType>(b, lhsEven, lhsOdd, rhsEven, rhsOdd);
+  }
+};
+
+struct Avx2Flavor {
+  static bool matchGatherLows(Value value) {
+    return isGatherLowsResultAVX2(value);
+  }
+  static bool matchGatherHighs(Value value) {
+    return isGatherHighsResultAVX2(value);
+  }
+  static Value emitGatherLows(ImplicitLocOpBuilder &b, Value even, Value odd) {
+    return gatherLowsInterleavedAVX2(b, even, odd);
+  }
+  static Value emitGatherHighs(ImplicitLocOpBuilder &b, Value even, Value odd) {
+    return gatherHighsInterleavedAVX2(b, even, odd);
+  }
+  static std::optional<std::pair<Value, Value>>
+  splitEvenOdd(ImplicitLocOpBuilder &b, Value value, bool duplicateForHighs,
+               bool duplicateForDefault) {
+    return extractEvenOddAVX2(b, value, duplicateForHighs, duplicateForDefault);
+  }
+  static std::pair<Value, Value> emitMulExtended(ImplicitLocOpBuilder &b,
+                                                 Value lhsEven, Value lhsOdd,
+                                                 Value rhsEven, Value rhsOdd,
+                                                 bool isSigned) {
+    return mulExtendedByOddEvenAVX2(b, lhsEven, lhsOdd, rhsEven, rhsOdd,
+                                    isSigned);
+  }
+  // Adds/subs on dual-lane values need no special instruction on AVX2;
+  // vector<16xi32> integer add/sub legalizes to vpaddd/vpsubd ymm pairs.
+  template <typename OpType>
+  static std::pair<Value, Value> emitAddSub(ImplicitLocOpBuilder &b,
+                                            Value lhsEven, Value lhsOdd,
+                                            Value rhsEven, Value rhsOdd) {
+    using LLVMOp = std::conditional_t<std::is_same_v<OpType, arith::AddIOp>,
+                                      LLVM::AddOp, LLVM::SubOp>;
+    Value resEven = LLVMOp::create(b, lhsEven, rhsEven);
+    Value resOdd = LLVMOp::create(b, lhsOdd, rhsOdd);
+    return {resEven, resOdd};
+  }
+};
+
 } // namespace
 
-template <typename OpType>
-struct SpecializeAddSubIOpToAVX512 : public OpConversionPattern<OpType> {
-  explicit SpecializeAddSubIOpToAVX512(MLIRContext *context)
+template <typename OpType, typename Flavor>
+struct SpecializeAddSubIOp : public OpConversionPattern<OpType> {
+  explicit SpecializeAddSubIOp(MLIRContext *context)
       : OpConversionPattern<OpType>(context) {}
 
   using OpConversionPattern<OpType>::OpConversionPattern;
@@ -274,12 +477,12 @@ struct SpecializeAddSubIOpToAVX512 : public OpConversionPattern<OpType> {
           }
         }
 
-        bool isLhsLow = isGatherLowsResult(adaptor.getLhs());
-        bool isLhsHigh = isGatherHighsResult(adaptor.getLhs());
+        bool isLhsLow = Flavor::matchGatherLows(adaptor.getLhs());
+        bool isLhsHigh = Flavor::matchGatherHighs(adaptor.getLhs());
         // In the case of SubIOp, LHS can be a constant.
         bool isLhsConst = isConstantSplat(adaptor.getLhs());
-        bool isRhsLow = isGatherLowsResult(adaptor.getRhs());
-        bool isRhsHigh = isGatherHighsResult(adaptor.getRhs());
+        bool isRhsLow = Flavor::matchGatherLows(adaptor.getRhs());
+        bool isRhsHigh = Flavor::matchGatherHighs(adaptor.getRhs());
         bool isRhsConst = isConstantSplat(adaptor.getRhs());
 
         bool onLowPath = (isLhsLow || isLhsConst) && (isRhsLow || isRhsConst);
@@ -292,22 +495,23 @@ struct SpecializeAddSubIOpToAVX512 : public OpConversionPattern<OpType> {
         }
 
         auto [lhsEven, lhsOdd] =
-            extractEvenOdd(b, adaptor.getLhs(), false, false).value();
+            Flavor::splitEvenOdd(b, adaptor.getLhs(), false, false).value();
         auto [rhsEven, rhsOdd] =
-            extractEvenOdd(b, adaptor.getRhs(), false, false).value();
+            Flavor::splitEvenOdd(b, adaptor.getRhs(), false, false).value();
 
-        auto [resultEven32, resultOdd32] =
-            addSubByOddEven<OpType>(b, lhsEven, lhsOdd, rhsEven, rhsOdd);
+        auto [resultEven32, resultOdd32] = Flavor::template emitAddSub<OpType>(
+            b, lhsEven, lhsOdd, rhsEven, rhsOdd);
 
         if (onLowPath) {
-          Value gatherLow = gatherLowsInterleaved(b, resultEven32, resultOdd32);
+          Value gatherLow =
+              Flavor::emitGatherLows(b, resultEven32, resultOdd32);
           rewriter.replaceOp(op, {gatherLow});
           return success();
         }
 
         if (onHighPath) {
           Value gatherHigh =
-              gatherHighsInterleaved(b, resultEven32, resultOdd32);
+              Flavor::emitGatherHighs(b, resultEven32, resultOdd32);
           rewriter.replaceOp(op, {gatherHigh});
           return success();
         }
@@ -319,12 +523,16 @@ struct SpecializeAddSubIOpToAVX512 : public OpConversionPattern<OpType> {
   }
 };
 
-using SpecializeAddIOpToAVX512 = SpecializeAddSubIOpToAVX512<arith::AddIOp>;
-using SpecializeSubIOpToAVX512 = SpecializeAddSubIOpToAVX512<arith::SubIOp>;
+using SpecializeAddIOpToAVX512 =
+    SpecializeAddSubIOp<arith::AddIOp, Avx512Flavor>;
+using SpecializeSubIOpToAVX512 =
+    SpecializeAddSubIOp<arith::SubIOp, Avx512Flavor>;
+using SpecializeAddIOpToAVX2 = SpecializeAddSubIOp<arith::AddIOp, Avx2Flavor>;
+using SpecializeSubIOpToAVX2 = SpecializeAddSubIOp<arith::SubIOp, Avx2Flavor>;
 
-template <typename OpType>
-struct SpecializeMulIOpToAVX512Impl : public OpConversionPattern<OpType> {
-  explicit SpecializeMulIOpToAVX512Impl(MLIRContext *context)
+template <typename OpType, typename Flavor>
+struct SpecializeMulIOpImpl : public OpConversionPattern<OpType> {
+  explicit SpecializeMulIOpImpl(MLIRContext *context)
       : OpConversionPattern<OpType>(context) {}
 
   using OpConversionPattern<OpType>::OpConversionPattern;
@@ -340,25 +548,20 @@ struct SpecializeMulIOpToAVX512Impl : public OpConversionPattern<OpType> {
         ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
         auto [lhsEven, lhsOdd] =
-            *extractEvenOdd(b, adaptor.getLhs(), true, true);
+            *Flavor::splitEvenOdd(b, adaptor.getLhs(), true, true);
         auto [rhsEven, rhsOdd] =
-            *extractEvenOdd(b, adaptor.getRhs(), true, true);
+            *Flavor::splitEvenOdd(b, adaptor.getRhs(), true, true);
 
-        Value prodEven32, prodOdd32;
-        if constexpr (std::is_same_v<OpType, arith::MulSIExtendedOp>) {
-          std::tie(prodEven32, prodOdd32) =
-              mulExtendedByOddEven(b, lhsEven, lhsOdd, rhsEven, rhsOdd, true);
-        } else {
-          std::tie(prodEven32, prodOdd32) =
-              mulExtendedByOddEven(b, lhsEven, lhsOdd, rhsEven, rhsOdd);
-        }
+        bool isSigned = std::is_same_v<OpType, arith::MulSIExtendedOp>;
+        auto [prodEven32, prodOdd32] = Flavor::emitMulExtended(
+            b, lhsEven, lhsOdd, rhsEven, rhsOdd, isSigned);
 
         if constexpr (std::is_same_v<OpType, arith::MulIOp>) {
-          Value prodLow = gatherLowsInterleaved(b, prodEven32, prodOdd32);
+          Value prodLow = Flavor::emitGatherLows(b, prodEven32, prodOdd32);
           rewriter.replaceOp(op, prodLow);
         } else {
-          Value prodLow = gatherLowsInterleaved(b, prodEven32, prodOdd32);
-          Value prodHi = gatherHighsInterleaved(b, prodEven32, prodOdd32);
+          Value prodLow = Flavor::emitGatherLows(b, prodEven32, prodOdd32);
+          Value prodHi = Flavor::emitGatherHighs(b, prodEven32, prodOdd32);
           rewriter.replaceOp(op, {prodLow, prodHi});
         }
         return success();
@@ -369,10 +572,16 @@ struct SpecializeMulIOpToAVX512Impl : public OpConversionPattern<OpType> {
 };
 
 using SpecializeMulUIExtendedToAVX512 =
-    SpecializeMulIOpToAVX512Impl<arith::MulUIExtendedOp>;
+    SpecializeMulIOpImpl<arith::MulUIExtendedOp, Avx512Flavor>;
 using SpecializeMulSIExtendedToAVX512 =
-    SpecializeMulIOpToAVX512Impl<arith::MulSIExtendedOp>;
-using SpecializeMulIOpToAVX512 = SpecializeMulIOpToAVX512Impl<arith::MulIOp>;
+    SpecializeMulIOpImpl<arith::MulSIExtendedOp, Avx512Flavor>;
+using SpecializeMulIOpToAVX512 =
+    SpecializeMulIOpImpl<arith::MulIOp, Avx512Flavor>;
+using SpecializeMulUIExtendedToAVX2 =
+    SpecializeMulIOpImpl<arith::MulUIExtendedOp, Avx2Flavor>;
+using SpecializeMulSIExtendedToAVX2 =
+    SpecializeMulIOpImpl<arith::MulSIExtendedOp, Avx2Flavor>;
+using SpecializeMulIOpToAVX2 = SpecializeMulIOpImpl<arith::MulIOp, Avx2Flavor>;
 
 namespace {
 #include "prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.cpp.inc"
@@ -395,15 +604,30 @@ void SpecializeArithToAVX::runOnOperation() {
 
   RewritePatternSet patterns(context);
   populateWithGenerated(patterns);
-  patterns.add<
-      // clang-format off
-      SpecializeAddIOpToAVX512,
-      SpecializeMulIOpToAVX512,
-      SpecializeMulSIExtendedToAVX512,
-      SpecializeMulUIExtendedToAVX512,
-      SpecializeSubIOpToAVX512
-      // clang-format on
-      >(context);
+  switch (flavor) {
+  case AVXFlavor::kAVX512:
+    patterns.add<
+        // clang-format off
+        SpecializeAddIOpToAVX512,
+        SpecializeMulIOpToAVX512,
+        SpecializeMulSIExtendedToAVX512,
+        SpecializeMulUIExtendedToAVX512,
+        SpecializeSubIOpToAVX512
+        // clang-format on
+        >(context);
+    break;
+  case AVXFlavor::kAVX2:
+    patterns.add<
+        // clang-format off
+        SpecializeAddIOpToAVX2,
+        SpecializeMulIOpToAVX2,
+        SpecializeMulSIExtendedToAVX2,
+        SpecializeMulUIExtendedToAVX2,
+        SpecializeSubIOpToAVX2
+        // clang-format on
+        >(context);
+    break;
+  }
   if (failed(applyPartialConversion(module, target, std::move(patterns)))) {
     signalPassFailure();
   }

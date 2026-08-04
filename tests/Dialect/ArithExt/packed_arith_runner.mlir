@@ -20,6 +20,15 @@
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s < %t
 
+// RUN: prime-ir-opt %s -specialize-arith-to-avx=flavor=avx2 \
+// RUN:   | FileCheck %s --check-prefix=CHECK-AVX2
+
+// The AVX2 flavor must produce bit-identical results (same CHECK lines).
+// RUN: prime-ir-opt %s -specialize-arith-to-avx=flavor=avx2 -convert-to-llvm \
+// RUN:   | mlir-runner -e main -entry-point-result=void \
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t.avx2
+// RUN: FileCheck %s < %t.avx2
+
 
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
@@ -28,6 +37,10 @@ func.func @packed_mului_extended() {
   %b = arith.constant dense<[1,10,100,1000,10000,100000,100000,10000000,1,10,100,1000,10000,100000,100000,10000000]> : vector<16xi32>
 
   // CHECK-LOWERING-NOT: arith.mului_extended
+  // CHECK-AVX2-NOT: arith.mului_extended
+  // CHECK-AVX2: llvm.mul {{.*}} : vector<8xi64>
+  // CHECK-AVX2: vector.shuffle {{.*}} [0, 16, 2, 18, 4, 20, 6, 22, 8, 24, 10, 26, 12, 28, 14, 30] : vector<16xi32>, vector<16xi32>
+  // CHECK-AVX2: vector.shuffle {{.*}} [1, 17, 3, 19, 5, 21, 7, 23, 9, 25, 11, 27, 13, 29, 15, 31] : vector<16xi32>, vector<16xi32>
   %c:2 = arith.mului_extended %a, %b : vector<16xi32>
 
   %mem = memref.alloc() : memref<32xi32>
@@ -46,6 +59,10 @@ func.func @packed_mulsi_extended() {
   %b = arith.constant dense<[1,10,100,1000,10000,100000,100000,10000000,1,10,100,1000,10000,100000,100000,10000000]> : vector<16xi32>
 
   // CHECK-LOWERING-NOT: arith.mulsi_extended
+  // CHECK-AVX2-NOT: arith.mulsi_extended
+  // CHECK-AVX2: llvm.shl {{.*}} : vector<8xi64>
+  // CHECK-AVX2: llvm.ashr {{.*}} : vector<8xi64>
+  // CHECK-AVX2: llvm.mul {{.*}} : vector<8xi64>
   %c:2 = arith.mulsi_extended %a, %b : vector<16xi32>
 
   %mem = memref.alloc() : memref<32xi32>
@@ -65,6 +82,8 @@ func.func @packed_muli() {
   %b = arith.constant dense<[2, 3, 4, 5, 6, 2, 3, 4, 5, 6, 2, 3, 4, 5, 6, 2]> : vector<16xi32>
 
   // CHECK-LOWERING-NOT: arith.muli
+  // CHECK-AVX2-NOT: arith.muli {{.*}} : vector<16xi32>
+  // CHECK-AVX2: llvm.mul {{.*}} : vector<8xi64>
   %c = arith.muli %a, %b : vector<16xi32>
 
   %mem = memref.alloc() : memref<16xi32>
@@ -88,6 +107,8 @@ func.func @packed_addi() {
 
   // Chain addi operations on the low results (gather low path)
   // CHECK-LOWERING-NOT: arith.addi
+  // CHECK-AVX2-NOT: arith.addi
+  // CHECK-AVX2: llvm.add {{.*}} : vector<16xi32>
   %low = arith.addi %mul#0, %mul1#0 : vector<16xi32>
   %high = arith.addi %mul#1, %mul1#1 : vector<16xi32>
 
@@ -116,7 +137,9 @@ func.func @packed_subi() {
   %mul:2 = arith.mului_extended %a, %b : vector<16xi32>
   %mul1:2 = arith.mului_extended %mul#0, %mul#1 : vector<16xi32>
 
-  // CHECK-LOWERING-NOT: arith.addi
+  // CHECK-LOWERING-NOT: arith.subi
+  // CHECK-AVX2-NOT: arith.subi
+  // CHECK-AVX2: llvm.sub {{.*}} : vector<16xi32>
   %low = arith.subi %mul#0, %mul1#0 : vector<16xi32>
   %high = arith.subi %mul#1, %mul1#1 : vector<16xi32>
 

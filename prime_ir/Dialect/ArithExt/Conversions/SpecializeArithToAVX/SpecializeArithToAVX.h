@@ -18,12 +18,20 @@ limitations under the License.
 
 // IWYU pragma: begin_keep
 // Headers needed for SpecializeArithToAVX.h.inc
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/Pass/Pass.h"
 // IWYU pragma: end_keep
 
 namespace mlir::prime_ir::arith_ext {
+
+// Instruction-set flavor emitted by SpecializeArithToAVX. See the pass
+// description in SpecializeArithToAVX.td.
+enum class AVXFlavor {
+  kAVX512 = 0,
+  kAVX2 = 1,
+};
 
 #define GEN_PASS_DECL
 #include "prime_ir/Dialect/ArithExt/Conversions/SpecializeArithToAVX/SpecializeArithToAVX.h.inc"
