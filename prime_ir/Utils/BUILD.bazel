@@ -173,6 +173,17 @@ prime_ir_cc_library(
 )
 
 prime_ir_cc_library(
+    name = "ShapedFieldMul",
+    hdrs = ["ShapedFieldMul.h"],
+    deps = [
+        "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:TensorDialect",
+        "@llvm-project//mlir:VectorDialect",
+    ],
+)
+
+prime_ir_cc_library(
     name = "ShapedTypeConverter",
     srcs = ["ShapedTypeConverter.cpp"],
     hdrs = ["ShapedTypeConverter.h"],

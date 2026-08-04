@@ -46,6 +46,7 @@ def SpecializeBinaryFieldToX86 : Pass<"specialize-binary-field-to-x86", "ModuleO
   let dependentDialects = [
     "arith::ArithDialect",
     "LLVM::LLVMDialect",
+    "tensor::TensorDialect",
     "vector::VectorDialect",
   ];
 

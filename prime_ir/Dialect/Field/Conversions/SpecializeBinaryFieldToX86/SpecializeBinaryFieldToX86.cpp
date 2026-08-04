@@ -17,15 +17,18 @@ limitations under the License.
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h" // IWYU pragma: keep
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/Utils/ShapedFieldMul.h"
 
 namespace mlir::prime_ir::field {
 
@@ -264,32 +267,33 @@ struct ConvertGhashMulToPCLMULQDQ : public OpRewritePattern<MulOp> {
 
   LogicalResult matchAndRewrite(MulOp op,
                                 PatternRewriter &rewriter) const override {
-    Type ghashType = op.getResult().getType();
-    auto bfType = dyn_cast<BinaryFieldType>(ghashType);
+    // getElementTypeOrSelf so a shaped (tensor/vector) ghash mul matches too;
+    // replaceFlatFieldMul unrolls it lane by lane (PCLMULQDQ is scalar-per-lane
+    // here, unlike the GFNI bf<3> path which is genuinely packed).
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
     if (!bfType || !bfType.isGhash())
       return failure();
+    Type ghashType = bfType;
 
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    auto i128Type = b.getIntegerType(128);
-    auto vec2i64Type = VectorType::get(2, b.getI64Type());
-
-    // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
-    Value lhsI128 = UnrealizedConversionCastOp::create(b, i128Type, op.getLhs())
-                        .getResult(0);
-    Value rhsI128 = UnrealizedConversionCastOp::create(b, i128Type, op.getRhs())
-                        .getResult(0);
-
-    Value lhsVec = LLVM::BitcastOp::create(b, vec2i64Type, lhsI128);
-    Value rhsVec = LLVM::BitcastOp::create(b, vec2i64Type, rhsI128);
-
-    Value resultVec = mulGhashPCLMULQDQ(b, lhsVec, rhsVec);
-
-    Value resultI128 = LLVM::BitcastOp::create(b, i128Type, resultVec);
-    Value resultGhash =
-        UnrealizedConversionCastOp::create(b, ghashType, resultI128)
-            .getResult(0);
-    rewriter.replaceOp(op, resultGhash);
-    return success();
+    auto mulScalar = [ghashType](ImplicitLocOpBuilder &b, Value lhs,
+                                 Value rhs) -> Value {
+      auto i128Type = b.getIntegerType(128);
+      auto vec2i64Type = VectorType::get(2, b.getI64Type());
+      // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
+      Value lhsI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, lhs).getResult(0);
+      Value rhsI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, rhs).getResult(0);
+      Value lhsVec = LLVM::BitcastOp::create(b, vec2i64Type, lhsI128);
+      Value rhsVec = LLVM::BitcastOp::create(b, vec2i64Type, rhsI128);
+      Value resultVec = mulGhashPCLMULQDQ(b, lhsVec, rhsVec);
+      Value resultI128 = LLVM::BitcastOp::create(b, i128Type, resultVec);
+      return UnrealizedConversionCastOp::create(b, ghashType, resultI128)
+          .getResult(0);
+    };
+    return replaceFlatFieldMul(rewriter, op, op.getLhs(), op.getRhs(),
+                               mulScalar);
   }
 };
 

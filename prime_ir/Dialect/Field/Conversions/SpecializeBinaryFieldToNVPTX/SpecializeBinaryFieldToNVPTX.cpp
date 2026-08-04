@@ -17,8 +17,11 @@ limitations under the License.
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"    // IWYU pragma: keep
+#include "mlir/Dialect/Vector/IR/VectorOps.h" // IWYU pragma: keep
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
+#include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
@@ -26,6 +29,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
+#include "prime_ir/Utils/ShapedFieldMul.h"
 
 namespace mlir::prime_ir::field {
 
@@ -177,27 +181,28 @@ struct ConvertGhashMulToClmad : public OpRewritePattern<MulOp> {
 
   LogicalResult matchAndRewrite(MulOp op,
                                 PatternRewriter &rewriter) const override {
-    Type ghashType = op.getResult().getType();
-    auto bfType = dyn_cast<BinaryFieldType>(ghashType);
+    // getElementTypeOrSelf so a shaped (tensor/vector) ghash mul matches too;
+    // replaceFlatFieldMul unrolls it lane by lane.
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
     if (!bfType || !bfType.isGhash())
       return failure();
+    Type ghashType = bfType;
 
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    auto i128Type = b.getIntegerType(128);
-
-    // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
-    Value lhsI128 = UnrealizedConversionCastOp::create(b, i128Type, op.getLhs())
-                        .getResult(0);
-    Value rhsI128 = UnrealizedConversionCastOp::create(b, i128Type, op.getRhs())
-                        .getResult(0);
-
-    Value resultI128 = mulGhashClmad(b, lhsI128, rhsI128);
-
-    Value resultGhash =
-        UnrealizedConversionCastOp::create(b, ghashType, resultI128)
-            .getResult(0);
-    rewriter.replaceOp(op, resultGhash);
-    return success();
+    auto mulScalar = [ghashType](ImplicitLocOpBuilder &b, Value lhs,
+                                 Value rhs) -> Value {
+      auto i128Type = b.getIntegerType(128);
+      // Cast ghash -> i128; BinaryFieldToArith later reconciles these casts.
+      Value lhsI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, lhs).getResult(0);
+      Value rhsI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, rhs).getResult(0);
+      Value resultI128 = mulGhashClmad(b, lhsI128, rhsI128);
+      return UnrealizedConversionCastOp::create(b, ghashType, resultI128)
+          .getResult(0);
+    };
+    return replaceFlatFieldMul(rewriter, op, op.getLhs(), op.getRhs(),
+                               mulScalar);
   }
 };
 
@@ -259,31 +264,33 @@ struct ConvertAesMulToClmad : public OpRewritePattern<MulOp> {
 
   LogicalResult matchAndRewrite(MulOp op,
                                 PatternRewriter &rewriter) const override {
-    Type aesType = op.getResult().getType();
-    auto bfType = dyn_cast<BinaryFieldType>(aesType);
+    // getElementTypeOrSelf so a shaped (tensor/vector) aes mul matches too;
+    // replaceFlatFieldMul unrolls it lane by lane.
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
     if (!bfType || !bfType.isAes())
       return failure();
+    Type aesType = bfType;
 
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    auto i8Type = b.getI8Type();
-    auto i64Type = b.getI64Type();
-
-    // Cast aes -> i8; BinaryFieldToArith later reconciles these casts.
-    Value lhs8 =
-        UnrealizedConversionCastOp::create(b, i8Type, op.getLhs()).getResult(0);
-    Value rhs8 =
-        UnrealizedConversionCastOp::create(b, i8Type, op.getRhs()).getResult(0);
-
-    // 0x1b = x⁴ + x³ + x + 1, the low half of the AES modulus x⁸ + 0x1b.
-    Value prodFlat64 = mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhs8),
-                                    arith::ExtUIOp::create(b, i64Type, rhs8),
-                                    /*n=*/8, /*fLow=*/0x1b);
-    Value prod8 = arith::TruncIOp::create(b, i8Type, prodFlat64);
-
-    Value resultAes =
-        UnrealizedConversionCastOp::create(b, aesType, prod8).getResult(0);
-    rewriter.replaceOp(op, resultAes);
-    return success();
+    auto mulScalar = [aesType](ImplicitLocOpBuilder &b, Value lhs,
+                               Value rhs) -> Value {
+      auto i8Type = b.getI8Type();
+      auto i64Type = b.getI64Type();
+      // Cast aes -> i8; BinaryFieldToArith later reconciles these casts.
+      Value lhs8 =
+          UnrealizedConversionCastOp::create(b, i8Type, lhs).getResult(0);
+      Value rhs8 =
+          UnrealizedConversionCastOp::create(b, i8Type, rhs).getResult(0);
+      // 0x1b = x⁴ + x³ + x + 1, the low half of the AES modulus x⁸ + 0x1b.
+      Value prodFlat64 =
+          mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhs8),
+                       arith::ExtUIOp::create(b, i64Type, rhs8),
+                       /*n=*/8, /*fLow=*/0x1b);
+      Value prod8 = arith::TruncIOp::create(b, i8Type, prodFlat64);
+      return UnrealizedConversionCastOp::create(b, aesType, prod8).getResult(0);
+    };
+    return replaceFlatFieldMul(rewriter, op, op.getLhs(), op.getRhs(),
+                               mulScalar);
   }
 };
 
