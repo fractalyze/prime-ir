@@ -1941,11 +1941,11 @@ ParseResult MulOp::parse(OpAsmParser &parser, OperationState &result) {
 
 //===----------------------------------------------------------------------===//
 
-// The flat bases (`bf<7, ghash>`, `bf<3, aes>`) have no compile-time
-// multiplicative evaluator: zk_dtypes::BinaryMul/BinarySquare/BinaryInverse
-// implement only the recursive tower basis, and the flat products are defined
-// solely by the runtime shift-XOR lowerings (emitGhashMul/emitAesMul in
-// BinaryFieldToArith). Folding mul/square/inverse through the tower evaluator
+// The flat bases have no compile-time multiplicative evaluator:
+// zk_dtypes::BinaryMul/BinarySquare/BinaryInverse implement only the
+// recursive tower basis, and the flat products are defined solely by
+// BinaryFieldToArith's lowerings. Folding mul/square/inverse through the
+// tower evaluator
 // would silently emit tower values (e.g. ghash 2·3 = 1 instead of 6, aes
 // 2·2 = 3 instead of 4), so leave those ops for the lowering. Additive ops
 // (add/sub/negate/double) are basis-independent (XOR) and still fold.

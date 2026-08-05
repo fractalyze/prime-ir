@@ -127,18 +127,28 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     - level 7: GF(2¹²⁸)  = 128 bits
 
     Each level uses the recursive x²+x+α tower basis (Fan–Paar) by default;
-    two levels additionally support a FLAT polynomial basis, selected by the
-    flat flag and named in the assembly by its polynomial:
-    - `ghash` (level 7 only): the flat GHASH/POLYVAL polynomial basis
-      GF(2)[x]/(x¹²⁸ + x⁷ + x² + x + 1) (reduction constant 0x87, natural
-      monomial bit order). `2·3 = 6` (2 = x, 3 = x+1, so 2·3 = x²+x). Same
-      abstract field as `bf<7>` but a different, NOT bit-compatible
-      representation — the one GHASH/AES-GCM uses, and that provers hashing raw
-      field bytes need byte-identity with.
-    - `aes` (level 3 only): the flat AES/Rijndael polynomial basis
-      GF(2)[x]/(x⁸ + x⁴ + x³ + x + 1) (0x11B, reduction constant 0x1B, natural
-      monomial bit order). `2·2 = 4` where the tower `bf<3>` gives 3.
-    Only the multiply differs between a flat basis and the tower;
+    every level 1..7 additionally supports a FLAT polynomial basis
+    GF(2)[y]/(f), where the modulus polynomial f is an explicit type
+    parameter carried as its reduction constant (f minus the leading yⁿ
+    term). The assembly names it three ways:
+    - `flat`: the CANONICAL modulus of the level (kCanonicalFlatModLow) —
+      the basis the tower↔flat conversion matrices target.
+    - `ghash` / `aes`: canonical sugar at levels 7 / 3. `ghash` is
+      GF(2)[x]/(x¹²⁸ + x⁷ + x² + x + 1) (reduction constant 0x87): `2·3 = 6`
+      (2 = x, 3 = x+1, so 2·3 = x²+x) — same abstract field as `bf<7>` but a
+      different, NOT bit-compatible representation, the one GHASH/AES-GCM
+      uses. `aes` is the AES/Rijndael basis GF(2)[x]/(x⁸ + x⁴ + x³ + x + 1)
+      (0x11B, reduction constant 0x1B): `2·2 = 4` where the tower gives 3.
+    - `poly<f>`: an explicit modulus, printed as the full polynomial
+      bitmask (bit i = coefficient of yⁱ). A canonical modulus spelled via
+      `poly<...>` uniques to the same type and prints back as its canonical
+      name. Custom moduli are limited to levels 1..6 with
+      2·deg(f − yⁿ) ≤ n, which keeps the reduction constant in 64 bits and
+      guarantees the two-fold clmad reduction schedule converges; level 7
+      admits only the canonical GHASH modulus (a POLYVAL-style high-degree
+      low part needs a different reduction algorithm).
+    Two flat types with different moduli are NOT bit-compatible even at the
+    same width. Only the multiply/square/inverse differ between bases;
     add/sub/negate/double/cmp/constant are identical.
 
     All operations are characteristic 2: add and sub are XOR, negation is
@@ -150,15 +160,28 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     !BF128 = !field.bf<7>        // GF(2¹²⁸), tower basis,  2·3 = 1
     !G = !field.bf<7, ghash>     // GF(2¹²⁸), GHASH basis,  2·3 = 6
     !A = !field.bf<3, aes>       // GF(2⁸), AES basis,      2·2 = 4
+    !F = !field.bf<5, flat>      // GF(2³²), canonical flat basis
+    !R = !field.bf<3, poly<0x11d>> // GF(2⁸), Reed-Solomon basis
     ```
   }];
   let parameters = (ins
     "unsigned": $towerLevel,
-    DefaultValuedParameter<"bool", "false">: $isFlat
+    DefaultValuedParameter<"bool", "false">: $isFlat,
+    DefaultValuedParameter<"uint64_t", "0">: $flatModLow
   );
   let builders = [
     TypeBuilder<(ins "unsigned":$towerLevel), [{
-      return $_get(context, towerLevel, /*isFlat=*/false);
+      return $_get(context, towerLevel, /*isFlat=*/false,
+                   /*flatModLow=*/uint64_t{0});
+    }]>,
+    // Flat with the canonical modulus of the level; tower when !isFlat.
+    TypeBuilder<(ins "unsigned":$towerLevel, "bool":$isFlat), [{
+      // Guard the table index: verify() runs after this (and not at all in
+      // NDEBUG), and the C API forwards an unvalidated level.
+      return $_get(context, towerLevel, isFlat,
+                   isFlat && towerLevel <= kMaxTowerLevel
+                       ? kCanonicalFlatModLow[towerLevel]
+                       : uint64_t{0});
     }]>,
   ];
   let extraClassDeclaration = [{
@@ -192,11 +215,36 @@ def Field_BinaryFieldType : Field_Type<"BinaryField", "bf", [
     /// True for the recursive tower basis (the default).
     bool isTower() const { return !getIsFlat(); }
 
-    /// True for the flat GHASH polynomial basis (flat GF(2¹²⁸)).
-    bool isGhash() const { return getIsFlat() && getTowerLevel() == 7; }
+    /// Canonical flat reduction constants per level (f_k minus its leading
+    /// term), indexed by tower level; index 0 unused (GF(2) has a single
+    /// basis). Level 3 is the AES polynomial and level 7 GHASH; derivation
+    /// and proofs in tools/derive_tower_flat_basis.py.
+    static constexpr uint64_t kCanonicalFlatModLow[8] = {
+        0, 0x3, 0x3, 0x1b, 0x2b, 0x8d, 0x1b, 0x87};
 
-    /// True for the flat AES polynomial basis (flat GF(2⁸)).
-    bool isAes() const { return getIsFlat() && getTowerLevel() == 3; }
+    /// True for the flat GHASH polynomial basis (flat GF(2¹²⁸), canonical
+    /// modulus).
+    bool isGhash() const {
+      return getIsFlat() && getTowerLevel() == 7 && getFlatModLow() == 0x87;
+    }
+
+    /// True for the flat AES polynomial basis (flat GF(2⁸), canonical
+    /// modulus).
+    bool isAes() const {
+      return getIsFlat() && getTowerLevel() == 3 && getFlatModLow() == 0x1b;
+    }
+
+    /// True for the canonical flat basis of the level — the basis the
+    /// tower<->flat conversion matrices (TowerFlatBasis.h) target.
+    bool isCanonicalFlat() const {
+      return getIsFlat() &&
+             getFlatModLow() == kCanonicalFlatModLow[getTowerLevel()];
+    }
+
+    /// True for every flat basis but canonical GHASH (whose 128-bit product
+    /// has dedicated emitters); generic lowerings read the modulus off the
+    /// type.
+    bool isGenericFlat() const { return getIsFlat() && !isGhash(); }
 
     /// Maximum supported tower level (GF(2¹²⁸)).
     static constexpr unsigned kMaxTowerLevel = 7;

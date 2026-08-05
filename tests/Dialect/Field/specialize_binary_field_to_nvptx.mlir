@@ -15,10 +15,9 @@
 
 // Test clmad specialization for binary field multiplication.
 //
-// clmad computes a carryless product: `bf<7, ghash>` and `bf<3, aes>` are
-// already flat so they multiply directly, tower bf<4>/bf<5> go through the
-// flat-basis conversion (TowerFlatBasis.h), and tower bf<6>/bf<7> stay
-// portable (`field.mul`).
+// clmad computes a carryless product: flat bases multiply directly (ghash 8
+// clmads, generic 3 or 5), and tower levels 4..7 convert through the
+// canonical flat basis of their width (TowerFlatBasis.h) around it.
 
 // RUN: prime-ir-opt --specialize-binary-field-to-nvptx %s | FileCheck %s --check-prefix=CHECK-CLMAD
 
@@ -37,6 +36,9 @@
 !BF128 = !field.bf<7>        // GF(2¹²⁸), tower basis
 !GHASH = !field.bf<7, ghash> // GF(2¹²⁸), flat GHASH polynomial basis
 !AES = !field.bf<3, aes>     // GF(2⁸), flat AES polynomial basis
+!F32 = !field.bf<5, flat>    // GF(2³²), canonical flat basis
+!F64 = !field.bf<6, flat>    // GF(2⁶⁴), canonical flat basis
+!RS8 = !field.bf<3, poly<0x11d>> // GF(2⁸), custom modulus
 
 // GHASH-basis scalar multiplication should use clmad: eight clmad.{lo,hi}.u64
 // build the 128×128 carryless product, then the shared GHASH reduction.
@@ -94,26 +96,70 @@ func.func @test_aes_mul(%a: !AES, %b: !AES) -> !AES {
   return %c : !AES
 }
 
-// BF128 (tower) scalar multiplication stays portable — no carryless fast path.
+// BF128 (tower) converts into the GHASH basis (128-wide ladders) around the
+// 8-clmad GHASH product.
 // CHECK-CLMAD-LABEL: @test_bf128_mul
-// CHECK-CLMAD: field.mul
-// CHECK-CLMAD-NOT: clmad
+// CHECK-CLMAD-COUNT-8: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: field.mul
 // CHECK-OFF-LABEL: @test_bf128_mul
 // CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
 func.func @test_bf128_mul(%a: !BF128, %b: !BF128) -> !BF128 {
   %c = field.mul %a, %b : !BF128
   return %c : !BF128
 }
 
-// BF64 (tower) scalar multiplication stays portable — no carryless fast path.
+// BF64 (tower) converts into the 64-bit flat basis around the 5-clmad
+// two-limb product.
 // CHECK-CLMAD-LABEL: @test_bf64_mul
-// CHECK-CLMAD: field.mul
-// CHECK-CLMAD-NOT: clmad
+// CHECK-CLMAD-COUNT-5: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: field.mul
 // CHECK-OFF-LABEL: @test_bf64_mul
 // CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
 func.func @test_bf64_mul(%a: !BF64, %b: !BF64) -> !BF64 {
   %c = field.mul %a, %b : !BF64
   return %c : !BF64
+}
+
+// Native flat 64-bit multiply: the 5-clmad product with no ladders.
+// CHECK-CLMAD-LABEL: @test_f64_mul
+// CHECK-CLMAD-NOT: arith.select
+// CHECK-CLMAD-COUNT-5: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: arith.select
+// CHECK-OFF-LABEL: @test_f64_mul
+// CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
+func.func @test_f64_mul(%a: !F64, %b: !F64) -> !F64 {
+  %c = field.mul %a, %b : !F64
+  return %c : !F64
+}
+
+// A custom modulus takes the generic path — same shape as canonical flat,
+// with the taps of ITS polynomial.
+// CHECK-CLMAD-LABEL: @test_custom_poly_mul
+// CHECK-CLMAD-COUNT-3: llvm.inline_asm{{.*}}clmad.lo{{.*}}u64
+// CHECK-OFF-LABEL: @test_custom_poly_mul
+// CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
+func.func @test_custom_poly_mul(%a: !RS8, %b: !RS8) -> !RS8 {
+  %c = field.mul %a, %b : !RS8
+  return %c : !RS8
+}
+
+// Native flat bf<5, flat> multiply is the clmad product with NO conversion
+// ladders — no arith.select appears between the casts (the tower path above
+// emits 2n of them per conversion).
+// CHECK-CLMAD-LABEL: @test_f32_mul
+// CHECK-CLMAD-NOT: arith.select
+// CHECK-CLMAD-COUNT-3: llvm.inline_asm{{.*}}clmad.lo{{.*}}u64
+// CHECK-CLMAD-NOT: arith.select
+// CHECK-OFF-LABEL: @test_f32_mul
+// CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
+func.func @test_f32_mul(%a: !F32, %b: !F32) -> !F32 {
+  %c = field.mul %a, %b : !F32
+  return %c : !F32
 }
 
 // Square is not specialized (only MulOp patterns are registered); it stays on

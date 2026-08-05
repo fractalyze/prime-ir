@@ -26,25 +26,28 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
     backend.
 
     The GPU analog of `SpecializeBinaryFieldToX86` (PCLMULQDQ) and
-    `SpecializeBinaryFieldToARM` (PMULL): it rewrites `field.mul` on
-    `bf<7, ghash>` into a 128x128 carryless product built from eight
-    `clmad.{lo,hi}.u64`, then the shared GHASH polynomial reduction
-    (x¹²⁸ + x⁷ + x² + x + 1). Tower `bf<4>`/`bf<5>` multiplies also
-    specialize: a carryless product does not compute a tower product
-    directly, so they convert through the isomorphic flat polynomial basis
-    (constants in `TowerFlatBasis.h`), multiply with one `clmad.lo.u64`
-    plus a low-weight reduction, and convert back. The flat `bf<3, aes>`
-    (GF(2⁸)) multiply specializes too, with no basis conversion. Operations
-    not specialized fall through to the portable software carryless multiply
+`SpecializeBinaryFieldToARM` (PMULL). Every flat multiply becomes a
+    clmad product: `bf<7, ghash>` a 128x128 schoolbook of eight
+    `clmad.{lo,hi}.u64` plus the shared GHASH reduction, `bf<3, aes>` and
+    every generic/custom `poly<...>` basis up to 32 bits a single
+    `clmad.lo` plus two constant-tap folds (the modulus is read off the
+    type), and 64-bit flat a 5-clmad two-limb product. Tower multiplies at
+    levels 4..7 convert through the canonical flat basis of their width
+    (matrices in `TowerFlatBasis.h`) around that same flat product —
+    native flat values skip the conversion entirely — the target for
+    emitters that hoist the basis change out of a kernel. Operations not
+    specialized fall through to the portable software carryless multiply
     in `binary-field-to-arith`.
 
-    The flat-basis multiplies (`bf<7, ghash>`, `bf<3, aes>`) also handle
-    shaped (tensor/vector) operands: since `clmad` is scalar inline asm, a
-    shaped `field.mul` is unrolled lane by lane into scalar clmad ladders
-    reassembled with `tensor.from_elements`/`vector.from_elements`. This is
-    what makes the batched gf8 additive-NTT butterfly multiply (flock
-    zerocheck) emit `clmad` rather than the software shift-XOR fallback.
-    Tower multiplies stay scalar-only.
+    Every specialized multiply also handles shaped (tensor/vector) operands:
+    since `clmad` is scalar inline asm, a shaped `field.mul` is unrolled lane
+    by lane into scalar clmad ladders reassembled with
+    `tensor.from_elements`/`vector.from_elements`. This is what makes the
+    batched gf8 additive-NTT butterfly multiply (flock zerocheck) emit
+    `clmad` rather than the software shift-XOR fallback. A tower lane pays
+    its conversion ladders per element, so shaped tower mul trades IR size
+    for the hardware multiply. Dynamic shapes have no static lane count and
+    stay portable.
 
     This pass must run BEFORE `binary-field-to-arith`. On the GPU codegen path
     it is inserted directly ahead of `createBinaryFieldToArith` — the GPU

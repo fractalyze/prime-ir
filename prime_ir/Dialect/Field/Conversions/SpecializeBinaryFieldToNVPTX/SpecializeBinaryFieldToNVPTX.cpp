@@ -25,7 +25,7 @@ limitations under the License.
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
-#include "prime_ir/Dialect/Field/Conversions/SpecializeBinaryFieldToNVPTX/TowerFlatBasis.h"
+#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/TowerFlatBasis.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -168,6 +168,46 @@ Value mulFlatClmad(ImplicitLocOpBuilder &b, Value a64, Value b64, unsigned n,
   return emitClmad(b, h2, fLowC, t1, /*isHi=*/false);
 }
 
+// Multiply two flat-basis 64-bit values, reducing mod y^64 + fLow: the
+// product is two limbs, so 5 clmads — two for the limbs, one folding the
+// high limb via y^64 == fLow, and two for the spill of that fold (at most
+// deg(fLow) bits), which one more fold absorbs. Schedule proven against
+// long division by tools/derive_tower_flat_basis.py.
+Value mulFlat64Clmad(ImplicitLocOpBuilder &b, Value a64, Value b64,
+                     uint64_t fLow) {
+  Value z = arith::ConstantIntOp::create(b, 0, 64);
+  Value fLowC = arith::ConstantIntOp::create(b, static_cast<int64_t>(fLow), 64);
+  Value pLo = emitClmad(b, a64, b64, z, /*isHi=*/false);
+  Value pHi = emitClmad(b, a64, b64, z, /*isHi=*/true);
+  Value r = emitClmad(b, pHi, fLowC, pLo, /*isHi=*/false);
+  Value spill = emitClmad(b, pHi, fLowC, z, /*isHi=*/true);
+  return emitClmad(b, spill, fLowC, r, /*isHi=*/false);
+}
+
+// Apply the GF(2)-linear map with 128-bit columns (given as lo/hi halves)
+// to an i128 value: XOR together the columns selected by the set bits.
+Value emitBitMatrix128(ImplicitLocOpBuilder &b, Value x,
+                       ArrayRef<uint64_t> colsLo, ArrayRef<uint64_t> colsHi) {
+  auto i128Ty = b.getIntegerType(128);
+  auto i128Const = [&](const llvm::APInt &v) {
+    return arith::ConstantOp::create(b, i128Ty, IntegerAttr::get(i128Ty, v));
+  };
+  Value zero = i128Const(llvm::APInt(128, 0));
+  Value acc = zero;
+  for (unsigned i = 0; i < 128; ++i) {
+    Value shifted = x;
+    if (i != 0) {
+      shifted = arith::ShRUIOp::create(b, x, i128Const(llvm::APInt(128, i)));
+    }
+    Value bit = arith::TruncIOp::create(b, b.getI1Type(), shifted);
+    llvm::APInt col(128, colsLo[i]);
+    col |= llvm::APInt(128, colsHi[i]).shl(64);
+    Value sel = arith::SelectOp::create(b, bit, i128Const(col), zero);
+    acc = arith::XOrIOp::create(b, acc, sel);
+  }
+  return acc;
+}
+
 //===----------------------------------------------------------------------===//
 // Conversion Patterns
 //===----------------------------------------------------------------------===//
@@ -213,81 +253,126 @@ struct ConvertTowerMulToClmad : public OpRewritePattern<MulOp> {
 
   LogicalResult matchAndRewrite(MulOp op,
                                 PatternRewriter &rewriter) const override {
-    Type towerType = op.getResult().getType();
-    auto bfType = dyn_cast<BinaryFieldType>(towerType);
+    // getElementTypeOrSelf so a shaped (tensor/vector) tower mul matches too;
+    // replaceFlatFieldMul unrolls it lane by lane, and the conversion ladders
+    // then only ever see the extracted scalars.
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
     if (!bfType || !bfType.isTower())
       return failure();
     unsigned level = bfType.getTowerLevel();
-    if (level != 4 && level != 5)
+    if (level < 4 || level > 7)
       return failure();
     const unsigned n = 1u << level;
+    Type towerType = bfType;
 
-    ArrayRef<uint64_t> toFlat =
-        level == 4 ? ArrayRef(kTowerToFlat16) : ArrayRef(kTowerToFlat32);
-    ArrayRef<uint64_t> fromFlat =
-        level == 4 ? ArrayRef(kFlatToTower16) : ArrayRef(kFlatToTower32);
-    uint64_t fLow = level == 4 ? kFlatModLow16 : kFlatModLow32;
+    auto mulScalar = [=](ImplicitLocOpBuilder &b, Value lhs,
+                         Value rhs) -> Value {
+      auto intNType = b.getIntegerType(n);
 
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    auto intNType = b.getIntegerType(n);
-    auto i64Type = b.getI64Type();
+      // Cast tower -> iN; BinaryFieldToArith later reconciles these casts.
+      Value lhsN =
+          UnrealizedConversionCastOp::create(b, intNType, lhs).getResult(0);
+      Value rhsN =
+          UnrealizedConversionCastOp::create(b, intNType, rhs).getResult(0);
 
-    // Cast tower -> iN; BinaryFieldToArith later reconciles these casts.
-    Value lhsN = UnrealizedConversionCastOp::create(b, intNType, op.getLhs())
-                     .getResult(0);
-    Value rhsN = UnrealizedConversionCastOp::create(b, intNType, op.getRhs())
-                     .getResult(0);
-
-    Value lhsFlat =
-        arith::ExtUIOp::create(b, i64Type, emitBitMatrix(b, lhsN, toFlat, n));
-    Value rhsFlat =
-        arith::ExtUIOp::create(b, i64Type, emitBitMatrix(b, rhsN, toFlat, n));
-
-    Value prodFlat64 = mulFlatClmad(b, lhsFlat, rhsFlat, n, fLow);
-    Value prodFlat = arith::TruncIOp::create(b, intNType, prodFlat64);
-
-    Value resultN = emitBitMatrix(b, prodFlat, fromFlat, n);
-    Value resultTower =
-        UnrealizedConversionCastOp::create(b, towerType, resultN).getResult(0);
-    rewriter.replaceOp(op, resultTower);
-    return success();
+      Value resultN;
+      if (level == 7) {
+        // 128-bit: convert into the GHASH basis and reuse its 8-clmad product.
+        Value lhsFlat =
+            emitBitMatrix128(b, lhsN, kTowerToFlat128Lo, kTowerToFlat128Hi);
+        Value rhsFlat =
+            emitBitMatrix128(b, rhsN, kTowerToFlat128Lo, kTowerToFlat128Hi);
+        Value prod = mulGhashClmad(b, lhsFlat, rhsFlat);
+        resultN =
+            emitBitMatrix128(b, prod, kFlatToTower128Lo, kFlatToTower128Hi);
+      } else {
+        ArrayRef<uint64_t> toFlat = level == 4   ? ArrayRef(kTowerToFlat16)
+                                    : level == 5 ? ArrayRef(kTowerToFlat32)
+                                                 : ArrayRef(kTowerToFlat64);
+        ArrayRef<uint64_t> fromFlat = level == 4   ? ArrayRef(kFlatToTower16)
+                                      : level == 5 ? ArrayRef(kFlatToTower32)
+                                                   : ArrayRef(kFlatToTower64);
+        const uint64_t fLow = BinaryFieldType::kCanonicalFlatModLow[level];
+        auto i64Type = b.getI64Type();
+        Value lhsFlat = emitBitMatrix(b, lhsN, toFlat, n);
+        Value rhsFlat = emitBitMatrix(b, rhsN, toFlat, n);
+        Value prodFlat;
+        if (n == 64) {
+          prodFlat = mulFlat64Clmad(b, lhsFlat, rhsFlat, fLow);
+        } else {
+          Value prod64 = mulFlatClmad(
+              b, arith::ExtUIOp::create(b, i64Type, lhsFlat),
+              arith::ExtUIOp::create(b, i64Type, rhsFlat), n, fLow);
+          prodFlat = arith::TruncIOp::create(b, intNType, prod64);
+        }
+        resultN = emitBitMatrix(b, prodFlat, fromFlat, n);
+      }
+      return UnrealizedConversionCastOp::create(b, towerType, resultN)
+          .getResult(0);
+    };
+    return replaceFlatFieldMul(rewriter, op, op.getLhs(), op.getRhs(),
+                               mulScalar);
   }
 };
 
-// AES-basis bf<3, aes> multiply via one clmad product. The AES basis is
-// already the flat monomial basis GF(2)[x]/(x⁸ + x⁴ + x³ + x + 1) (0x11B), so
-// -- unlike the tower path -- no toFlat/fromFlat bit-matrix is needed. The 8×8
-// product is 15-bit, so one clmad.lo covers it and two folds finish. Result is
-// byte-identical to BinaryFieldToArith's emitAesMul (the software fallback).
-struct ConvertAesMulToClmad : public OpRewritePattern<MulOp> {
+// Generic flat multiply (isGenericFlat, levels 1-6): clmad product plus
+// constant-tap folds, modulus read off the type; no conversion ladders.
+struct ConvertFlatGenericMulToClmad : public OpRewritePattern<MulOp> {
   using OpRewritePattern<MulOp>::OpRewritePattern;
 
   LogicalResult matchAndRewrite(MulOp op,
                                 PatternRewriter &rewriter) const override {
-    // getElementTypeOrSelf so a shaped (tensor/vector) aes mul matches too;
+    // getElementTypeOrSelf so a shaped (tensor/vector) flat mul matches too;
     // replaceFlatFieldMul unrolls it lane by lane.
     auto bfType = dyn_cast<BinaryFieldType>(
         getElementTypeOrSelf(op.getResult().getType()));
-    if (!bfType || !bfType.isAes())
+    if (!bfType || !bfType.isGenericFlat())
       return failure();
-    Type aesType = bfType;
+    // Verifier caps generic flat at level 6, so n <= 64.
+    const unsigned n = bfType.getBitWidth();
+    const uint64_t fLow = bfType.getFlatModLow();
+    Type flatType = bfType;
+    // The storage carrier, not the element width: sub-byte levels ride i8.
+    auto storageType = bfType.getStorageType();
 
-    auto mulScalar = [aesType](ImplicitLocOpBuilder &b, Value lhs,
-                               Value rhs) -> Value {
-      auto i8Type = b.getI8Type();
+    auto mulScalar = [=](ImplicitLocOpBuilder &b, Value lhs,
+                         Value rhs) -> Value {
       auto i64Type = b.getI64Type();
-      // Cast aes -> i8; BinaryFieldToArith later reconciles these casts.
-      Value lhs8 =
-          UnrealizedConversionCastOp::create(b, i8Type, lhs).getResult(0);
-      Value rhs8 =
-          UnrealizedConversionCastOp::create(b, i8Type, rhs).getResult(0);
-      // 0x1b = x⁴ + x³ + x + 1, the low half of the AES modulus x⁸ + 0x1b.
-      Value prodFlat64 =
-          mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhs8),
-                       arith::ExtUIOp::create(b, i64Type, rhs8),
-                       /*n=*/8, /*fLow=*/0x1b);
-      Value prod8 = arith::TruncIOp::create(b, i8Type, prodFlat64);
-      return UnrealizedConversionCastOp::create(b, aesType, prod8).getResult(0);
+      // Cast flat -> storage int; BinaryFieldToArith later reconciles these
+      // casts.
+      Value lhsS =
+          UnrealizedConversionCastOp::create(b, storageType, lhs).getResult(0);
+      Value rhsS =
+          UnrealizedConversionCastOp::create(b, storageType, rhs).getResult(0);
+      // Sub-byte elements sit in a wider carrier that field.bitcast retags
+      // without normalizing; clmad multiplies the whole carrier, so junk
+      // above bit n-1 would fold into the result.
+      if (storageType.getWidth() > n) {
+        Value mask = arith::ConstantIntOp::create(
+            b, static_cast<int64_t>((uint64_t{1} << n) - 1),
+            storageType.getWidth());
+        lhsS = arith::AndIOp::create(b, lhsS, mask);
+        rhsS = arith::AndIOp::create(b, rhsS, mask);
+      }
+
+      Value prod;
+      if (n == 64) {
+        prod = mulFlat64Clmad(b, lhsS, rhsS, fLow);
+      } else {
+        Value prod64 =
+            mulFlatClmad(b, arith::ExtUIOp::create(b, i64Type, lhsS),
+                         arith::ExtUIOp::create(b, i64Type, rhsS), n, fLow);
+        // Junk above bit n-1 must not leak into a wider storage carrier.
+        if (storageType.getWidth() > n) {
+          prod64 = arith::AndIOp::create(
+              b, prod64,
+              arith::ConstantIntOp::create(
+                  b, static_cast<int64_t>((uint64_t{1} << n) - 1), 64));
+        }
+        prod = arith::TruncIOp::create(b, storageType, prod64);
+      }
+      return UnrealizedConversionCastOp::create(b, flatType, prod).getResult(0);
     };
     return replaceFlatFieldMul(rewriter, op, op.getLhs(), op.getRhs(),
                                mulScalar);
@@ -309,7 +394,7 @@ struct SpecializeBinaryFieldToNVPTX
     RewritePatternSet patterns(context);
     if (useClmad) {
       patterns.add<ConvertGhashMulToClmad, ConvertTowerMulToClmad,
-                   ConvertAesMulToClmad>(context);
+                   ConvertFlatGenericMulToClmad>(context);
     }
 
     // Greedy rewriting (not partial conversion) so unmatched field.mul ops

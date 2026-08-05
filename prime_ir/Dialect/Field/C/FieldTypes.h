@@ -55,9 +55,10 @@ MLIR_CAPI_EXPORTED MlirTypeID primeIRBinaryFieldTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED bool primeIRTypeIsABinaryField(MlirType type);
 
 // Creates a binary field type GF(2^(2^towerLevel)) in the context. When isFlat
-// is true the type selects the flat polynomial basis of that level instead of
-// the recursive tower basis: GHASH/POLYVAL at towerLevel 7, AES at towerLevel 3
-// (other levels have no flat basis). The type is owned by the context.
+// is true the type selects the canonical flat polynomial basis of that level
+// instead of the recursive tower (GHASH at 7, AES at 3, a pinned low-weight
+// modulus elsewhere; levels 1-7 only). Custom moduli are not constructible
+// through this API. The type is owned by the context.
 MLIR_CAPI_EXPORTED MlirType primeIRBinaryFieldTypeGet(MlirContext ctx,
                                                       unsigned towerLevel,
                                                       bool isFlat);

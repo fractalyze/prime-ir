@@ -60,6 +60,14 @@ prime_ir_cc_library(
     ],
 )
 
+# Tower<->flat basis-change matrices. Header-only and backend-agnostic:
+# consumed by the NVPTX clmad specializer and by downstream emitters that
+# hoist whole kernels into the flat basis (xla's additive NTT).
+prime_ir_cc_library(
+    name = "TowerFlatBasis",
+    hdrs = ["TowerFlatBasis.h"],
+)
+
 prime_ir_cc_library(
     name = "BinaryFieldToArith",
     srcs = ["BinaryFieldToArith.cpp"],
