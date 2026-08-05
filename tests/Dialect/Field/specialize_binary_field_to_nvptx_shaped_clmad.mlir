@@ -21,10 +21,9 @@
 // path the batched gf8 additive-NTT butterfly multiply (flock zerocheck) takes
 // on GPU, so it must emit clmad instead of the software shift-XOR fallback.
 //
-// Tower multiplies stay scalar-only (see
-// specialize_binary_field_to_nvptx_shaped.mlir): the flat bases are covered
-// here because, unlike shaped tower mul, shaped flat mul fully legalizes
-// through binary-field-to-arith once specialized.
+// Shaped tower multiplies unroll the same way, with each lane paying the
+// tower<->flat conversion ladders around the flat product. Only dynamic
+// shapes stay portable (specialize_binary_field_to_nvptx_shaped.mlir).
 
 // RUN: prime-ir-opt --specialize-binary-field-to-nvptx %s | FileCheck %s --check-prefix=CHECK-CLMAD
 
@@ -40,6 +39,8 @@
 
 !AES = !field.bf<3, aes>     // GF(2⁸), flat AES polynomial basis
 !GHASH = !field.bf<7, ghash> // GF(2¹²⁸), flat GHASH polynomial basis
+!BF32 = !field.bf<5>         // GF(2³²), tower basis
+!BF128 = !field.bf<7>        // GF(2¹²⁸), tower basis
 
 // Shaped AES (tensor): each of the 2 lanes is one clmad.lo product + two
 // reduction folds = three clmad.lo.u64, so 6 total, wrapped by an extract per
@@ -117,4 +118,40 @@ func.func @tensor_aes_mul_empty(%a: tensor<0x!AES>, %b: tensor<0x!AES>) -> tenso
 func.func @tensor_ghash_mul_empty(%a: tensor<0x!GHASH>, %b: tensor<0x!GHASH>) -> tensor<0x!GHASH> {
   %c = field.mul %a, %b : tensor<0x!GHASH>
   return %c : tensor<0x!GHASH>
+}
+
+// Shaped tower (tensor): 4 lanes, each converting into the canonical flat
+// basis (select ladders) around the 3-clmad flat product = 12 clmad.lo.u64.
+// CHECK-CLMAD-LABEL: @tensor_bf32_mul
+// CHECK-CLMAD-COUNT-12: llvm.inline_asm{{.*}}clmad.lo{{.*}}u64
+// CHECK-CLMAD-NOT: field.mul
+// CHECK-OFF-LABEL: @tensor_bf32_mul
+// CHECK-OFF: field.mul
+// CHECK-OFF-NOT: clmad
+func.func @tensor_bf32_mul(%a: tensor<4x!BF32>, %b: tensor<4x!BF32>) -> tensor<4x!BF32> {
+  %c = field.mul %a, %b : tensor<4x!BF32>
+  return %c : tensor<4x!BF32>
+}
+
+// Shaped tower (vector) takes the same path.
+// CHECK-CLMAD-LABEL: @vector_bf32_mul
+// CHECK-CLMAD-COUNT-6: llvm.inline_asm{{.*}}clmad.lo{{.*}}u64
+// CHECK-CLMAD-NOT: field.mul
+// CHECK-OFF-LABEL: @vector_bf32_mul
+// CHECK-OFF: field.mul
+func.func @vector_bf32_mul(%a: vector<2x!BF32>, %b: vector<2x!BF32>) -> vector<2x!BF32> {
+  %c = field.mul %a, %b : vector<2x!BF32>
+  return %c : vector<2x!BF32>
+}
+
+// Tower level 7 converts into the GHASH basis, so each lane is the 8-clmad
+// GHASH product between 128-wide ladders.
+// CHECK-CLMAD-LABEL: @tensor_bf128_mul
+// CHECK-CLMAD-COUNT-16: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: field.mul
+// CHECK-OFF-LABEL: @tensor_bf128_mul
+// CHECK-OFF: field.mul
+func.func @tensor_bf128_mul(%a: tensor<2x!BF128>, %b: tensor<2x!BF128>) -> tensor<2x!BF128> {
+  %c = field.mul %a, %b : tensor<2x!BF128>
+  return %c : tensor<2x!BF128>
 }

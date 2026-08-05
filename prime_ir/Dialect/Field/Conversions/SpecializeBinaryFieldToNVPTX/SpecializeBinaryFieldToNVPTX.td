@@ -39,13 +39,15 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
     specialized fall through to the portable software carryless multiply
     in `binary-field-to-arith`.
 
-    Flat multiplies also handle shaped (tensor/vector) operands: since
-    `clmad` is scalar inline asm, a shaped `field.mul` is unrolled lane by
-    lane into scalar clmad ladders reassembled with
+    Every specialized multiply also handles shaped (tensor/vector) operands:
+    since `clmad` is scalar inline asm, a shaped `field.mul` is unrolled lane
+    by lane into scalar clmad ladders reassembled with
     `tensor.from_elements`/`vector.from_elements`. This is what makes the
     batched gf8 additive-NTT butterfly multiply (flock zerocheck) emit
-    `clmad` rather than the software shift-XOR fallback. Tower multiplies
-    stay scalar-only.
+    `clmad` rather than the software shift-XOR fallback. A tower lane pays
+    its conversion ladders per element, so shaped tower mul trades IR size
+    for the hardware multiply. Dynamic shapes have no static lane count and
+    stay portable.
 
     This pass must run BEFORE `binary-field-to-arith`. On the GPU codegen path
     it is inserted directly ahead of `createBinaryFieldToArith` — the GPU
