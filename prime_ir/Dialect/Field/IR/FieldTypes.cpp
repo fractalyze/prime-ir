@@ -131,8 +131,40 @@ Attribute maybeToMontgomery(Type type, Attribute attr) {
 
 Value createFieldConstant(Type fieldType, ImplicitLocOpBuilder &builder,
                           uint64_t value) {
-  auto constantLike = cast<ConstantLikeInterface>(fieldType);
-  TypedAttr attr = constantLike.createConstantAttr(static_cast<int64_t>(value));
+  // `value` is a CANONICAL field element, so every bit of it is significant. It
+  // must NOT be routed through `createConstantAttr(int64_t)`: that path takes
+  // the magnitude and then field-negates (right for a caller passing a genuine
+  // negative, wrong here), so any `value >= 2^63` reads as negative and
+  // materializes `p - (2^64 - value)`. For Goldilocks that is
+  // `value - (2^32 - 1)` — silently wrong, with no verifier or assert to catch
+  // it, over roughly half the field range.
+  //
+  // Build from an APInt instead. This dispatches on the concrete type rather
+  // than going through ConstantLikeInterface because
+  // `createConstantAttrFromValues` is one-value-per-coefficient: an extension
+  // field expects `getDegreeOverPrime()` entries, so a scalar has to be
+  // embedded as [value, 0, ..., 0].
+  TypedAttr attr;
+  if (auto pfType = dyn_cast<PrimeFieldType>(fieldType)) {
+    attr = pfType.createConstantAttrFromValues(
+        {APInt(pfType.getTypeSizeInBits(), value)});
+  } else if (auto bfType = dyn_cast<BinaryFieldType>(fieldType)) {
+    attr = bfType.createConstantAttrFromValues(
+        {APInt(bfType.getBitWidth(), value)});
+  } else if (auto efType = dyn_cast<ExtensionFieldType>(fieldType)) {
+    PrimeFieldType pfType = efType.getBasePrimeField();
+    unsigned bitWidth = pfType.getTypeSizeInBits();
+    PrimeFieldOperation pfOp(APInt(bitWidth, value),
+                             pfType); // Handles Montgomery conversion
+    SmallVector<APInt> coeffs(efType.getDegreeOverPrime(),
+                              APInt::getZero(bitWidth));
+    coeffs[0] = static_cast<APInt>(pfOp);
+    attr = efType.createConstantAttrFromValues(coeffs);
+  } else {
+    // Any other ConstantLike type keeps the previous behavior.
+    attr = cast<ConstantLikeInterface>(fieldType).createConstantAttr(
+        static_cast<int64_t>(value));
+  }
   return ConstantOp::create(builder, fieldType, attr)->getResult(0);
 }
 
