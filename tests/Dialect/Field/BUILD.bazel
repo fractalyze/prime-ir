@@ -106,3 +106,16 @@ prime_ir_cc_test(
         "@llvm-project//mlir:IR",
     ],
 )
+
+prime_ir_cc_test(
+    name = "CreateFieldConstantTest",
+    srcs = ["CreateFieldConstantTest.cpp"],
+    deps = [
+        "//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "//prime_ir/Dialect/Field/IR:Field",
+        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_main",
+        "@llvm-project//llvm:Support",
+        "@llvm-project//mlir:IR",
+    ],
+)
