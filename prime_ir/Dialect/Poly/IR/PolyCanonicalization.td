@@ -24,10 +24,14 @@ def Equal : Constraint<CPred<"$0 == $1">>;
 def BoolNotEqual : Constraint<CPred<"$0.getValue() != $1.getValue()">, "not equal">;
 def BoolEqual : Constraint<CPred<"$0.getValue() == $1.getValue()">, "equal">;
 
+// `negacyclic` must match on both sides. A cyclic transform undone by a
+// negacyclic one is not the identity — they are transforms over different rings
+// — and folding the pair away would be silently wrong rather than merely
+// suboptimal.
 def INTTAfterNTT : Pat<
-  (Poly_NTTOp (Poly_NTTOp $tensor, $dest1, $twiddles1, $r1, $tileCap1, $gridSize1, $bitReverse1, $inverse1), $dest2, $twiddles2, $r2, $tileCap2, $gridSize2, $bitReverse2, $inverse2),
+  (Poly_NTTOp (Poly_NTTOp $tensor, $dest1, $twiddles1, $r1, $tileCap1, $gridSize1, $bitReverse1, $inverse1, $negacyclic1), $dest2, $twiddles2, $r2, $tileCap2, $gridSize2, $bitReverse2, $inverse2, $negacyclic2),
   (replaceWithValue $tensor),
-  [(Equal $twiddles1, $twiddles2), (Equal $r1, $r2), (BoolNotEqual $inverse1, $inverse2), (BoolEqual $bitReverse1, $bitReverse2)]
+  [(Equal $twiddles1, $twiddles2), (Equal $r1, $r2), (BoolNotEqual $inverse1, $inverse2), (BoolEqual $bitReverse1, $bitReverse2), (BoolEqual $negacyclic1, $negacyclic2)]
 >;
 
 def FromToTensor : Pat<
