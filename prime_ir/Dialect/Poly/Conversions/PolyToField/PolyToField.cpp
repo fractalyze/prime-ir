@@ -134,23 +134,36 @@ struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
   }
 };
 
-// A constant tensor of `count` consecutive powers of `root`, in the field's own
+// The first `count` powers of `root`, as a constant tensor in the field's own
 // storage encoding.
 //
-// `PrimitiveRootAttr` holds the same loop but sizes its table by the root's
+// The powers come from `PrimitiveRootAttr`, which is uniqued on the
+// MLIRContext, so the modular exponentiation runs once per distinct root for
+// the whole module rather than once per op — the cyclic path gets that for free
+// and computing the table locally would not. Its table is sized by the root's
 // degree, and the negacyclic twist wants `psi^0 .. psi^(n-1)` from a root of
-// degree `2n` — so going through the attribute would materialize `2n` constants
-// to use half of them.
-static Value buildPowerTable(ImplicitLocOpBuilder &b, IntegerAttr rootAttr,
-                             field::PrimeFieldType coeffType, unsigned count) {
-  auto root = field::PrimeFieldOperation::fromUnchecked(rootAttr, coeffType);
+// degree `2n`, hence the prefix.
+static Value buildPowerTable(ImplicitLocOpBuilder &b,
+                             field::RootOfUnityAttr rootAttr,
+                             field::PrimeFieldType coeffType, unsigned count,
+                             bool inverse) {
+  mod_arith::MontgomeryAttr montAttr;
+  if (coeffType.isMontgomery())
+    montAttr =
+        mod_arith::MontgomeryAttr::get(b.getContext(), coeffType.getModulus());
+  auto primitiveRoots =
+      PrimitiveRootAttr::get(b.getContext(), rootAttr, montAttr);
+  DenseElementsAttr full =
+      inverse ? primitiveRoots.getInvRoots() : primitiveRoots.getRoots();
+
   SmallVector<APInt> powers;
   powers.reserve(count);
-  field::PrimeFieldOperation cur = root.getOne();
-  for (unsigned i = 0; i < count; ++i) {
-    powers.push_back(cur);
-    cur *= root;
+  for (const APInt &value : full.getValues<APInt>()) {
+    if (powers.size() == count)
+      break;
+    powers.push_back(value);
   }
+
   auto storageTensorType =
       RankedTensorType::get({count}, coeffType.getStorageType());
   auto fieldTensorType = RankedTensorType::get({count}, coeffType);
@@ -501,8 +514,8 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
       // on before the bit-reversal permutation reorders anything and the
       // inverse one after the output is back in natural order.
       if (!adaptor.getInverse()) {
-        Value psiPowers =
-            buildPowerTable(b, psi.getIntegerAttr(), coeffType, degree);
+        Value psiPowers = buildPowerTable(b, *adaptor.getRoot(), coeffType,
+                                          degree, /*inverse=*/false);
         source = field::MulOp::create(b, source, psiPowers);
       }
     }
@@ -533,10 +546,8 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     }
 
     if (negacyclic && adaptor.getInverse()) {
-      auto psi = field::PrimeFieldOperation::fromUnchecked(
-          adaptor.getRoot()->getRoot(), coeffType);
-      Value psiInvPowers =
-          buildPowerTable(b, psi.inverse().getIntegerAttr(), coeffType, degree);
+      Value psiInvPowers = buildPowerTable(b, *adaptor.getRoot(), coeffType,
+                                           degree, /*inverse=*/true);
       nttResult = field::MulOp::create(b, nttResult, psiInvPowers);
     }
 
