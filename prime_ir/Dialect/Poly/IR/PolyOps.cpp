@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Poly/IR/PolyOps.h"
 
+#include "llvm/ADT/bit.h"
 #include "mlir/include/mlir/IR/PatternMatch.h"
 #include "prime_ir/Dialect/Field/IR/FieldOperation.h"
 
@@ -63,10 +64,19 @@ LogicalResult NTTOp::verify() {
   if (!rootOfUnity)
     return emitOpError("negacyclic requires `root`");
 
+  // The lowering reads the length off dimension zero and the staged butterflies
+  // assume it is a power of two — an `assert` there, so an unchecked shape is a
+  // crash rather than a diagnostic. Note `psi^n == -1` below does not imply it:
+  // a root of order 4 satisfies it at n = 6 as well as at n = 2.
   auto tensorType = cast<RankedTensorType>(getOutput().getType());
+  if (tensorType.getRank() != 1)
+    return emitOpError("negacyclic requires a rank-1 tensor");
   if (tensorType.isDynamicDim(0))
     return emitOpError("negacyclic requires a static length");
   int64_t degree = tensorType.getShape()[0];
+  if (degree <= 0 || !llvm::has_single_bit(static_cast<uint64_t>(degree)))
+    return emitOpError("negacyclic requires a power-of-two length, got ")
+           << degree;
 
   // `psi^n == -1` rather than a check on the *stated* degree. `RootOfUnityAttr`
   // verifies only `root^degree == 1`, which is divisibility and not order, so
