@@ -74,7 +74,19 @@ def Poly_FromTensorOp : Poly_Op<"from_tensor"> {
   let hasCanonicalizer = 1;
 }
 
-def Poly_NTTOp : Poly_Op<"ntt", [DestinationStyleOpInterface, SameOperandsAndResultType]> {
+// A rank-1 table over the transform length, whatever the batch shape of the
+// transformed tensor is. Spelled as a type transform rather than by
+// `SameOperandsAndResultType` so the batch axes stay off the table, and so the
+// assembly format can still infer `$twiddles` from `type($output)` alone.
+class Poly_TwiddlesOverMinorDim<string src, string tw> : OptionalTypesMatchWith<
+  "twiddles is a rank-1 table over the transform length", src, tw,
+  "::mlir::RankedTensorType::get("
+      "{::llvm::cast<::mlir::ShapedType>($_self).getShape().back()}, "
+      "::llvm::cast<::mlir::ShapedType>($_self).getElementType())">;
+
+def Poly_NTTOp : Poly_Op<"ntt", [DestinationStyleOpInterface,
+                                 AllTypesMatch<["source", "dest", "output"]>,
+                                 Poly_TwiddlesOverMinorDim<"output", "twiddles">]> {
   let summary = "Compute the number theoretic transform.";
   let description = [{
     Computes the forward integer Number Theoretic Transform
@@ -91,6 +103,26 @@ def Poly_NTTOp : Poly_Op<"ntt", [DestinationStyleOpInterface, SameOperandsAndRes
     %coeffs = poly.to_tensor %poly : !poly_ty -> tensor<4x!pf>
     %evals = poly.ntt %coeffs {root=#root}: tensor<4x!pf>
     ```
+
+    The transform runs along the **minor** dimension; every leading dimension is
+    a batch axis, so one op transforms `64x11` independent length-256
+    polynomials:
+
+    ```
+    %evals = poly.ntt %coeffs into %dest {root=#root} : tensor<64x11x256x!pf>
+    ```
+
+    Batching belongs to the op rather than to the caller's loop because the
+    transform is `log2(n)` barrier-separated stages. A length-256 transform
+    offers 128 butterflies per stage, which does not fill a machine, and looping
+    the op pays those barriers once per polynomial. Carrying the batch inside
+    puts `batch * n/2` butterflies in every stage and leaves the barrier count
+    at `log2(n)` for the whole batch, which is what `tileX` / `gridSize` then
+    tile.
+
+    `twiddles` stays rank-1 of length `n` however the source is batched: the
+    table is indexed by position within a stage's block, which is the same for
+    every polynomial in the batch, so a batched table would only duplicate it.
 
     With `negacyclic`, the transform is over `Z_q[X]/(X^n + 1)` instead — the ring
     lattice cryptography multiplies in, where the wrap-around comes back negated.

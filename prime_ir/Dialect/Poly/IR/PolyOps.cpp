@@ -41,6 +41,21 @@ void NTTOp::getCanonicalizationPatterns(RewritePatternSet &results,
 }
 
 LogicalResult NTTOp::verify() {
+  auto tensorType = cast<RankedTensorType>(getOutput().getType());
+
+  // The transform runs along the minor dimension; leading dimensions are a
+  // batch. The staged butterflies assume a power-of-two length and read it off
+  // that dimension — an `assert` in the lowering, so an unchecked shape is a
+  // crash rather than a diagnostic.
+  if (tensorType.getRank() == 0)
+    return emitOpError("requires a tensor of rank 1 or higher");
+  if (tensorType.isDynamicDim(tensorType.getRank() - 1))
+    return emitOpError("requires a static transform length");
+  int64_t degree = tensorType.getShape().back();
+  if (degree <= 0 || !llvm::has_single_bit(static_cast<uint64_t>(degree)))
+    return emitOpError("requires a power-of-two transform length, got ")
+           << degree;
+
   if (!getNegacyclic())
     return success();
 
@@ -64,27 +79,14 @@ LogicalResult NTTOp::verify() {
   if (!rootOfUnity)
     return emitOpError("negacyclic requires `root`");
 
-  // The lowering reads the length off dimension zero and the staged butterflies
-  // assume it is a power of two — an `assert` there, so an unchecked shape is a
-  // crash rather than a diagnostic. Note `psi^n == -1` below does not imply it:
-  // a root of order 4 satisfies it at n = 6 as well as at n = 2.
-  auto tensorType = cast<RankedTensorType>(getOutput().getType());
-  if (tensorType.getRank() != 1)
-    return emitOpError("negacyclic requires a rank-1 tensor");
-  if (tensorType.isDynamicDim(0))
-    return emitOpError("negacyclic requires a static length");
-  int64_t degree = tensorType.getShape()[0];
-  if (degree <= 0 || !llvm::has_single_bit(static_cast<uint64_t>(degree)))
-    return emitOpError("negacyclic requires a power-of-two length, got ")
-           << degree;
-
   // `psi^n == -1` rather than a check on the *stated* degree. `RootOfUnityAttr`
   // verifies only `root^degree == 1`, which is divisibility and not order, so
   // an n-th root relabelled as a 2n-th one passes it, and would then drive
   // the core with `psi^2` of half the needed order, silently computing a
   // transform over the wrong ring. This is the defining property instead of a
   // proxy for it, and it is also what fails when `q - 1` lacks the 2-adicity
-  // for a 2n-th root at all.
+  // for a 2n-th root at all. It does not subsume the power-of-two check above:
+  // a root of order 4 satisfies it at n = 6 as well as at n = 2.
   auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
   auto psi = field::PrimeFieldOperation::fromUnchecked(rootOfUnity->getRoot(),
                                                        coeffType);

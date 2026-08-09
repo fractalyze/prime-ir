@@ -172,6 +172,25 @@ static Value buildPowerTable(ImplicitLocOpBuilder &b,
   return field::BitcastOp::create(b, fieldTensorType, table);
 }
 
+// Stretch a per-coefficient table across the batch axes of `type`, so it can
+// meet a batched tensor in an elementwise `field` op -- those are
+// `SameOperandsAndResultType` and do not broadcast. A no-op when there is no
+// batch.
+static Value broadcastOverBatch(ImplicitLocOpBuilder &b, Value table,
+                                RankedTensorType type) {
+  if (type.getRank() == 1)
+    return table;
+
+  SmallVector<int64_t> batchDims;
+  for (int64_t dim = 0; dim < type.getRank() - 1; ++dim)
+    batchDims.push_back(dim);
+  Value init =
+      tensor::EmptyOp::create(b, type.getShape(), type.getElementType());
+  return linalg::BroadcastOp::create(b, table, init, batchDims)
+      .getResults()
+      .front();
+}
+
 // Butterfly : Cooley-Tukey
 static std::pair<Value, Value> bflyCT(ImplicitLocOpBuilder &b, Value A, Value B,
                                       Value root) {
@@ -205,8 +224,11 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
   // -------------------------------------------------------------------------
   // Compute basic parameters and precompute the roots of unity.
   // -------------------------------------------------------------------------
-  // `degree` is the number of coefficients (assumed to be a power of 2).
-  unsigned degree = tensorType.getShape()[0];
+  // `degree` is the number of coefficients (assumed to be a power of 2). It is
+  // the minor dimension; every leading dimension is a batch axis, transformed
+  // independently by the same staged butterflies.
+  ArrayRef<int64_t> batchShape = tensorType.getShape().drop_back();
+  unsigned degree = tensorType.getShape().back();
   assert(llvm::has_single_bit(degree) &&
          "expected the number of coefficients to be a power of 2");
 
@@ -240,7 +262,8 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
                             b, rootsType, primitiveRootsAttr.getInvRoots());
 
     // Wrap the roots in a field encapsulation for further field operations.
-    roots = field::BitcastOp::create(b, tensorType, roots);
+    // Not `tensorType`: one table serves the whole batch.
+    roots = field::BitcastOp::create(b, rootsType.clone(coeffType), roots);
   }
 
   // -------------------------------------------------------------------------
@@ -341,10 +364,21 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
 
         // The inner loop processes groups of coefficients defined by the
         // current batchSize with a tile size of (tileX, tileY).
-        auto parallelLoop = scf::ParallelOp::create(
-            b, /*lowerBounds=*/ValueRange{c0, c0, c0, c0},
-            /*upperBounds=*/ValueRange{gridX, gridY, tileX, tileY},
-            /*steps=*/ValueRange{c1, c1, c1, c1});
+        //
+        // The batch axes lead, so one stage's parallel region spans every
+        // polynomial: `batch * degree/2` butterflies, and the stage barrier is
+        // paid once for the batch rather than once per polynomial. `row` names
+        // them because `batchSize`/`batchNum` above already mean the butterfly
+        // block within a single transform.
+        SmallVector<Value> lbs(batchShape.size(), c0);
+        SmallVector<Value> ubs;
+        for (int64_t rows : batchShape)
+          ubs.push_back(arith::ConstantIndexOp::create(b, rows));
+        lbs.append({c0, c0, c0, c0});
+        ubs.append({gridX, gridY, tileX, tileY});
+        SmallVector<Value> steps(lbs.size(), c1);
+
+        auto parallelLoop = scf::ParallelOp::create(b, lbs, ubs, steps);
 
         // Build the body of the parallel loop.
         {
@@ -353,10 +387,13 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
           ImplicitLocOpBuilder pb(parallelBlock.getArgument(0).getLoc(),
                                   parallelBuilder);
 
-          Value bx = parallelBlock.getArgument(0);
-          Value by = parallelBlock.getArgument(1);
-          Value tx = parallelBlock.getArgument(2);
-          Value ty = parallelBlock.getArgument(3);
+          unsigned rowRank = batchShape.size();
+          SmallVector<Value> rowIvs(
+              parallelBlock.getArguments().take_front(rowRank));
+          Value bx = parallelBlock.getArgument(rowRank + 0);
+          Value by = parallelBlock.getArgument(rowRank + 1);
+          Value tx = parallelBlock.getArgument(rowRank + 2);
+          Value ty = parallelBlock.getArgument(rowRank + 3);
 
           // Global indices:
           //   indexK = bx*tileY + ty
@@ -397,11 +434,16 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
                 Value halfBatch = arith::DivUIOp::create(t, batchSize, c2);
                 Value indexB = arith::AddIOp::create(t, indexA, halfBatch);
 
+                // The butterfly indices address the minor dimension; the row
+                // induction variables select the polynomial.
+                SmallVector<Value> subscriptA(rowIvs);
+                subscriptA.push_back(indexA);
+                SmallVector<Value> subscriptB(rowIvs);
+                subscriptB.push_back(indexB);
+
                 // Load values from previous stage output.
-                Value A =
-                    memref::LoadOp::create(t, stageMemref, ValueRange{indexA});
-                Value B =
-                    memref::LoadOp::create(t, stageMemref, ValueRange{indexB});
+                Value A = memref::LoadOp::create(t, stageMemref, subscriptA);
+                Value B = memref::LoadOp::create(t, stageMemref, subscriptB);
 
                 // ---------------------------------------------------------
                 // Compute the twiddle factor for the butterfly.
@@ -423,9 +465,9 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
                     kInverse ? bflyGS(t, A, B, root) : bflyCT(t, A, B, root);
 
                 memref::StoreOp::create(t, bflyResult.first, destMemref,
-                                        ValueRange{indexA});
+                                        subscriptA);
                 memref::StoreOp::create(t, bflyResult.second, destMemref,
-                                        ValueRange{indexB});
+                                        subscriptB);
 
                 scf::YieldOp::create(t, ValueRange{});
               });
@@ -495,7 +537,8 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     Value source = adaptor.getSource();
     auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
     auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
-    unsigned degree = tensorType.getShape()[0];
+    const int64_t minorDim = tensorType.getRank() - 1;
+    unsigned degree = tensorType.getShape().back();
     const bool negacyclic = adaptor.getNegacyclic();
 
     // Negacyclic states its root as the 2n-th root `psi`; the staged
@@ -516,7 +559,8 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
       if (!adaptor.getInverse()) {
         Value psiPowers = buildPowerTable(b, *adaptor.getRoot(), coeffType,
                                           degree, /*inverse=*/false);
-        source = field::MulOp::create(b, source, psiPowers);
+        source = field::MulOp::create(
+            b, source, broadcastOverBatch(b, psiPowers, tensorType));
       }
     }
 
@@ -526,7 +570,7 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     // forward NTT.
     if (!adaptor.getInverse() && adaptor.getBitReverse()) {
       auto bitReversed = tensor_ext::BitReverseOp::create(
-          b, source, adaptor.getDest(), /*dimension=*/0);
+          b, source, adaptor.getDest(), /*dimension=*/minorDim);
 
       // NOTE(batzor): We should not use `dest` operand for the destination
       // here. Otherwise, writable `ToBufferOp` will be called twice on the same
@@ -541,14 +585,15 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     // inverse NTT.
     if (adaptor.getInverse() && adaptor.getBitReverse()) {
       auto nttResultBitReversed = tensor_ext::BitReverseOp::create(
-          b, nttResult, nttResult, /*dimension=*/0);
+          b, nttResult, nttResult, /*dimension=*/minorDim);
       nttResult = nttResultBitReversed.getResult();
     }
 
     if (negacyclic && adaptor.getInverse()) {
       Value psiInvPowers = buildPowerTable(b, *adaptor.getRoot(), coeffType,
                                            degree, /*inverse=*/true);
-      nttResult = field::MulOp::create(b, nttResult, psiInvPowers);
+      nttResult = field::MulOp::create(
+          b, nttResult, broadcastOverBatch(b, psiInvPowers, tensorType));
     }
 
     rewriter.replaceOp(op, nttResult);

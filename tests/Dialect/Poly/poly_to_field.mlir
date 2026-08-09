@@ -77,6 +77,34 @@ func.func @test_lower_intt_with_twiddles(%input : tensor<2x!PF1>, %twiddles : te
   return %res: tensor<2x!PF1>
 }
 
+// What the batch axis is for, and the one thing an execution test cannot see:
+// the stage loop stays singular and its parallel region grows to cover every
+// polynomial, so `log2(n)` barriers are paid once for the whole batch. A caller
+// that looped the rank-1 op would emit one stage loop per row instead.
+// CHECK-LABEL: @test_lower_batched_ntt
+func.func @test_lower_batched_ntt(%input : tensor<3x2x!PF1>) -> tensor<3x2x!PF1> {
+  // CHECK-NOT: poly.ntt
+  // CHECK: scf.for
+  // One induction variable per leading dimension, ahead of the four the
+  // (tileX, tileY) grid already had.
+  // CHECK: scf.parallel ({{[^,]*}}, {{[^,]*}}, {{[^,]*}}, {{[^,]*}}, {{[^,)]*}}) =
+  // CHECK-NOT: scf.parallel
+  %res = poly.ntt %input into %input {root=#root_of_unity} : tensor<3x2x!PF1>
+  return %res: tensor<3x2x!PF1>
+}
+
+// Each leading dimension is its own loop dimension rather than one flattened
+// axis, so the rank-3 shape a lattice consumer actually has (signatures x
+// polynomials x coefficients) needs no reshape to reach the op.
+// CHECK-LABEL: @test_lower_batched_ntt_rank3
+func.func @test_lower_batched_ntt_rank3(%input : tensor<3x5x2x!PF1>) -> tensor<3x5x2x!PF1> {
+  // CHECK-NOT: poly.ntt
+  // CHECK: scf.parallel ({{[^,]*}}, {{[^,]*}}, {{[^,]*}}, {{[^,]*}}, {{[^,]*}}, {{[^,)]*}}) =
+  // CHECK-NOT: scf.parallel
+  %res = poly.ntt %input into %input {root=#root_of_unity} : tensor<3x5x2x!PF1>
+  return %res: tensor<3x5x2x!PF1>
+}
+
 // The twist rides on the natural coefficient index, so on the forward transform
 // it lands *before* the bit-reversal permutation reorders anything.
 // CHECK-LABEL: @test_lower_negacyclic_ntt
