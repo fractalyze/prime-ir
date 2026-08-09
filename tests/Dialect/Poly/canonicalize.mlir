@@ -17,6 +17,7 @@
 
 !coeff_ty = !field.pf<7681:i32>
 #root_of_unity = #field.root_of_unity<3383:i32, 4:i32> : !coeff_ty
+#psi = #field.root_of_unity<1925:i32, 8:i32> : !coeff_ty
 !poly_ty = !poly.polynomial<!coeff_ty, 3>
 !tensor_ty = tensor<4x!coeff_ty>
 
@@ -46,4 +47,27 @@ func.func @test_canonicalize_ntt_after_intt(%t0 : !tensor_ty) -> !tensor_ty {
   %evals3 = field.add %evals2, %evals2 : !tensor_ty
   // CHECK: return %[[RESULT]] : [[T]]
   return %evals3 : !tensor_ty
+}
+
+// A negacyclic pair folds like the cyclic one.
+// CHECK-LABEL: @test_canonicalize_negacyclic_pair
+// CHECK: (%[[X:.*]]: [[T:.*]]) -> [[T]]
+func.func @test_canonicalize_negacyclic_pair(%t0 : !tensor_ty) -> !tensor_ty {
+  // CHECK-NOT: poly.ntt
+  %evals = poly.ntt %t0 into %t0 {root=#psi} negacyclic=true : !tensor_ty
+  %coeffs = poly.ntt %evals into %evals {root=#psi} inverse=true negacyclic=true : !tensor_ty
+  // CHECK: return %[[X]] : [[T]]
+  return %coeffs : !tensor_ty
+}
+
+// A cyclic transform undone by a negacyclic one is NOT the identity — they are
+// transforms over different rings — so the pair must survive canonicalization.
+// Without the `negacyclic` equality constraint this folds away silently and the
+// program computes something else entirely.
+// CHECK-LABEL: @test_no_fold_across_negacyclic_mismatch
+func.func @test_no_fold_across_negacyclic_mismatch(%t0 : !tensor_ty) -> !tensor_ty {
+  // CHECK-COUNT-2: poly.ntt
+  %evals = poly.ntt %t0 into %t0 {root=#psi} : !tensor_ty
+  %coeffs = poly.ntt %evals into %evals {root=#psi} inverse=true negacyclic=true : !tensor_ty
+  return %coeffs : !tensor_ty
 }

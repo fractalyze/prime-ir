@@ -134,6 +134,44 @@ struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
   }
 };
 
+// The first `count` powers of `root`, as a constant tensor in the field's own
+// storage encoding.
+//
+// The powers come from `PrimitiveRootAttr`, which is uniqued on the
+// MLIRContext, so the modular exponentiation runs once per distinct root for
+// the whole module rather than once per op — the cyclic path gets that for free
+// and computing the table locally would not. Its table is sized by the root's
+// degree, and the negacyclic twist wants `psi^0 .. psi^(n-1)` from a root of
+// degree `2n`, hence the prefix.
+static Value buildPowerTable(ImplicitLocOpBuilder &b,
+                             field::RootOfUnityAttr rootAttr,
+                             field::PrimeFieldType coeffType, unsigned count,
+                             bool inverse) {
+  mod_arith::MontgomeryAttr montAttr;
+  if (coeffType.isMontgomery())
+    montAttr =
+        mod_arith::MontgomeryAttr::get(b.getContext(), coeffType.getModulus());
+  auto primitiveRoots =
+      PrimitiveRootAttr::get(b.getContext(), rootAttr, montAttr);
+  DenseElementsAttr full =
+      inverse ? primitiveRoots.getInvRoots() : primitiveRoots.getRoots();
+
+  SmallVector<APInt> powers;
+  powers.reserve(count);
+  for (const APInt &value : full.getValues<APInt>()) {
+    if (powers.size() == count)
+      break;
+    powers.push_back(value);
+  }
+
+  auto storageTensorType =
+      RankedTensorType::get({count}, coeffType.getStorageType());
+  auto fieldTensorType = RankedTensorType::get({count}, coeffType);
+  Value table = arith::ConstantOp::create(
+      b, storageTensorType, DenseElementsAttr::get(storageTensorType, powers));
+  return field::BitcastOp::create(b, fieldTensorType, table);
+}
+
 // Butterfly : Cooley-Tukey
 static std::pair<Value, Value> bflyCT(ImplicitLocOpBuilder &b, Value A, Value B,
                                       Value root) {
@@ -153,7 +191,8 @@ static std::pair<Value, Value> bflyGS(ImplicitLocOpBuilder &b, Value A, Value B,
 }
 
 static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
-                     Value source, Value dest) {
+                     field::RootOfUnityAttr coreRoot, Value source,
+                     Value dest) {
   auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
   auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
 
@@ -181,11 +220,8 @@ static Value fastNTT(ImplicitLocOpBuilder &b, NTTOpAdaptor adaptor,
   if (adaptor.getTwiddles()) {
     roots = adaptor.getTwiddles();
   } else {
-    assert(adaptor.getRoot() &&
-           "Root of unity is required if no twiddles are provided");
-    field::RootOfUnityAttr rootAttr = adaptor.getRoot().value();
-    APInt cmod = coeffType.getModulus().getValue();
-    APInt root = rootAttr.getRoot().getValue();
+    assert(coreRoot && "Root of unity is required if no twiddles are provided");
+    field::RootOfUnityAttr rootAttr = coreRoot;
 
     mod_arith::MontgomeryAttr montAttr;
     if (coeffType.isMontgomery()) {
@@ -456,21 +492,49 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
                   ConversionPatternRewriter &rewriter) const override {
     ImplicitLocOpBuilder b(op.getLoc(), rewriter);
 
+    Value source = adaptor.getSource();
+    auto tensorType = cast<RankedTensorType>(adaptor.getDest().getType());
+    auto coeffType = cast<field::PrimeFieldType>(tensorType.getElementType());
+    unsigned degree = tensorType.getShape()[0];
+    const bool negacyclic = adaptor.getNegacyclic();
+
+    // Negacyclic states its root as the 2n-th root `psi`; the staged
+    // butterflies are the cyclic transform, which runs on `omega = psi^2` of
+    // degree n. The verifier rejects negacyclic without a root, so the value is
+    // there.
+    field::RootOfUnityAttr coreRoot = adaptor.getRoot().value_or(nullptr);
+    if (negacyclic) {
+      auto psi = field::PrimeFieldOperation::fromUnchecked(coreRoot.getRoot(),
+                                                           coeffType);
+      coreRoot = field::RootOfUnityAttr::get(
+          b.getContext(), coeffType, psi.square().getIntegerAttr(),
+          b.getIntegerAttr(coreRoot.getDegree().getType(), degree));
+
+      // `psi^j` on the *natural* coefficient index, so the forward twist goes
+      // on before the bit-reversal permutation reorders anything and the
+      // inverse one after the output is back in natural order.
+      if (!adaptor.getInverse()) {
+        Value psiPowers = buildPowerTable(b, *adaptor.getRoot(), coeffType,
+                                          degree, /*inverse=*/false);
+        source = field::MulOp::create(b, source, psiPowers);
+      }
+    }
+
     Value nttResult;
 
     // Transform the input tensor to bit-reversed order at first if performing
     // forward NTT.
     if (!adaptor.getInverse() && adaptor.getBitReverse()) {
       auto bitReversed = tensor_ext::BitReverseOp::create(
-          b, adaptor.getSource(), adaptor.getDest(), /*dimension=*/0);
+          b, source, adaptor.getDest(), /*dimension=*/0);
 
       // NOTE(batzor): We should not use `dest` operand for the destination
       // here. Otherwise, writable `ToBufferOp` will be called twice on the same
       // `dest` SSA Value causing conflict and force memory copy.
-      nttResult =
-          fastNTT(b, adaptor, bitReversed.getResult(), bitReversed.getResult());
+      nttResult = fastNTT(b, adaptor, coreRoot, bitReversed.getResult(),
+                          bitReversed.getResult());
     } else {
-      nttResult = fastNTT(b, adaptor, adaptor.getSource(), adaptor.getDest());
+      nttResult = fastNTT(b, adaptor, coreRoot, source, adaptor.getDest());
     }
 
     // Transform the input tensor to bit-reversed order at last if performing
@@ -478,11 +542,16 @@ struct ConvertNTT : public OpConversionPattern<NTTOp> {
     if (adaptor.getInverse() && adaptor.getBitReverse()) {
       auto nttResultBitReversed = tensor_ext::BitReverseOp::create(
           b, nttResult, nttResult, /*dimension=*/0);
-
-      rewriter.replaceOp(op, nttResultBitReversed);
-    } else {
-      rewriter.replaceOp(op, nttResult);
+      nttResult = nttResultBitReversed.getResult();
     }
+
+    if (negacyclic && adaptor.getInverse()) {
+      Value psiInvPowers = buildPowerTable(b, *adaptor.getRoot(), coeffType,
+                                           degree, /*inverse=*/true);
+      nttResult = field::MulOp::create(b, nttResult, psiInvPowers);
+    }
+
+    rewriter.replaceOp(op, nttResult);
 
     return success();
   }
