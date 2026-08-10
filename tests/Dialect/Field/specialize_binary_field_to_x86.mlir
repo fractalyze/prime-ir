@@ -202,6 +202,26 @@ func.func @test_ghash_mul(%a: !GHASH, %b: !GHASH) -> !GHASH {
   return %c : !GHASH
 }
 
+// Squaring drops the Karatsuba cross term — a₀·a₁ + a₁·a₀ = 0 in characteristic
+// 2 — so it is two vpclmulqdq against the multiply's three. The trailing NOT
+// makes that an exact bound: routing a square through the multiply would still
+// emit the third, and a bare positive-match list would not notice.
+// CHECK-GFNI-LABEL: @test_ghash_square
+// CHECK-GFNI: field.square
+// CHECK-GFNI-NOT: llvm.inline_asm
+// CHECK-PCLMULQDQ-LABEL: @test_ghash_square
+// CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
+// CHECK-PCLMULQDQ-COUNT-2: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-PCLMULQDQ-NOT: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-PCLMULQDQ: builtin.unrealized_conversion_cast
+// CHECK-ALL-LABEL: @test_ghash_square
+// CHECK-ALL-COUNT-2: llvm.inline_asm{{.*}}vpclmulqdq
+// CHECK-ALL-NOT: llvm.inline_asm{{.*}}vpclmulqdq
+func.func @test_ghash_square(%a: !GHASH) -> !GHASH {
+  %c = field.square %a : !GHASH
+  return %c : !GHASH
+}
+
 // Vector of BF64 should NOT be specialized by this pass (use ARM pass for vectors)
 // CHECK-GFNI-LABEL: @test_bf64_vec_mul
 // CHECK-GFNI: field.mul
