@@ -27,7 +27,7 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
 
     The GPU analog of `SpecializeBinaryFieldToX86` (PCLMULQDQ) and
 `SpecializeBinaryFieldToARM` (PMULL). Every flat multiply becomes a
-    clmad product: `bf<7, ghash>` a 128x128 schoolbook of eight
+    clmad product: `bf<7, ghash>` a 128x128 Karatsuba product of six
     `clmad.{lo,hi}.u64` plus the shared GHASH reduction, `bf<3, aes>` and
     every generic/custom `poly<...>` basis up to 32 bits a single
     `clmad.lo` plus two constant-tap folds (the modulus is read off the
@@ -56,6 +56,15 @@ def SpecializeBinaryFieldToNVPTX : Pass<"specialize-binary-field-to-nvptx", "Mod
 
     The emitted `clmad` requires a CUDA-13.3+ ptxas to assemble; on older
     toolchains leave this pass disabled and the portable path is used.
+
+    Performance notes:
+    - The GHASH product uses Karatsuba (3 sub-products, not 4), trading two
+      clmad for six XOR. Measured 1.27x on a GHASH mul-accumulate chain and
+      +2.7% on a whole GPU prove, because the multiply is clmad-issue-bound
+      on sm_120 and integer work issued alongside it is effectively free.
+      That premise is what makes the trade one-directional — re-measure
+      before assuming it holds on a target whose carryless-multiply pipe is
+      not the bottleneck.
   }];
 
   let dependentDialects = [

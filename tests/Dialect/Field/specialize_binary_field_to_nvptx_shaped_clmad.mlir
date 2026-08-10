@@ -71,11 +71,12 @@ func.func @vector_aes_mul(%a: vector<2x!AES>, %b: vector<2x!AES>) -> vector<2x!A
   return %c : vector<2x!AES>
 }
 
-// Shaped GHASH (tensor): eight clmad.{lo,hi}.u64 build the 128×128 product per
-// lane, so 16 clmad across the 2 lanes.
+// Shaped GHASH (tensor): six clmad.{lo,hi}.u64 build the Karatsuba 128×128
+// product per lane, so 12 clmad across the 2 lanes.
 // CHECK-CLMAD-LABEL: @tensor_ghash_mul
 // CHECK-CLMAD: tensor.extract
-// CHECK-CLMAD-COUNT-16: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-COUNT-12: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: llvm.inline_asm{{.*}}clmad{{.*}}u64
 // CHECK-CLMAD: tensor.from_elements
 // CHECK-OFF-LABEL: @tensor_ghash_mul
 // CHECK-OFF: field.mul
@@ -144,10 +145,11 @@ func.func @vector_bf32_mul(%a: vector<2x!BF32>, %b: vector<2x!BF32>) -> vector<2
   return %c : vector<2x!BF32>
 }
 
-// Tower level 7 converts into the GHASH basis, so each lane is the 8-clmad
-// GHASH product between 128-wide ladders.
+// Tower level 7 converts into the GHASH basis, so each lane is the 6-clmad
+// Karatsuba GHASH product between 128-wide ladders.
 // CHECK-CLMAD-LABEL: @tensor_bf128_mul
-// CHECK-CLMAD-COUNT-16: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-COUNT-12: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: llvm.inline_asm{{.*}}clmad{{.*}}u64
 // CHECK-CLMAD-NOT: field.mul
 // CHECK-OFF-LABEL: @tensor_bf128_mul
 // CHECK-OFF: field.mul

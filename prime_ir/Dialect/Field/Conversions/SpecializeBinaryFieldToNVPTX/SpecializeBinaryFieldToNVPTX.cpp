@@ -45,8 +45,8 @@ namespace {
 // Emit a single PTX `clmad.{lo,hi}.u64` (carryless multiply-add, PTX ISA 9.3):
 //   dst = carryless_product_{lo|hi}(a, b) XOR c
 // `lo` selects bits 0..63 of the 64x64 carryless product, `hi` bits 64..127.
-// The `c` operand chains the XOR-accumulation for free, which the schoolbook
-// below uses to fold cross terms without extra XOR ops. Kept as opaque inline
+// The `c` operand chains one XOR into the multiply for free, which the
+// schedules below use to absorb fold terms. Kept as opaque inline
 // asm so `clmad` survives to PTX regardless of the LLVM NVPTX backend version;
 // only ptxas (CUDA 13.3+) needs to know the instruction.
 Value emitClmad(ImplicitLocOpBuilder &b, Value a, Value bv, Value c,
@@ -67,17 +67,16 @@ Value emitClmad(ImplicitLocOpBuilder &b, Value a, Value bv, Value c,
 // clmad-based GHASH Multiplication
 //===----------------------------------------------------------------------===//
 
-// Multiply two GHASH-basis i128 values using clmad. Eight clmad build the
-// 128x128 -> 256-bit carryless product as limbs r0..r3 (low to high), folding
-// the two cross terms via clmad's XOR-accumulate operand exactly as flock's
-// clmad kernel (optim/clmad/ghash_mul.ptx):
-//   r0 = ll_lo
-//   r1 = ll_hi ^ (a1·b0)_lo ^ (a0·b1)_lo   (= ll_hi ^ mid_lo)
-//   r2 = hh_lo ^ (a1·b0)_hi ^ (a0·b1)_hi   (= hh_lo ^ mid_hi)
-//   r3 = hh_hi
-// These are the same r0..r3 limbs the x86 PCLMULQDQ path produces, so the
-// reduction reuses the shared `reduceGhash` — the carryless-multiply backends
-// fold the high half identically and cannot drift.
+// Multiply two GHASH-basis i128 values using clmad. Karatsuba — 3 sub-products
+// instead of 4 (cross term a₀b₁ + a₁b₀ = (a₀+a₁)(b₀+b₁) + a₀b₀ + a₁b₁), which
+// trades two clmad for six XOR. Worth it because this multiply is
+// clmad-issue-bound on sm_120, so the XORs issue alongside for free; see the
+// pass's Performance notes for the measurement and when to re-check it.
+//
+// These are the same r0..r3 limbs the x86 PCLMULQDQ, ARM PMULL, and portable
+// `emitGhashMul` paths produce from the same identity, so the reduction reuses
+// the shared `reduceGhash` — the carryless-multiply backends fold the high half
+// identically and cannot drift.
 Value mulGhashClmad(ImplicitLocOpBuilder &b, Value lhsI128, Value rhsI128) {
   auto i64Ty = b.getI64Type();
   auto i128Ty = b.getIntegerType(128);
@@ -92,14 +91,25 @@ Value mulGhashClmad(ImplicitLocOpBuilder &b, Value lhsI128, Value rhsI128) {
 
   Value z = arith::ConstantIntOp::create(b, 0, 64);
 
-  Value r0 = emitClmad(b, a0, b0, z, /*isHi=*/false);
-  Value t1 = emitClmad(b, a1, b0, z, /*isHi=*/false);
-  t1 = emitClmad(b, a0, b1, t1, /*isHi=*/false);
-  Value r1 = emitClmad(b, a0, b0, t1, /*isHi=*/true);
-  Value t2 = emitClmad(b, a1, b0, z, /*isHi=*/true);
-  t2 = emitClmad(b, a0, b1, t2, /*isHi=*/true);
-  Value r2 = emitClmad(b, a1, b1, t2, /*isHi=*/false);
-  Value r3 = emitClmad(b, a1, b1, z, /*isHi=*/true);
+  Value aXor = arith::XOrIOp::create(b, a0, a1);
+  Value bXor = arith::XOrIOp::create(b, b0, b1);
+
+  Value llLo = emitClmad(b, a0, b0, z, /*isHi=*/false);
+  Value llHi = emitClmad(b, a0, b0, z, /*isHi=*/true);
+  Value hhLo = emitClmad(b, a1, b1, z, /*isHi=*/false);
+  Value hhHi = emitClmad(b, a1, b1, z, /*isHi=*/true);
+
+  // The `^ ll ^ hh` half of the cross term rides clmad's accumulate operand;
+  // the other half is these two XORs.
+  Value foldLo = arith::XOrIOp::create(b, llLo, hhLo);
+  Value foldHi = arith::XOrIOp::create(b, llHi, hhHi);
+  Value midLo = emitClmad(b, aXor, bXor, foldLo, /*isHi=*/false);
+  Value midHi = emitClmad(b, aXor, bXor, foldHi, /*isHi=*/true);
+
+  Value r0 = llLo;
+  Value r1 = arith::XOrIOp::create(b, llHi, midLo);
+  Value r2 = arith::XOrIOp::create(b, hhLo, midHi);
+  Value r3 = hhHi;
 
   // Fold the high half down via x¹²⁸ == x⁷ + x² + x + 1.
   auto [r3Red, r3Overflow] = reduceGhash(b, r3);
@@ -278,7 +288,8 @@ struct ConvertTowerMulToClmad : public OpRewritePattern<MulOp> {
 
       Value resultN;
       if (level == 7) {
-        // 128-bit: convert into the GHASH basis and reuse its 8-clmad product.
+        // 128-bit: route through the GHASH basis so level 7 shares
+        // mulGhashClmad instead of carrying a second product schedule.
         Value lhsFlat =
             emitBitMatrix128(b, lhsN, kTowerToFlat128Lo, kTowerToFlat128Hi);
         Value rhsFlat =
