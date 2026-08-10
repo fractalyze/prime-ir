@@ -15,7 +15,7 @@
 
 // Test clmad specialization for binary field multiplication.
 //
-// clmad computes a carryless product: flat bases multiply directly (ghash 8
+// clmad computes a carryless product: flat bases multiply directly (ghash 6
 // clmads, generic 3 or 5), and tower levels 4..7 convert through the
 // canonical flat basis of their width (TowerFlatBasis.h) around it.
 
@@ -40,11 +40,15 @@
 !F64 = !field.bf<6, flat>    // GF(2⁶⁴), canonical flat basis
 !RS8 = !field.bf<3, poly<0x11d>> // GF(2⁸), custom modulus
 
-// GHASH-basis scalar multiplication should use clmad: eight clmad.{lo,hi}.u64
-// build the 128×128 carryless product, then the shared GHASH reduction.
+// GHASH-basis scalar multiplication should use clmad: six clmad.{lo,hi}.u64
+// build the Karatsuba 128×128 carryless product, then the shared GHASH
+// reduction. The trailing NOT makes the count an exact bound rather than a
+// lower one — COUNT-6 alone still passes on a regression to the 4-sub-product
+// schedule, which is the thing worth catching (see `mulGhashClmad`).
 // CHECK-CLMAD-LABEL: @test_ghash_mul
 // CHECK-CLMAD: builtin.unrealized_conversion_cast
-// CHECK-CLMAD-COUNT-8: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-COUNT-6: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: llvm.inline_asm{{.*}}clmad{{.*}}u64
 // CHECK-CLMAD: builtin.unrealized_conversion_cast
 // CHECK-OFF-LABEL: @test_ghash_mul
 // CHECK-OFF: field.mul
@@ -97,9 +101,10 @@ func.func @test_aes_mul(%a: !AES, %b: !AES) -> !AES {
 }
 
 // BF128 (tower) converts into the GHASH basis (128-wide ladders) around the
-// 8-clmad GHASH product.
+// 6-clmad Karatsuba GHASH product.
 // CHECK-CLMAD-LABEL: @test_bf128_mul
-// CHECK-CLMAD-COUNT-8: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-COUNT-6: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: llvm.inline_asm{{.*}}clmad{{.*}}u64
 // CHECK-CLMAD-NOT: field.mul
 // CHECK-OFF-LABEL: @test_bf128_mul
 // CHECK-OFF: field.mul
