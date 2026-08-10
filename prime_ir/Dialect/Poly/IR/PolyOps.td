@@ -16,12 +16,8 @@ limitations under the License.
 #ifndef PRIME_IR_DIALECT_POLY_IR_POLYOPS_TD_
 #define PRIME_IR_DIALECT_POLY_IR_POLYOPS_TD_
 
-include "mlir/IR/BuiltinAttributes.td"
-include "prime_ir/Dialect/Poly/IR/PolyAttributes.td"
 include "prime_ir/Dialect/Poly/IR/PolyDialect.td"
 include "prime_ir/Dialect/Poly/IR/PolyTypes.td"
-include "mlir/Interfaces/DestinationStyleOpInterface.td"
-include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 // Base class for polynomial operations.
@@ -72,66 +68,6 @@ def Poly_FromTensorOp : Poly_Op<"from_tensor"> {
   let results = (outs Poly_PolyType:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($output)";
   let hasCanonicalizer = 1;
-}
-
-def Poly_NTTOp : Poly_Op<"ntt", [DestinationStyleOpInterface, SameOperandsAndResultType]> {
-  let summary = "Compute the number theoretic transform.";
-  let description = [{
-    Computes the forward integer Number Theoretic Transform
-    (NTT) on the input coefficients. It returns a tensor containing a point-value
-    representation of the input polynomial.
-
-    Given an input polynomial `F(x)` with degree `n`, and a primitive `n`-th root of
-    unity `omega[n]`, the output is the list of $n$ evaluations
-
-      `f[k] = F(omega[n]^k) ; k = {0, ..., n-1}`
-
-    Example:
-    ```
-    %coeffs = poly.to_tensor %poly : !poly_ty -> tensor<4x!pf>
-    %evals = poly.ntt %coeffs {root=#root}: tensor<4x!pf>
-    ```
-
-    With `negacyclic`, the transform is over `Z_q[X]/(X^n + 1)` instead — the ring
-    lattice cryptography multiplies in, where the wrap-around comes back negated.
-    `root` then carries a primitive `2n`-th root `psi` rather than an `n`-th root,
-    and the cyclic core runs on `omega = psi^2`. Taking `psi` rather than deriving
-    it is deliberate: a square root of `omega` is not unique, so `omega` alone does
-    not determine the transform.
-
-    It reduces to the cyclic transform with a twist on each side — forward
-    pre-twists `a[j]` by `psi^j` on the natural index, inverse post-untwists by
-    `psi^-j` — so the staged butterflies are shared, and `bit_reverse` is
-    required because that is what puts slot `j` on coefficient `j`.
-
-    `twiddles` cannot carry the twist and is rejected with `negacyclic`: the
-    butterflies index one table by the position within a block, so a
-    per-coefficient diagonal has nowhere to live.
-
-    A length-`n` negacyclic transform exists only where the field has a primitive
-    `2n`-th root, which the 2-adicity of `q - 1` decides. That is why FIPS 203's
-    ML-KEM (`q = 3329`, 2-adicity 8) has no length-256 negacyclic transform and
-    uses two length-128 ones, while FIPS 204's ML-DSA (`q = 8380417`, 2-adicity 13)
-    has one.
-  }];
-  let arguments = (ins
-    RankedTensorOf<[Field_PrimeFieldType]>:$source,
-    RankedTensorOf<[Field_PrimeFieldType]>:$dest,
-    Optional<RankedTensorOf<[Field_PrimeFieldType]>>:$twiddles,
-    OptionalAttr<Field_RootOfUnityAttr>:$root,
-    OptionalAttr<Builtin_IntegerAttr>:$tileX,
-    OptionalAttr<Builtin_IntegerAttr>:$gridSize,
-    DefaultValuedAttr<BoolAttr, "true">:$bitReverse,
-    DefaultValuedAttr<BoolAttr, "false">:$inverse,
-    DefaultValuedAttr<BoolAttr, "false">:$negacyclic
-  );
-  let results = (outs RankedTensorOf<[Field_PrimeFieldType]>:$output);
-  let assemblyFormat = "$source `into` $dest (`with` $twiddles^)? attr-dict (`inverse` `=` $inverse^)? (`bit_reverse` `=` $bitReverse^)? (`negacyclic` `=` $negacyclic^)? `:` type($output)";
-  let hasCanonicalizer = 1;
-  let hasVerifier = 1;
-  let extraClassDeclaration = [{
-    MutableOperandRange getDpsInitsMutable() { return getDestMutable(); }
-  }];
 }
 
 #endif  // PRIME_IR_DIALECT_POLY_IR_POLYOPS_TD_

@@ -32,7 +32,6 @@ def Poly_Dialect : Dialect {
   }];
   let cppNamespace = "::mlir::prime_ir::poly";
   let useDefaultTypePrinterParser = 1;
-  let useDefaultAttributePrinterParser = 1;
   let dependentDialects = [
     "prime_ir::field::FieldDialect",
   ];
