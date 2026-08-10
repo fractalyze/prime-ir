@@ -413,3 +413,22 @@ func.func @test_lower_sub_goldilocks_feeds_mul(%a: !Gsub, %b: !Gsub, %c: !Gsub) 
   %r = mod_arith.mul %s, %c : !Gsub
   return %r : !Gsub
 }
+
+// -----
+
+// Regression: the Solinas reducer's constants must splat over a shaped
+// operand. A tensor-typed Goldilocks square used to crash the lowering:
+// getIntegerAttr received the shaped type itself and walked into
+// FloatType::getWidth (the CPU fusion pipeline hands the reducer shaped
+// i64 values; the GPU pipeline scalarizes first, which hid the crash).
+!Gv = !mod_arith.int<18446744069414584321 : i64>
+!Gvec = tensor<4x!Gv>
+// CHECK-LABEL: @test_lower_square_goldilocks_shaped
+func.func @test_lower_square_goldilocks_shaped(%lhs : !Gvec) -> !Gvec {
+  // CHECK-NOT: mod_arith.square
+  // CHECK:      arith.mului_extended %{{.*}}, %{{.*}} : tensor<4xi64>
+  // CHECK:      %[[RES:.*]] = arith.minui %{{.*}}, %{{.*}} : tensor<4xi64>
+  // CHECK:      return %[[RES]] : tensor<4xi64>
+  %res = mod_arith.square %lhs : !Gvec
+  return %res : !Gvec
+}
