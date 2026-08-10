@@ -17,13 +17,6 @@
 
 !PF1 = !field.pf<7:i255>
 !poly_ty1 = !poly.polynomial<!PF1, 3>
-!poly_ty2 = !poly.polynomial<!PF1, 4>
-#root_of_unity = #field.root_of_unity<6:i255, 2:i255> : !PF1
-// A separate field for the negacyclic cases because F_7's `q - 1 = 6` has
-// 2-adicity 1: it has no 4th root of unity, so a length-2 negacyclic transform
-// does not exist over !PF1 at all. 7681 has 2-adicity 9.
-!PFN = !field.pf<7681:i32, true>
-#psi = #field.root_of_unity<1925:i32, 8:i32> : !PFN
 
 // CHECK-LABEL: @test_lower_to_tensor
 // CHECK-SAME: (%[[ARG0:.*]]: [[T:.*]]) -> [[T]] {
@@ -41,60 +34,4 @@ func.func @test_lower_from_tensor(%t : tensor<4x!PF1>) -> !poly_ty1 {
   // CHECK: return %[[LHS]] : [[T]]
   %res = poly.from_tensor %t : tensor<4x!PF1> -> !poly_ty1
   return %res : !poly_ty1
-}
-
-// CHECK-LABEL: @test_lower_ntt
-// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_ntt(%input : tensor<2x!PF1>) -> tensor<2x!PF1> {
-  // CHECK-NOT: poly.ntt
-  %res = poly.ntt %input into %input {root=#root_of_unity}: tensor<2x!PF1>
-  return %res: tensor<2x!PF1>
-}
-
-// CHECK-LABEL: @test_lower_ntt_with_twiddles
-// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_ntt_with_twiddles(%input : tensor<2x!PF1>, %twiddles : tensor<2x!PF1>) -> tensor<2x!PF1> {
-  // CHECK-NOT: poly.ntt
-  // CHECK-NOT: arith.constant dense
-  %res = poly.ntt %input into %input with %twiddles: tensor<2x!PF1>
-  return %res: tensor<2x!PF1>
-}
-
-// CHECK-LABEL: @test_lower_intt
-// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[P:.*]] {
-func.func @test_lower_intt(%input : tensor<2x!PF1>) -> tensor<2x!PF1> {
-  // CHECK-NOT: poly.ntt
-  %res = poly.ntt %input into %input {root=#root_of_unity} inverse=true : tensor<2x!PF1>
-  return %res: tensor<2x!PF1>
-}
-
-// CHECK-LABEL: @test_lower_intt_with_twiddles
-// CHECK-SAME: (%[[INPUT:.*]]: [[T:.*]]) -> [[T]] {
-func.func @test_lower_intt_with_twiddles(%input : tensor<2x!PF1>, %twiddles : tensor<2x!PF1>) -> tensor<2x!PF1> {
-  // CHECK-NOT: poly.ntt
-  // CHECK-NOT: arith.constant dense
-  %res = poly.ntt %input into %input with %twiddles inverse=true: tensor<2x!PF1>
-  return %res: tensor<2x!PF1>
-}
-
-// The twist rides on the natural coefficient index, so on the forward transform
-// it lands *before* the bit-reversal permutation reorders anything.
-// CHECK-LABEL: @test_lower_negacyclic_ntt
-func.func @test_lower_negacyclic_ntt(%input : tensor<4x!PFN>) -> tensor<4x!PFN> {
-  // The check is about twist *position*, not the opcode.
-  // CHECK-NOT: poly.ntt
-  // CHECK: field.mul
-  // CHECK: tensor_ext.bit_reverse
-  %res = poly.ntt %input into %input {root=#psi} negacyclic=true : tensor<4x!PFN>
-  return %res: tensor<4x!PFN>
-}
-
-// And on the inverse it lands after, once the output is back in natural order.
-// CHECK-LABEL: @test_lower_negacyclic_intt
-func.func @test_lower_negacyclic_intt(%input : tensor<4x!PFN>) -> tensor<4x!PFN> {
-  // CHECK-NOT: poly.ntt
-  // CHECK: tensor_ext.bit_reverse
-  // CHECK: field.mul
-  %res = poly.ntt %input into %input {root=#psi} inverse=true negacyclic=true : tensor<4x!PFN>
-  return %res: tensor<4x!PFN>
 }

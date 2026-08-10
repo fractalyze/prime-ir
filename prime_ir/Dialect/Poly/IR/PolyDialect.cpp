@@ -21,17 +21,12 @@ limitations under the License.
 // IWYU pragma: begin_keep
 // Headers needed for PolyDialect.cpp.inc
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
-// Headers needed for PolyAttributes.cpp.inc
-#include "prime_ir/Dialect/Poly/IR/PolyAttributes.h"
 // Headers needed for PolyOps.cpp.inc
 #include "prime_ir/Dialect/Poly/IR/PolyOps.h"
 // IWYU pragma: end_keep
 
 // Generated definitions
 #include "prime_ir/Dialect/Poly/IR/PolyDialect.cpp.inc"
-
-#define GET_ATTRDEF_CLASSES
-#include "prime_ir/Dialect/Poly/IR/PolyAttributes.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "prime_ir/Dialect/Poly/IR/PolyTypes.cpp.inc"
@@ -58,10 +53,6 @@ public:
 };
 
 void PolyDialect::initialize() {
-  addAttributes<
-#define GET_ATTRDEF_LIST
-#include "prime_ir/Dialect/Poly/IR/PolyAttributes.cpp.inc" // NOLINT(build/include)
-      >();
   addTypes<
 #define GET_TYPEDEF_LIST
 #include "prime_ir/Dialect/Poly/IR/PolyTypes.cpp.inc" // NOLINT(build/include)

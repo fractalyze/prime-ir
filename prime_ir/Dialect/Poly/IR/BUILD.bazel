@@ -23,18 +23,15 @@ package(
 prime_ir_cc_library(
     name = "Poly",
     srcs = [
-        "PolyAttributes.cpp",
         "PolyDialect.cpp",
         "PolyOps.cpp",
     ],
     hdrs = [
-        "PolyAttributes.h",
         "PolyDialect.h",
         "PolyOps.h",
         "PolyTypes.h",
     ],
     deps = [
-        ":attributes_inc_gen",
         ":canonicalization_inc_gen",
         ":dialect_inc_gen",
         ":ops_inc_gen",
@@ -53,7 +50,6 @@ prime_ir_cc_library(
 td_library(
     name = "td_files",
     srcs = [
-        "PolyAttributes.td",
         "PolyCanonicalization.td",
         "PolyDialect.td",
         "PolyOps.td",
@@ -66,26 +62,6 @@ td_library(
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",
         "@llvm-project//mlir:SideEffectInterfacesTdFiles",
-    ],
-)
-
-gentbl_cc_library(
-    name = "attributes_inc_gen",
-    tbl_outs = {
-        "PolyAttributes.h.inc": [
-            "-gen-attrdef-decls",
-            "--attrdefs-dialect=poly",
-        ],
-        "PolyAttributes.cpp.inc": [
-            "-gen-attrdef-defs",
-            "--attrdefs-dialect=poly",
-        ],
-    },
-    tblgen = "@llvm-project//mlir:mlir-tblgen",
-    td_file = "PolyAttributes.td",
-    deps = [
-        ":td_files",
-        "//prime_ir/Dialect/Field/IR:td_files",
     ],
 )
 
