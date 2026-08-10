@@ -413,3 +413,38 @@ func.func @test_lower_sub_goldilocks_feeds_mul(%a: !Gsub, %b: !Gsub, %c: !Gsub) 
   %r = mod_arith.mul %s, %c : !Gsub
   return %r : !Gsub
 }
+
+// -----
+
+// Regression: the Solinas reducer's constants must splat over a shaped
+// operand — a tensor-typed Goldilocks square used to crash the lowering
+// (the CPU fusion pipeline hands the reducer shaped i64; the GPU pipeline
+// scalarizes first, which hid it).
+!Gsq = !mod_arith.int<18446744069414584321 : i64>
+!Gsqv = tensor<4x!Gsq>
+// CHECK-LABEL: @test_lower_square_goldilocks_shaped
+func.func @test_lower_square_goldilocks_shaped(%lhs : !Gsqv) -> !Gsqv {
+  // CHECK-NOT: mod_arith.square
+  // CHECK:      arith.mului_extended %{{.*}}, %{{.*}} : tensor<4xi64>
+  // CHECK:      %[[RES:.*]] = arith.minui %{{.*}}, %{{.*}} : tensor<4xi64>
+  // CHECK:      return %[[RES]] : tensor<4xi64>
+  %res = mod_arith.square %lhs : !Gsqv
+  return %res : !Gsqv
+}
+
+// -----
+
+// Regression: the Mersenne fast path's shift-amount constant must also
+// splat over a shaped operand (same crash class as the Solinas reducer).
+!M31 = !mod_arith.int<2147483647 : i32>
+!M31v = tensor<4x!M31>
+// CHECK-LABEL: @test_lower_mul_mersenne_shaped
+func.func @test_lower_mul_mersenne_shaped(%lhs : !M31v, %rhs : !M31v) -> !M31v {
+  // CHECK-NOT: mod_arith.mul
+  // CHECK:      arith.muli %{{.*}}, %{{.*}} : tensor<4xi64>
+  // CHECK:      arith.shrui %{{.*}}, %{{.*}} : tensor<4xi64>
+  // CHECK:      %[[RES:.*]] = arith.trunci %{{.*}} : tensor<4xi64> to tensor<4xi32>
+  // CHECK:      return %[[RES]] : tensor<4xi32>
+  %res = mod_arith.mul %lhs, %rhs : !M31v
+  return %res : !M31v
+}

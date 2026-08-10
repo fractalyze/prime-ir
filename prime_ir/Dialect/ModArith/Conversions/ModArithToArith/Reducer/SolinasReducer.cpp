@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "llvm/ADT/APInt.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h" // IWYU pragma: keep
@@ -36,9 +37,11 @@ SolinasReducer::SolinasReducer(ImplicitLocOpBuilder &b,
 }
 
 Value SolinasReducer::reduce(Value lo, Value hi, bool lazy) {
+  // `t` may be shaped (the CPU pipeline hands the reducer vector/tensor i64).
+  // The APInt overload keeps p > INT64_MAX exact.
   Type t = lo.getType();
   auto konst = [&](uint64_t v) {
-    return arith::ConstantOp::create(b, t, b.getIntegerAttr(t, v));
+    return createScalarOrSplatConstant(b, b.getLoc(), t, APInt(64, v));
   };
   // ε = 2^32 - 1 = 2^64 mod p. With hi = hi_hi·2^32 + hi_lo and the
   // congruences 2^64 ≡ ε, 2^96 ≡ -1 (mod p):

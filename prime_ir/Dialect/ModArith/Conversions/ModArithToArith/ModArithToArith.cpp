@@ -1184,9 +1184,8 @@ struct ConvertMul : public BoundMapPattern<MulOp> {
       // === Mersenne Reduction Strategy ===
       // Logic: A * B = H * 2ᵏ + L == H + L (mod 2ᵏ - 1)
 
-      // 1. Reduce
-      Value kConst =
-          arith::ConstantOp::create(b, wideType, b.getIntegerAttr(wideType, k));
+      // 1. Reduce (wideType may be shaped, so splat)
+      Value kConst = createScalarOrSplatConstant(b, b.getLoc(), wideType, k);
 
       // hi = mul >> k
       Value hi = arith::ShRUIOp::create(b, mul, kConst);
