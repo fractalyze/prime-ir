@@ -58,6 +58,24 @@ func.func @test_ghash_mul(%a: !GHASH, %b: !GHASH) -> !GHASH {
   return %c : !GHASH
 }
 
+// Squaring drops the Karatsuba cross term — a₀·a₁ + a₁·a₀ = 0 in characteristic
+// 2 — so it is four clmad against the multiply's six. Same reasoning as above
+// for the trailing NOT: routing a square through mulGhashClmad would still emit
+// the two cross-term clmad and XOR their result to zero, and COUNT-4 alone
+// would still pass.
+// CHECK-CLMAD-LABEL: @test_ghash_square
+// CHECK-CLMAD: builtin.unrealized_conversion_cast
+// CHECK-CLMAD-COUNT-4: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD-NOT: llvm.inline_asm{{.*}}clmad{{.*}}u64
+// CHECK-CLMAD: builtin.unrealized_conversion_cast
+// CHECK-OFF-LABEL: @test_ghash_square
+// CHECK-OFF: field.square
+// CHECK-OFF-NOT: clmad
+func.func @test_ghash_square(%a: !GHASH) -> !GHASH {
+  %c = field.square %a : !GHASH
+  return %c : !GHASH
+}
+
 // BF32 (tower) multiplies via the flat basis: three clmad.lo.u64 (one product
 // + two reduction folds) between the conversion ladders.
 // CHECK-CLMAD-LABEL: @test_bf32_mul

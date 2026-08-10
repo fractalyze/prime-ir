@@ -159,13 +159,28 @@ Value mulBF8PackedGFNI(ImplicitLocOpBuilder &b, Value lhs, Value rhs,
 // PCLMULQDQ-based Binary Field Multiplication
 //===----------------------------------------------------------------------===//
 
+// Fold the 256-bit carryless product limbs r0..r3 (low to high) down to a GHASH
+// field element via x¹²⁸ == x⁷ + x² + x + 1, then repack as vec2i64. Shared by
+// the multiply and the square so the two cannot drift in how they reduce.
+Value reduceGhashProduct(ImplicitLocOpBuilder &b, Value r0, Value r1, Value r2,
+                         Value r3) {
+  auto vec2i64Type = VectorType::get(2, b.getI64Type());
+
+  auto [r3_red, r3_overflow] = reduceGhash(b, r3);
+  r1 = arith::XOrIOp::create(b, r1, r3_red);
+  r2 = arith::XOrIOp::create(b, r2, r3_overflow);
+
+  auto [r2_red, r2_overflow] = reduceGhash(b, r2);
+  r0 = arith::XOrIOp::create(b, r0, r2_red);
+  r1 = arith::XOrIOp::create(b, r1, r2_overflow);
+
+  return vector::FromElementsOp::create(b, vec2i64Type, ValueRange{r0, r1});
+}
+
 // Multiply two GHASH-basis i128 values (as vector<2xi64>) using PCLMULQDQ.
 // Karatsuba — 3 PCLMULQDQ (the cross term a₀b₁ + a₁b₀ = (a₀+a₁)(b₀+b₁) + ll +
 // hh), then reduce mod x¹²⁸ + x⁷ + x² + x + 1.
 Value mulGhashPCLMULQDQ(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
-  auto i64Type = b.getI64Type();
-  auto vec2i64Type = VectorType::get(2, i64Type);
-
   // Swap the two 64-bit lanes so each lane of *Xor holds (lo ^ hi).
   Value lhsSwapped =
       vector::ShuffleOp::create(b, lhs, lhs, ArrayRef<int64_t>{1, 0});
@@ -187,22 +202,27 @@ Value mulGhashPCLMULQDQ(ImplicitLocOpBuilder &b, Value lhs, Value rhs) {
   Value midLow = vector::ExtractOp::create(b, mid, ArrayRef<int64_t>{0});
   Value midHigh = vector::ExtractOp::create(b, mid, ArrayRef<int64_t>{1});
 
-  // 256-bit product as limbs r0..r3 (low to high).
-  Value r0 = llLow;
-  Value r1 = arith::XOrIOp::create(b, llHigh, midLow);
-  Value r2 = arith::XOrIOp::create(b, hhLow, midHigh);
-  Value r3 = hhHigh;
+  return reduceGhashProduct(b, llLow, arith::XOrIOp::create(b, llHigh, midLow),
+                            arith::XOrIOp::create(b, hhLow, midHigh), hhHigh);
+}
 
-  // Fold the high half down via x¹²⁸ == x⁷ + x² + x + 1.
-  auto [r3_red, r3_overflow] = reduceGhash(b, r3);
-  r1 = arith::XOrIOp::create(b, r1, r3_red);
-  r2 = arith::XOrIOp::create(b, r2, r3_overflow);
+// Square a GHASH-basis vec2i64. In characteristic 2 the cross term vanishes —
+// a₀·a₁ + a₁·a₀ = 0 — so only the two diagonal sub-products survive: two
+// PCLMULQDQ against the multiply's three, and no lane-swap XORs to build the
+// Karatsuba operands.
+//
+// Routing a square through mulGhashPCLMULQDQ would still emit the cross-term
+// product and then XOR its result to zero; the intrinsic is opaque, so nothing
+// downstream can prove that and delete it.
+Value squareGhashPCLMULQDQ(ImplicitLocOpBuilder &b, Value val) {
+  Value ll = emitPCLMULQDQ128(b, val, val, 0x00);
+  Value hh = emitPCLMULQDQ128(b, val, val, 0x11);
 
-  auto [r2_red, r2_overflow] = reduceGhash(b, r2);
-  r0 = arith::XOrIOp::create(b, r0, r2_red);
-  r1 = arith::XOrIOp::create(b, r1, r2_overflow);
-
-  return vector::FromElementsOp::create(b, vec2i64Type, ValueRange{r0, r1});
+  return reduceGhashProduct(
+      b, vector::ExtractOp::create(b, ll, ArrayRef<int64_t>{0}),
+      vector::ExtractOp::create(b, ll, ArrayRef<int64_t>{1}),
+      vector::ExtractOp::create(b, hh, ArrayRef<int64_t>{0}),
+      vector::ExtractOp::create(b, hh, ArrayRef<int64_t>{1}));
 }
 
 //===----------------------------------------------------------------------===//
@@ -297,6 +317,38 @@ struct ConvertGhashMulToPCLMULQDQ : public OpRewritePattern<MulOp> {
   }
 };
 
+// `field.square` on a GHASH value gets its own pattern rather than being routed
+// through the multiply with both operands equal, so it can drop the cross-term
+// product (see squareGhashPCLMULQDQ). replaceFlatFieldMul is op-agnostic and
+// takes the input twice; only the scalar callback differs.
+struct ConvertGhashSquareToPCLMULQDQ : public OpRewritePattern<SquareOp> {
+  using OpRewritePattern<SquareOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(SquareOp op,
+                                PatternRewriter &rewriter) const override {
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
+    if (!bfType || !bfType.isGhash())
+      return failure();
+    Type ghashType = bfType;
+
+    auto squareScalar = [ghashType](ImplicitLocOpBuilder &b, Value val,
+                                    Value) -> Value {
+      auto i128Type = b.getIntegerType(128);
+      auto vec2i64Type = VectorType::get(2, b.getI64Type());
+      Value valI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, val).getResult(0);
+      Value valVec = LLVM::BitcastOp::create(b, vec2i64Type, valI128);
+      Value resultVec = squareGhashPCLMULQDQ(b, valVec);
+      Value resultI128 = LLVM::BitcastOp::create(b, i128Type, resultVec);
+      return UnrealizedConversionCastOp::create(b, ghashType, resultI128)
+          .getResult(0);
+    };
+    return replaceFlatFieldMul(rewriter, op, op.getInput(), op.getInput(),
+                               squareScalar);
+  }
+};
+
 // Pattern for packed 8-bit binary field squaring using GFNI
 struct ConvertPackedBF8SquareToGFNI : public OpRewritePattern<SquareOp> {
   using OpRewritePattern<SquareOp>::OpRewritePattern;
@@ -357,7 +409,8 @@ struct SpecializeBinaryFieldToX86
     }
 
     if (usePCLMULQDQ) {
-      patterns.add<ConvertGhashMulToPCLMULQDQ>(context);
+      patterns.add<ConvertGhashMulToPCLMULQDQ, ConvertGhashSquareToPCLMULQDQ>(
+          context);
     }
 
     // Use greedy pattern rewriting (not partial conversion)

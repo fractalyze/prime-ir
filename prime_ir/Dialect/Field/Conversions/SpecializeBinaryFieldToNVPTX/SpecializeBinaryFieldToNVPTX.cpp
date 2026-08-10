@@ -67,6 +67,28 @@ Value emitClmad(ImplicitLocOpBuilder &b, Value a, Value bv, Value c,
 // clmad-based GHASH Multiplication
 //===----------------------------------------------------------------------===//
 
+// Fold the 256-bit carryless product limbs r0..r3 (low to high) down to a GHASH
+// field element via x¹²⁸ == x⁷ + x² + x + 1, then repack as i128. Shared by the
+// multiply and the square so the two cannot drift in how they reduce.
+Value reduceGhashProduct(ImplicitLocOpBuilder &b, Value r0, Value r1, Value r2,
+                         Value r3) {
+  auto i128Ty = b.getIntegerType(128);
+  Value sh64 = arith::ConstantIntOp::create(b, 64, 128);
+
+  auto [r3Red, r3Overflow] = reduceGhash(b, r3);
+  r1 = arith::XOrIOp::create(b, r1, r3Red);
+  r2 = arith::XOrIOp::create(b, r2, r3Overflow);
+
+  auto [r2Red, r2Overflow] = reduceGhash(b, r2);
+  r0 = arith::XOrIOp::create(b, r0, r2Red);
+  r1 = arith::XOrIOp::create(b, r1, r2Overflow);
+
+  Value r0Ext = arith::ExtUIOp::create(b, i128Ty, r0);
+  Value r1Ext = arith::ExtUIOp::create(b, i128Ty, r1);
+  Value r1Hi = arith::ShLIOp::create(b, r1Ext, sh64);
+  return arith::OrIOp::create(b, r0Ext, r1Hi);
+}
+
 // Multiply two GHASH-basis i128 values using clmad. Karatsuba — 3 sub-products
 // instead of 4 (cross term a₀b₁ + a₁b₀ = (a₀+a₁)(b₀+b₁) + a₀b₀ + a₁b₁), which
 // trades two clmad for six XOR. Worth it because this multiply is
@@ -79,7 +101,6 @@ Value emitClmad(ImplicitLocOpBuilder &b, Value a, Value bv, Value c,
 // identically and cannot drift.
 Value mulGhashClmad(ImplicitLocOpBuilder &b, Value lhsI128, Value rhsI128) {
   auto i64Ty = b.getI64Type();
-  auto i128Ty = b.getIntegerType(128);
   Value sh64 = arith::ConstantIntOp::create(b, 64, 128);
 
   Value a0 = arith::TruncIOp::create(b, i64Ty, lhsI128);
@@ -106,25 +127,30 @@ Value mulGhashClmad(ImplicitLocOpBuilder &b, Value lhsI128, Value rhsI128) {
   Value midLo = emitClmad(b, aXor, bXor, foldLo, /*isHi=*/false);
   Value midHi = emitClmad(b, aXor, bXor, foldHi, /*isHi=*/true);
 
-  Value r0 = llLo;
-  Value r1 = arith::XOrIOp::create(b, llHi, midLo);
-  Value r2 = arith::XOrIOp::create(b, hhLo, midHi);
-  Value r3 = hhHi;
+  return reduceGhashProduct(b, llLo, arith::XOrIOp::create(b, llHi, midLo),
+                            arith::XOrIOp::create(b, hhLo, midHi), hhHi);
+}
 
-  // Fold the high half down via x¹²⁸ == x⁷ + x² + x + 1.
-  auto [r3Red, r3Overflow] = reduceGhash(b, r3);
-  r1 = arith::XOrIOp::create(b, r1, r3Red);
-  r2 = arith::XOrIOp::create(b, r2, r3Overflow);
+// Square a GHASH-basis i128 value. In characteristic 2 the cross term vanishes
+// — a₀·a₁ + a₁·a₀ = 0 — so only the two diagonal sub-products survive: four
+// clmad against the multiply's six.
+//
+// Routing a square through mulGhashClmad would still emit the cross-term clmads
+// and then XOR their result to zero. `clmad` is opaque inline asm, so nothing
+// downstream can prove that and delete them.
+Value squareGhashClmad(ImplicitLocOpBuilder &b, Value valI128) {
+  auto i64Ty = b.getI64Type();
+  Value sh64 = arith::ConstantIntOp::create(b, 64, 128);
 
-  auto [r2Red, r2Overflow] = reduceGhash(b, r2);
-  r0 = arith::XOrIOp::create(b, r0, r2Red);
-  r1 = arith::XOrIOp::create(b, r1, r2Overflow);
+  Value a0 = arith::TruncIOp::create(b, i64Ty, valI128);
+  Value a1 = arith::TruncIOp::create(b, i64Ty,
+                                     arith::ShRUIOp::create(b, valI128, sh64));
+  Value z = arith::ConstantIntOp::create(b, 0, 64);
 
-  // Reassemble the 128-bit result: r0 | (r1 << 64).
-  Value r0Ext = arith::ExtUIOp::create(b, i128Ty, r0);
-  Value r1Ext = arith::ExtUIOp::create(b, i128Ty, r1);
-  Value r1Hi = arith::ShLIOp::create(b, r1Ext, sh64);
-  return arith::OrIOp::create(b, r0Ext, r1Hi);
+  return reduceGhashProduct(b, emitClmad(b, a0, a0, z, /*isHi=*/false),
+                            emitClmad(b, a0, a0, z, /*isHi=*/true),
+                            emitClmad(b, a1, a1, z, /*isHi=*/false),
+                            emitClmad(b, a1, a1, z, /*isHi=*/true));
 }
 
 //===----------------------------------------------------------------------===//
@@ -253,6 +279,35 @@ struct ConvertGhashMulToClmad : public OpRewritePattern<MulOp> {
     };
     return replaceFlatFieldMul(rewriter, op, op.getLhs(), op.getRhs(),
                                mulScalar);
+  }
+};
+
+// `field.square` on a GHASH value gets its own pattern rather than being routed
+// through the multiply with both operands equal, so it can drop the cross-term
+// products (see squareGhashClmad). replaceFlatFieldMul is op-agnostic and takes
+// the input twice; only the scalar callback differs.
+struct ConvertGhashSquareToClmad : public OpRewritePattern<SquareOp> {
+  using OpRewritePattern<SquareOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(SquareOp op,
+                                PatternRewriter &rewriter) const override {
+    auto bfType = dyn_cast<BinaryFieldType>(
+        getElementTypeOrSelf(op.getResult().getType()));
+    if (!bfType || !bfType.isGhash())
+      return failure();
+    Type ghashType = bfType;
+
+    auto squareScalar = [ghashType](ImplicitLocOpBuilder &b, Value val,
+                                    Value) -> Value {
+      auto i128Type = b.getIntegerType(128);
+      Value valI128 =
+          UnrealizedConversionCastOp::create(b, i128Type, val).getResult(0);
+      Value resultI128 = squareGhashClmad(b, valI128);
+      return UnrealizedConversionCastOp::create(b, ghashType, resultI128)
+          .getResult(0);
+    };
+    return replaceFlatFieldMul(rewriter, op, op.getInput(), op.getInput(),
+                               squareScalar);
   }
 };
 
@@ -404,8 +459,9 @@ struct SpecializeBinaryFieldToNVPTX
 
     RewritePatternSet patterns(context);
     if (useClmad) {
-      patterns.add<ConvertGhashMulToClmad, ConvertTowerMulToClmad,
-                   ConvertFlatGenericMulToClmad>(context);
+      patterns.add<ConvertGhashMulToClmad, ConvertGhashSquareToClmad,
+                   ConvertTowerMulToClmad, ConvertFlatGenericMulToClmad>(
+          context);
     }
 
     // Greedy rewriting (not partial conversion) so unmatched field.mul ops
