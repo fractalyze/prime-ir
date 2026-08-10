@@ -1184,14 +1184,8 @@ struct ConvertMul : public BoundMapPattern<MulOp> {
       // === Mersenne Reduction Strategy ===
       // Logic: A * B = H * 2ᵏ + L == H + L (mod 2ᵏ - 1)
 
-      // 1. Reduce
-      // Build the attr on the element type and splat: wideType is shaped for
-      // shaped operands, and getIntegerAttr on a shaped type crashes (same
-      // fix as SolinasReducer's konst).
-      TypedAttr kAttr = b.getIntegerAttr(getElementTypeOrSelf(wideType), k);
-      if (auto shaped = dyn_cast<ShapedType>(wideType))
-        kAttr = SplatElementsAttr::get(shaped, kAttr);
-      Value kConst = arith::ConstantOp::create(b, wideType, kAttr);
+      // 1. Reduce (wideType may be shaped, so splat)
+      Value kConst = createScalarOrSplatConstant(b, b.getLoc(), wideType, k);
 
       // hi = mul >> k
       Value hi = arith::ShRUIOp::create(b, mul, kConst);

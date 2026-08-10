@@ -55,6 +55,7 @@ prime_ir_cc_library(
         "//prime_ir/Dialect/ModArith/IR:ModArith",
         "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:ArithUtils",
         "@llvm-project//mlir:IR",
         "@zk_dtypes//zk_dtypes:goldilocks",
     ],

@@ -17,9 +17,9 @@ limitations under the License.
 
 #include "llvm/ADT/APInt.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Arith/Utils/Utils.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/TypeUtilities.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h" // IWYU pragma: keep
 #include "zk_dtypes/include/field/goldilocks/goldilocks.h"
 
@@ -37,16 +37,11 @@ SolinasReducer::SolinasReducer(ImplicitLocOpBuilder &b,
 }
 
 Value SolinasReducer::reduce(Value lo, Value hi, bool lazy) {
+  // `t` may be shaped (the CPU pipeline hands the reducer vector/tensor i64).
+  // The APInt overload keeps p > INT64_MAX exact.
   Type t = lo.getType();
-  // `t` may be a shaped (vector/tensor) i64 on the CPU pipeline;
-  // getIntegerAttr on a shaped type walks into FloatType::getWidth and
-  // crashes, so build the scalar attr on the element type and splat it
-  // (same idiom as MontReducer's shaped-type constants).
   auto konst = [&](uint64_t v) {
-    TypedAttr attr = b.getIntegerAttr(getElementTypeOrSelf(t), v);
-    if (auto shaped = dyn_cast<ShapedType>(t))
-      attr = SplatElementsAttr::get(shaped, attr);
-    return arith::ConstantOp::create(b, t, attr);
+    return createScalarOrSplatConstant(b, b.getLoc(), t, APInt(64, v));
   };
   // ε = 2^32 - 1 = 2^64 mod p. With hi = hi_hi·2^32 + hi_lo and the
   // congruences 2^64 ≡ ε, 2^96 ≡ -1 (mod p):
