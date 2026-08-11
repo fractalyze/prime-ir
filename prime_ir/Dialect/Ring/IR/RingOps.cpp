@@ -19,6 +19,8 @@ limitations under the License.
 
 #include "llvm/ADT/StringRef.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 
 namespace mlir::prime_ir::ring {
 
@@ -31,6 +33,55 @@ static LogicalResult requireCoeff(Operation *op, RqType ty,
     return success();
   }
   return op->emitOpError(what) << " must be in the coeff basis (" << why << ")";
+}
+
+// Shared by from_limbs and to_limbs: each limb is the residue vector of one
+// modulus, so it must be a field tensor over that q_i with the ring's N
+// entries. Checking the modulus against the limb's own type is the reason this
+// bridge exists -- an attribute restating the moduli could drift from them.
+static LogicalResult verifyLimbTypes(Operation *op, RqType ring,
+                                     TypeRange limbs) {
+  if (limbs.size() != ring.getModuli().size()) {
+    return op->emitOpError("expects ")
+           << ring.getModuli().size() << " limb"
+           << (ring.getModuli().size() == 1 ? "" : "s") << ", but got "
+           << limbs.size();
+  }
+  for (auto [i, limbType] : llvm::enumerate(limbs)) {
+    auto tensorType = llvm::dyn_cast<RankedTensorType>(limbType);
+    auto fieldType =
+        tensorType
+            ? llvm::dyn_cast<field::PrimeFieldType>(tensorType.getElementType())
+            : nullptr;
+    if (!fieldType) {
+      return op->emitOpError("limb ")
+             << i << " must be a prime field tensor, but got " << limbType;
+    }
+    uint64_t modulus = fieldType.getModulus().getValue().getZExtValue();
+    uint64_t expected = ring.getModuli()[i];
+    if (modulus != expected) {
+      return op->emitOpError("limb ") << i << " has modulus " << modulus
+                                      << ", but the ring's is " << expected;
+    }
+    int64_t n = ring.getRingDegree().getValue().getSExtValue();
+    if (tensorType.getRank() != 1 || tensorType.getDimSize(0) != n) {
+      return op->emitOpError("limb ")
+             << i << " must have " << n << " elements, but got "
+             << (tensorType.getRank() == 1 ? tensorType.getDimSize(0)
+                                           : tensorType.getRank());
+    }
+  }
+  return success();
+}
+
+LogicalResult FromLimbsOp::verify() {
+  return verifyLimbTypes(*this, llvm::cast<RqType>(getOutput().getType()),
+                         getLimbs().getTypes());
+}
+
+LogicalResult ToLimbsOp::verify() {
+  return verifyLimbTypes(*this, llvm::cast<RqType>(getInput().getType()),
+                         getLimbs().getTypes());
 }
 
 LogicalResult BaseConvertOp::verify() {

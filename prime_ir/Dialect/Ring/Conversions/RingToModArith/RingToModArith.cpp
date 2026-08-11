@@ -23,6 +23,8 @@ limitations under the License.
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "prime_ir/Dialect/Field/IR/FieldDialect.h"
+#include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
@@ -452,6 +454,65 @@ struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
   }
 };
 
+// The limb bridge is the one place this pass touches the field dialect: a limb
+// arrives typed `!field.pf<q_i>` so its modulus is checked against the ring,
+// and reaching the [L, N] residue tensor means dropping to that field's storage
+// integers. field.bitcast is exactly that reinterpret, and FieldToModArith
+// takes it from there.
+struct ConvertFromLimbs : public OpConversionPattern<FromLimbsOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(FromLimbsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    auto ty = cast<RqType>(op.getOutput().getType());
+    int64_t n = ty.getRingDegree().getValue().getSExtValue();
+    auto L = static_cast<int64_t>(ty.getModuli().size());
+
+    Type i64 = IntegerType::get(op.getContext(), 64);
+    auto rowI64 = RankedTensorType::get({n}, i64);
+    auto outTy = RankedTensorType::get({L, n}, i64);
+    SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
+    SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
+
+    Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
+    for (auto [i, limb] : llvm::enumerate(adaptor.getLimbs())) {
+      Value storage = field::BitcastOp::create(b, rowI64, limb);
+      SmallVector<OpFoldResult> offs = {b.getIndexAttr(i), b.getIndexAttr(0)};
+      result = tensor::InsertSliceOp::create(b, storage, result, offs, sizes,
+                                             strides);
+    }
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+struct ConvertToLimbs : public OpConversionPattern<ToLimbsOp> {
+  using OpConversionPattern::OpConversionPattern;
+  LogicalResult
+  matchAndRewrite(ToLimbsOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    auto ty = cast<RqType>(op.getInput().getType());
+    int64_t n = ty.getRingDegree().getValue().getSExtValue();
+
+    Type i64 = IntegerType::get(op.getContext(), 64);
+    auto rowI64 = RankedTensorType::get({n}, i64);
+    SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
+    SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
+
+    SmallVector<Value> limbs;
+    for (auto [i, limbType] : llvm::enumerate(op.getLimbs().getTypes())) {
+      SmallVector<OpFoldResult> offs = {b.getIndexAttr(i), b.getIndexAttr(0)};
+      Value row = tensor::ExtractSliceOp::create(b, rowI64, adaptor.getInput(),
+                                                 offs, sizes, strides);
+      limbs.push_back(field::BitcastOp::create(b, limbType, row));
+    }
+    rewriter.replaceOp(op, limbs);
+    return success();
+  }
+};
+
 struct ConvertToTensor : public OpConversionPattern<ToTensorOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -472,11 +533,15 @@ struct RingToModArith : impl::RingToModArithBase<RingToModArith> {
 
     ConversionTarget target(*context);
     target.addIllegalDialect<RingDialect>();
-    target.addLegalDialect<mod_arith::ModArithDialect, tensor::TensorDialect>();
+    // field is legal only as an exit: the limb bridge emits field.bitcast to
+    // reach a limb's storage integers, and FieldToModArith lowers it later.
+    target.addLegalDialect<mod_arith::ModArithDialect, tensor::TensorDialect,
+                           field::FieldDialect>();
 
     RewritePatternSet patterns(context);
     patterns.add<ConvertBaseConvert, ConvertRescale, ConvertAutomorphism,
                  ConvertGadgetDecompose, ConvertFromTensor, ConvertToTensor,
+                 ConvertFromLimbs, ConvertToLimbs,
                  ConvertBinOp<AddOp, mod_arith::AddOp>,
                  ConvertBinOp<SubOp, mod_arith::SubOp>,
                  ConvertBinOp<MulOp, mod_arith::MulOp>,

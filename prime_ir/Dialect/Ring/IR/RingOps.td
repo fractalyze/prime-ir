@@ -45,6 +45,41 @@ def Ring_ToTensorOp : Ring_Op<"to_tensor"> {
   let assemblyFormat = "$input attr-dict `:` type($input) `to` type($output)";
 }
 
+def Ring_FromLimbsOp : Ring_Op<"from_limbs"> {
+  let summary = "Build an RNS ring value from one field tensor per modulus.";
+  let description = [{
+    Limb `i` is a `tensor<Nx!field.pf<q_i>>` holding the residues mod `q_i`, so
+    the modulus arrives as part of the limb's type and the verifier checks it
+    against the ring rather than against a restated attribute. This is the
+    boundary where a set of independently typed residue vectors becomes one
+    value that CRT relates.
+
+    ```mlir
+    %r = ring.from_limbs %l0, %l1
+        : tensor<8x!field.pf<12289:i64>>, tensor<8x!field.pf<40961:i64>>
+        to !ring.rq<[12289, 40961], 8 : i32, eval>
+    ```
+  }];
+  let arguments = (ins Variadic<RankedTensorOf<[AnyType]>>:$limbs);
+  let results = (outs Ring_RqType:$output);
+  let assemblyFormat =
+      "$limbs attr-dict `:` type($limbs) `to` type($output)";
+  let hasVerifier = 1;
+}
+
+def Ring_ToLimbsOp : Ring_Op<"to_limbs"> {
+  let summary = "Split an RNS ring value into one field tensor per modulus.";
+  let description = [{
+    The inverse of `ring.from_limbs`: residue row `i` comes back typed
+    `!field.pf<q_i>`, so downstream field passes see an ordinary field tensor.
+  }];
+  let arguments = (ins Ring_RqType:$input);
+  let results = (outs Variadic<RankedTensorOf<[AnyType]>>:$limbs);
+  let assemblyFormat =
+      "$input attr-dict `:` type($input) `to` type($limbs)";
+  let hasVerifier = 1;
+}
+
 def Ring_AutomorphismOp : Ring_Op<"automorphism", [SameOperandsAndResultType]> {
   let summary = "Galois automorphism X -> X^g of R_Q = Z_Q[X]/(X^N+1).";
   let description = [{

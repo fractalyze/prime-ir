@@ -33,6 +33,7 @@ def RingToModArith : Pass<"ring-to-mod-arith", "ModuleOp"> {
   }];
   let dependentDialects = [
     "tensor::TensorDialect",
+    "prime_ir::field::FieldDialect",
     "prime_ir::mod_arith::ModArithDialect",
     "prime_ir::ring::RingDialect",
   ];

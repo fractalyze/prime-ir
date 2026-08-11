@@ -59,3 +59,52 @@ func.func @rescale_preserves_basis(
   %y = ring.rescale %x : !ring.rq<[12289, 40961], 8 : i32, eval> to !ring.rq<[12289], 8 : i32>
   return %y : !ring.rq<[12289], 8 : i32>
 }
+
+// -----
+
+// One limb per modulus: the operand count is what fixes which q_i each limb
+// answers to, so a mismatch has no reading to fall back on.
+func.func @from_limbs_rejects_wrong_limb_count(
+    %l0: tensor<8x!field.pf<12289:i64>>, %l1: tensor<8x!field.pf<40961:i64>>)
+    -> !ring.rq<[12289], 8 : i32> {
+  // expected-error @+1 {{expects 1 limb, but got 2}}
+  %r = ring.from_limbs %l0, %l1
+      : tensor<8x!field.pf<12289:i64>>, tensor<8x!field.pf<40961:i64>>
+      to !ring.rq<[12289], 8 : i32>
+  return %r : !ring.rq<[12289], 8 : i32>
+}
+
+// -----
+
+// The limb carries its modulus in its own type, which is the whole point of
+// the bridge: the check is against the type, not against a restated attribute.
+func.func @from_limbs_rejects_modulus_mismatch(
+    %l0: tensor<8x!field.pf<40961:i64>>) -> !ring.rq<[12289], 8 : i32> {
+  // expected-error @+1 {{limb 0 has modulus 40961, but the ring's is 12289}}
+  %r = ring.from_limbs %l0
+      : tensor<8x!field.pf<40961:i64>> to !ring.rq<[12289], 8 : i32>
+  return %r : !ring.rq<[12289], 8 : i32>
+}
+
+// -----
+
+// A limb holds the ring's N residues; a shorter one is not a truncated ring
+// element, it is a different object.
+func.func @from_limbs_rejects_wrong_degree(
+    %l0: tensor<4x!field.pf<12289:i64>>) -> !ring.rq<[12289], 8 : i32> {
+  // expected-error @+1 {{limb 0 must have 8 elements, but got 4}}
+  %r = ring.from_limbs %l0
+      : tensor<4x!field.pf<12289:i64>> to !ring.rq<[12289], 8 : i32>
+  return %r : !ring.rq<[12289], 8 : i32>
+}
+
+// -----
+
+// to_limbs answers the same constraints from the result side.
+func.func @to_limbs_rejects_modulus_mismatch(
+    %r: !ring.rq<[12289], 8 : i32>) -> tensor<8x!field.pf<40961:i64>> {
+  // expected-error @+1 {{limb 0 has modulus 40961, but the ring's is 12289}}
+  %l = ring.to_limbs %r
+      : !ring.rq<[12289], 8 : i32> to tensor<8x!field.pf<40961:i64>>
+  return %l : tensor<8x!field.pf<40961:i64>>
+}
