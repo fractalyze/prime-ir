@@ -101,25 +101,6 @@ def Ring_AutomorphismOp : Ring_Op<"automorphism", [SameOperandsAndResultType]> {
   let hasVerifier = 1;
 }
 
-def Ring_GadgetDecomposeOp : Ring_Op<"gadget_decompose"> {
-  let summary = "Base-2^baseBits digit decomposition of each residue.";
-  let description = [{
-    Splits each residue into `levels` base-`2^baseBits` digits (least-significant
-    first): `x_i = sum_j digit_j[i] * 2^(j*baseBits)`. Returns `levels` ring
-    elements (the digit polynomials). Pure bit manipulation (shift + mask) — no
-    modular reduction. A generic ring/number-theory primitive.
-
-    Decomposition is defined on the residues themselves, so the operand and every
-    digit must be in the `coeff` basis. Digits of evaluations do not recombine to
-    the digits of the underlying element — the decomposition is not linear, so it
-    does not commute with the CRT map.
-  }];
-  let arguments = (ins Ring_RqType:$input, I64Attr:$baseBits, I64Attr:$levels);
-  let results = (outs Variadic<Ring_RqType>:$digits);
-  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($digits)";
-  let hasVerifier = 1;
-}
-
 def Ring_RescaleOp : Ring_Op<"rescale"> {
   let summary = "Exact division by the trailing (dropped) RNS modulus.";
   let description = [{

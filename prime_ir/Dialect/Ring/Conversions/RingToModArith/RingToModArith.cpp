@@ -223,32 +223,6 @@ struct ConvertRescale : public OpConversionPattern<RescaleOp> {
   }
 };
 
-struct ConvertGadgetDecompose : public OpConversionPattern<GadgetDecomposeOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(GadgetDecomposeOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    int64_t baseBits = op.getBaseBits(), levels = op.getLevels();
-    Value in = adaptor.getInput(); // tensor<LxNxi64>
-    auto tType = cast<RankedTensorType>(in.getType());
-    auto splat = [&](uint64_t v) -> Value {
-      return arith::ConstantOp::create(
-          b, DenseElementsAttr::get(tType, APInt(64, v)));
-    };
-    Value mask = splat((static_cast<uint64_t>(1) << baseBits) - 1);
-    SmallVector<Value> digits;
-    for (int64_t j = 0; j < levels; ++j) {
-      Value shifted = arith::ShRUIOp::create(
-          b, in, splat(static_cast<uint64_t>(j * baseBits)));
-      digits.push_back(arith::AndIOp::create(b, shifted, mask));
-    }
-    rewriter.replaceOp(op, digits);
-    return success();
-  }
-};
-
 // automorphism sigma_g: X->X^g. Signed static coefficient permutation per limb:
 // a_k -> position (g*k mod N), sign -1 iff (g*k mod 2N) >= N. Emitted as a
 // scalar permute (extract/insert) + one mod_arith.mul by a +/-1 sign tensor.
@@ -540,9 +514,8 @@ struct RingToModArith : impl::RingToModArithBase<RingToModArith> {
 
     RewritePatternSet patterns(context);
     patterns.add<ConvertBaseConvert, ConvertRescale, ConvertAutomorphism,
-                 ConvertGadgetDecompose, ConvertFromTensor, ConvertToTensor,
-                 ConvertFromLimbs, ConvertToLimbs,
-                 ConvertBinOp<AddOp, mod_arith::AddOp>,
+                 ConvertFromTensor, ConvertToTensor, ConvertFromLimbs,
+                 ConvertToLimbs, ConvertBinOp<AddOp, mod_arith::AddOp>,
                  ConvertBinOp<SubOp, mod_arith::SubOp>,
                  ConvertBinOp<MulOp, mod_arith::MulOp>,
                  ConvertUnaryOp<NegateOp, mod_arith::NegateOp>>(typeConverter,

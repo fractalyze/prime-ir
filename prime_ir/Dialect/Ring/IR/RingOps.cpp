@@ -17,23 +17,11 @@ limitations under the License.
 
 #include <cstdint>
 
-#include "llvm/ADT/StringRef.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 
 namespace mlir::prime_ir::ring {
-
-// Ops that are defined only on the coefficient basis share this check; the two
-// bases are indistinguishable in storage, so nothing but the type catches the
-// mistake.
-static LogicalResult requireCoeff(Operation *op, RqType ty,
-                                  llvm::StringRef what, llvm::StringRef why) {
-  if (ty.isCoeff()) {
-    return success();
-  }
-  return op->emitOpError(what) << " must be in the coeff basis (" << why << ")";
-}
 
 // Shared by from_limbs and to_limbs: each limb is the residue vector of one
 // modulus, so it must be a field tensor over that q_i with the ring's N
@@ -132,29 +120,6 @@ LogicalResult MulOp::verify() {
       "operands must be in the eval basis; the coefficient-basis "
       "product is a negacyclic convolution, which needs the "
       "transform that lives above this dialect");
-}
-
-LogicalResult GadgetDecomposeOp::verify() {
-  int64_t levels = getLevels();
-  if (getBaseBits() <= 0 || levels <= 0) {
-    return emitOpError("baseBits and levels must be positive");
-  }
-  if (static_cast<int64_t>(getDigits().size()) != levels) {
-    return emitOpError("expected ")
-           << levels << " digit results, got " << getDigits().size();
-  }
-  RqType in = llvm::cast<RqType>(getInput().getType());
-  if (failed(
-          requireCoeff(*this, in, "input",
-                       "digit extraction does not commute with the CRT map"))) {
-    return failure();
-  }
-  for (Value digit : getDigits()) {
-    if (llvm::cast<RqType>(digit.getType()).getDomain() != Domain::Coeff) {
-      return emitOpError("digits must be in the coeff basis");
-    }
-  }
-  return success();
 }
 
 LogicalResult AutomorphismOp::verify() {

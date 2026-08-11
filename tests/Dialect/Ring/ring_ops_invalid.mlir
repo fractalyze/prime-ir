@@ -30,17 +30,6 @@ func.func @automorphism_rejects_even_exponent(
 
 // -----
 
-// Digit extraction does not commute with the CRT map.
-func.func @gadget_decompose_rejects_eval(
-    %x: !ring.rq<[12289], 8 : i32, eval>) -> !ring.rq<[12289], 8 : i32, eval> {
-  // expected-error @+1 {{input must be in the coeff basis}}
-  %d:2 = ring.gadget_decompose %x {baseBits = 4 : i64, levels = 2 : i64}
-      : !ring.rq<[12289], 8 : i32, eval> -> !ring.rq<[12289], 8 : i32, eval>, !ring.rq<[12289], 8 : i32, eval>
-  return %d#0 : !ring.rq<[12289], 8 : i32, eval>
-}
-
-// -----
-
 // The coefficient-basis product is a negacyclic convolution, not anything this
 // dialect can spell.
 func.func @mul_rejects_coeff(
