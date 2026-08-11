@@ -389,7 +389,8 @@ struct ConvertBinaryFieldBitcast : public OpConversionPattern<BitcastOp> {
 // `bf<7, ghash>` is GF(2)[x]/(x¹²⁸ + x⁷ + x² + x + 1) in the monomial basis
 // (NOT the x²+x+α tower of the default `bf<7>`). Only the multiply differs;
 // it is a carryless product reduced mod the GHASH polynomial. This portable
-// lowering emits the carryless multiply as shift-XOR so it runs on targets
+// lowering builds the carryless multiply from integer multiplies (see
+// `emitClmul32`) so it runs on targets
 // without a CLMUL instruction (e.g. GPU); the x86/ARM specializers swap in
 // PCLMULQDQ/PMULL.
 
@@ -397,31 +398,75 @@ Value i64Const(ImplicitLocOpBuilder &b, uint64_t v) {
   return arith::ConstantIntOp::create(b, static_cast<int64_t>(v), 64);
 }
 
-// Portable 64x64 -> (lo, hi) carryless (GF(2)[x]) product, bit-serial shift-XOR
-// (mirrors flock's software clmul64). For bit i of `bv`, XOR in `a << i` (low
-// limb) and `a >> (64 - i)` (high limb); i == 0 contributes nothing to `hi`.
-std::pair<Value, Value> emitClmul64(ImplicitLocOpBuilder &b, Value a,
-                                    Value bv) {
-  Value zero = i64Const(b, 0);
-  Value one = i64Const(b, 1);
-  Value lo = zero;
-  Value hi = zero;
-  for (unsigned i = 0; i < 64; ++i) {
-    Value bShifted = bv;
-    Value aShl = a;
-    if (i != 0) {
-      Value shiftI = i64Const(b, i);
-      bShifted = arith::ShRUIOp::create(b, bv, shiftI);
-      aShl = arith::ShLIOp::create(b, a, shiftI);
-    }
-    Value bit = arith::AndIOp::create(b, bShifted, one);
-    Value mask = arith::SubIOp::create(b, zero, bit); // 0 or all-ones
-    lo = arith::XOrIOp::create(b, lo, arith::AndIOp::create(b, mask, aShl));
-    if (i != 0) {
-      Value aShr = arith::ShRUIOp::create(b, a, i64Const(b, 64 - i));
-      hi = arith::XOrIOp::create(b, hi, arith::AndIOp::create(b, mask, aShr));
+// Portable 32x32 -> 64 carryless (GF(2)[x]) product, built from sixteen
+// integer multiplies. `a` and `bv` are i64 holding values below 2^32.
+//
+// An integer multiply already computes Σ a<<i over the set bits i of b; it
+// differs from a carryless product only in that the partial products carry
+// into each other. Restrict both operands to bits four apart — a & 0x11111111
+// keeps positions 0, 4, 8, ... — and every partial product of that pair lands
+// on a position congruent to (k + j) mod 4. A 32-bit operand contributes at
+// most eight set bits to a group, so at most eight partial products stack on
+// any one output position; eight fits in the four bits separating consecutive
+// positions, so nothing carries into the next one and the position's low bit
+// IS the carryless parity. Masking those bits out and XOR-ing the sixteen
+// group pairs reconstructs the full product exactly.
+//
+// This replaced a bit-serial shift-XOR loop costing ~9 operations per bit,
+// about 1,150 for a 128x128 multiply once Karatsuba had cut four clmul64 to
+// three. Targets that reach this code have no CLMUL to lower onto, so their
+// integer multiplier is idle hardware; spending it costs roughly a fifth of
+// the operations. On GPUs this multiply was the dominant cost of the whole
+// flock prover (fractalyze/xla#491).
+Value emitClmul32(ImplicitLocOpBuilder &b, Value a, Value bv) {
+  // Bits four apart, selected by residue; the slot masks are the same pattern
+  // widened to the 64-bit product.
+  static constexpr uint64_t kGroup[4] = {0x11111111u, 0x22222222u, 0x44444444u,
+                                         0x88888888u};
+  static constexpr uint64_t kSlot[4] = {
+      0x1111111111111111ull, 0x2222222222222222ull, 0x4444444444444444ull,
+      0x8888888888888888ull};
+
+  Value aGroup[4], bGroup[4];
+  for (unsigned k = 0; k < 4; ++k) {
+    aGroup[k] = arith::AndIOp::create(b, a, i64Const(b, kGroup[k]));
+    bGroup[k] = arith::AndIOp::create(b, bv, i64Const(b, kGroup[k]));
+  }
+
+  Value acc;
+  for (unsigned k = 0; k < 4; ++k) {
+    for (unsigned j = 0; j < 4; ++j) {
+      Value prod = arith::MulIOp::create(b, aGroup[k], bGroup[j]);
+      Value slot =
+          arith::AndIOp::create(b, prod, i64Const(b, kSlot[(k + j) % 4]));
+      acc = acc ? arith::XOrIOp::create(b, acc, slot) : slot;
     }
   }
+  return acc;
+}
+
+// Portable 64x64 -> (lo, hi) carryless product: Karatsuba over three
+// `emitClmul32`, the same three-instead-of-four split `emitGhashMul` applies
+// one level up.
+std::pair<Value, Value> emitClmul64(ImplicitLocOpBuilder &b, Value a,
+                                    Value bv) {
+  Value lowMask = i64Const(b, 0xFFFFFFFFull);
+  Value sh32 = i64Const(b, 32);
+  Value a0 = arith::AndIOp::create(b, a, lowMask);
+  Value a1 = arith::ShRUIOp::create(b, a, sh32);
+  Value b0 = arith::AndIOp::create(b, bv, lowMask);
+  Value b1 = arith::ShRUIOp::create(b, bv, sh32);
+
+  Value ll = emitClmul32(b, a0, b0);
+  Value hh = emitClmul32(b, a1, b1);
+  Value mid = emitClmul32(b, arith::XOrIOp::create(b, a0, a1),
+                          arith::XOrIOp::create(b, b0, b1));
+  // cross = mid + ll + hh = a₀b₁ + a₁b₀, straddling the 32-bit boundary.
+  Value cross = arith::XOrIOp::create(b, arith::XOrIOp::create(b, mid, ll), hh);
+  Value lo =
+      arith::XOrIOp::create(b, ll, arith::ShLIOp::create(b, cross, sh32));
+  Value hi =
+      arith::XOrIOp::create(b, hh, arith::ShRUIOp::create(b, cross, sh32));
   return {lo, hi};
 }
 

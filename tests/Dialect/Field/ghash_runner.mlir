@@ -176,12 +176,64 @@ func.func @test_ghash_inverse_zero() {
 }
 // CHECK: [1]
 
+// Worst case for the integer-multiply construction in `emitClmul32`: with
+// every bit set, each output position takes the maximum eight stacked partial
+// products, so this is what fails first if the four-bit spacing between
+// positions were not enough to contain them.
+// (2^128-1)^2 = 0x5555555555555555555555555555402f.
+func.func @test_ghash_mul_all_ones() {
+  %ones = arith.constant -1 : i128
+  %a = field.bitcast %ones : i128 -> !G
+  %c = field.mul %a, %a : !G
+
+  %i = field.bitcast %c : !G -> i128
+  %want = arith.constant 113427455640312821154458202477256065071 : i128
+  func.call @check_i128_eq(%i, %want) : (i128, i128) -> ()
+  return
+}
+// CHECK: [1]
+
+// x^127 * x^127 = x^254, the deepest reduction a 256-bit product can need —
+// it folds twice before landing. = 0xc0000000000000000000000000001067.
+func.func @test_ghash_mul_top_bit() {
+  %c127 = arith.constant 170141183460469231731687303715884105728 : i128
+  %a = field.bitcast %c127 : i128 -> !G
+  %c = field.mul %a, %a : !G
+
+  %i = field.bitcast %c : !G -> i128
+  %want = arith.constant 255211775190703847597530955573826162791 : i128
+  func.call @check_i128_eq(%i, %want) : (i128, i128) -> ()
+  return
+}
+// CHECK: [1]
+
+// A full-width pair with no structure, so a construction that happens to be
+// right on sparse or repetitive inputs still has to be right here.
+// 0x0123456789abcdeffedcba9876543210 * 0xdeadbeefcafebabe1337c0de5ca1ab1e
+// = 0x958352597e5280557dd1e70e821122f5.
+func.func @test_ghash_mul_full_width() {
+  %ca = arith.constant 1512366075204170947332355369683137040 : i128
+  %cb = arith.constant 295990755076957304699463973005254830878 : i128
+  %a = field.bitcast %ca : i128 -> !G
+  %b = field.bitcast %cb : i128 -> !G
+  %c = field.mul %a, %b : !G
+
+  %i = field.bitcast %c : !G -> i128
+  %want = arith.constant 198736832508409339883152769906835006197 : i128
+  func.call @check_i128_eq(%i, %want) : (i128, i128) -> ()
+  return
+}
+// CHECK: [1]
+
 func.func @main() {
   func.call @test_ghash_mul() : () -> ()
   func.call @test_ghash_square() : () -> ()
   func.call @test_ghash_one() : () -> ()
   func.call @test_ghash_reduce() : () -> ()
   func.call @test_ghash_square_reduce() : () -> ()
+  func.call @test_ghash_mul_all_ones() : () -> ()
+  func.call @test_ghash_mul_top_bit() : () -> ()
+  func.call @test_ghash_mul_full_width() : () -> ()
   func.call @test_ghash_inverse_one() : () -> ()
   func.call @test_ghash_inverse_roundtrip() : () -> ()
   func.call @test_ghash_inverse_all_ones() : () -> ()
