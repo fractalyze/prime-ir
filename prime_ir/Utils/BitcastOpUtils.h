@@ -23,6 +23,33 @@ limitations under the License.
 
 namespace mlir::prime_ir {
 
+// A bitcast reinterprets raw bytes, so it only means anything when the source
+// is laid out contiguously: the descriptor rebuilds in the LLVM lowerings carry
+// the offset across and derive everything else from the result shape.
+//
+// Only provable violations are reported. Strides that are not statically known
+// cannot be checked, and rejecting them would break working code — bufferizing
+// function boundaries hands out `strided<[?], offset: ?>` arguments that are
+// contiguous in practice.
+inline bool hasProvablyNonContiguousLayout(MemRefType type) {
+  SmallVector<int64_t> strides;
+  int64_t offset;
+  if (failed(type.getStridesAndOffset(strides, offset))) {
+    return false;
+  }
+  int64_t expected = 1;
+  for (int64_t i = type.getRank() - 1; i >= 0; --i) {
+    if (ShapedType::isDynamic(strides[i]) || type.isDynamicDim(i)) {
+      return false;
+    }
+    if (strides[i] != expected) {
+      return true;
+    }
+    expected *= type.getDimSize(i);
+  }
+  return false;
+}
+
 // Helper function to check if input and output types are the same (no-op).
 inline bool isSameTypeBitcast(Type inputType, Type outputType) {
   return inputType == outputType;

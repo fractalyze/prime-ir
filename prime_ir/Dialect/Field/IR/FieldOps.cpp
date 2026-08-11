@@ -826,6 +826,16 @@ LogicalResult BitcastOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
 
+  // A reinterpret only describes the same bytes when the source is packed; the
+  // descriptor rebuilds in the LLVM lowerings carry the offset across and
+  // derive everything else from the result shape.
+  for (Type t : {inputType, outputType}) {
+    auto mt = dyn_cast<MemRefType>(t);
+    if (mt && hasProvablyNonContiguousLayout(mt)) {
+      return emitOpError("requires a contiguous input buffer, but got ") << mt;
+    }
+  }
+
   if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType})) {
     return success();
   }

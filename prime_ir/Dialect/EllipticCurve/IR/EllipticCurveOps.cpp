@@ -30,6 +30,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
+#include "prime_ir/Utils/BitcastOpUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
 
 // IWYU pragma: begin_keep
@@ -396,35 +397,38 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     return false;
   }
 
-  // Both must be 1-D tensors.
-  if (fieldTensor.getRank() != 1 || pointTensor.getRank() != 1)
-    return false;
-
   unsigned numCoords = pointType.getNumCoords();
   Type baseFieldType = pointType.getBaseFieldType();
   unsigned extDegree = field::getExtensionDegree(baseFieldType);
   unsigned K = numCoords * extDegree;
 
-  int64_t fieldDim = fieldTensor.getDimSize(0);
-  int64_t pointDim = pointTensor.getDimSize(0);
+  // A point's K coordinates sit contiguously, so the constraint is on element
+  // counts and not on any distinguished dimension: batching points into rows
+  // reinterprets the same bytes as laying them out flat.
+  if (fieldTensor.hasStaticShape() && pointTensor.hasStaticShape())
+    return fieldTensor.getNumElements() == pointTensor.getNumElements() * K;
 
-  // If both static: verify fieldDim == pointDim * K.
-  if (fieldDim != ShapedType::kDynamic && pointDim != ShapedType::kDynamic)
-    return fieldDim == pointDim * K;
+  // Only the field side is known: it must at least divide into whole points.
+  if (fieldTensor.hasStaticShape())
+    return fieldTensor.getNumElements() % K == 0;
 
-  // If one is static and the other dynamic: check static side is divisible.
-  if (fieldDim != ShapedType::kDynamic && pointDim == ShapedType::kDynamic)
-    return fieldDim % K == 0;
-  if (fieldDim == ShapedType::kDynamic && pointDim != ShapedType::kDynamic)
-    return true; // dynamic field dim, any static point dim is fine
-
-  // Both dynamic: trust the user.
+  // A dynamic field extent can accommodate any point count; trust the user.
   return true;
 }
 
 LogicalResult BitcastOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
+
+  // A reinterpret only describes the same bytes when the source is packed;
+  // the descriptor rebuilds in the LLVM lowerings carry the offset across
+  // and derive everything else from the result shape.
+  for (Type t : {inputType, outputType}) {
+    auto mt = dyn_cast<MemRefType>(t);
+    if (mt && hasProvablyNonContiguousLayout(mt)) {
+      return emitOpError("requires a contiguous input buffer, but got ") << mt;
+    }
+  }
 
   if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType}))
     return success();
