@@ -13,22 +13,24 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//prime_ir:pywrap.bzl", "pywrap_library")
+load("//bazel:prime_ir_cc.bzl", "prime_ir_cc_library")
 
 package(
     default_visibility = ["//visibility:public"],
 )
 
-exports_files([
-    "pyinit_stub.c",
-])
-
-pywrap_library(
-    name = "prime_ir",
+prime_ir_cc_library(
+    name = "CAPI",
+    srcs = [
+        "RingDialect.cpp",
+        "RingTypes.cpp",
+    ],
+    hdrs = [
+        "RingDialect.h",
+        "RingTypes.h",
+    ],
     deps = [
-        "//prime_ir/mlir/_mlir_libs:_elliptic_curve",
-        "//prime_ir/mlir/_mlir_libs:_field",
-        "//prime_ir/mlir/_mlir_libs:_mlir",
-        "//prime_ir/mlir/_mlir_libs:_ring",
+        "//prime_ir/Dialect/Ring/IR:Ring",
+        "@llvm-project//mlir:CAPIIR",
     ],
 )

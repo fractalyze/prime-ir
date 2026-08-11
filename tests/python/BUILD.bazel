@@ -26,6 +26,16 @@ py_test(
 )
 
 py_test(
+    name = "ring_test",
+    srcs = ["ring_test.py"],
+    deps = [
+        "//prime_ir",
+        "//prime_ir/mlir:ring",
+        "@pypi//absl_py",
+    ],
+)
+
+py_test(
     name = "elliptic_curve_test",
     srcs = ["elliptic_curve_test.py"],
     deps = [
