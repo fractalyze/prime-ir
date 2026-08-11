@@ -16,14 +16,14 @@ func.func @test_add() {
   %ra = ring.from_tensor %a : tensor<2x2xi64> to !ring.rq<[7, 11], 2 : i32>
   %rb = ring.from_tensor %b : tensor<2x2xi64> to !ring.rq<[7, 11], 2 : i32>
   %rc = ring.add %ra, %rb : !ring.rq<[7, 11], 2 : i32>
-  %ot = ring.to_tensor %rc : !ring.rq<[7, 11], 2 : i32> to tensor<2x2xi64>
+  %out = ring.to_tensor %rc : !ring.rq<[7, 11], 2 : i32> to tensor<2x2xi64>
 
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
-  %v00 = tensor.extract %ot[%c0, %c0] : tensor<2x2xi64>
-  %v01 = tensor.extract %ot[%c0, %c1] : tensor<2x2xi64>
-  %v10 = tensor.extract %ot[%c1, %c0] : tensor<2x2xi64>
-  %v11 = tensor.extract %ot[%c1, %c1] : tensor<2x2xi64>
+  %v00 = tensor.extract %out[%c0, %c0] : tensor<2x2xi64>
+  %v01 = tensor.extract %out[%c0, %c1] : tensor<2x2xi64>
+  %v10 = tensor.extract %out[%c1, %c0] : tensor<2x2xi64>
+  %v11 = tensor.extract %out[%c1, %c1] : tensor<2x2xi64>
   // CHECK: 0
   vector.print %v00 : i64
   // CHECK: 4

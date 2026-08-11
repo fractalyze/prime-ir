@@ -13,14 +13,14 @@ func.func @test_rescale() {
   %x = arith.constant dense<[[6, 5], [5, 7], [1, 1]]> : tensor<3x2xi64>
   %rx = ring.from_tensor %x : tensor<3x2xi64> to !ring.rq<[7, 11, 13], 2 : i32>
   %ro = ring.rescale %rx : !ring.rq<[7, 11, 13], 2 : i32> to !ring.rq<[7, 11], 2 : i32>
-  %ot = ring.to_tensor %ro : !ring.rq<[7, 11], 2 : i32> to tensor<2x2xi64>
+  %out = ring.to_tensor %ro : !ring.rq<[7, 11], 2 : i32> to tensor<2x2xi64>
 
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
-  %v00 = tensor.extract %ot[%c0, %c0] : tensor<2x2xi64>
-  %v01 = tensor.extract %ot[%c0, %c1] : tensor<2x2xi64>
-  %v10 = tensor.extract %ot[%c1, %c0] : tensor<2x2xi64>
-  %v11 = tensor.extract %ot[%c1, %c1] : tensor<2x2xi64>
+  %v00 = tensor.extract %out[%c0, %c0] : tensor<2x2xi64>
+  %v01 = tensor.extract %out[%c0, %c1] : tensor<2x2xi64>
+  %v10 = tensor.extract %out[%c1, %c0] : tensor<2x2xi64>
+  %v11 = tensor.extract %out[%c1, %c1] : tensor<2x2xi64>
   // CHECK: 2
   vector.print %v00 : i64
   // CHECK: 3

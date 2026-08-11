@@ -15,12 +15,12 @@ func.func @test_bconv() {
   %in = arith.constant dense<[[2, 2], [3, 1]]> : tensor<2x2xi64>
   %r = ring.from_tensor %in : tensor<2x2xi64> to !ring.rq<[3, 5], 2 : i32>
   %o = ring.base_convert %r : !ring.rq<[3, 5], 2 : i32> to !ring.rq<[7], 2 : i32>
-  %ot = ring.to_tensor %o : !ring.rq<[7], 2 : i32> to tensor<1x2xi64>
+  %out = ring.to_tensor %o : !ring.rq<[7], 2 : i32> to tensor<1x2xi64>
 
   %c0 = arith.constant 0 : index
   %c1 = arith.constant 1 : index
-  %v0 = tensor.extract %ot[%c0, %c0] : tensor<1x2xi64>
-  %v1 = tensor.extract %ot[%c0, %c1] : tensor<1x2xi64>
+  %v0 = tensor.extract %out[%c0, %c0] : tensor<1x2xi64>
+  %v1 = tensor.extract %out[%c0, %c1] : tensor<1x2xi64>
   // CHECK: 1
   vector.print %v0 : i64
   // CHECK: 4

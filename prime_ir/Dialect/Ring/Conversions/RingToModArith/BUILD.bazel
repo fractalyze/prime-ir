@@ -26,9 +26,7 @@ prime_ir_cc_library(
     hdrs = ["RingToModArith.h"],
     deps = [
         ":pass_inc_gen",
-        "//prime_ir/Dialect/Field/IR:Field",
         "//prime_ir/Dialect/ModArith/IR:ModArith",
-        "//prime_ir/Dialect/Poly/IR:Poly",
         "//prime_ir/Dialect/Ring/IR:Ring",
         "//prime_ir/Utils:ConversionUtils",
         "@llvm-project//llvm:Support",

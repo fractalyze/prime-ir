@@ -28,11 +28,13 @@ prime_ir_cc_library(
     ],
     hdrs = [
         "RingDialect.h",
+        "RingEnums.h",
         "RingOps.h",
         "RingTypes.h",
     ],
     deps = [
         ":dialect_inc_gen",
+        ":enums_inc_gen",
         ":ops_inc_gen",
         ":types_inc_gen",
         "@llvm-project//llvm:Support",
@@ -47,11 +49,13 @@ td_library(
     name = "td_files",
     srcs = [
         "RingDialect.td",
+        "RingEnums.td",
         "RingOps.td",
         "RingTypes.td",
     ],
     includes = ["../../../.."],
     deps = [
+        "@llvm-project//mlir:AttrTdFiles",
         "@llvm-project//mlir:BuiltinDialectTdFiles",
         "@llvm-project//mlir:InferTypeOpInterfaceTdFiles",
         "@llvm-project//mlir:OpBaseTdFiles",
@@ -67,6 +71,19 @@ gentbl_cc_library(
     },
     tblgen = "@llvm-project//mlir:mlir-tblgen",
     td_file = "RingDialect.td",
+    deps = [
+        ":td_files",
+    ],
+)
+
+gentbl_cc_library(
+    name = "enums_inc_gen",
+    tbl_outs = {
+        "RingEnums.h.inc": ["-gen-enum-decls"],
+        "RingEnums.cpp.inc": ["-gen-enum-defs"],
+    },
+    tblgen = "@llvm-project//mlir:mlir-tblgen",
+    td_file = "RingEnums.td",
     deps = [
         ":td_files",
     ],

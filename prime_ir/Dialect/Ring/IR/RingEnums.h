@@ -13,17 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#ifndef PRIME_IR_DIALECT_RING_IR_RINGTYPES_H_
-#define PRIME_IR_DIALECT_RING_IR_RINGTYPES_H_
+#ifndef PRIME_IR_DIALECT_RING_IR_RINGENUMS_H_
+#define PRIME_IR_DIALECT_RING_IR_RINGENUMS_H_
 
 // IWYU pragma: begin_keep
-// Headers needed for RingTypes.h.inc (DenseI64ArrayAttr, IntegerAttr params).
-#include "mlir/IR/BuiltinAttributes.h"
-// Domain is a type parameter, so its definition must precede the typedef.
-#include "prime_ir/Dialect/Ring/IR/RingEnums.h"
+// Headers needed by RingEnums.h.inc (StringRef / optional symbolizers).
+#include <optional>
+
+#include "llvm/ADT/StringRef.h"
 // IWYU pragma: end_keep
 
-#define GET_TYPEDEF_CLASSES
-#include "prime_ir/Dialect/Ring/IR/RingTypes.h.inc"
+#include "prime_ir/Dialect/Ring/IR/RingEnums.h.inc"
 
-#endif // PRIME_IR_DIALECT_RING_IR_RINGTYPES_H_
+#endif // PRIME_IR_DIALECT_RING_IR_RINGENUMS_H_

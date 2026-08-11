@@ -28,3 +28,22 @@ func.func @ciphertext_is_tensor_of_ring(
     -> tensor<2x!ring.rq<[12289], 8 : i32>> {
   return %arg0 : tensor<2x!ring.rq<[12289], 8 : i32>>
 }
+
+// The evaluation basis prints its keyword; the coefficient basis is the default
+// and stays implicit, so the two spellings above and below are distinct types.
+// CHECK-LABEL: func.func @rq_eval_basis_roundtrip
+// CHECK-SAME: !ring.rq<[12289], 8 : i32, eval>
+func.func @rq_eval_basis_roundtrip(
+    %arg0: !ring.rq<[12289], 8 : i32, eval>) -> !ring.rq<[12289], 8 : i32, eval> {
+  // CHECK: return %arg0 : !ring.rq<[12289], 8 : i32, eval>
+  return %arg0 : !ring.rq<[12289], 8 : i32, eval>
+}
+
+// Spelling the default explicitly parses and canonicalises back to implicit.
+// CHECK-LABEL: func.func @rq_explicit_coeff_is_the_default
+// CHECK-SAME: !ring.rq<[12289], 8 : i32>
+// CHECK-NOT: coeff
+func.func @rq_explicit_coeff_is_the_default(
+    %arg0: !ring.rq<[12289], 8 : i32, coeff>) -> !ring.rq<[12289], 8 : i32> {
+  return %arg0 : !ring.rq<[12289], 8 : i32>
+}

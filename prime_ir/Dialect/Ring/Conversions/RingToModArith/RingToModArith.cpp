@@ -23,15 +23,9 @@ limitations under the License.
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/ImplicitLocOpBuilder.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "prime_ir/Dialect/Field/IR/FieldAttributes.h"
-#include "prime_ir/Dialect/Field/IR/FieldDialect.h"
-#include "prime_ir/Dialect/Field/IR/FieldOps.h"
-#include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithOps.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
-#include "prime_ir/Dialect/Poly/IR/PolyDialect.h"
-#include "prime_ir/Dialect/Poly/IR/PolyOps.h"
 #include "prime_ir/Dialect/Ring/IR/RingOps.h"
 #include "prime_ir/Dialect/Ring/IR/RingTypes.h"
 #include "prime_ir/Utils/ConversionUtils.h"
@@ -65,132 +59,12 @@ static uint64_t modInverse(uint64_t a, uint64_t m) {
   }
   if (t < 0)
     t += m;
-  return (uint64_t)t;
-}
-
-// A primitive `order`-th root of unity mod q, 0 if none (order ∤ q-1). For a
-// candidate c, r = c^((q-1)/order) is a root whose order divides `order`; it is
-// primitive iff r^(order/2) != 1. Trying c = 2,3,... finds one in a few steps
-// (one powmod each) — works for real word-size primes, unlike an O(q) scan.
-static uint64_t primitiveNthRoot(int64_t order, uint64_t q) {
-  auto powmod = [](unsigned __int128 base, uint64_t e, uint64_t m) -> uint64_t {
-    unsigned __int128 r = 1;
-    base %= m;
-    while (e) {
-      if (e & 1)
-        r = r * base % m;
-      base = base * base % m;
-      e >>= 1;
-    }
-    return (uint64_t)r;
-  };
-  if (order <= 0 || (q - 1) % (uint64_t)order != 0)
-    return 0;
-  uint64_t exp = (q - 1) / (uint64_t)order;
-  for (uint64_t c = 2; c < q; ++c) {
-    uint64_t r = powmod(c, exp, q);
-    if (r > 1 && powmod(r, (uint64_t)order / 2, q) != 1)
-      return r;
-  }
-  return 0;
-}
-
-static uint64_t powmod64(unsigned __int128 base, uint64_t e, uint64_t m) {
-  unsigned __int128 r = 1;
-  base %= m;
-  while (e) {
-    if (e & 1)
-      r = r * base % m;
-    base = base * base % m;
-    e >>= 1;
-  }
-  return (uint64_t)r;
-}
-
-// Negacyclic (mod X^N+1) transform machinery for one prime limb, precomputed
-// once so callers can transform many operands and accumulate in the evaluation
-// domain before a single inverse. psi = 2N-th root, omega = psi^2 the N-th root;
-// forward() = twist by psi^k then cyclic NTT; inverse() = cyclic iNTT then untwist
-// by psi^-k. `valid` is false if q has no 2N-th root of unity (2N ∤ q-1).
-struct NegacyclicNTT {
-  ImplicitLocOpBuilder &b;
-  MLIRContext *ctx;
-  int64_t n;
-  uint64_t omega = 0;
-  field::PrimeFieldType pfTy;
-  RankedTensorType pfTensor;
-  Value twistPsi, twistPsiInv;
-  bool valid = false;
-
-  NegacyclicNTT(ImplicitLocOpBuilder &b, MLIRContext *ctx, int64_t modulus,
-                int64_t n)
-      : b(b), ctx(ctx), n(n) {
-    uint64_t q = (uint64_t)modulus;
-    uint64_t psi = primitiveNthRoot(2 * n, q);
-    if (psi == 0)
-      return;
-    omega = powmod64(psi, 2, q);
-    Type i64 = IntegerType::get(ctx, 64);
-    pfTy = field::PrimeFieldType::get(ctx, IntegerAttr::get(i64, modulus),
-                                      /*isMontgomery=*/false);
-    pfTensor = RankedTensorType::get({n}, pfTy);
-    twistPsi = makeTwist(q, psi);
-    twistPsiInv = makeTwist(q, modInverse(psi, q));
-    valid = true;
-  }
-
-  // [psi^0, psi^1, ..., psi^{N-1}] as a field.pf coefficient tensor.
-  Value makeTwist(uint64_t q, uint64_t basePow) {
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
-    SmallVector<APInt> vals;
-    uint64_t acc = 1;
-    for (int64_t k = 0; k < n; ++k) {
-      vals.push_back(APInt(64, acc));
-      acc = (uint64_t)((unsigned __int128)acc * basePow % q);
-    }
-    Value ci = arith::ConstantOp::create(b, DenseElementsAttr::get(rowI64, vals));
-    return field::BitcastOp::create(b, pfTensor, ci);
-  }
-
-  Value ntt(Value src, bool inverse) {
-    Type i64 = IntegerType::get(ctx, 64);
-    Value dest = tensor::EmptyOp::create(b, pfTensor, ValueRange{});
-    auto root = field::RootOfUnityAttr::get(ctx, pfTy,
-                                            IntegerAttr::get(i64, (int64_t)omega),
-                                            IntegerAttr::get(i64, n));
-    return poly::NTTOp::create(b, src, dest, /*twiddles=*/Value(), root,
-                               /*tileX=*/IntegerAttr(), /*gridSize=*/IntegerAttr(),
-                               /*bitReverse=*/b.getBoolAttr(true),
-                               /*inverse=*/b.getBoolAttr(inverse))
-        .getOutput();
-  }
-
-  // Coefficient tensor -> evaluation domain (twist by psi^k, then NTT).
-  Value forward(Value field) {
-    return ntt(field::MulOp::create(b, field, twistPsi), /*inverse=*/false);
-  }
-  // Evaluation domain -> coefficient tensor (iNTT, then untwist by psi^-k).
-  Value inverse(Value eval) {
-    return field::MulOp::create(b, ntt(eval, /*inverse=*/true), twistPsiInv);
-  }
-};
-
-// Negacyclic product of two field.pf<q> coefficient tensors (mod X^N+1).
-// Returns null if q has no 2N-th root of unity.
-static Value negacyclicMulLimb(ImplicitLocOpBuilder &b, MLIRContext *ctx,
-                               int64_t modulus, int64_t n, Value aField,
-                               Value bField) {
-  NegacyclicNTT t(b, ctx, modulus, n);
-  if (!t.valid)
-    return Value();
-  Value prod = field::MulOp::create(b, t.forward(aField), t.forward(bField));
-  return t.inverse(prod);
+  return static_cast<uint64_t>(t);
 }
 
 class RingToModArithTypeConverter : public TypeConverter {
 public:
-  RingToModArithTypeConverter(MLIRContext *ctx) {
+  explicit RingToModArithTypeConverter(MLIRContext *ctx) {
     addConversion([](Type t) { return t; });
     addConversion([](RqType t) -> Type { return convertRqType(t); });
   }
@@ -217,7 +91,7 @@ struct ConvertBaseConvert : public OpConversionPattern<BaseConvertOp> {
     APInt Q(qw, 1);
     SmallVector<APInt> qWide;
     for (int64_t q : inM) {
-      APInt qi(qw, (uint64_t)q);
+      APInt qi(qw, static_cast<uint64_t>(q));
       qWide.push_back(qi);
       Q *= qi;
     }
@@ -225,10 +99,11 @@ struct ConvertBaseConvert : public OpConversionPattern<BaseConvertOp> {
     SmallVector<SmallVector<uint64_t>> table(L, SmallVector<uint64_t>(Lp));
     for (unsigned i = 0; i < L; ++i) {
       APInt qHat = Q.udiv(qWide[i]);
-      yHatInv[i] =
-          modInverse(qHat.urem(qWide[i]).getZExtValue(), (uint64_t)inM[i]);
+      yHatInv[i] = modInverse(qHat.urem(qWide[i]).getZExtValue(),
+                              static_cast<uint64_t>(inM[i]));
       for (unsigned j = 0; j < Lp; ++j)
-        table[i][j] = qHat.urem(APInt(qw, (uint64_t)outM[j])).getZExtValue();
+        table[i][j] =
+            qHat.urem(APInt(qw, static_cast<uint64_t>(outM[j]))).getZExtValue();
     }
 
     Type i64 = IntegerType::get(ctx, 64);
@@ -265,7 +140,8 @@ struct ConvertBaseConvert : public OpConversionPattern<BaseConvertOp> {
     // out_j = (sum_i y_i * table_ij) mod p_j, all in mod_arith<p_j>. Barrett
     // reduces each product, so reinterpreting a raw y_i into mod_arith<p_j>
     // (possibly non-canonical) still yields the correct residue.
-    auto outTensorTy = RankedTensorType::get({(int64_t)Lp, n}, i64);
+    auto outTensorTy =
+        RankedTensorType::get({static_cast<int64_t>(Lp), n}, i64);
     Value result = tensor::EmptyOp::create(b, outTensorTy, ValueRange{});
     for (unsigned j = 0; j < Lp; ++j) {
       Value acc;
@@ -273,7 +149,8 @@ struct ConvertBaseConvert : public OpConversionPattern<BaseConvertOp> {
         Value yiPj = mod_arith::BitcastOp::create(b, maTensor(outM[j]), y[i]);
         Value term =
             mod_arith::MulOp::create(b, yiPj, maConst(outM[j], table[i][j]));
-        acc = i == 0 ? term : mod_arith::AddOp::create(b, acc, term).getResult();
+        acc =
+            i == 0 ? term : mod_arith::AddOp::create(b, acc, term).getResult();
       }
       Value outj = mod_arith::BitcastOp::create(b, rowI64, acc);
       result = tensor::InsertSliceOp::create(b, outj, result, sliceOffsets(j),
@@ -285,8 +162,8 @@ struct ConvertBaseConvert : public OpConversionPattern<BaseConvertOp> {
 };
 
 // rescale: exact division by the trailing modulus q_last. Per output limb i,
-// out_i = (x_i - x_last) * q_last^{-1} mod q_i (mod_arith.mul Barrett-reduces the
-// x_last*qInv product, so the non-canonical x_last reinterpret is fine).
+// out_i = (x_i - x_last) * q_last^{-1} mod q_i (mod_arith.mul Barrett-reduces
+// the x_last*qInv product, so the non-canonical x_last reinterpret is fine).
 struct ConvertRescale : public OpConversionPattern<RescaleOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -299,7 +176,7 @@ struct ConvertRescale : public OpConversionPattern<RescaleOp> {
     ArrayRef<int64_t> inM = inTy.getModuli().asArrayRef();
     int64_t n = inTy.getRingDegree().getValue().getSExtValue();
     unsigned L = inM.size();
-    uint64_t qLast = (uint64_t)inM[L - 1];
+    uint64_t qLast = static_cast<uint64_t>(inM[L - 1]);
 
     Type i64 = IntegerType::get(ctx, 64);
     auto rowI64 = RankedTensorType::get({n}, i64);
@@ -321,10 +198,10 @@ struct ConvertRescale : public OpConversionPattern<RescaleOp> {
     Value xLast = tensor::ExtractSliceOp::create(b, rowI64, in, offs(L - 1),
                                                  sizes, strides);
 
-    auto outTy = RankedTensorType::get({(int64_t)L - 1, n}, i64);
+    auto outTy = RankedTensorType::get({static_cast<int64_t>(L) - 1, n}, i64);
     Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
     for (unsigned i = 0; i + 1 < L; ++i) {
-      uint64_t qi = (uint64_t)inM[i];
+      uint64_t qi = static_cast<uint64_t>(inM[i]);
       uint64_t qInv = modInverse(qLast % qi, qi);
       Value xi = tensor::ExtractSliceOp::create(b, rowI64, in, offs(i), sizes,
                                                 strides);
@@ -344,189 +221,6 @@ struct ConvertRescale : public OpConversionPattern<RescaleOp> {
   }
 };
 
-// ntt: per limb, field.bitcast i64 -> field.pf<q_i>, poly.ntt (reusing the
-// shared kernel), bitcast back. Cyclic NTT with an N-th root mod q_i.
-struct ConvertNTT : public OpConversionPattern<NTTOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(NTTOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    MLIRContext *ctx = op.getContext();
-    auto ty = cast<RqType>(op.getInput().getType());
-    ArrayRef<int64_t> mod = ty.getModuli().asArrayRef();
-    int64_t n = ty.getRingDegree().getValue().getSExtValue();
-    unsigned L = mod.size();
-    bool inverse = op.getInverse();
-
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
-    SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
-    SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
-    auto offs = [&](int64_t r) -> SmallVector<OpFoldResult> {
-      return {b.getIndexAttr(r), b.getIndexAttr(0)};
-    };
-    Value in = adaptor.getInput();
-
-    auto outTy = RankedTensorType::get({(int64_t)L, n}, i64);
-    Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
-    for (unsigned i = 0; i < L; ++i) {
-      uint64_t q = (uint64_t)mod[i];
-      uint64_t w = primitiveNthRoot(n, q);
-      if (w == 0)
-        return op.emitOpError("modulus ") << mod[i] << " has no N-th root of "
-                                             "unity (N must divide q-1)";
-      auto pfTy = field::PrimeFieldType::get(ctx, IntegerAttr::get(i64, mod[i]),
-                                             /*isMontgomery=*/false);
-      auto pfTensor = RankedTensorType::get({n}, pfTy);
-      Value xi = tensor::ExtractSliceOp::create(b, rowI64, in, offs(i), sizes,
-                                                strides);
-      Value fi = field::BitcastOp::create(b, pfTensor, xi);
-      Value dest = tensor::EmptyOp::create(b, pfTensor, ValueRange{});
-      auto root = field::RootOfUnityAttr::get(
-          ctx, pfTy, IntegerAttr::get(i64, (int64_t)w), IntegerAttr::get(i64, n));
-      Value ev = poly::NTTOp::create(b, /*source=*/fi, /*dest=*/dest,
-                                     /*twiddles=*/Value(), /*root=*/root,
-                                     /*tileX=*/IntegerAttr(),
-                                     /*gridSize=*/IntegerAttr(),
-                                     /*bitReverse=*/b.getBoolAttr(true),
-                                     /*inverse=*/b.getBoolAttr(inverse))
-                     .getOutput();
-      Value oi = field::BitcastOp::create(b, rowI64, ev);
-      result = tensor::InsertSliceOp::create(b, oi, result, offs(i), sizes,
-                                             strides);
-    }
-    rewriter.replaceOp(op, result);
-    return success();
-  }
-};
-
-// mul: negacyclic polynomial product per limb, via the psi-twisted NTT
-// (twist by psi^k, cyclic NTT with omega=psi^2, pointwise, inverse NTT, untwist
-// by psi^-k). Reuses poly.ntt for the transforms; field.mul for twist/pointwise.
-struct ConvertMul : public OpConversionPattern<MulOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(MulOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    MLIRContext *ctx = op.getContext();
-    auto ty = cast<RqType>(op.getLhs().getType());
-    ArrayRef<int64_t> mod = ty.getModuli().asArrayRef();
-    int64_t n = ty.getRingDegree().getValue().getSExtValue();
-    unsigned L = mod.size();
-
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
-    SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
-    SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
-    auto offs = [&](int64_t r) -> SmallVector<OpFoldResult> {
-      return {b.getIndexAttr(r), b.getIndexAttr(0)};
-    };
-    Value lhs = adaptor.getLhs(), rhs = adaptor.getRhs();
-
-    auto outTy = RankedTensorType::get({(int64_t)L, n}, i64);
-    Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
-    for (unsigned i = 0; i < L; ++i) {
-      auto pfTy = field::PrimeFieldType::get(ctx, IntegerAttr::get(i64, mod[i]),
-                                             /*isMontgomery=*/false);
-      auto pfTensor = RankedTensorType::get({n}, pfTy);
-      auto limbField = [&](Value whole) -> Value {
-        Value s = tensor::ExtractSliceOp::create(b, rowI64, whole, offs(i),
-                                                 sizes, strides);
-        return field::BitcastOp::create(b, pfTensor, s);
-      };
-      Value ci = negacyclicMulLimb(b, ctx, mod[i], n, limbField(lhs),
-                                   limbField(rhs));
-      if (!ci)
-        return op.emitOpError("modulus ")
-               << mod[i] << " has no 2N-th root of unity (need 2N | q-1)";
-      Value oi = field::BitcastOp::create(b, rowI64, ci);
-      result = tensor::InsertSliceOp::create(b, oi, result, offs(i), sizes,
-                                             strides);
-    }
-    rewriter.replaceOp(op, result);
-    return success();
-  }
-};
-
-// gadget_product: sum_j decompose(x)_j * keys[j]. Digit-decompose x (bit-slice),
-// then per limb accumulate the negacyclic products in the NTT (evaluation) domain:
-// forward-transform each digit and key once, sum the pointwise products, and do a
-// SINGLE inverse per limb instead of one per term. Valid because the inverse
-// transform and the psi^-k untwist are linear, so sum(inverse(P_j)) =
-// inverse(sum(P_j)) — this collapses the memory-bound iNTT of the key-switch chain
-// from `levels` down to 1 per limb (the fused key-switch lever).
-struct ConvertGadgetProduct : public OpConversionPattern<GadgetProductOp> {
-  using OpConversionPattern::OpConversionPattern;
-
-  LogicalResult
-  matchAndRewrite(GadgetProductOp op, OpAdaptor adaptor,
-                  ConversionPatternRewriter &rewriter) const override {
-    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
-    MLIRContext *ctx = op.getContext();
-    auto ty = cast<RqType>(op.getInput().getType());
-    ArrayRef<int64_t> mod = ty.getModuli().asArrayRef();
-    int64_t n = ty.getRingDegree().getValue().getSExtValue();
-    unsigned L = mod.size();
-    int64_t baseBits = op.getBaseBits();
-    ValueRange keys = adaptor.getKeys();
-    unsigned levels = keys.size();
-
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
-    Value in = adaptor.getInput();
-    auto wholeTy = cast<RankedTensorType>(in.getType());
-    auto splat = [&](uint64_t v) -> Value {
-      return arith::ConstantOp::create(
-          b, DenseElementsAttr::get(wholeTy, APInt(64, v)));
-    };
-    Value mask = splat((uint64_t(1) << baseBits) - 1);
-    SmallVector<Value> digits;
-    for (unsigned j = 0; j < levels; ++j)
-      digits.push_back(arith::AndIOp::create(
-          b, arith::ShRUIOp::create(b, in, splat((uint64_t)(j * baseBits))),
-          mask));
-
-    SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
-    SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
-    auto offs = [&](int64_t r) -> SmallVector<OpFoldResult> {
-      return {b.getIndexAttr(r), b.getIndexAttr(0)};
-    };
-
-    auto outTy = RankedTensorType::get({(int64_t)L, n}, i64);
-    Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
-    for (unsigned i = 0; i < L; ++i) {
-      NegacyclicNTT t(b, ctx, mod[i], n);
-      if (!t.valid)
-        return op.emitOpError("modulus ")
-               << mod[i] << " has no 2N-th root of unity";
-      auto limbField = [&](Value whole) -> Value {
-        Value s = tensor::ExtractSliceOp::create(b, rowI64, whole, offs(i),
-                                                 sizes, strides);
-        return field::BitcastOp::create(b, t.pfTensor, s);
-      };
-      // Accumulate d_j*k_j pointwise in the evaluation domain, one inverse total.
-      Value accHat;
-      for (unsigned j = 0; j < levels; ++j) {
-        Value prod = field::MulOp::create(b, t.forward(limbField(digits[j])),
-                                          t.forward(limbField(keys[j])));
-        accHat =
-            j == 0 ? prod : field::AddOp::create(b, accHat, prod).getResult();
-      }
-      Value oi = field::BitcastOp::create(b, rowI64, t.inverse(accHat));
-      result = tensor::InsertSliceOp::create(b, oi, result, offs(i), sizes,
-                                             strides);
-    }
-    rewriter.replaceOp(op, result);
-    return success();
-  }
-};
-
-// gadget_decompose: base-2^baseBits digit split of each residue. Pure bit
-// manipulation on the whole [L,N] tensor: digit_j = (x >> j*baseBits) & (B-1).
 struct ConvertGadgetDecompose : public OpConversionPattern<GadgetDecomposeOp> {
   using OpConversionPattern::OpConversionPattern;
 
@@ -541,11 +235,11 @@ struct ConvertGadgetDecompose : public OpConversionPattern<GadgetDecomposeOp> {
       return arith::ConstantOp::create(
           b, DenseElementsAttr::get(tType, APInt(64, v)));
     };
-    Value mask = splat((uint64_t(1) << baseBits) - 1);
+    Value mask = splat((static_cast<uint64_t>(1) << baseBits) - 1);
     SmallVector<Value> digits;
     for (int64_t j = 0; j < levels; ++j) {
-      Value shifted =
-          arith::ShRUIOp::create(b, in, splat((uint64_t)(j * baseBits)));
+      Value shifted = arith::ShRUIOp::create(
+          b, in, splat(static_cast<uint64_t>(j * baseBits)));
       digits.push_back(arith::AndIOp::create(b, shifted, mask));
     }
     rewriter.replaceOp(op, digits);
@@ -569,15 +263,30 @@ struct ConvertAutomorphism : public OpConversionPattern<AutomorphismOp> {
     int64_t n = ty.getRingDegree().getValue().getSExtValue();
     unsigned L = mod.size();
     int64_t g = op.getExponent();
-    int64_t twoN = 2 * n;
+    int64_t psiOrder = 2 * n;
 
-    // pos[k] = destination of coefficient k; neg[k] = whether it flips sign.
-    SmallVector<int64_t> pos(n);
-    SmallVector<bool> neg(n);
-    for (int64_t k = 0; k < n; ++k) {
-      int64_t dest = (g * k) % twoN;
-      pos[k] = dest % n;
-      neg[k] = dest >= n;
+    // sigma_g depends only on g mod 2N, and reducing first keeps the products
+    // below from overflowing for a large exponent.
+    int64_t gr = g % psiOrder;
+    bool evalBasis = ty.isEval();
+
+    // Coefficient basis: pos[k] = destination of coefficient k, neg[k] =
+    // whether the X^N = -1 wrap flips its sign. Evaluation basis: slot j
+    // evaluates at psi^(2j+1), and sigma_g carries that to psi^(g(2j+1)), so
+    // slot j gathers from src[j]. The exponent reduces exactly mod 2N, which is
+    // why no sign survives on this side.
+    SmallVector<int64_t> pos(n), src(n);
+    SmallVector<bool> neg(n, false);
+    if (evalBasis) {
+      for (int64_t j = 0; j < n; ++j) {
+        src[j] = ((gr * (2 * j + 1)) % psiOrder - 1) / 2;
+      }
+    } else {
+      for (int64_t k = 0; k < n; ++k) {
+        int64_t dest = (gr * k) % psiOrder;
+        pos[k] = dest % n;
+        neg[k] = dest >= n;
+      }
     }
 
     Type i64 = IntegerType::get(ctx, 64);
@@ -592,12 +301,22 @@ struct ConvertAutomorphism : public OpConversionPattern<AutomorphismOp> {
       idx[j] = arith::ConstantIndexOp::create(b, j);
     Value in = adaptor.getInput();
 
-    auto outTy = RankedTensorType::get({(int64_t)L, n}, i64);
+    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, i64);
     Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
     for (unsigned i = 0; i < L; ++i) {
-      uint64_t q = (uint64_t)mod[i];
+      uint64_t q = static_cast<uint64_t>(mod[i]);
       Value xi = tensor::ExtractSliceOp::create(b, rowI64, in, offs(i), sizes,
                                                 strides);
+      if (evalBasis) {
+        Value gathered = tensor::EmptyOp::create(b, rowI64, ValueRange{});
+        for (int64_t j = 0; j < n; ++j) {
+          Value v = tensor::ExtractOp::create(b, xi, idx[src[j]]);
+          gathered = tensor::InsertOp::create(b, v, gathered, idx[j]);
+        }
+        result = tensor::InsertSliceOp::create(b, gathered, result, offs(i),
+                                               sizes, strides);
+        continue;
+      }
       // permute coefficients (no sign yet)
       Value perm = tensor::EmptyOp::create(b, rowI64, ValueRange{});
       SmallVector<APInt> signs(n, APInt(64, 1));
@@ -615,8 +334,8 @@ struct ConvertAutomorphism : public OpConversionPattern<AutomorphismOp> {
       Value permMa = mod_arith::BitcastOp::create(b, maTensor, perm);
       Value outMa = mod_arith::MulOp::create(b, permMa, signConst);
       Value oi = mod_arith::BitcastOp::create(b, rowI64, outMa);
-      result = tensor::InsertSliceOp::create(b, oi, result, offs(i), sizes,
-                                             strides);
+      result =
+          tensor::InsertSliceOp::create(b, oi, result, offs(i), sizes, strides);
     }
     rewriter.replaceOp(op, result);
     return success();
@@ -624,6 +343,9 @@ struct ConvertAutomorphism : public OpConversionPattern<AutomorphismOp> {
 };
 
 // Componentwise same-basis binary op: per limb i, ModOpT on mod_arith<q_i>.
+// Multiplication qualifies because the verifier admits only eval-basis
+// operands, where CRT has already diagonalised the ring; reaching that basis is
+// the caller's business, not this pass's.
 template <typename RingOpT, typename ModOpT>
 struct ConvertBinOp : public OpConversionPattern<RingOpT> {
   using OpConversionPattern<RingOpT>::OpConversionPattern;
@@ -653,7 +375,7 @@ struct ConvertBinOp : public OpConversionPattern<RingOpT> {
     };
     Value lhs = adaptor.getLhs(), rhs = adaptor.getRhs();
 
-    auto outTy = RankedTensorType::get({(int64_t)L, n}, i64);
+    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, i64);
     Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
     for (unsigned i = 0; i < L; ++i) {
       Value li = tensor::ExtractSliceOp::create(b, rowI64, lhs, offs(i), sizes,
@@ -664,8 +386,53 @@ struct ConvertBinOp : public OpConversionPattern<RingOpT> {
       Value rm = mod_arith::BitcastOp::create(b, maTensor(mod[i]), ri);
       Value sm = ModOpT::create(b, lm, rm);
       Value si = mod_arith::BitcastOp::create(b, rowI64, sm);
-      result = tensor::InsertSliceOp::create(b, si, result, offs(i), sizes,
-                                             strides);
+      result =
+          tensor::InsertSliceOp::create(b, si, result, offs(i), sizes, strides);
+    }
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+};
+
+// Componentwise same-basis unary op: per limb i, ModOpT on mod_arith<q_i>.
+// Basis-agnostic — negation commutes with the CRT map, so it needs no check.
+template <typename RingOpT, typename ModOpT>
+struct ConvertUnaryOp : public OpConversionPattern<RingOpT> {
+  using OpConversionPattern<RingOpT>::OpConversionPattern;
+  using OpAdaptor = typename OpConversionPattern<RingOpT>::OpAdaptor;
+
+  LogicalResult
+  matchAndRewrite(RingOpT op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    ImplicitLocOpBuilder b(op.getLoc(), rewriter);
+    MLIRContext *ctx = op.getContext();
+    auto ty = cast<RqType>(op.getInput().getType());
+    ArrayRef<int64_t> mod = ty.getModuli().asArrayRef();
+    int64_t n = ty.getRingDegree().getValue().getSExtValue();
+    unsigned L = mod.size();
+
+    Type i64 = IntegerType::get(ctx, 64);
+    auto rowI64 = RankedTensorType::get({n}, i64);
+    SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
+    SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
+    auto offs = [&](int64_t r) -> SmallVector<OpFoldResult> {
+      return {b.getIndexAttr(r), b.getIndexAttr(0)};
+    };
+    Value in = adaptor.getInput();
+
+    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, i64);
+    Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
+    for (unsigned i = 0; i < L; ++i) {
+      auto maTensor = RankedTensorType::get(
+          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(i64, mod[i]),
+                                            /*isMontgomery=*/false));
+      Value xi = tensor::ExtractSliceOp::create(b, rowI64, in, offs(i), sizes,
+                                                strides);
+      Value xm = mod_arith::BitcastOp::create(b, maTensor, xi);
+      Value rm = ModOpT::create(b, xm);
+      Value ri = mod_arith::BitcastOp::create(b, rowI64, rm);
+      result =
+          tensor::InsertSliceOp::create(b, ri, result, offs(i), sizes, strides);
     }
     rewriter.replaceOp(op, result);
     return success();
@@ -673,7 +440,8 @@ struct ConvertBinOp : public OpConversionPattern<RingOpT> {
 };
 
 // from_tensor / to_tensor bridge the (converted) tensor representation and the
-// ring type; after conversion both sides are the same tensor, so they fold away.
+// ring type; after conversion both sides are the same tensor, so they fold
+// away.
 struct ConvertFromTensor : public OpConversionPattern<FromTensorOp> {
   using OpConversionPattern::OpConversionPattern;
   LogicalResult
@@ -704,15 +472,16 @@ struct RingToModArith : impl::RingToModArithBase<RingToModArith> {
 
     ConversionTarget target(*context);
     target.addIllegalDialect<RingDialect>();
-    target.addLegalDialect<mod_arith::ModArithDialect, tensor::TensorDialect,
-                           field::FieldDialect, poly::PolyDialect>();
+    target.addLegalDialect<mod_arith::ModArithDialect, tensor::TensorDialect>();
 
     RewritePatternSet patterns(context);
-    patterns.add<ConvertBaseConvert, ConvertRescale, ConvertNTT, ConvertMul,
-                 ConvertAutomorphism, ConvertGadgetDecompose,
-                 ConvertGadgetProduct, ConvertFromTensor, ConvertToTensor,
+    patterns.add<ConvertBaseConvert, ConvertRescale, ConvertAutomorphism,
+                 ConvertGadgetDecompose, ConvertFromTensor, ConvertToTensor,
                  ConvertBinOp<AddOp, mod_arith::AddOp>,
-                 ConvertBinOp<SubOp, mod_arith::SubOp>>(typeConverter, context);
+                 ConvertBinOp<SubOp, mod_arith::SubOp>,
+                 ConvertBinOp<MulOp, mod_arith::MulOp>,
+                 ConvertUnaryOp<NegateOp, mod_arith::NegateOp>>(typeConverter,
+                                                                context);
     addStructuralConversionPatterns(typeConverter, patterns, target);
 
     if (failed(applyPartialConversion(module, target, std::move(patterns))))

@@ -17,7 +17,9 @@ limitations under the License.
 #define PRIME_IR_DIALECT_RING_IR_RINGTYPES_TD_
 
 include "mlir/IR/AttrTypeBase.td"
+include "mlir/IR/EnumAttr.td"
 include "prime_ir/Dialect/Ring/IR/RingDialect.td"
+include "prime_ir/Dialect/Ring/IR/RingEnums.td"
 
 class Ring_Type<string name, string typeMnemonic, list<Trait> traits = []>
     : TypeDef<Ring_Dialect, name, traits> {
@@ -44,14 +46,40 @@ def Ring_RqType : Ring_Type<"Rq", "rq"> {
     A rank-k module over R_Q is `tensor<k x !ring.rq<...>>` (componentwise), so
     element-times-element is left to the scalar action, not a ring×ring op here.
 
+    `domain` records which CRT basis the value is written in — the coefficient
+    basis or the fully split evaluation basis. It defaults to `coeff` and is
+    omitted from the assembly in that case. The two bases share the same `[L, N]`
+    storage but not the same multiplication, so the basis is not recoverable from
+    the data and has to live in the type; see `Ring_Domain`. Nothing here changes
+    it: the transform between the two is the NTT, which lives in XLA.
+
     Example:
     ```
     // N = 4096, two ~60-bit RNS limbs
     !R = !ring.rq<[1152921504606830593, 1152921504598720513], 4096 : i32>
+    // the same ring in the evaluation basis
+    !Rhat = !ring.rq<[1152921504606830593, 1152921504598720513], 4096 : i32, eval>
     ```
   }];
   let parameters = (ins "::mlir::DenseI64ArrayAttr":$moduli,
-                        "::mlir::IntegerAttr":$ringDegree);
+                        "::mlir::IntegerAttr":$ringDegree,
+                        EnumParameter<Ring_Domain>:$domain);
+  let builders = [
+    // Coefficient basis is the default spelling; an eval-basis ring is named
+    // explicitly, at the boundary with whoever ran the transform.
+    TypeBuilder<(ins "::mlir::DenseI64ArrayAttr":$moduli,
+                     "::mlir::IntegerAttr":$ringDegree), [{
+      return $_get($_ctxt, moduli, ringDegree, Domain::Coeff);
+    }]>,
+  ];
+  let extraClassDeclaration = [{
+    /// This ring with the same moduli and degree, re-based into `d`.
+    RqType withDomain(Domain d) const {
+      return RqType::get(getContext(), getModuli(), getRingDegree(), d);
+    }
+    bool isCoeff() const { return getDomain() == Domain::Coeff; }
+    bool isEval() const { return getDomain() == Domain::Eval; }
+  }];
   // Custom `<[q0, q1, ...], N>` format: DenseI64ArrayAttr's generic field parser
   // wants `[...]` but prints `array<i64:...>`, so it can't round-trip on its own.
   let hasCustomAssemblyFormat = 1;

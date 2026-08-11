@@ -15,9 +15,23 @@ limitations under the License.
 
 #include "prime_ir/Dialect/Ring/IR/RingOps.h"
 
+#include <cstdint>
+
+#include "llvm/ADT/StringRef.h"
 #include "mlir/IR/BuiltinAttributes.h"
 
 namespace mlir::prime_ir::ring {
+
+// Ops that are defined only on the coefficient basis share this check; the two
+// bases are indistinguishable in storage, so nothing but the type catches the
+// mistake.
+static LogicalResult requireCoeff(Operation *op, RqType ty,
+                                  llvm::StringRef what, llvm::StringRef why) {
+  if (ty.isCoeff()) {
+    return success();
+  }
+  return op->emitOpError(what) << " must be in the coeff basis (" << why << ")";
+}
 
 LogicalResult BaseConvertOp::verify() {
   RqType in = llvm::cast<RqType>(getInput().getType());
@@ -25,6 +39,11 @@ LogicalResult BaseConvertOp::verify() {
   if (in.getRingDegree() != out.getRingDegree()) {
     return emitOpError("input and output rings must share the degree N (")
            << in.getRingDegree() << " vs " << out.getRingDegree() << ")";
+  }
+  if (in.getDomain() != out.getDomain()) {
+    return emitOpError("base conversion does not change basis, but input is ")
+           << stringifyDomain(in.getDomain()) << " and output is "
+           << stringifyDomain(out.getDomain());
   }
   return success();
 }
@@ -45,17 +64,23 @@ LogicalResult RescaleOp::verify() {
     return emitOpError(
         "output basis must be the input basis without its last modulus");
   }
+  if (in.getDomain() != out.getDomain()) {
+    return emitOpError("rescale does not change basis, but input is ")
+           << stringifyDomain(in.getDomain()) << " and output is "
+           << stringifyDomain(out.getDomain());
+  }
   return success();
 }
 
-LogicalResult GadgetProductOp::verify() {
-  if (getBaseBits() <= 0) {
-    return emitOpError("baseBits must be positive");
+LogicalResult MulOp::verify() {
+  RqType ty = llvm::cast<RqType>(getOutput().getType());
+  if (ty.isEval()) {
+    return success();
   }
-  if (getKeys().empty()) {
-    return emitOpError("gadget_product needs at least one key");
-  }
-  return success();
+  return emitOpError(
+      "operands must be in the eval basis; the coefficient-basis "
+      "product is a negacyclic convolution, which needs the "
+      "transform that lives above this dialect");
 }
 
 LogicalResult GadgetDecomposeOp::verify() {
@@ -63,9 +88,20 @@ LogicalResult GadgetDecomposeOp::verify() {
   if (getBaseBits() <= 0 || levels <= 0) {
     return emitOpError("baseBits and levels must be positive");
   }
-  if ((int64_t)getDigits().size() != levels) {
-    return emitOpError("expected ") << levels << " digit results, got "
-                                    << getDigits().size();
+  if (static_cast<int64_t>(getDigits().size()) != levels) {
+    return emitOpError("expected ")
+           << levels << " digit results, got " << getDigits().size();
+  }
+  RqType in = llvm::cast<RqType>(getInput().getType());
+  if (failed(
+          requireCoeff(*this, in, "input",
+                       "digit extraction does not commute with the CRT map"))) {
+    return failure();
+  }
+  for (Value digit : getDigits()) {
+    if (llvm::cast<RqType>(digit.getType()).getDomain() != Domain::Coeff) {
+      return emitOpError("digits must be in the coeff basis");
+    }
   }
   return success();
 }

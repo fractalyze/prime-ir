@@ -16,10 +16,12 @@ limitations under the License.
 #include "prime_ir/Dialect/Ring/IR/RingDialect.h"
 
 #include <cstdint>
+#include <optional>
 
 #include "llvm/ADT/STLExtras.h" // IWYU pragma: keep (interleaveComma)
 #include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TypeSwitch.h" // IWYU pragma: keep
 #include "mlir/IR/Builders.h"    // IWYU pragma: keep
 #include "mlir/IR/Diagnostics.h"
@@ -29,6 +31,7 @@ limitations under the License.
 
 // Generated definitions
 #include "prime_ir/Dialect/Ring/IR/RingDialect.cpp.inc"
+#include "prime_ir/Dialect/Ring/IR/RingEnums.cpp.inc"
 
 #define GET_TYPEDEF_CLASSES
 #include "prime_ir/Dialect/Ring/IR/RingTypes.cpp.inc"
@@ -39,7 +42,8 @@ limitations under the License.
 namespace mlir::prime_ir::ring {
 
 LogicalResult RqType::verify(function_ref<InFlightDiagnostic()> emitError,
-                             DenseI64ArrayAttr moduli, IntegerAttr ringDegree) {
+                             DenseI64ArrayAttr moduli, IntegerAttr ringDegree,
+                             Domain domain) {
   if (moduli.empty()) {
     return emitError() << "ring.rq must have at least one modulus";
   }
@@ -63,38 +67,74 @@ LogicalResult RqType::verify(function_ref<InFlightDiagnostic()> emitError,
                           "got "
                        << n;
   }
+  // The evaluation basis is the image of the CRT map, which exists only when
+  // X^N+1 splits into linear factors over every Z_q_i — i.e. when each q_i
+  // admits a 2N-th root of unity. A coefficient-basis value needs no such root.
+  if (domain == Domain::Eval) {
+    for (int64_t q : moduli.asArrayRef()) {
+      if ((q - 1) % (2 * n) != 0) {
+        return emitError()
+               << "ring.rq eval basis needs X^N+1 to split over each modulus, "
+                  "but 2N = "
+               << (2 * n) << " does not divide " << q << " - 1";
+      }
+    }
+  }
   return success();
 }
 
-// Format: !ring.rq<[q0, q1, ...], N : iW>
+// Format: !ring.rq<[q0, q1, ...], N : iW> with an optional `, coeff|eval` basis
+// (absent means coeff).
 Type RqType::parse(AsmParser &parser) {
   llvm::SmallVector<int64_t> moduli;
   if (parser.parseLess() ||
-      parser.parseCommaSeparatedList(AsmParser::Delimiter::Square, [&]() {
-        int64_t v;
-        if (parser.parseInteger(v)) {
-          return failure();
-        }
-        moduli.push_back(v);
-        return success();
-      }) ||
+      parser.parseCommaSeparatedList(AsmParser::Delimiter::Square,
+                                     [&]() {
+                                       int64_t v;
+                                       if (parser.parseInteger(v)) {
+                                         return failure();
+                                       }
+                                       moduli.push_back(v);
+                                       return success();
+                                     }) ||
       parser.parseComma()) {
     return {};
   }
   IntegerAttr ringDegree;
-  if (parser.parseAttribute(ringDegree) || parser.parseGreater()) {
+  if (parser.parseAttribute(ringDegree)) {
+    return {};
+  }
+  Domain domain = Domain::Coeff;
+  if (succeeded(parser.parseOptionalComma())) {
+    llvm::StringRef keyword;
+    if (parser.parseKeyword(&keyword)) {
+      return {};
+    }
+    std::optional<Domain> parsed = symbolizeDomain(keyword);
+    if (!parsed) {
+      parser.emitError(parser.getNameLoc())
+          << "expected 'coeff' or 'eval' basis, got '" << keyword << "'";
+      return {};
+    }
+    domain = *parsed;
+  }
+  if (parser.parseGreater()) {
     return {};
   }
   return getChecked([&] { return parser.emitError(parser.getNameLoc()); },
                     parser.getContext(),
                     DenseI64ArrayAttr::get(parser.getContext(), moduli),
-                    ringDegree);
+                    ringDegree, domain);
 }
 
 void RqType::print(AsmPrinter &printer) const {
   printer << "<[";
   llvm::interleaveComma(getModuli().asArrayRef(), printer.getStream());
-  printer << "], " << getRingDegree() << ">";
+  printer << "], " << getRingDegree();
+  if (getDomain() != Domain::Coeff) {
+    printer << ", " << stringifyDomain(getDomain());
+  }
+  printer << ">";
 }
 
 void RingDialect::initialize() {

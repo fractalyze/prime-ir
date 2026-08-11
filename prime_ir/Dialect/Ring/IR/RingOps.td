@@ -53,26 +53,17 @@ def Ring_AutomorphismOp : Ring_Op<"automorphism", [SameOperandsAndResultType]> {
     coefficient a_k moves to position `(g*k) mod N` with sign `-1` iff
     `(g*k) mod 2N >= N` (the X^N = -1 wrap). Applied per RNS limb. A generic ring
     endomorphism (cyclotomic Galois action).
+
+    Defined on either basis. In the evaluation basis it is a pure permutation of
+    the slots: slot `j` evaluates at `psi^(2j+1)`, and sigma_g carries that to
+    `psi^(g(2j+1))`, an exponent that reduces exactly mod 2N — so no signs
+    appear on that side. RNS libraries rotate in the evaluation basis for this
+    reason, rather than paying transforms around the coefficient form.
   }];
   let arguments = (ins Ring_RqType:$input, I64Attr:$exponent);
   let results = (outs Ring_RqType:$output);
   let assemblyFormat = "$input attr-dict `:` type($output)";
   let hasVerifier = 1;
-}
-
-def Ring_NTTOp : Ring_Op<"ntt", [SameOperandsAndResultType]> {
-  let summary = "Per-limb number-theoretic transform of an RNS ring element.";
-  let description = [{
-    Applies the (cyclic) NTT to each RNS limb independently, using an N-th root of
-    unity in that limb's prime field. `inverse = true` applies the inverse NTT.
-    A generic transform (number theory); lowers each limb via `field.bitcast` +
-    `poly.ntt` over `field.pf<q_i>`, reusing the shared Cooley-Tukey/GS kernel.
-    Requires each modulus q_i to admit an N-th root of unity (N | q_i - 1).
-  }];
-  let arguments = (ins Ring_RqType:$input,
-                       DefaultValuedAttr<BoolAttr, "false">:$inverse);
-  let results = (outs Ring_RqType:$output);
-  let assemblyFormat = "$input attr-dict `:` type($output)";
 }
 
 def Ring_GadgetDecomposeOp : Ring_Op<"gadget_decompose"> {
@@ -82,29 +73,15 @@ def Ring_GadgetDecomposeOp : Ring_Op<"gadget_decompose"> {
     first): `x_i = sum_j digit_j[i] * 2^(j*baseBits)`. Returns `levels` ring
     elements (the digit polynomials). Pure bit manipulation (shift + mask) — no
     modular reduction. A generic ring/number-theory primitive.
+
+    Decomposition is defined on the residues themselves, so the operand and every
+    digit must be in the `coeff` basis. Digits of evaluations do not recombine to
+    the digits of the underlying element — the decomposition is not linear, so it
+    does not commute with the CRT map.
   }];
   let arguments = (ins Ring_RqType:$input, I64Attr:$baseBits, I64Attr:$levels);
   let results = (outs Variadic<Ring_RqType>:$digits);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($digits)";
-  let hasVerifier = 1;
-}
-
-def Ring_GadgetProductOp : Ring_Op<"gadget_product"> {
-  let summary = "Digit-decomposed inner product: sum_j decompose(x)_j * keys[j].";
-  let description = [{
-    Base-`2^baseBits`-decomposes `input`, then negacyclically multiplies each
-    digit polynomial by the corresponding `keys` ring element and sums:
-    `sum_j gadget_decompose(x)_j * keys[j]`. A generic ring operation (the digit
-    decomposition inner product / "external product"). `keys` are ordinary ring
-    operands. (An FHE key-switch is this fed a key-switching key; the "key"
-    semantics live in the scheme layer, not here.) The number of keys is the
-    number of decomposition levels.
-  }];
-  let arguments = (ins Ring_RqType:$input, Variadic<Ring_RqType>:$keys,
-                       I64Attr:$baseBits);
-  let results = (outs Ring_RqType:$output);
-  let assemblyFormat =
-      "$input `,` $keys attr-dict `:` type($input) `,` type($keys) `->` type($output)";
   let hasVerifier = 1;
 }
 
@@ -151,17 +128,21 @@ def Ring_NegateOp : Ring_Op<"negate", [SameOperandsAndResultType]> {
 }
 
 def Ring_MulOp : Ring_Op<"mul", [SameOperandsAndResultType, Commutative]> {
-  let summary = "Negacyclic polynomial product in R_Q = Z_Q[X]/(X^N+1).";
+  let summary = "The ring product: one pointwise mod_arith.mul per RNS limb.";
   let description = [{
-    The ring product `a * b` modulo X^N + 1, computed per RNS limb via the
-    negacyclic NTT: twist both operands by psi^k (psi a 2N-th root of unity),
-    forward NTT, pointwise multiply, inverse NTT, then untwist by psi^-k. A
-    generic ring operation. Both operands must share the RNS basis and degree N.
-    Requires each modulus q_i to admit a 2N-th root of unity (2N | q_i - 1).
+    The ring product `a * b`, in the evaluation basis where CRT has already
+    diagonalised the ring — so it is a single pointwise `mod_arith.mul` per limb.
+
+    Coefficient-basis operands are rejected. The product there is a negacyclic
+    convolution, which needs the transform, and the transform is not this
+    dialect's to own: callers reach the evaluation basis first and multiply here.
+    That also matches production RNS libraries, which keep ciphertexts in the
+    evaluation basis rather than paying transforms per product.
   }];
   let arguments = (ins Ring_RqType:$lhs, Ring_RqType:$rhs);
   let results = (outs Ring_RqType:$output);
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($output)";
+  let hasVerifier = 1;
 }
 
 def Ring_BaseConvertOp : Ring_Op<"base_convert"> {
