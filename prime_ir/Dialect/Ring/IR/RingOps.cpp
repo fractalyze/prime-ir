@@ -109,9 +109,60 @@ static LogicalResult verifyResidueTensor(Operation *op, RqType ring,
   return success();
 }
 
+// Raw words carry no basis, so a bridge into the ring asserts one -- there is
+// nothing to check when the words come from outside the module. But a value
+// that just came back out of the opposite bridge still carries the basis of the
+// ring it left, and naming a different one is then a relabel with nothing
+// between. The transform that does change the basis is the NTT, which lives
+// above this dialect.
+static LogicalResult verifyNoRelabel(Operation *op, RqType producer,
+                                     RqType named) {
+  if (producer == named || producer.withDomain(named.getDomain()) != named) {
+    return success();
+  }
+  return op->emitOpError("cannot relabel the basis of a value that came "
+                         "straight back from the matching bridge: the "
+                         "residues are ")
+         << stringifyDomain(producer.getDomain()) << " and this names them "
+         << stringifyDomain(named.getDomain());
+}
+
+// The limb bridges round-trip only when every limb of this op is the matching
+// result of one `to_limbs`, in order; anything else is a genuine regrouping.
+static ToLimbsOp matchingLimbProducer(OperandRange limbs) {
+  if (limbs.empty()) {
+    return {};
+  }
+  auto producer = limbs[0].getDefiningOp<ToLimbsOp>();
+  if (!producer || producer.getLimbs().size() != limbs.size()) {
+    return {};
+  }
+  for (auto [i, limb] : llvm::enumerate(limbs)) {
+    if (limb != producer.getLimbs()[i]) {
+      return {};
+    }
+  }
+  return producer;
+}
+
 LogicalResult FromTensorOp::verify() {
-  return verifyResidueTensor(*this, llvm::cast<RqType>(getOutput().getType()),
-                             getInput().getType());
+  auto ring = llvm::cast<RqType>(getOutput().getType());
+  if (failed(verifyResidueTensor(*this, ring, getInput().getType()))) {
+    return failure();
+  }
+  if (auto producer = getInput().getDefiningOp<ToTensorOp>()) {
+    return verifyNoRelabel(
+        *this, llvm::cast<RqType>(producer.getInput().getType()), ring);
+  }
+  return success();
+}
+
+OpFoldResult FromTensorOp::fold(FoldAdaptor adaptor) {
+  auto producer = getInput().getDefiningOp<ToTensorOp>();
+  if (producer && producer.getInput().getType() == getOutput().getType()) {
+    return producer.getInput();
+  }
+  return {};
 }
 
 LogicalResult ToTensorOp::verify() {
@@ -119,14 +170,48 @@ LogicalResult ToTensorOp::verify() {
                              getOutput().getType());
 }
 
+OpFoldResult ToTensorOp::fold(FoldAdaptor adaptor) {
+  auto producer = getInput().getDefiningOp<FromTensorOp>();
+  if (producer && producer.getInput().getType() == getOutput().getType()) {
+    return producer.getInput();
+  }
+  return {};
+}
+
 LogicalResult FromLimbsOp::verify() {
-  return verifyLimbTypes(*this, llvm::cast<RqType>(getOutput().getType()),
-                         getLimbs().getTypes());
+  auto ring = llvm::cast<RqType>(getOutput().getType());
+  if (failed(verifyLimbTypes(*this, ring, getLimbs().getTypes()))) {
+    return failure();
+  }
+  if (ToLimbsOp producer = matchingLimbProducer(getLimbs())) {
+    return verifyNoRelabel(
+        *this, llvm::cast<RqType>(producer.getInput().getType()), ring);
+  }
+  return success();
+}
+
+OpFoldResult FromLimbsOp::fold(FoldAdaptor adaptor) {
+  ToLimbsOp producer = matchingLimbProducer(getLimbs());
+  if (producer && producer.getInput().getType() == getOutput().getType()) {
+    return producer.getInput();
+  }
+  return {};
 }
 
 LogicalResult ToLimbsOp::verify() {
   return verifyLimbTypes(*this, llvm::cast<RqType>(getInput().getType()),
                          getLimbs().getTypes());
+}
+
+LogicalResult ToLimbsOp::fold(FoldAdaptor adaptor,
+                              SmallVectorImpl<OpFoldResult> &results) {
+  auto producer = getInput().getDefiningOp<FromLimbsOp>();
+  if (!producer ||
+      !llvm::equal(producer.getLimbs().getTypes(), getLimbs().getTypes())) {
+    return failure();
+  }
+  llvm::append_range(results, producer.getLimbs());
+  return success();
 }
 
 // rescale and base_convert both combine limb i and limb j at the same position

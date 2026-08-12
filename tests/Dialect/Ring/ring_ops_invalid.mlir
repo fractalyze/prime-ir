@@ -179,3 +179,29 @@ func.func @to_limbs_rejects_modulus_mismatch(
 func.func @rq_rejects_non_coprime_moduli(%x: !ring.rq<[9, 21], 2 : i32>) {
   return
 }
+
+// -----
+
+// The bridges are reinterprets, so a value that just came out of one carries
+// the basis of the ring it came from. Naming a different basis on the way back
+// in is a relabel with no transform between, and the transform is not this
+// dialect's to perform.
+func.func @from_tensor_cannot_relabel_the_basis(
+    %x: !ring.rq<[12289], 8 : i32>) -> !ring.rq<[12289], 8 : i32, eval> {
+  %t = ring.to_tensor %x : !ring.rq<[12289], 8 : i32> to tensor<1x8xi64>
+  // expected-error @+1 {{cannot relabel the basis}}
+  %r = ring.from_tensor %t : tensor<1x8xi64> to !ring.rq<[12289], 8 : i32, eval>
+  return %r : !ring.rq<[12289], 8 : i32, eval>
+}
+
+// -----
+
+func.func @from_limbs_cannot_relabel_the_basis(
+    %x: !ring.rq<[12289], 8 : i32>) -> !ring.rq<[12289], 8 : i32, eval> {
+  %l = ring.to_limbs %x
+      : !ring.rq<[12289], 8 : i32> to tensor<8x!field.pf<12289:i64>>
+  // expected-error @+1 {{cannot relabel the basis}}
+  %r = ring.from_limbs %l
+      : tensor<8x!field.pf<12289:i64>> to !ring.rq<[12289], 8 : i32, eval>
+  return %r : !ring.rq<[12289], 8 : i32, eval>
+}

@@ -33,14 +33,16 @@ def Ring_FromTensorOp : Ring_Op<"from_tensor"> {
     IS the lowered representation, so this lowers to identity — it exists to feed
     tensor-typed data (constants, host inputs) into ring ops.
 
-    Raw bytes carry no basis, so naming one here asserts it. Whoever built the
-    tensor owes that assertion: relabelling a coefficient-basis value `eval`
-    passes every check and then multiplies pointwise instead of by negacyclic
-    convolution.
+    Raw words carry no basis, so naming one here asserts it, and for words that
+    come from outside the module that assertion is the caller's to make. Words
+    that came back out of `ring.to_tensor` are not: they still carry the basis
+    of the ring they left, so naming a different one is refused. The same pair
+    of ops round-trips to nothing when the basis does agree.
   }];
   let arguments = (ins RankedTensorOf<[AnyInteger]>:$input);
   let results = (outs Ring_RqType:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `to` type($output)";
+  let hasFolder = 1;
   let hasVerifier = 1;
 }
 
@@ -49,6 +51,7 @@ def Ring_ToTensorOp : Ring_Op<"to_tensor"> {
   let arguments = (ins Ring_RqType:$input);
   let results = (outs RankedTensorOf<[AnyInteger]>:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `to` type($output)";
+  let hasFolder = 1;
   let hasVerifier = 1;
 }
 
@@ -71,6 +74,7 @@ def Ring_FromLimbsOp : Ring_Op<"from_limbs"> {
   let results = (outs Ring_RqType:$output);
   let assemblyFormat =
       "$limbs attr-dict `:` type($limbs) `to` type($output)";
+  let hasFolder = 1;
   let hasVerifier = 1;
 }
 
@@ -84,6 +88,7 @@ def Ring_ToLimbsOp : Ring_Op<"to_limbs"> {
   let results = (outs Variadic<RankedTensorOf<[AnyType]>>:$limbs);
   let assemblyFormat =
       "$input attr-dict `:` type($input) `to` type($limbs)";
+  let hasFolder = 1;
   let hasVerifier = 1;
 }
 
