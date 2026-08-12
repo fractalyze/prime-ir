@@ -44,3 +44,33 @@ func.func @dynamic_stride_is_trusted(
   %r = field.bitcast %m : memref<12x!PF, strided<[?], offset: ?>> -> memref<6x!EF2>
   return
 }
+
+// -----
+
+!PF = !field.pf<7:i256>
+!EF2 = !field.ef<2x!PF, 6:i256>
+
+// Two prime elements make one extension element, so an odd offset names a
+// position that is not the start of any extension element. The descriptor
+// rebuild divides the offset by two, which would silently move it.
+func.func @odd_offset_is_not_an_extension_boundary(
+    %m: memref<12x!PF, strided<[1], offset: 3>>) {
+  // expected-error @+1 {{input offset does not start on an extension element boundary}}
+  %r = field.bitcast %m : memref<12x!PF, strided<[1], offset: 3>> -> memref<6x!EF2>
+  return
+}
+
+// -----
+
+!PF = !field.pf<7:i256>
+!EF2 = !field.ef<2x!PF, 6:i256>
+
+// A row of a bufferized rank-2 buffer: the leading extent is one, so its stride
+// is the parent row pitch and never gets stepped. The 8 elements it names are
+// still consecutive.
+func.func @unit_extent_row_is_contiguous(
+    %m: memref<1x8x!PF, strided<[16, 1], offset: ?>>) {
+  %r = field.bitcast %m
+      : memref<1x8x!PF, strided<[16, 1], offset: ?>> -> memref<1x4x!EF2>
+  return
+}

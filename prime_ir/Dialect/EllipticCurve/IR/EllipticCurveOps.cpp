@@ -420,14 +420,30 @@ LogicalResult BitcastOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
 
-  // A reinterpret only describes the same bytes when the source is packed;
-  // the descriptor rebuilds in the LLVM lowerings carry the offset across
-  // and derive everything else from the result shape.
-  for (Type t : {inputType, outputType}) {
-    auto mt = dyn_cast<MemRefType>(t);
-    if (mt && hasProvablyNonContiguousLayout(mt)) {
-      return emitOpError("requires a contiguous input buffer, but got ") << mt;
+  // A reinterpret only describes the same bytes when the source is packed, and
+  // a point occupies k field elements, so the offset must land on a point: the
+  // descriptor rebuild in the LLVM lowering divides it by k.
+  auto inMt = dyn_cast<MemRefType>(inputType);
+  auto outMt = dyn_cast<MemRefType>(outputType);
+  unsigned ratio = 1;
+  if (inMt && outMt) {
+    if (auto pointType = dyn_cast<PointTypeInterface>(outMt.getElementType())) {
+      ratio = pointType.getNumCoords() *
+              field::getExtensionDegree(pointType.getBaseFieldType());
     }
+    // The rebuild stamps the result extents in as constants, so a dynamic
+    // result would become a descriptor full of the dynamic sentinel. A
+    // diagnostic from the conversion pattern is rolled back with the pattern
+    // and never reaches the user, so it has to be refused here.
+    if (!outMt.hasStaticShape()) {
+      return emitOpError("cannot rebuild a descriptor for a dynamically "
+                         "shaped result, but got ")
+             << outMt;
+    }
+  }
+  if (failed(verifyBitcastMemRefLayout(*this, inputType, outputType, ratio,
+                                       "a point"))) {
+    return failure();
   }
 
   if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType}))

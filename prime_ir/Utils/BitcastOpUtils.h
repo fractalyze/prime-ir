@@ -42,12 +42,60 @@ inline bool hasProvablyNonContiguousLayout(MemRefType type) {
     if (ShapedType::isDynamic(strides[i]) || type.isDynamicDim(i)) {
       return false;
     }
+    // A dimension of one element is never stepped, so its stride says nothing
+    // about the layout -- subview of a single row keeps the parent's stride
+    // there while still naming one contiguous run.
+    if (type.getDimSize(i) == 1) {
+      continue;
+    }
     if (strides[i] != expected) {
       return true;
     }
     expected *= type.getDimSize(i);
   }
   return false;
+}
+
+// A narrowing bitcast (k source elements per result element) rebuilds the
+// descriptor offset by dividing it by k, so an offset that is not a multiple of
+// k does not land on a result element at all -- the division would truncate to
+// a different address. Like the stride check above, only a statically known
+// violation is reported; a dynamic offset is trusted.
+inline bool hasProvablyMisalignedOffset(MemRefType type, unsigned ratio) {
+  if (ratio <= 1) {
+    return false;
+  }
+  SmallVector<int64_t> strides;
+  int64_t offset;
+  if (failed(type.getStridesAndOffset(strides, offset)) ||
+      ShapedType::isDynamic(offset)) {
+    return false;
+  }
+  return offset % ratio != 0;
+}
+
+// Both dialects' bitcasts reinterpret one buffer as a tensor of a wider or
+// narrower element, so both owe the same two checks on a memref operand. Only
+// the ratio -- how many source elements make one result element -- is
+// dialect-specific, so that is the parameter. `boundaryNoun` names what the
+// offset must land on in the diagnostic, article included.
+inline LogicalResult verifyBitcastMemRefLayout(Operation *op, Type inputType,
+                                               Type outputType,
+                                               unsigned srcElemsPerDstElem,
+                                               StringRef boundaryNoun) {
+  for (Type t : {inputType, outputType}) {
+    auto mt = dyn_cast<MemRefType>(t);
+    if (mt && hasProvablyNonContiguousLayout(mt)) {
+      return op->emitOpError("requires a contiguous input buffer, but got ")
+             << mt;
+    }
+  }
+  auto inMt = dyn_cast<MemRefType>(inputType);
+  if (inMt && hasProvablyMisalignedOffset(inMt, srcElemsPerDstElem)) {
+    return op->emitOpError("input offset does not start on ")
+           << boundaryNoun << " boundary, but got " << inMt;
+  }
+  return success();
 }
 
 // Helper function to check if input and output types are the same (no-op).

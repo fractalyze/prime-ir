@@ -826,14 +826,23 @@ LogicalResult BitcastOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
 
-  // A reinterpret only describes the same bytes when the source is packed; the
-  // descriptor rebuilds in the LLVM lowerings carry the offset across and
-  // derive everything else from the result shape.
-  for (Type t : {inputType, outputType}) {
-    auto mt = dyn_cast<MemRefType>(t);
-    if (mt && hasProvablyNonContiguousLayout(mt)) {
-      return emitOpError("requires a contiguous input buffer, but got ") << mt;
+  // A reinterpret only describes the same bytes when the source is packed, and
+  // the offset must land on a whole result element: the descriptor rebuild in
+  // the LLVM lowering divides it by the degree ratio.
+  auto inMt = dyn_cast<MemRefType>(inputType);
+  auto outMt = dyn_cast<MemRefType>(outputType);
+  unsigned ratio = 1;
+  if (inMt && outMt) {
+    auto inField = dyn_cast<FieldTypeInterface>(inMt.getElementType());
+    auto outField = dyn_cast<FieldTypeInterface>(outMt.getElementType());
+    if (inField && outField &&
+        outField.getDegreeOverPrime() > inField.getDegreeOverPrime()) {
+      ratio = outField.getDegreeOverPrime() / inField.getDegreeOverPrime();
     }
+  }
+  if (failed(verifyBitcastMemRefLayout(*this, inputType, outputType, ratio,
+                                       "an extension element"))) {
+    return failure();
   }
 
   if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType})) {

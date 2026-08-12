@@ -112,36 +112,38 @@ struct ConvertToCoords : public ConvertOpToLLVMPattern<ToCoordsOp> {
   }
 };
 
+// The pattern and the legality rule have to agree on which bitcasts this pass
+// owns, so they read it from the same place.
+static bool isMemRefBitcast(BitcastOp op) {
+  return isa<MemRefType>(op.getInput().getType()) &&
+         isa<MemRefType>(op.getType());
+}
+
 struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
   using ConvertOpToLLVMPattern<BitcastOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
   matchAndRewrite(BitcastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Type convertedOutputType = typeConverter->convertType(op.getType());
-    if (!convertedOutputType) {
-      return op.emitOpError("failed to convert output type");
-    }
-
     // Memref bitcasts (produced by bufferization) reinterpret one buffer as a
     // tensor of N points <-> N*K coordinates. The element COUNT changes, so
     // the descriptor must be rebuilt with sizes/strides/offset in the output
     // element's units. A plain unrealized_conversion_cast preserves the input
     // descriptor -- sizes still in input-element units -- and any later
-    // dealloc/copy then computes the wrong byte count (heap corruption).
-    auto inputMemRef = dyn_cast<MemRefType>(op.getInput().getType());
-    auto outputMemRef = dyn_cast<MemRefType>(op.getType());
-    if (inputMemRef && outputMemRef) {
-      return convertMemRefBitcast(op, adaptor, rewriter, inputMemRef,
-                                  outputMemRef, convertedOutputType);
+    // dealloc/copy then computes the wrong byte count (heap corruption). A
+    // still-tensor bitcast has no descriptor to rebuild and is left to
+    // bufferization.
+    if (!isMemRefBitcast(op)) {
+      return failure();
     }
-
-    // Still on tensors: no descriptor exists yet, and the memory is the same
-    // either way, so hand the value across and let reconcile-unrealized-casts
-    // clean up.
-    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
-        op, convertedOutputType, adaptor.getInput());
-    return success();
+    auto inputMemRef = cast<MemRefType>(op.getInput().getType());
+    auto outputMemRef = cast<MemRefType>(op.getType());
+    Type convertedOutputType = typeConverter->convertType(outputMemRef);
+    if (!convertedOutputType) {
+      return op.emitOpError("failed to convert output type");
+    }
+    return convertMemRefBitcast(op, adaptor, rewriter, inputMemRef,
+                                outputMemRef, convertedOutputType);
   }
 
 private:
@@ -158,14 +160,6 @@ private:
     auto llvmDescTy = dyn_cast<LLVM::LLVMStructType>(convertedOutputType);
     if (!llvmDescTy) {
       return failure();
-    }
-
-    // areCastCompatible admits dynamic extents, but the sizes below are stamped
-    // in as constants, so a dynamic result would silently become a descriptor
-    // full of the dynamic sentinel.
-    if (!outputMemRef.hasStaticShape()) {
-      return op.emitOpError(
-          "cannot rebuild a descriptor for a dynamically shaped result");
     }
 
     auto pointType =
@@ -288,7 +282,12 @@ struct EllipticCurveToLLVMDialectInterface
     // Without this the ops stay legal and the patterns below never fire, which
     // is silent rather than fatal: the op survives to the end of the pipeline
     // still carrying its point and field types.
-    target.addIllegalOp<BitcastOp, FromCoordsOp, ToCoordsOp>();
+    target.addIllegalOp<FromCoordsOp, ToCoordsOp>();
+    // Only the memref form has a descriptor to rebuild. A tensor-typed bitcast
+    // has no LLVM type to convert to, so demanding one here would turn an op
+    // this pass has nothing to say about into a hard failure.
+    target.addDynamicallyLegalOp<BitcastOp>(
+        [](BitcastOp op) { return !isMemRefBitcast(op); });
     populateEllipticCurveToLLVMTypeConversion(typeConverter);
     populateEllipticCurveToLLVMConversionPatterns(typeConverter, patterns);
   }
