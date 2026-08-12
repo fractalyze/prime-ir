@@ -43,9 +43,12 @@ namespace mlir::prime_ir::ring {
 
 LogicalResult RqType::verify(function_ref<InFlightDiagnostic()> emitError,
                              DenseI64ArrayAttr moduli, IntegerAttr ringDegree,
-                             Domain domain) {
+                             IntegerType storageType, Domain domain) {
   if (moduli.empty()) {
     return emitError() << "ring.rq must have at least one modulus";
+  }
+  if (!storageType) {
+    return emitError() << "ring.rq residue storage type must be provided";
   }
   llvm::SmallSet<int64_t, 8> seen;
   for (int64_t q : moduli.asArrayRef()) {
@@ -56,6 +59,11 @@ LogicalResult RqType::verify(function_ref<InFlightDiagnostic()> emitError,
       return emitError() << "ring.rq moduli must be distinct (coprime RNS "
                             "basis), got repeated "
                          << q;
+    }
+    // Residues live in [0, q), so the word has to hold q - 1 unsigned.
+    if (APInt(64, q - 1).getActiveBits() > storageType.getWidth()) {
+      return emitError() << "ring.rq modulus " << q << " does not fit in i"
+                         << storageType.getWidth() << " storage";
     }
   }
   if (!ringDegree) {
@@ -83,8 +91,9 @@ LogicalResult RqType::verify(function_ref<InFlightDiagnostic()> emitError,
   return success();
 }
 
-// Format: !ring.rq<[q0, q1, ...], N : iW> with an optional `, coeff|eval` basis
-// (absent means coeff).
+// Format: !ring.rq<[q0, q1, ...], N : iW> with an optional storage type and an
+// optional `coeff|eval` basis after it (absent means i64 and coeff). The two
+// tails are told apart by whether the token parses as a type.
 Type RqType::parse(AsmParser &parser) {
   llvm::SmallVector<int64_t> moduli;
   if (parser.parseLess() ||
@@ -104,8 +113,27 @@ Type RqType::parse(AsmParser &parser) {
   if (parser.parseAttribute(ringDegree)) {
     return {};
   }
+  auto storageType = IntegerType::get(parser.getContext(), 64);
   Domain domain = Domain::Coeff;
-  if (succeeded(parser.parseOptionalComma())) {
+  bool haveStorage = false;
+  while (succeeded(parser.parseOptionalComma())) {
+    Type parsedType;
+    OptionalParseResult typeResult = parser.parseOptionalType(parsedType);
+    if (typeResult.has_value()) {
+      if (failed(*typeResult)) {
+        return {};
+      }
+      auto intType = llvm::dyn_cast<IntegerType>(parsedType);
+      if (!intType || haveStorage) {
+        parser.emitError(parser.getNameLoc())
+            << "expected a single integer residue storage type, got "
+            << parsedType;
+        return {};
+      }
+      storageType = intType;
+      haveStorage = true;
+      continue;
+    }
     llvm::StringRef keyword;
     if (parser.parseKeyword(&keyword)) {
       return {};
@@ -117,6 +145,7 @@ Type RqType::parse(AsmParser &parser) {
       return {};
     }
     domain = *parsed;
+    break;
   }
   if (parser.parseGreater()) {
     return {};
@@ -124,13 +153,16 @@ Type RqType::parse(AsmParser &parser) {
   return getChecked([&] { return parser.emitError(parser.getNameLoc()); },
                     parser.getContext(),
                     DenseI64ArrayAttr::get(parser.getContext(), moduli),
-                    ringDegree, domain);
+                    ringDegree, storageType, domain);
 }
 
 void RqType::print(AsmPrinter &printer) const {
   printer << "<[";
   llvm::interleaveComma(getModuli().asArrayRef(), printer.getStream());
   printer << "], " << getRingDegree();
+  if (getStorageWidth() != 64) {
+    printer << ", " << getStorageType();
+  }
   if (getDomain() != Domain::Coeff) {
     printer << ", " << stringifyDomain(getDomain());
   }

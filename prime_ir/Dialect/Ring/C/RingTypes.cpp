@@ -28,12 +28,13 @@ bool primeIRTypeIsARq(MlirType type) { return llvm::isa<RqType>(unwrap(type)); }
 
 MlirType primeIRRqTypeGet(MlirContext ctx, intptr_t nModuli,
                           const int64_t *moduli, MlirAttribute ringDegree,
-                          PrimeIRRingDomain domain) {
+                          MlirType storageType, PrimeIRRingDomain domain) {
   MLIRContext *context = unwrap(ctx);
   return wrap(RqType::get(
       context,
       DenseI64ArrayAttr::get(context, llvm::ArrayRef<int64_t>(moduli, nModuli)),
       llvm::cast<IntegerAttr>(unwrap(ringDegree)),
+      llvm::cast<IntegerType>(unwrap(storageType)),
       static_cast<Domain>(domain)));
 }
 
@@ -47,6 +48,10 @@ int64_t primeIRRqTypeGetModulus(MlirType type, intptr_t pos) {
 
 MlirAttribute primeIRRqTypeGetRingDegree(MlirType type) {
   return wrap(llvm::cast<RqType>(unwrap(type)).getRingDegree());
+}
+
+MlirType primeIRRqTypeGetStorageType(MlirType type) {
+  return wrap(llvm::cast<RqType>(unwrap(type)).getStorageType());
 }
 
 PrimeIRRingDomain primeIRRqTypeGetDomain(MlirType type) {

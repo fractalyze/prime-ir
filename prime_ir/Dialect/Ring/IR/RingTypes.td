@@ -43,6 +43,12 @@ def Ring_RqType : Ring_Type<"Rq", "rq"> {
     storage width is constant and dropping a modulus is a tensor slice. That is
     why the moduli live on the type, not in a per-element class.
 
+    `storageType` is the integer word one residue occupies. NTT-word primes
+    usually fit 32 bits, and a limb crossing the boundary is already typed by
+    its own field dtype, so pinning the ring to 64-bit words would cost a
+    widening copy at the bridge and double the traffic on every limb. It is
+    omitted from the assembly when it is `i64`.
+
     A rank-k module over R_Q is `tensor<k x !ring.rq<...>>` (componentwise), so
     element-times-element is left to the scalar action, not a ring×ring op here.
 
@@ -59,29 +65,35 @@ def Ring_RqType : Ring_Type<"Rq", "rq"> {
     !R = !ring.rq<[1152921504606830593, 1152921504598720513], 4096 : i32>
     // the same ring in the evaluation basis
     !Rhat = !ring.rq<[1152921504606830593, 1152921504598720513], 4096 : i32, eval>
+    // two 30-bit limbs held in 32-bit words
+    !Rsmall = !ring.rq<[1073479681, 1071513601], 4096 : i32, i32, eval>
     ```
   }];
   let parameters = (ins "::mlir::DenseI64ArrayAttr":$moduli,
                         "::mlir::IntegerAttr":$ringDegree,
+                        "::mlir::IntegerType":$storageType,
                         EnumParameter<Ring_Domain>:$domain);
   let builders = [
     // Coefficient basis is the default spelling; an eval-basis ring is named
     // explicitly, at the boundary with whoever ran the transform.
     TypeBuilder<(ins "::mlir::DenseI64ArrayAttr":$moduli,
-                     "::mlir::IntegerAttr":$ringDegree), [{
-      return $_get($_ctxt, moduli, ringDegree, Domain::Coeff);
+                     "::mlir::IntegerAttr":$ringDegree,
+                     "::mlir::IntegerType":$storageType), [{
+      return $_get($_ctxt, moduli, ringDegree, storageType, Domain::Coeff);
     }]>,
   ];
   let extraClassDeclaration = [{
-    /// This ring with the same moduli and degree, re-based into `d`.
     RqType withDomain(Domain d) const {
-      return RqType::get(getContext(), getModuli(), getRingDegree(), d);
+      return RqType::get(getContext(), getModuli(), getRingDegree(),
+                         getStorageType(), d);
     }
+    unsigned getStorageWidth() const { return getStorageType().getWidth(); }
     bool isCoeff() const { return getDomain() == Domain::Coeff; }
     bool isEval() const { return getDomain() == Domain::Eval; }
   }];
   // Custom `<[q0, q1, ...], N>` format: DenseI64ArrayAttr's generic field parser
-  // wants `[...]` but prints `array<i64:...>`, so it can't round-trip on its own.
+  // wants `[...]` but prints `array<i64:...>`, so it can't round-trip on its
+  // own, and the trailing storage/domain fields are both optional.
   let hasCustomAssemblyFormat = 1;
   let genVerifyDecl = 1;
 }

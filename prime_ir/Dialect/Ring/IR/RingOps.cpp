@@ -51,6 +51,15 @@ static LogicalResult verifyLimbTypes(Operation *op, RqType ring,
       return op->emitOpError("limb ") << i << " has modulus " << modulus
                                       << ", but the ring's is " << expected;
     }
+    // The bridge reinterprets the limb into the ring's residue rows, so a
+    // width mismatch would have to be a widening copy instead.
+    unsigned limbWidth =
+        fieldType.getModulus().getType().getIntOrFloatBitWidth();
+    if (limbWidth != ring.getStorageWidth()) {
+      return op->emitOpError("limb ")
+             << i << " is stored in i" << limbWidth
+             << ", but the ring's residues are i" << ring.getStorageWidth();
+    }
     int64_t n = ring.getRingDegree().getValue().getSExtValue();
     if (tensorType.getRank() != 1 || tensorType.getDimSize(0) != n) {
       return op->emitOpError("limb ")

@@ -39,11 +39,11 @@ namespace mlir::prime_ir::ring {
 
 namespace {
 
-// The RNS ring lowers to [L, N] raw i64 residues (limb-major).
+// The RNS ring lowers to [L, N] raw residue words (limb-major).
 static RankedTensorType convertRqType(RqType type) {
   int64_t l = type.getModuli().asArrayRef().size();
   int64_t n = type.getRingDegree().getValue().getSExtValue();
-  return RankedTensorType::get({l, n}, IntegerType::get(type.getContext(), 64));
+  return RankedTensorType::get({l, n}, type.getStorageType());
 }
 
 // a^{-1} mod m via extended Euclid (m fits 64 bits; __int128 avoids overflow).
@@ -108,17 +108,18 @@ struct ConvertBaseConvert : public OpConversionPattern<BaseConvertOp> {
             qHat.urem(APInt(qw, static_cast<uint64_t>(outM[j]))).getZExtValue();
     }
 
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
-    // Residues stored as `mod_arith.int<q : i64>` (i64 storage -> Barrett).
+    Type word = inTy.getStorageType();
+    unsigned width = inTy.getStorageWidth();
+    auto rowWord = RankedTensorType::get({n}, word);
+    // Residues stored as `mod_arith.int<q : iW>` on the ring's own word.
     auto maTensor = [&](int64_t q) {
       return RankedTensorType::get(
-          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(i64, q),
+          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(word, q),
                                             /*isMontgomery=*/false));
     };
     auto maConst = [&](int64_t q, uint64_t v) -> Value {
       return mod_arith::ConstantOp::create(
-          b, maTensor(q), DenseIntElementsAttr::get(rowI64, APInt(64, v)));
+          b, maTensor(q), DenseIntElementsAttr::get(rowWord, APInt(width, v)));
     };
     SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
     auto sliceOffsets = [&](int64_t row) -> SmallVector<OpFoldResult> {
@@ -126,24 +127,24 @@ struct ConvertBaseConvert : public OpConversionPattern<BaseConvertOp> {
     };
     SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
 
-    Value in = adaptor.getInput(); // tensor<LxNxi64>
+    Value in = adaptor.getInput(); // tensor<LxNxiW>
 
-    // y_i = (x_i * yHatInv_i) mod q_i, held as raw i64 (< q_i).
+    // y_i = (x_i * yHatInv_i) mod q_i, held as a raw word (< q_i).
     SmallVector<Value> y(L);
     for (unsigned i = 0; i < L; ++i) {
-      Value xi = tensor::ExtractSliceOp::create(b, rowI64, in, sliceOffsets(i),
+      Value xi = tensor::ExtractSliceOp::create(b, rowWord, in, sliceOffsets(i),
                                                 sizes, strides);
       Value xiMa = mod_arith::BitcastOp::create(b, maTensor(inM[i]), xi);
       Value yiMa =
           mod_arith::MulOp::create(b, xiMa, maConst(inM[i], yHatInv[i]));
-      y[i] = mod_arith::BitcastOp::create(b, rowI64, yiMa);
+      y[i] = mod_arith::BitcastOp::create(b, rowWord, yiMa);
     }
 
     // out_j = (sum_i y_i * table_ij) mod p_j, all in mod_arith<p_j>. Barrett
     // reduces each product, so reinterpreting a raw y_i into mod_arith<p_j>
     // (possibly non-canonical) still yields the correct residue.
     auto outTensorTy =
-        RankedTensorType::get({static_cast<int64_t>(Lp), n}, i64);
+        RankedTensorType::get({static_cast<int64_t>(Lp), n}, word);
     Value result = tensor::EmptyOp::create(b, outTensorTy, ValueRange{});
     for (unsigned j = 0; j < Lp; ++j) {
       Value acc;
@@ -154,7 +155,7 @@ struct ConvertBaseConvert : public OpConversionPattern<BaseConvertOp> {
         acc =
             i == 0 ? term : mod_arith::AddOp::create(b, acc, term).getResult();
       }
-      Value outj = mod_arith::BitcastOp::create(b, rowI64, acc);
+      Value outj = mod_arith::BitcastOp::create(b, rowWord, acc);
       result = tensor::InsertSliceOp::create(b, outj, result, sliceOffsets(j),
                                              sizes, strides);
     }
@@ -180,16 +181,17 @@ struct ConvertRescale : public OpConversionPattern<RescaleOp> {
     unsigned L = inM.size();
     uint64_t qLast = static_cast<uint64_t>(inM[L - 1]);
 
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
+    Type word = inTy.getStorageType();
+    unsigned width = inTy.getStorageWidth();
+    auto rowWord = RankedTensorType::get({n}, word);
     auto maTensor = [&](int64_t q) {
       return RankedTensorType::get(
-          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(i64, q),
+          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(word, q),
                                             /*isMontgomery=*/false));
     };
     auto maConst = [&](int64_t q, uint64_t v) -> Value {
       return mod_arith::ConstantOp::create(
-          b, maTensor(q), DenseIntElementsAttr::get(rowI64, APInt(64, v)));
+          b, maTensor(q), DenseIntElementsAttr::get(rowWord, APInt(width, v)));
     };
     SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
     SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
@@ -197,15 +199,15 @@ struct ConvertRescale : public OpConversionPattern<RescaleOp> {
       return {b.getIndexAttr(r), b.getIndexAttr(0)};
     };
     Value in = adaptor.getInput();
-    Value xLast = tensor::ExtractSliceOp::create(b, rowI64, in, offs(L - 1),
+    Value xLast = tensor::ExtractSliceOp::create(b, rowWord, in, offs(L - 1),
                                                  sizes, strides);
 
-    auto outTy = RankedTensorType::get({static_cast<int64_t>(L) - 1, n}, i64);
+    auto outTy = RankedTensorType::get({static_cast<int64_t>(L) - 1, n}, word);
     Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
     for (unsigned i = 0; i + 1 < L; ++i) {
       uint64_t qi = static_cast<uint64_t>(inM[i]);
       uint64_t qInv = modInverse(qLast % qi, qi);
-      Value xi = tensor::ExtractSliceOp::create(b, rowI64, in, offs(i), sizes,
+      Value xi = tensor::ExtractSliceOp::create(b, rowWord, in, offs(i), sizes,
                                                 strides);
       Value t1 = mod_arith::MulOp::create(
           b, mod_arith::BitcastOp::create(b, maTensor(qi), xi),
@@ -214,7 +216,7 @@ struct ConvertRescale : public OpConversionPattern<RescaleOp> {
           b, mod_arith::BitcastOp::create(b, maTensor(qi), xLast),
           maConst(qi, qInv));
       Value diff = mod_arith::SubOp::create(b, t1, t2);
-      Value outi = mod_arith::BitcastOp::create(b, rowI64, diff);
+      Value outi = mod_arith::BitcastOp::create(b, rowWord, diff);
       result = tensor::InsertSliceOp::create(b, outi, result, offs(i), sizes,
                                              strides);
     }
@@ -265,8 +267,9 @@ struct ConvertAutomorphism : public OpConversionPattern<AutomorphismOp> {
       }
     }
 
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
+    Type word = ty.getStorageType();
+    unsigned width = ty.getStorageWidth();
+    auto rowWord = RankedTensorType::get({n}, word);
     SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
     SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
     auto offs = [&](int64_t r) -> SmallVector<OpFoldResult> {
@@ -277,14 +280,14 @@ struct ConvertAutomorphism : public OpConversionPattern<AutomorphismOp> {
       idx[j] = arith::ConstantIndexOp::create(b, j);
     Value in = adaptor.getInput();
 
-    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, i64);
+    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, word);
     Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
     for (unsigned i = 0; i < L; ++i) {
       uint64_t q = static_cast<uint64_t>(mod[i]);
-      Value xi = tensor::ExtractSliceOp::create(b, rowI64, in, offs(i), sizes,
+      Value xi = tensor::ExtractSliceOp::create(b, rowWord, in, offs(i), sizes,
                                                 strides);
       if (evalBasis) {
-        Value gathered = tensor::EmptyOp::create(b, rowI64, ValueRange{});
+        Value gathered = tensor::EmptyOp::create(b, rowWord, ValueRange{});
         for (int64_t j = 0; j < n; ++j) {
           Value v = tensor::ExtractOp::create(b, xi, idx[src[j]]);
           gathered = tensor::InsertOp::create(b, v, gathered, idx[j]);
@@ -294,22 +297,22 @@ struct ConvertAutomorphism : public OpConversionPattern<AutomorphismOp> {
         continue;
       }
       // permute coefficients (no sign yet)
-      Value perm = tensor::EmptyOp::create(b, rowI64, ValueRange{});
-      SmallVector<APInt> signs(n, APInt(64, 1));
+      Value perm = tensor::EmptyOp::create(b, rowWord, ValueRange{});
+      SmallVector<APInt> signs(n, APInt(width, 1));
       for (int64_t k = 0; k < n; ++k) {
         Value v = tensor::ExtractOp::create(b, xi, idx[k]);
         perm = tensor::InsertOp::create(b, v, perm, idx[pos[k]]);
         if (neg[k])
-          signs[pos[k]] = APInt(64, q - 1); // -1 mod q
+          signs[pos[k]] = APInt(width, q - 1); // -1 mod q
       }
       auto maTensor = RankedTensorType::get(
-          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(i64, mod[i]),
+          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(word, mod[i]),
                                             /*isMontgomery=*/false));
       Value signConst = mod_arith::ConstantOp::create(
-          b, maTensor, DenseIntElementsAttr::get(rowI64, signs));
+          b, maTensor, DenseIntElementsAttr::get(rowWord, signs));
       Value permMa = mod_arith::BitcastOp::create(b, maTensor, perm);
       Value outMa = mod_arith::MulOp::create(b, permMa, signConst);
-      Value oi = mod_arith::BitcastOp::create(b, rowI64, outMa);
+      Value oi = mod_arith::BitcastOp::create(b, rowWord, outMa);
       result =
           tensor::InsertSliceOp::create(b, oi, result, offs(i), sizes, strides);
     }
@@ -337,11 +340,11 @@ struct ConvertBinOp : public OpConversionPattern<RingOpT> {
     int64_t n = ty.getRingDegree().getValue().getSExtValue();
     unsigned L = mod.size();
 
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
+    Type word = ty.getStorageType();
+    auto rowWord = RankedTensorType::get({n}, word);
     auto maTensor = [&](int64_t q) {
       return RankedTensorType::get(
-          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(i64, q),
+          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(word, q),
                                             /*isMontgomery=*/false));
     };
     SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
@@ -351,17 +354,17 @@ struct ConvertBinOp : public OpConversionPattern<RingOpT> {
     };
     Value lhs = adaptor.getLhs(), rhs = adaptor.getRhs();
 
-    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, i64);
+    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, word);
     Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
     for (unsigned i = 0; i < L; ++i) {
-      Value li = tensor::ExtractSliceOp::create(b, rowI64, lhs, offs(i), sizes,
+      Value li = tensor::ExtractSliceOp::create(b, rowWord, lhs, offs(i), sizes,
                                                 strides);
-      Value ri = tensor::ExtractSliceOp::create(b, rowI64, rhs, offs(i), sizes,
+      Value ri = tensor::ExtractSliceOp::create(b, rowWord, rhs, offs(i), sizes,
                                                 strides);
       Value lm = mod_arith::BitcastOp::create(b, maTensor(mod[i]), li);
       Value rm = mod_arith::BitcastOp::create(b, maTensor(mod[i]), ri);
       Value sm = ModOpT::create(b, lm, rm);
-      Value si = mod_arith::BitcastOp::create(b, rowI64, sm);
+      Value si = mod_arith::BitcastOp::create(b, rowWord, sm);
       result =
           tensor::InsertSliceOp::create(b, si, result, offs(i), sizes, strides);
     }
@@ -387,8 +390,8 @@ struct ConvertUnaryOp : public OpConversionPattern<RingOpT> {
     int64_t n = ty.getRingDegree().getValue().getSExtValue();
     unsigned L = mod.size();
 
-    Type i64 = IntegerType::get(ctx, 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
+    Type word = ty.getStorageType();
+    auto rowWord = RankedTensorType::get({n}, word);
     SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
     SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
     auto offs = [&](int64_t r) -> SmallVector<OpFoldResult> {
@@ -396,17 +399,17 @@ struct ConvertUnaryOp : public OpConversionPattern<RingOpT> {
     };
     Value in = adaptor.getInput();
 
-    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, i64);
+    auto outTy = RankedTensorType::get({static_cast<int64_t>(L), n}, word);
     Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
     for (unsigned i = 0; i < L; ++i) {
       auto maTensor = RankedTensorType::get(
-          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(i64, mod[i]),
+          {n}, mod_arith::ModArithType::get(ctx, IntegerAttr::get(word, mod[i]),
                                             /*isMontgomery=*/false));
-      Value xi = tensor::ExtractSliceOp::create(b, rowI64, in, offs(i), sizes,
+      Value xi = tensor::ExtractSliceOp::create(b, rowWord, in, offs(i), sizes,
                                                 strides);
       Value xm = mod_arith::BitcastOp::create(b, maTensor, xi);
       Value rm = ModOpT::create(b, xm);
-      Value ri = mod_arith::BitcastOp::create(b, rowI64, rm);
+      Value ri = mod_arith::BitcastOp::create(b, rowWord, rm);
       result =
           tensor::InsertSliceOp::create(b, ri, result, offs(i), sizes, strides);
     }
@@ -443,15 +446,15 @@ struct ConvertFromLimbs : public OpConversionPattern<FromLimbsOp> {
     int64_t n = ty.getRingDegree().getValue().getSExtValue();
     auto L = static_cast<int64_t>(ty.getModuli().size());
 
-    Type i64 = IntegerType::get(op.getContext(), 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
-    auto outTy = RankedTensorType::get({L, n}, i64);
+    Type word = ty.getStorageType();
+    auto rowWord = RankedTensorType::get({n}, word);
+    auto outTy = RankedTensorType::get({L, n}, word);
     SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
     SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
 
     Value result = tensor::EmptyOp::create(b, outTy, ValueRange{});
     for (auto [i, limb] : llvm::enumerate(adaptor.getLimbs())) {
-      Value storage = field::BitcastOp::create(b, rowI64, limb);
+      Value storage = field::BitcastOp::create(b, rowWord, limb);
       SmallVector<OpFoldResult> offs = {b.getIndexAttr(i), b.getIndexAttr(0)};
       result = tensor::InsertSliceOp::create(b, storage, result, offs, sizes,
                                              strides);
@@ -470,15 +473,15 @@ struct ConvertToLimbs : public OpConversionPattern<ToLimbsOp> {
     auto ty = cast<RqType>(op.getInput().getType());
     int64_t n = ty.getRingDegree().getValue().getSExtValue();
 
-    Type i64 = IntegerType::get(op.getContext(), 64);
-    auto rowI64 = RankedTensorType::get({n}, i64);
+    Type word = ty.getStorageType();
+    auto rowWord = RankedTensorType::get({n}, word);
     SmallVector<OpFoldResult> strides(2, b.getIndexAttr(1));
     SmallVector<OpFoldResult> sizes = {b.getIndexAttr(1), b.getIndexAttr(n)};
 
     SmallVector<Value> limbs;
     for (auto [i, limbType] : llvm::enumerate(op.getLimbs().getTypes())) {
       SmallVector<OpFoldResult> offs = {b.getIndexAttr(i), b.getIndexAttr(0)};
-      Value row = tensor::ExtractSliceOp::create(b, rowI64, adaptor.getInput(),
+      Value row = tensor::ExtractSliceOp::create(b, rowWord, adaptor.getInput(),
                                                  offs, sizes, strides);
       limbs.push_back(field::BitcastOp::create(b, limbType, row));
     }

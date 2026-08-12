@@ -48,12 +48,24 @@ class RingTest(absltest.TestCase):
       self.assertEqual(str(rq), "!ring.rq<[12289, 40961], 8 : i32, eval>")
       self.assertTrue(rq.is_eval)
 
+  def testNarrowStorageIsNamedOnTheType(self):
+    with Context() as ctx, Location.unknown():
+      ring.register_dialect(ctx)
+      i32 = IntegerType.get_signless(32)
+      rq = ring.RqType.get(MODULI, _degree_attr(), storage_type=i32)
+      self.assertEqual(str(rq), "!ring.rq<[12289, 40961], 8 : i32, i32>")
+      self.assertEqual(rq.storage_type, i32)
+
   def testTypeRoundTripsThroughTheParser(self):
     with Context() as ctx, Location.unknown():
       ring.register_dialect(ctx)
+      storages = (None, IntegerType.get_signless(32))
       for is_eval in (False, True):
-        built = ring.RqType.get(MODULI, _degree_attr(), is_eval=is_eval)
-        self.assertEqual(Type.parse(str(built)), built)
+        for storage in storages:
+          built = ring.RqType.get(
+              MODULI, _degree_attr(), storage_type=storage, is_eval=is_eval
+          )
+          self.assertEqual(Type.parse(str(built)), built)
 
   def _mul(self, is_eval):
     """Builds `ring.mul` on two ring-typed values and returns the module."""

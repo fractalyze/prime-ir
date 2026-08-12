@@ -19,6 +19,8 @@ limitations under the License.
 // IWYU pragma: begin_keep
 // Headers needed for RingTypes.h.inc (DenseI64ArrayAttr, IntegerAttr params).
 #include "mlir/IR/BuiltinAttributes.h"
+// IntegerType is the residue storage parameter.
+#include "mlir/IR/BuiltinTypes.h"
 // Domain is a type parameter, so its definition must precede the typedef.
 #include "prime_ir/Dialect/Ring/IR/RingEnums.h"
 // IWYU pragma: end_keep

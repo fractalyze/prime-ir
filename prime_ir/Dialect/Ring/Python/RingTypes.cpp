@@ -15,7 +15,10 @@ limitations under the License.
 #include "prime_ir/Dialect/Ring/Python/RingTypes.h"
 
 #include <cstdint>
+#include <optional>
 #include <vector>
+
+#include "mlir-c/BuiltinTypes.h"
 
 namespace nb = nanobind;
 using namespace mlir::python::MLIR_BINDINGS_PYTHON_DOMAIN;
@@ -27,14 +30,18 @@ void PyRqType::bindDerived(ClassTy &c) {
   c.def_static(
       "get",
       [](const std::vector<int64_t> &moduli, PyAttribute &ringDegree,
-         bool isEval, DefaultingPyMlirContext context) -> PyRqType {
+         std::optional<PyType> storageType, bool isEval,
+         DefaultingPyMlirContext context) -> PyRqType {
+        MlirType word = storageType ? storageType->get()
+                                    : mlirIntegerTypeGet(context->get(), 64);
         MlirType t = primeIRRqTypeGet(
             context->get(), static_cast<intptr_t>(moduli.size()), moduli.data(),
-            ringDegree,
+            ringDegree, word,
             isEval ? PRIME_IR_RING_DOMAIN_EVAL : PRIME_IR_RING_DOMAIN_COEFF);
         return PyRqType(context->getRef(), t);
       },
-      nb::arg("moduli"), nb::arg("ring_degree"), nb::arg("is_eval") = false,
+      nb::arg("moduli"), nb::arg("ring_degree"),
+      nb::arg("storage_type") = nb::none(), nb::arg("is_eval") = false,
       nb::arg("context") = nb::none(),
       "Create the RNS ring Z_Q[X]/(X^N+1), Q the product of the moduli");
   c.def_prop_ro(
@@ -56,6 +63,12 @@ void PyRqType::bindDerived(ClassTy &c) {
                                   primeIRRqTypeGetRingDegree(self));
       },
       "Returns the ring degree N");
+  c.def_prop_ro(
+      "storage_type",
+      [](PyRqType &self) -> PyType {
+        return PyType(self.getContext(), primeIRRqTypeGetStorageType(self));
+      },
+      "Returns the integer word one residue occupies");
   c.def_prop_ro(
       "is_eval",
       [](PyRqType &self) -> bool {

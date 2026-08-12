@@ -42,10 +42,12 @@ MLIR_CAPI_EXPORTED MlirTypeID primeIRRqTypeGetTypeID(void);
 MLIR_CAPI_EXPORTED bool primeIRTypeIsARq(MlirType type);
 
 // Creates the ring Z_Q[X]/(X^N+1) in RNS form, where Q is the product of
-// `moduli` and N is `ringDegree`. The type is owned by the context.
+// `moduli` and N is `ringDegree`, with one residue per `storageType` word.
+// The type is owned by the context.
 MLIR_CAPI_EXPORTED MlirType primeIRRqTypeGet(MlirContext ctx, intptr_t nModuli,
                                              const int64_t *moduli,
                                              MlirAttribute ringDegree,
+                                             MlirType storageType,
                                              PrimeIRRingDomain domain);
 
 // Returns the number of RNS limbs.
@@ -56,6 +58,9 @@ MLIR_CAPI_EXPORTED int64_t primeIRRqTypeGetModulus(MlirType type, intptr_t pos);
 
 // Returns the ring degree N.
 MLIR_CAPI_EXPORTED MlirAttribute primeIRRqTypeGetRingDegree(MlirType type);
+
+// Returns the integer word one residue occupies.
+MLIR_CAPI_EXPORTED MlirType primeIRRqTypeGetStorageType(MlirType type);
 
 // Returns the basis the element is written in.
 MLIR_CAPI_EXPORTED PrimeIRRingDomain primeIRRqTypeGetDomain(MlirType type);
