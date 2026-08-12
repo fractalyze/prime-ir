@@ -41,12 +41,84 @@ func.func @mul_rejects_coeff(
 
 // -----
 
-// rescale drops a modulus; it does not change basis.
-func.func @rescale_preserves_basis(
-    %x: !ring.rq<[12289, 40961], 8 : i32, eval>) -> !ring.rq<[12289], 8 : i32> {
-  // expected-error @+1 {{rescale does not change basis}}
-  %y = ring.rescale %x : !ring.rq<[12289, 40961], 8 : i32, eval> to !ring.rq<[12289], 8 : i32>
+// Position k of the dropped limb only stands for the same coefficient as
+// position k of the surviving ones in the coefficient basis; in the evaluation
+// basis each limb evaluates at its own root of unity.
+func.func @rescale_rejects_eval_basis(
+    %x: !ring.rq<[12289, 40961], 8 : i32, eval>)
+    -> !ring.rq<[12289], 8 : i32, eval> {
+  // expected-error @+1 {{only the coefficient basis relates}}
+  %y = ring.rescale %x
+      : !ring.rq<[12289, 40961], 8 : i32, eval> to !ring.rq<[12289], 8 : i32, eval>
+  return %y : !ring.rq<[12289], 8 : i32, eval>
+}
+
+// -----
+
+// Same for the other cross-limb op.
+func.func @base_convert_rejects_eval_basis(
+    %x: !ring.rq<[12289], 8 : i32, eval>) -> !ring.rq<[40961], 8 : i32, eval> {
+  // expected-error @+1 {{only the coefficient basis relates}}
+  %y = ring.base_convert %x
+      : !ring.rq<[12289], 8 : i32, eval> to !ring.rq<[40961], 8 : i32, eval>
+  return %y : !ring.rq<[40961], 8 : i32, eval>
+}
+
+// -----
+
+// The result is written with the input's residue word, so a ring that stores
+// its residues differently is not a rescale target.
+func.func @rescale_rejects_storage_mismatch(
+    %x: !ring.rq<[12289, 40961], 8 : i32, i32>) -> !ring.rq<[12289], 8 : i32> {
+  // expected-error @+1 {{must share the residue storage type}}
+  %y = ring.rescale %x
+      : !ring.rq<[12289, 40961], 8 : i32, i32> to !ring.rq<[12289], 8 : i32>
   return %y : !ring.rq<[12289], 8 : i32>
+}
+
+// -----
+
+// A Montgomery limb carries a factor of R that the ring's canonical residues
+// do not, and nothing downstream would take it back out.
+func.func @from_limbs_rejects_montgomery(
+    %l: tensor<8x!field.pf<12289 : i64, true>>) -> !ring.rq<[12289], 8 : i32> {
+  // expected-error @+1 {{is in Montgomery form}}
+  %r = ring.from_limbs %l
+      : tensor<8x!field.pf<12289 : i64, true>> to !ring.rq<[12289], 8 : i32>
+  return %r : !ring.rq<[12289], 8 : i32>
+}
+
+// -----
+
+// A limb modulus is an arbitrary-width integer; comparing it must not depend
+// on it fitting a word.
+func.func @from_limbs_rejects_wide_modulus(
+    %l: tensor<8x!field.pf<21888242871839275222246405745257275088548364400416034343698204186575808495617:i256>>)
+    -> !ring.rq<[12289], 8 : i32> {
+  // expected-error @+1 {{but the ring's is 12289}}
+  %r = ring.from_limbs %l
+      : tensor<8x!field.pf<21888242871839275222246405745257275088548364400416034343698204186575808495617:i256>>
+      to !ring.rq<[12289], 8 : i32>
+  return %r : !ring.rq<[12289], 8 : i32>
+}
+
+// -----
+
+// The tensor IS the residue layout, so it has to be [L, N] in the ring's word.
+func.func @from_tensor_rejects_wrong_shape(%t: tensor<3x2xi64>)
+    -> !ring.rq<[7, 11, 13], 4 : i32> {
+  // expected-error @+1 {{residue tensor must be 3x4}}
+  %r = ring.from_tensor %t : tensor<3x2xi64> to !ring.rq<[7, 11, 13], 4 : i32>
+  return %r : !ring.rq<[7, 11, 13], 4 : i32>
+}
+
+// -----
+
+func.func @to_tensor_rejects_wrong_element(%x: !ring.rq<[12289], 8 : i32, i32>)
+    -> tensor<1x8xi64> {
+  // expected-error @+1 {{must be the ring's storage type i32}}
+  %t = ring.to_tensor %x : !ring.rq<[12289], 8 : i32, i32> to tensor<1x8xi64>
+  return %t : tensor<1x8xi64>
 }
 
 // -----
@@ -96,4 +168,14 @@ func.func @to_limbs_rejects_modulus_mismatch(
   %l = ring.to_limbs %r
       : !ring.rq<[12289], 8 : i32> to tensor<8x!field.pf<40961:i64>>
   return %l : tensor<8x!field.pf<40961:i64>>
+}
+
+// -----
+
+// CRT is an isomorphism only for a pairwise coprime basis. Distinctness is not
+// enough: a shared factor makes the residues redundant, so base_convert and
+// rescale would compute against a modulus product that is not Q.
+// expected-error @+1 {{moduli must be pairwise coprime, but 9 and 21 share the factor 3}}
+func.func @rq_rejects_non_coprime_moduli(%x: !ring.rq<[9, 21], 2 : i32>) {
+  return
 }

@@ -42,6 +42,11 @@ def Ring_Dialect : Dialect {
   }];
   let cppNamespace = "::mlir::prime_ir::ring";
   let useDefaultTypePrinterParser = 1;
+  // ring.from_limbs/to_limbs spell !field.pf in their own assembly, so a
+  // context holding only this dialect still has to be able to parse it.
+  let dependentDialects = [
+    "prime_ir::field::FieldDialect",
+  ];
 }
 
 #endif // PRIME_IR_DIALECT_RING_IR_RINGDIALECT_TD_

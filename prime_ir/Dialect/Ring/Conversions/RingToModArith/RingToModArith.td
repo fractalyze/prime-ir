@@ -21,21 +21,26 @@ include "mlir/Pass/PassBase.td"
 def RingToModArith : Pass<"ring-to-mod-arith", "ModuleOp"> {
   let summary = "Lower the `ring` dialect (RNS) to per-limb `mod_arith`";
   let description = [{
-    Lowers `!ring.rq<[q0 ... qL], N>` to `tensor<LxNxi64>` (one raw residue per
+    Lowers `!ring.rq<[q0 ... qL], N>` to `tensor<LxNxiW>` (one raw residue per
     (limb, coefficient)) and expands the RNS ops into per-limb modular arithmetic
     on `mod_arith.int<q_i>`, so every reduction goes through the ModArith
-    Barrett/Montgomery reducers (NOT `arith.remui`, which has no native GPU
-    integer divide). `ring.base_convert` becomes the CRT fast-basis-extension:
+    Barrett/Montgomery reducers rather than `arith.remui`, which has no native
+    GPU integer divide. `ring.base_convert` becomes the CRT fast-basis-extension:
     `y_i = x_i * yHatInv_i mod q_i` (a `mod_arith.mul` in q_i), then
     `out_j = sum_i y_i * (Q/q_i mod p_j) mod p_j` (`mod_arith.mul`/`add` in p_j).
-    Barrett reduces each PRODUCT, so a raw `y_i` reinterpreted into `mod_arith<p_j>`
-    needs no separate reduction. CRT constants precomputed (APInt) from the moduli.
+    CRT constants precomputed (APInt) from the moduli.
+
+    The cross-limb ops (`base_convert`, `rescale`) carry a residue from one
+    modulus into another, and the reducers take a canonical operand as their
+    precondition, so a divide does appear where the source modulus is the wider
+    of the two -- a statically decided case, and the only one.
   }];
   let dependentDialects = [
+    "arith::ArithDialect",
+    "linalg::LinalgDialect",
     "tensor::TensorDialect",
     "prime_ir::field::FieldDialect",
     "prime_ir::mod_arith::ModArithDialect",
-    "prime_ir::ring::RingDialect",
   ];
 }
 

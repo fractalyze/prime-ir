@@ -16,16 +16,17 @@ limitations under the License.
 #include "prime_ir/Dialect/Ring/IR/RingDialect.h"
 
 #include <cstdint>
+#include <numeric>
 #include <optional>
 
 #include "llvm/ADT/STLExtras.h" // IWYU pragma: keep (interleaveComma)
-#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TypeSwitch.h" // IWYU pragma: keep
 #include "mlir/IR/Builders.h"    // IWYU pragma: keep
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/DialectImplementation.h" // IWYU pragma: keep (AsmParser, FieldParser)
+#include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Ring/IR/RingOps.h"
 #include "prime_ir/Dialect/Ring/IR/RingTypes.h"
 
@@ -50,18 +51,25 @@ LogicalResult RqType::verify(function_ref<InFlightDiagnostic()> emitError,
   if (!storageType) {
     return emitError() << "ring.rq residue storage type must be provided";
   }
-  llvm::SmallSet<int64_t, 8> seen;
-  for (int64_t q : moduli.asArrayRef()) {
+  llvm::ArrayRef<int64_t> ms = moduli.asArrayRef();
+  for (auto [i, q] : llvm::enumerate(ms)) {
     if (q <= 1) {
       return emitError() << "ring.rq modulus must be > 1, got " << q;
     }
-    if (!seen.insert(q).second) {
-      return emitError() << "ring.rq moduli must be distinct (coprime RNS "
-                            "basis), got repeated "
-                         << q;
+    // CRT is an isomorphism only for a pairwise coprime basis; a shared factor
+    // makes the residues redundant and the product of the moduli larger than
+    // the modulus they actually represent. A repeat is the gcd(q, q) = q case.
+    for (int64_t other : ms.take_front(i)) {
+      if (int64_t g = std::gcd(q, other); g != 1) {
+        return emitError() << "ring.rq moduli must be pairwise coprime, but "
+                           << other << " and " << q << " share the factor "
+                           << g;
+      }
     }
-    // Residues live in [0, q), so the word has to hold q - 1 unsigned.
-    if (APInt(64, q - 1).getActiveBits() > storageType.getWidth()) {
+    // The bound is on q itself, not on the largest residue: the lowering also
+    // materializes the modulus in this word (mod_arith carries it as an
+    // attribute of the storage type), so q = 2^W would truncate to zero there.
+    if (APInt(64, q).getActiveBits() > storageType.getWidth()) {
       return emitError() << "ring.rq modulus " << q << " does not fit in i"
                          << storageType.getWidth() << " storage";
     }
@@ -69,7 +77,13 @@ LogicalResult RqType::verify(function_ref<InFlightDiagnostic()> emitError,
   if (!ringDegree) {
     return emitError() << "ring.rq degree N must be provided";
   }
-  int64_t n = ringDegree.getValue().getSExtValue();
+  // The attribute's width is whatever the user wrote, so the degree is checked
+  // for fitting a word before it is read as one.
+  std::optional<int64_t> degree = ringDegree.getValue().trySExtValue();
+  if (!degree) {
+    return emitError() << "ring.rq degree N must fit a 64-bit integer";
+  }
+  int64_t n = *degree;
   if (n <= 0 || (n & (n - 1)) != 0) {
     return emitError() << "ring.rq degree N must be a positive power of two, "
                           "got "

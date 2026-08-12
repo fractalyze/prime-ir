@@ -17,8 +17,11 @@ limitations under the License.
 #define PRIME_IR_DIALECT_RING_CONVERSIONS_RINGTOMODARITH_RINGTOMODARITH_H_
 
 // IWYU pragma: begin_keep
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Pass/Pass.h"
+#include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
 #include "prime_ir/Dialect/Ring/IR/RingDialect.h"
 // IWYU pragma: end_keep

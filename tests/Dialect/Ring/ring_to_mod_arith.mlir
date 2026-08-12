@@ -22,3 +22,22 @@ func.func @bconv(%x: !ring.rq<[3, 5], 2 : i32>) -> !ring.rq<[7], 2 : i32> {
   %y = ring.base_convert %x : !ring.rq<[3, 5], 2 : i32> to !ring.rq<[7], 2 : i32>
   return %y : !ring.rq<[7], 2 : i32>
 }
+
+// -----
+
+// The permutation is static and the same in every limb, so the whole [L, N]
+// tensor lowers to one constant index table and one gather -- not one op per
+// coefficient, and not one nest per limb. At CKKS degrees (N = 2^15) an
+// unrolled permute would emit hundreds of thousands of ops.
+// CHECK-LABEL: func.func @automorphism_gathers_once
+// CHECK: arith.constant dense<{{.*}}> : tensor<256xi32>
+// CHECK: linalg.generic
+// CHECK-NOT: linalg.generic
+// CHECK-NOT: tensor.insert %
+func.func @automorphism_gathers_once(
+    %x: !ring.rq<[12289, 40961], 256 : i32, eval>)
+    -> !ring.rq<[12289, 40961], 256 : i32, eval> {
+  %y = ring.automorphism %x {exponent = 3 : i64}
+      : !ring.rq<[12289, 40961], 256 : i32, eval>
+  return %y : !ring.rq<[12289, 40961], 256 : i32, eval>
+}

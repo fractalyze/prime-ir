@@ -51,6 +51,9 @@ def Ring_RqType : Ring_Type<"Rq", "rq"> {
 
     A rank-k module over R_Q is `tensor<k x !ring.rq<...>>` (componentwise), so
     element-times-element is left to the scalar action, not a ring×ring op here.
+    The lowering rejects that spelling for now — a ring already occupies two
+    tensor dimensions, so a module would land on a rank-(k+2) residue tensor
+    that no pattern here builds.
 
     `domain` records which CRT basis the value is written in — the coefficient
     basis or the fully split evaluation basis. It defaults to `coeff` and is

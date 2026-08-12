@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <cstdint>
 
+#include "llvm/ADT/APInt.h"
+#include "llvm/ADT/StringExtras.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -35,6 +37,7 @@ static LogicalResult verifyLimbTypes(Operation *op, RqType ring,
            << (ring.getModuli().size() == 1 ? "" : "s") << ", but got "
            << limbs.size();
   }
+  int64_t n = ring.getRingDegree().getValue().getSExtValue();
   for (auto [i, limbType] : llvm::enumerate(limbs)) {
     auto tensorType = llvm::dyn_cast<RankedTensorType>(limbType);
     auto fieldType =
@@ -45,30 +48,75 @@ static LogicalResult verifyLimbTypes(Operation *op, RqType ring,
       return op->emitOpError("limb ")
              << i << " must be a prime field tensor, but got " << limbType;
     }
-    uint64_t modulus = fieldType.getModulus().getValue().getZExtValue();
-    uint64_t expected = ring.getModuli()[i];
-    if (modulus != expected) {
-      return op->emitOpError("limb ") << i << " has modulus " << modulus
-                                      << ", but the ring's is " << expected;
+    // A field modulus is an arbitrary-width APInt -- i256 is the ordinary
+    // spelling for curve fields -- so it is compared without being narrowed to
+    // a word first.
+    APInt modulus = fieldType.getModulus().getValue();
+    auto expected = static_cast<uint64_t>(ring.getModuli()[i]);
+    if (modulus.getActiveBits() > 64 || modulus.getZExtValue() != expected) {
+      return op->emitOpError("limb ")
+             << i << " has modulus " << llvm::toString(modulus, 10, false)
+             << ", but the ring's is " << expected;
+    }
+    // Residues are stored canonically throughout the lowering. A Montgomery
+    // limb carries the extra factor of R, which every ring op would then
+    // silently compound; converting it is the caller's job.
+    if (fieldType.isMontgomery()) {
+      return op->emitOpError("limb ")
+             << i
+             << " is in Montgomery form, but the ring's residues are "
+                "canonical";
     }
     // The bridge reinterprets the limb into the ring's residue rows, so a
     // width mismatch would have to be a widening copy instead.
-    unsigned limbWidth =
-        fieldType.getModulus().getType().getIntOrFloatBitWidth();
+    unsigned limbWidth = fieldType.getTypeSizeInBits();
     if (limbWidth != ring.getStorageWidth()) {
       return op->emitOpError("limb ")
              << i << " is stored in i" << limbWidth
              << ", but the ring's residues are i" << ring.getStorageWidth();
     }
-    int64_t n = ring.getRingDegree().getValue().getSExtValue();
-    if (tensorType.getRank() != 1 || tensorType.getDimSize(0) != n) {
+    if (tensorType.getRank() != 1) {
+      return op->emitOpError("limb ")
+             << i << " must be 1-D, but got " << tensorType;
+    }
+    if (tensorType.getDimSize(0) != n) {
       return op->emitOpError("limb ")
              << i << " must have " << n << " elements, but got "
-             << (tensorType.getRank() == 1 ? tensorType.getDimSize(0)
-                                           : tensorType.getRank());
+             << tensorType.getDimSize(0);
     }
   }
   return success();
+}
+
+// The raw bridge: the tensor IS the lowered representation, so it has to be
+// exactly that -- limb-major [L, N] in the ring's residue word. Nothing
+// downstream re-checks it, and the patterns slice rows out by those extents.
+static LogicalResult verifyResidueTensor(Operation *op, RqType ring,
+                                         Type tensorType) {
+  auto shaped = llvm::cast<RankedTensorType>(tensorType);
+  auto l = static_cast<int64_t>(ring.getModuli().size());
+  int64_t n = ring.getRingDegree().getValue().getSExtValue();
+  if (shaped.getRank() != 2 || shaped.getDimSize(0) != l ||
+      shaped.getDimSize(1) != n) {
+    return op->emitOpError("residue tensor must be ")
+           << l << "x" << n << ", but got " << shaped;
+  }
+  if (shaped.getElementType() != ring.getStorageType()) {
+    return op->emitOpError("residue tensor element must be the ring's storage "
+                           "type i")
+           << ring.getStorageWidth() << ", but got " << shaped.getElementType();
+  }
+  return success();
+}
+
+LogicalResult FromTensorOp::verify() {
+  return verifyResidueTensor(*this, llvm::cast<RqType>(getOutput().getType()),
+                             getInput().getType());
+}
+
+LogicalResult ToTensorOp::verify() {
+  return verifyResidueTensor(*this, llvm::cast<RqType>(getInput().getType()),
+                             getOutput().getType());
 }
 
 LogicalResult FromLimbsOp::verify() {
@@ -81,26 +129,46 @@ LogicalResult ToLimbsOp::verify() {
                          getLimbs().getTypes());
 }
 
-LogicalResult BaseConvertOp::verify() {
-  RqType in = llvm::cast<RqType>(getInput().getType());
-  RqType out = llvm::cast<RqType>(getOutput().getType());
+// rescale and base_convert both combine limb i and limb j at the same position
+// k, which reads that position of every limb as the residues of one common
+// integer coefficient -- what the coefficient basis means. In the evaluation
+// basis position k holds an evaluation at a root of unity chosen per modulus,
+// so the values there are residues of nothing in common and there is no CRT
+// combination to perform; reaching the coefficient basis first is the caller's
+// job, as it is in production RNS libraries. Both also write the result with
+// the input's residue word, so the two rings must agree on it.
+static LogicalResult verifyCrossLimbBases(Operation *op, RqType in, RqType out,
+                                          StringRef what) {
   if (in.getRingDegree() != out.getRingDegree()) {
-    return emitOpError("input and output rings must share the degree N (")
+    return op->emitOpError("input and output rings must share the degree N (")
            << in.getRingDegree() << " vs " << out.getRingDegree() << ")";
   }
-  if (in.getDomain() != out.getDomain()) {
-    return emitOpError("base conversion does not change basis, but input is ")
-           << stringifyDomain(in.getDomain()) << " and output is "
+  if (in.getStorageType() != out.getStorageType()) {
+    return op->emitOpError("input and output rings must share the residue "
+                           "storage type, but got i")
+           << in.getStorageWidth() << " and i" << out.getStorageWidth();
+  }
+  if (!in.isCoeff() || !out.isCoeff()) {
+    return op->emitOpError(what)
+           << " combines residues across limbs at a fixed position, which "
+              "only the coefficient basis relates; got "
+           << stringifyDomain(in.getDomain()) << " to "
            << stringifyDomain(out.getDomain());
   }
   return success();
 }
 
+LogicalResult BaseConvertOp::verify() {
+  return verifyCrossLimbBases(*this, llvm::cast<RqType>(getInput().getType()),
+                              llvm::cast<RqType>(getOutput().getType()),
+                              "base conversion");
+}
+
 LogicalResult RescaleOp::verify() {
   RqType in = llvm::cast<RqType>(getInput().getType());
   RqType out = llvm::cast<RqType>(getOutput().getType());
-  if (in.getRingDegree() != out.getRingDegree()) {
-    return emitOpError("input and output must share the degree N");
+  if (failed(verifyCrossLimbBases(*this, in, out, "rescale"))) {
+    return failure();
   }
   ArrayRef<int64_t> inM = in.getModuli().asArrayRef();
   ArrayRef<int64_t> outM = out.getModuli().asArrayRef();
@@ -111,11 +179,6 @@ LogicalResult RescaleOp::verify() {
   if (inM.take_front(outM.size()) != outM) {
     return emitOpError(
         "output basis must be the input basis without its last modulus");
-  }
-  if (in.getDomain() != out.getDomain()) {
-    return emitOpError("rescale does not change basis, but input is ")
-           << stringifyDomain(in.getDomain()) << " and output is "
-           << stringifyDomain(out.getDomain());
   }
   return success();
 }

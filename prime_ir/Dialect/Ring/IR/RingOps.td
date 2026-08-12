@@ -32,10 +32,16 @@ def Ring_FromTensorOp : Ring_Op<"from_tensor"> {
     Wraps a limb-major `tensor<LxNxiW>` of residues as an `!ring.rq`. The tensor
     IS the lowered representation, so this lowers to identity — it exists to feed
     tensor-typed data (constants, host inputs) into ring ops.
+
+    Raw bytes carry no basis, so naming one here asserts it. Whoever built the
+    tensor owes that assertion: relabelling a coefficient-basis value `eval`
+    passes every check and then multiplies pointwise instead of by negacyclic
+    convolution.
   }];
   let arguments = (ins RankedTensorOf<[AnyInteger]>:$input);
   let results = (outs Ring_RqType:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `to` type($output)";
+  let hasVerifier = 1;
 }
 
 def Ring_ToTensorOp : Ring_Op<"to_tensor"> {
@@ -43,6 +49,7 @@ def Ring_ToTensorOp : Ring_Op<"to_tensor"> {
   let arguments = (ins Ring_RqType:$input);
   let results = (outs RankedTensorOf<[AnyInteger]>:$output);
   let assemblyFormat = "$input attr-dict `:` type($input) `to` type($output)";
+  let hasVerifier = 1;
 }
 
 def Ring_FromLimbsOp : Ring_Op<"from_limbs"> {
