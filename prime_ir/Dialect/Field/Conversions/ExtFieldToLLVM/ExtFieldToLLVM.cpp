@@ -260,9 +260,17 @@ private:
     for (int64_t i = 0, e = outputMemRef.getRank(); i < e; ++i)
       outputDesc.setConstantSize(rewriter, loc, i, outputMemRef.getDimSize(i));
 
-    // Strides: output has identity layout (contiguous), stride = 1.
-    for (int64_t i = 0, e = outputMemRef.getRank(); i < e; ++i)
-      outputDesc.setConstantStride(rewriter, loc, i, 1);
+    // Strides: row-major over the output shape. Reinterpreting the bytes is
+    // only meaningful when the input is contiguous, which is also what the
+    // offset rescale above assumes, so the output is contiguous by
+    // construction — but "contiguous" is stride 1 on the innermost dimension
+    // only, and the product of the trailing extents above it.
+    int64_t rank = outputMemRef.getRank();
+    int64_t stride = 1;
+    for (int64_t i = rank - 1; i >= 0; --i) {
+      outputDesc.setConstantStride(rewriter, loc, i, stride);
+      stride *= outputMemRef.getDimSize(i);
+    }
 
     rewriter.replaceOp(op, Value(outputDesc));
     return success();

@@ -30,6 +30,7 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "prime_ir/Utils/AssemblyFormatUtils.h"
+#include "prime_ir/Utils/BitcastOpUtils.h"
 #include "prime_ir/Utils/ConstantFolder.h"
 
 // IWYU pragma: begin_keep
@@ -396,35 +397,54 @@ bool BitcastOp::areCastCompatible(TypeRange inputs, TypeRange outputs) {
     return false;
   }
 
-  // Both must be 1-D tensors.
-  if (fieldTensor.getRank() != 1 || pointTensor.getRank() != 1)
-    return false;
-
   unsigned numCoords = pointType.getNumCoords();
   Type baseFieldType = pointType.getBaseFieldType();
   unsigned extDegree = field::getExtensionDegree(baseFieldType);
   unsigned K = numCoords * extDegree;
 
-  int64_t fieldDim = fieldTensor.getDimSize(0);
-  int64_t pointDim = pointTensor.getDimSize(0);
+  // A point's K coordinates sit contiguously, so the constraint is on element
+  // counts and not on any distinguished dimension: batching points into rows
+  // reinterprets the same bytes as laying them out flat.
+  if (fieldTensor.hasStaticShape() && pointTensor.hasStaticShape())
+    return fieldTensor.getNumElements() == pointTensor.getNumElements() * K;
 
-  // If both static: verify fieldDim == pointDim * K.
-  if (fieldDim != ShapedType::kDynamic && pointDim != ShapedType::kDynamic)
-    return fieldDim == pointDim * K;
+  // Only the field side is known: it must at least divide into whole points.
+  if (fieldTensor.hasStaticShape())
+    return fieldTensor.getNumElements() % K == 0;
 
-  // If one is static and the other dynamic: check static side is divisible.
-  if (fieldDim != ShapedType::kDynamic && pointDim == ShapedType::kDynamic)
-    return fieldDim % K == 0;
-  if (fieldDim == ShapedType::kDynamic && pointDim != ShapedType::kDynamic)
-    return true; // dynamic field dim, any static point dim is fine
-
-  // Both dynamic: trust the user.
+  // A dynamic field extent can accommodate any point count; trust the user.
   return true;
 }
 
 LogicalResult BitcastOp::verify() {
   Type inputType = getInput().getType();
   Type outputType = getOutput().getType();
+
+  // A reinterpret only describes the same bytes when the source is packed, and
+  // a point occupies k field elements, so the offset must land on a point: the
+  // descriptor rebuild in the LLVM lowering divides it by k.
+  auto inMt = dyn_cast<MemRefType>(inputType);
+  auto outMt = dyn_cast<MemRefType>(outputType);
+  unsigned ratio = 1;
+  if (inMt && outMt) {
+    if (auto pointType = dyn_cast<PointTypeInterface>(outMt.getElementType())) {
+      ratio = pointType.getNumCoords() *
+              field::getExtensionDegree(pointType.getBaseFieldType());
+    }
+    // The rebuild stamps the result extents in as constants, so a dynamic
+    // result would become a descriptor full of the dynamic sentinel. A
+    // diagnostic from the conversion pattern is rolled back with the pattern
+    // and never reaches the user, so it has to be refused here.
+    if (!outMt.hasStaticShape()) {
+      return emitOpError("cannot rebuild a descriptor for a dynamically "
+                         "shaped result, but got ")
+             << outMt;
+    }
+  }
+  if (failed(verifyBitcastMemRefLayout(*this, inputType, outputType, ratio,
+                                       "a point"))) {
+    return failure();
+  }
 
   if (areCastCompatible(TypeRange{inputType}, TypeRange{outputType}))
     return success();

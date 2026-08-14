@@ -65,6 +65,25 @@ nanobind_pywrap_extension(
 )
 
 ########################################################
+# Ring
+########################################################
+
+nanobind_pywrap_extension(
+    name = "_ring",
+    srcs = ["//prime_ir/Dialect/Ring/Python:RingPyApiFiles"],
+    deps = [
+        "//prime_ir/Dialect/Ring/C:CAPI",
+        "//prime_ir/Dialect/Ring/Python:RingAttributesAndTypes",
+        "@llvm-project//mlir:CAPIIR",
+        "@llvm-project//mlir:MLIRBindingsPythonNanobindHeaders",
+        "@nanobind",
+    ] + select({
+        "@platforms//os:macos": ["@rules_python//python/cc:current_py_cc_libs"],
+        "//conditions:default": [],
+    }),
+)
+
+########################################################
 # EllipticCurve
 ########################################################
 

@@ -112,106 +112,96 @@ struct ConvertToCoords : public ConvertOpToLLVMPattern<ToCoordsOp> {
   }
 };
 
+// The pattern and the legality rule have to agree on which bitcasts this pass
+// owns, so they read it from the same place.
+static bool isMemRefBitcast(BitcastOp op) {
+  return isa<MemRefType>(op.getInput().getType()) &&
+         isa<MemRefType>(op.getType());
+}
+
 struct ConvertBitcast : public ConvertOpToLLVMPattern<BitcastOp> {
   using ConvertOpToLLVMPattern<BitcastOp>::ConvertOpToLLVMPattern;
 
   LogicalResult
   matchAndRewrite(BitcastOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    Type convertedOutputType = typeConverter->convertType(op.getType());
+    // Memref bitcasts (produced by bufferization) reinterpret one buffer as a
+    // tensor of N points <-> N*K coordinates. The element COUNT changes, so
+    // the descriptor must be rebuilt with sizes/strides/offset in the output
+    // element's units. A plain unrealized_conversion_cast preserves the input
+    // descriptor -- sizes still in input-element units -- and any later
+    // dealloc/copy then computes the wrong byte count (heap corruption). A
+    // still-tensor bitcast has no descriptor to rebuild and is left to
+    // bufferization.
+    if (!isMemRefBitcast(op)) {
+      return failure();
+    }
+    auto inputMemRef = cast<MemRefType>(op.getInput().getType());
+    auto outputMemRef = cast<MemRefType>(op.getType());
+    Type convertedOutputType = typeConverter->convertType(outputMemRef);
     if (!convertedOutputType) {
       return op.emitOpError("failed to convert output type");
     }
-
-    // Memref bitcasts (produced by bufferization) reinterpret one buffer as a
-    // tensor of N points <-> N*K coordinates. The element COUNT changes (K
-    // coordinates per point), so the descriptor must be rebuilt with
-    // sizes/strides/offset in the output element's units. A plain
-    // unrealized_conversion_cast preserves the input descriptor — sizes still
-    // in input-element units — and any later dealloc/copy then computes the
-    // wrong byte count (heap corruption). Mirrors
-    // field::ConvertBitcast::convertMemRefBitcast.
-    if (isa<MemRefType>(op.getInput().getType()))
-      return convertMemRefBitcast(op, adaptor, rewriter, convertedOutputType);
-
-    // Value-level reinterpret: the memory is identical and the input already
-    // has the right LLVM struct type. reconcile-unrealized-casts cleans it up.
-    rewriter.replaceOpWithNewOp<UnrealizedConversionCastOp>(
-        op, convertedOutputType, adaptor.getInput());
-    return success();
+    return convertMemRefBitcast(op, adaptor, rewriter, inputMemRef,
+                                outputMemRef, convertedOutputType);
   }
 
 private:
-  // Number of base-field coordinates an element type spans: an EC point has
-  // getNumCoords() (affine 2, jacobian 3, xyzz 4); a field coordinate is 1.
-  static unsigned getNumCoords(Type elementType) {
-    if (auto pt = dyn_cast<PointTypeInterface>(elementType))
-      return pt.getNumCoords();
-    return 1;
-  }
-
+  // A point occupies K = coords * extension-degree consecutive field elements,
+  // so the two memrefs never agree on extent and the input descriptor cannot be
+  // forwarded: its sizes are in the wrong element unit and its offset counts
+  // the wrong thing.
   LogicalResult convertMemRefBitcast(BitcastOp op, OpAdaptor adaptor,
                                      ConversionPatternRewriter &rewriter,
+                                     MemRefType inputMemRef,
+                                     MemRefType outputMemRef,
                                      Type convertedOutputType) const {
     Location loc = op.getLoc();
-    auto inputMemRef = cast<MemRefType>(op.getInput().getType());
-    auto outputMemRef = cast<MemRefType>(op.getType());
-
     auto llvmDescTy = dyn_cast<LLVM::LLVMStructType>(convertedOutputType);
-    if (!llvmDescTy)
+    if (!llvmDescTy) {
       return failure();
-
-    MemRefDescriptor inputDesc(adaptor.getInput());
-
-    // Same-shape reinterpret: descriptor unchanged. Unreachable for EC -- a
-    // point has K>=2 coords, so point<->coordinate element counts always
-    // differ -- but kept as a defensive mirror of field::convertMemRefBitcast,
-    // where the equal-byte-size case (e.g. ef4 <-> i128) is reachable.
-    if (inputMemRef.getShape() == outputMemRef.getShape()) {
-      rewriter.replaceOp(op, adaptor.getInput());
-      return success();
     }
 
-    // Point tensor <-> coordinate tensor: rebuild the descriptor sharing the
-    // buffer, adjusting offset by the coordinate-count ratio and resetting
-    // sizes/strides to the contiguous output shape.
-    auto outputDesc = MemRefDescriptor::poison(rewriter, loc, llvmDescTy);
+    auto pointType =
+        dyn_cast<PointTypeInterface>(outputMemRef.getElementType());
+    bool toPoints = pointType != nullptr;
+    if (!toPoints) {
+      pointType = dyn_cast<PointTypeInterface>(inputMemRef.getElementType());
+    }
+    if (!pointType) {
+      return op.emitOpError("expected a point type on one side of the bitcast");
+    }
+    unsigned k = pointType.getNumCoords() *
+                 field::getExtensionDegree(pointType.getBaseFieldType());
 
-    // Same underlying memory — pointers are shared.
+    MemRefDescriptor inputDesc(adaptor.getInput());
+    auto outputDesc = MemRefDescriptor::poison(rewriter, loc, llvmDescTy);
     outputDesc.setAllocatedPtr(rewriter, loc,
                                inputDesc.allocatedPtr(rewriter, loc));
     outputDesc.setAlignedPtr(rewriter, loc,
                              inputDesc.alignedPtr(rewriter, loc));
 
-    // Adjust offset: offset_out = offset_in × coordsIn / coordsOut, where
-    // coords is the base-field coordinate count of the respective element type.
-    unsigned coordsIn = getNumCoords(inputMemRef.getElementType());
-    unsigned coordsOut = getNumCoords(outputMemRef.getElementType());
-
+    // The offset counts elements, so it converts with the element size: k field
+    // elements per point going one way, the reverse going the other.
     Value offset = inputDesc.offset(rewriter, loc);
-    if (coordsIn != coordsOut) {
+    if (k != 1) {
       Type idxTy = getTypeConverter()->getIndexType();
-      if (coordsOut > coordsIn) {
-        // coords -> point: divide offset (output counts fewer, larger elems).
-        Value ratio =
-            createIndexAttrConstant(rewriter, loc, idxTy, coordsOut / coordsIn);
-        offset = LLVM::SDivOp::create(rewriter, loc, offset, ratio);
-      } else {
-        // point -> coords: multiply offset (output counts more, smaller elems).
-        Value ratio =
-            createIndexAttrConstant(rewriter, loc, idxTy, coordsIn / coordsOut);
-        offset = LLVM::MulOp::create(rewriter, loc, offset, ratio);
-      }
+      Value ratio = createIndexAttrConstant(rewriter, loc, idxTy, k);
+      offset =
+          toPoints
+              ? LLVM::SDivOp::create(rewriter, loc, offset, ratio).getResult()
+              : LLVM::MulOp::create(rewriter, loc, offset, ratio).getResult();
     }
     outputDesc.setOffset(rewriter, loc, offset);
 
-    // Sizes: from the static output shape.
-    for (int64_t i = 0, e = outputMemRef.getRank(); i < e; ++i)
+    for (int64_t i = 0, e = outputMemRef.getRank(); i < e; ++i) {
       outputDesc.setConstantSize(rewriter, loc, i, outputMemRef.getDimSize(i));
-
-    // Strides: output has identity layout (contiguous), stride = 1.
-    for (int64_t i = 0, e = outputMemRef.getRank(); i < e; ++i)
-      outputDesc.setConstantStride(rewriter, loc, i, 1);
+    }
+    int64_t stride = 1;
+    for (int64_t i = outputMemRef.getRank() - 1; i >= 0; --i) {
+      outputDesc.setConstantStride(rewriter, loc, i, stride);
+      stride *= outputMemRef.getDimSize(i);
+    }
 
     rewriter.replaceOp(op, Value(outputDesc));
     return success();
@@ -289,6 +279,15 @@ struct EllipticCurveToLLVMDialectInterface
   void populateConvertToLLVMConversionPatterns(
       ConversionTarget &target, LLVMTypeConverter &typeConverter,
       RewritePatternSet &patterns) const final {
+    // Without this the ops stay legal and the patterns below never fire, which
+    // is silent rather than fatal: the op survives to the end of the pipeline
+    // still carrying its point and field types.
+    target.addIllegalOp<FromCoordsOp, ToCoordsOp>();
+    // Only the memref form has a descriptor to rebuild. A tensor-typed bitcast
+    // has no LLVM type to convert to, so demanding one here would turn an op
+    // this pass has nothing to say about into a hard failure.
+    target.addDynamicallyLegalOp<BitcastOp>(
+        [](BitcastOp op) { return !isMemRefBitcast(op); });
     populateEllipticCurveToLLVMTypeConversion(typeConverter);
     populateEllipticCurveToLLVMConversionPatterns(typeConverter, patterns);
   }

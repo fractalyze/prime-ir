@@ -13,22 +13,11 @@
 # limitations under the License.
 # ==============================================================================
 
-load("//prime_ir:pywrap.bzl", "pywrap_library")
+load("//bazel:lit.bzl", "glob_lit_tests")
 
-package(
-    default_visibility = ["//visibility:public"],
-)
-
-exports_files([
-    "pyinit_stub.c",
-])
-
-pywrap_library(
-    name = "prime_ir",
-    deps = [
-        "//prime_ir/mlir/_mlir_libs:_elliptic_curve",
-        "//prime_ir/mlir/_mlir_libs:_field",
-        "//prime_ir/mlir/_mlir_libs:_mlir",
-        "//prime_ir/mlir/_mlir_libs:_ring",
-    ],
+glob_lit_tests(
+    name = "all_tests",
+    data = ["//tests:test_utilities"],
+    driver = "//tests:run_lit.sh",
+    test_file_exts = ["mlir"],
 )

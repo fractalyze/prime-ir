@@ -57,6 +57,20 @@ symlink_inputs(
 )
 
 symlink_inputs(
+    name = "ring",
+    rule = py_library,
+    symlinked_inputs = {"srcs": {
+        "dialects": ["//prime_ir/Dialect/Ring/Python:RingPyFiles"],
+    }},
+    deps = [
+        ":core",
+        ":ir",
+        ":mlir",
+        "//prime_ir/mlir/_mlir_libs:_ring",
+    ],
+)
+
+symlink_inputs(
     name = "elliptic_curve",
     rule = py_library,
     symlinked_inputs = {"srcs": {

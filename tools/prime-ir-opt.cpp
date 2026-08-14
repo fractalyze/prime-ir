@@ -40,6 +40,8 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/Transforms/BufferizableOpInterfaceImpl.h"
 #include "prime_ir/Dialect/Poly/Conversions/PolyToField/PolyToField.h"
 #include "prime_ir/Dialect/Poly/IR/PolyDialect.h"
+#include "prime_ir/Dialect/Ring/Conversions/RingToModArith/RingToModArith.h"
+#include "prime_ir/Dialect/Ring/IR/RingDialect.h"
 #include "prime_ir/Dialect/TensorExt/Conversions/TensorExtToTensor/TensorExtToTensor.h"
 #include "prime_ir/Dialect/TensorExt/IR/TensorExtDialect.h"
 
@@ -48,6 +50,7 @@ int main(int argc, char **argv) {
   registry.insert<mlir::prime_ir::mod_arith::ModArithDialect>();
   registry.insert<mlir::prime_ir::field::FieldDialect>();
   registry.insert<mlir::prime_ir::poly::PolyDialect>();
+  registry.insert<mlir::prime_ir::ring::RingDialect>();
   registry.insert<mlir::prime_ir::elliptic_curve::EllipticCurveDialect>();
   registry.insert<mlir::prime_ir::tensor_ext::TensorExtDialect>();
   mlir::prime_ir::elliptic_curve::registerConvertEllipticCurveToLLVMInterface(
@@ -73,6 +76,7 @@ int main(int argc, char **argv) {
   mlir::prime_ir::field::registerSpecializeBinaryFieldToNVPTXPasses();
   mlir::prime_ir::field::registerSpecializeBinaryFieldToX86Passes();
   mlir::prime_ir::field::registerFieldToModArithPasses();
+  mlir::prime_ir::ring::registerRingToModArithPasses();
   mlir::prime_ir::field::registerExtFieldToLLVMPasses();
   mlir::prime_ir::poly::registerPolyToFieldPasses();
   mlir::prime_ir::elliptic_curve::registerEllipticCurveToFieldPasses();

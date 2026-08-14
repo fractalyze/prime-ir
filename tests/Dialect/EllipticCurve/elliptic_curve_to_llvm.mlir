@@ -126,3 +126,13 @@ func.func @bitcast_pf_to_jacobian(%arg0: memref<6x!PF>) -> memref<2x!jacobian> {
   %0 = elliptic_curve.bitcast %arg0 : memref<6x!PF> -> memref<2x!jacobian>
   return %0 : memref<2x!jacobian>
 }
+
+// A bitcast still on tensors has no descriptor to rebuild and no LLVM type to
+// convert to, so this pass leaves it for bufferization instead of failing.
+//
+// CHECK-LABEL: @bitcast_tensor_survives
+//       CHECK:   elliptic_curve.bitcast
+func.func @bitcast_tensor_survives(%arg0: tensor<6x!PF>) -> tensor<2x!jacobian> {
+  %0 = elliptic_curve.bitcast %arg0 : tensor<6x!PF> -> tensor<2x!jacobian>
+  return %0 : tensor<2x!jacobian>
+}
