@@ -287,6 +287,33 @@ func.func @test_mont_mul_single_limb_signed_opt(%a : !BBm, %b : !BBm, %c : !BBm)
 
 // -----
 
+// secp256k1 Fq (Montgomery): full-width 256-bit modulus (no spare bit).
+// Multi-limb REDC must be the standard per-limb form — one m·n product per
+// limb (4 mului_extended after the initial widening product) — NOT the
+// former shift-then-add b⁻¹ variant, whose result bound V < T/2ʷ + b⁻¹ + p
+// breaks the [0, 2p) contract (b⁻¹ is an arbitrary constant in [0, p)).
+// The first limb iteration's tHigh add must capture its carry-out
+// (addui_extended: tHigh can be as large as p - 1 and p is within 2⁶⁴ of
+// 2²⁵⁶), and the epilogue folds V's 2²⁵⁶ bit via cmpi ne + select.
+!K1m = !mod_arith.int<115792089237316195423570985008687907853269984665640564039457584007908834671663 : i256, true>
+
+// CHECK-LABEL: @test_mont_mul_full_width_standard_redc
+func.func @test_mont_mul_full_width_standard_redc(%a : !K1m, %b : !K1m) -> !K1m {
+  // b⁻¹ mod p must not be materialized anywhere (the old variant's constant).
+  // CHECK-NOT: arith.constant 97798581649299591516383885342152904135335272353249846763749256112567415731113
+  // CHECK: arith.mului_extended
+  // CHECK: arith.mului_extended
+  // CHECK: arith.addui_extended
+  // CHECK-COUNT-3: arith.mului_extended
+  // CHECK-NOT: arith.mului_extended
+  // CHECK: arith.cmpi ne
+  // CHECK: arith.select
+  %res = mod_arith.mont_mul %a, %b : !K1m
+  return %res : !K1m
+}
+
+// -----
+
 // Goldilocks: p = 2⁶⁴ - 2³² + 1, p > 2⁶³ so getCanonicalDiff must use
 // cmpi + select instead of minui (diff + p overflows i64).
 !Gp = !mod_arith.int<18446744069414584321 : i64>

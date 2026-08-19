@@ -166,21 +166,13 @@ Value MontReducer::reduceSingleLimb(Value tLow, Value tHigh, bool lazy) {
 Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   TypedAttr nPrimeAttr = montAttr.getNPrime();
 
-  // Retrieve the modulus bitwidth.
-  const unsigned modBitWidth =
-      cast<IntegerType>(getElementTypeOrSelf(modAttr.getType())).getWidth();
-
   // Compute number of limbs.
   const unsigned limbWidth = montAttr.getLimbWidth();
   const unsigned numLimbs = montAttr.getNumLimbs();
 
-  TypedAttr bInvAttr = montAttr.getBInv();
   Type limbType = nPrimeAttr.getType();
   TypedAttr limbWidthAttr =
       b.getIntegerAttr(getElementTypeOrSelf(tLow), limbWidth);
-  TypedAttr limbMaskAttr =
-      b.getIntegerAttr(getElementTypeOrSelf(tLow),
-                       APInt::getAllOnes(limbWidth).zext(modBitWidth));
   TypedAttr limbShiftAttr =
       b.getIntegerAttr(getElementTypeOrSelf(tLow), (numLimbs - 1) * limbWidth);
   TypedAttr oneAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), 1);
@@ -192,98 +184,106 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
     limbType = shapedType.cloneWith(std::nullopt, limbType);
     nPrimeAttr = SplatElementsAttr::get(cast<ShapedType>(limbType), nPrimeAttr);
     limbWidthAttr = SplatElementsAttr::get(shapedType, limbWidthAttr);
-    limbMaskAttr = SplatElementsAttr::get(shapedType, limbMaskAttr);
     limbShiftAttr = SplatElementsAttr::get(shapedType, limbShiftAttr);
     modAttrLocal = isa<VectorType>(modAttrLocal.getType())
                        ? modAttrLocal
                        : SplatElementsAttr::get(shapedType, modAttrLocal);
-    bInvAttr = SplatElementsAttr::get(shapedType, bInvAttr);
     oneAttr = SplatElementsAttr::get(shapedType, oneAttr);
   }
 
   // Create constants for the Montgomery reduction.
   auto nPrimeConst = arith::ConstantOp::create(b, nPrimeAttr);
   auto limbWidthConst = arith::ConstantOp::create(b, limbWidthAttr);
-  auto limbMaskConst = arith::ConstantOp::create(b, limbMaskAttr);
   auto limbShiftConst = arith::ConstantOp::create(b, limbShiftAttr);
   auto modConst = arith::ConstantOp::create(b, modAttrLocal);
-  auto bInvConst = arith::ConstantOp::create(b, bInvAttr);
   auto oneConst = arith::ConstantOp::create(b, oneAttr);
 
   auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
       b.getContext(),
       arith::IntegerOverflowFlags::nuw | arith::IntegerOverflowFlags::nsw);
 
-  // Because the number of limbs (`numLimbs`) is known at compile time, we can
-  // unroll the loop as a straight-line chain of operations.
-  // The result of the `i`th iteration is `T` * b⁻¹ mod n.
-  for (unsigned i = 0; i < numLimbs - 1; ++i) {
-    // Shift `T` right by `limbWidth`.
-    Value freeCoeff = arith::AndIOp::create(b, tLow, limbMaskConst);
+  // Standard per-limb REDC, unrolled (`numLimbs` is a compile-time constant).
+  // Each iteration adds `m·n` with `m = (T mod b)·nPrime mod b` — the unique
+  // multiple of `n` that zeroes T's lowest limb — then shifts T right one
+  // limb. The result is V = (T + n·Σᵢ mᵢbⁱ)/2ʷ < T/2ʷ + n ≤ 2n under the
+  // REDC precondition T < n·2ʷ (callers pre-reduce operands to guarantee it).
+  //
+  // Do NOT replace the per-iteration `m·n` with the historical shift-then-add
+  // `t₀·(b⁻¹ mod n)` variant: its result bound is V < T/2ʷ + bInv + n, and
+  // bInv is an arbitrary constant in [0, n). For moduli where bInv is large
+  // (e.g. the BLS12-381 scalar field, bInv ≈ n) V exceeds both 2n and 2ʷ,
+  // which silently truncates and breaks the [0, 2n) result contract that the
+  // lazy-reduction bound tracking and the final conditional subtraction rely
+  // on. That variant shipped and miscompiled (p-1)² to 0 instead of 1 for
+  // every full-width modulus (fractalyze/xla#542); the case is pinned by
+  // tests/Dialect/ModArith/mod_arith_secp256k1_runner.mlir.
+  for (unsigned i = 0; i < numLimbs; ++i) {
+    // m = (T mod b) * nPrime (mod b).
+    Value freeCoeff = arith::TruncIOp::create(b, limbType, tLow);
+    auto m = arith::MulIOp::create(b, freeCoeff, nPrimeConst);
+    Value mExt = arith::ExtUIOp::create(b, tLow.getType(), m);
+    auto mN = arith::MulUIExtendedOp::create(b, modConst, mExt);
+
+    // T += m * n. Fold the carry out of tLow into mN's high limb first:
+    // mN.high = floor(m·n / 2ʷ) ≤ b - 2 (m ≤ b-1, n < 2ʷ), so the +1 cannot
+    // wrap.
+    tLow = arith::AddIOp::create(b, tLow, mN.getLow());
+    Value carry =
+        arith::CmpIOp::create(b, arith::CmpIPredicate::ult, tLow, mN.getLow());
+    auto mNHighPlusOne =
+        arith::AddIOp::create(b, mN.getHigh(), oneConst, noOverflow);
+    Value mNHigh =
+        arith::SelectOp::create(b, carry, mNHighPlusOne, mN.getHigh());
+
+    Value carryOut; // Bit 2w of T; reachable only in the first iteration.
+    if (i == 0) {
+      // In the first iteration tHigh can be as large as n - 1, so adding
+      // mN.high can carry out of the w-bit register when n is within
+      // 2^limbWidth of 2ʷ (e.g. secp256k1). Capture the carry-out; it is
+      // folded back in after the limb shift below. From the second iteration
+      // on, T < n·2ʷ/b + n·b implies tHigh < 2^(w-limbWidth) + 1 and the add
+      // cannot wrap.
+      auto sum = arith::AddUIExtendedOp::create(b, tHigh, mNHigh);
+      tHigh = sum.getSum();
+      carryOut = sum.getOverflow();
+    } else {
+      tHigh = arith::AddIOp::create(b, tHigh, mNHigh, noOverflow);
+    }
+
+    // T's lowest limb is now zero; shift T right by one limb.
     tLow = arith::ShRUIOp::create(b, tLow, limbWidthConst);
     Value tHighLowerLimb = arith::ShLIOp::create(b, tHigh, limbShiftConst);
     tLow = arith::OrIOp::create(b, tLow, tHighLowerLimb);
     tHigh = arith::ShRUIOp::create(b, tHigh, limbWidthConst);
-
-    // Compute `m` = `freeCoeff` * (b⁻¹ mod n) and add to `T`.
-    auto m = arith::MulUIExtendedOp::create(b, freeCoeff, bInvConst);
-    tLow = arith::AddIOp::create(b, tLow, m.getLow());
-    Value carry =
-        arith::CmpIOp::create(b, arith::CmpIPredicate::ult, tLow, m.getLow());
-    tHigh = arith::AddIOp::create(b, tHigh, m.getHigh(), noOverflow);
-    auto tHighPlusOne = arith::AddIOp::create(b, tHigh, oneConst, noOverflow);
-    tHigh = arith::SelectOp::create(b, carry, tHighPlusOne, tHigh);
+    if (i == 0) {
+      Value carryExt = arith::ExtUIOp::create(b, tLow.getType(), carryOut);
+      Value carryShifted =
+          arith::ShLIOp::create(b, carryExt, limbShiftConst, noOverflow);
+      tHigh = arith::OrIOp::create(b, tHigh, carryShifted);
+    }
   }
-  // The last iteration is the same as normal Montgomery reduction.
-  Value freeCoeff = arith::TruncIOp::create(b, limbType, tLow);
-  // Compute `m` = `freeCoeff` * `nPrime` (mod `base`)
-  auto m = arith::MulIOp::create(b, freeCoeff, nPrimeConst);
-  // Compute `m` * `n`
-  Value mExt = arith::ExtUIOp::create(b, tLow.getType(), m);
-  auto mN = arith::MulUIExtendedOp::create(b, modConst, mExt);
-  // Add the product to `T`.
-  tLow = arith::AddIOp::create(b, tLow, mN.getLow());
-  auto carry =
-      arith::CmpIOp::create(b, arith::CmpIPredicate::ult, tLow, mN.getLow());
-  tHigh = arith::AddIOp::create(b, tHigh, mN.getHigh(), noOverflow);
-  auto tHighPlusOne = arith::AddIOp::create(b, tHigh, oneConst, noOverflow);
-  tHigh = arith::SelectOp::create(b, carry, tHighPlusOne, tHigh);
-  // Shift right `T` by `limbWidth` to discard the zeroed limb.
-  tLow = arith::ShRUIOp::create(b, tLow, limbWidthConst);
 
-  // When p > 2ʷ⁻¹ (modulus uses all w bits), the REDC result can exceed
-  // 2ʷ because 2p > 2ʷ. The upper bits of tHigh (above the lowest limb)
-  // represent the overflow: real_value = tLow_combined + tHighUpper * 2ʷ.
-  // Since 2ʷ ≡ R (mod p) where R = 2ʷ mod p, we recover the correct value
-  // by adding tHighUpper * R to tLow, then conditionally subtracting p.
+  // Here V = tLow + tHigh·2ʷ with V < 2n (classical REDC bound above).
   APInt mod = cast<IntegerAttr>(modAttr).getValue();
   if (mod.isSignBitSet()) {
-    Value tHighUpper = arith::ShRUIOp::create(b, tHigh, limbWidthConst);
-    // Mask tHigh to only the lowest limb before the left-shift.
-    tHigh = arith::AndIOp::create(b, tHigh, limbMaskConst);
-    tHigh = arith::ShLIOp::create(b, tHigh, limbShiftConst);
-    tLow = arith::OrIOp::create(b, tLow, tHigh);
-
-    // Add overflow * R to recover the truncated value mod p.
-    // R = 2ʷ mod p is small, so tHighUpper * R fits in w bits.
-    // R = 2ʷ mod p = 2ʷ - p. Compute without overflow: -p in w-bit wraps
-    // to 2ʷ - p since p < 2ʷ.
-    APInt rVal = -mod; // R = 2ʷ - p (unsigned wrap in w bits)
-    TypedAttr rAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), rVal);
-    Value rConst;
+    // Full-width modulus (n > 2ʷ⁻¹): V < 2n can exceed 2ʷ, so tHigh holds
+    // V's 2ʷ bit (0 or 1). [0, 2n) does not fit in w bits, so a lazy result
+    // is not representable; always canonicalize, folding the overflow bit
+    // (the wrapped subtract in getCanonicalFromExtended yields
+    // tLow + 2ʷ - n = V - n < n exactly when the bit is set).
+    TypedAttr zeroAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), 0);
+    Value zeroConst;
     if (auto shapedType = dyn_cast<ShapedType>(tLow.getType()))
-      rConst = createSplatConst(b, rAttr, shapedType, tLow);
+      zeroConst = createSplatConst(b, zeroAttr, shapedType, tLow);
     else
-      rConst = arith::ConstantOp::create(b, rAttr);
-    Value correction = arith::MulIOp::create(b, tHighUpper, rConst);
-    tLow = arith::AddIOp::create(b, tLow, correction);
-
-    return getCanonicalFromExtended(tLow);
+      zeroConst = arith::ConstantOp::create(b, zeroAttr);
+    Value overflow =
+        arith::CmpIOp::create(b, arith::CmpIPredicate::ne, tHigh, zeroConst);
+    return getCanonicalFromExtended(tLow, overflow);
   }
 
-  tHigh = arith::ShLIOp::create(b, tHigh, limbShiftConst);
-  tLow = arith::OrIOp::create(b, tLow, tHigh);
-
+  // Narrow modulus (n < 2ʷ⁻¹): V < 2n < 2ʷ, so tHigh == 0 and tLow already
+  // holds V in the lazy range [0, 2n).
   if (lazy)
     return tLow;
   // Final conditional subtraction: if (`tLow` >= `modulus`) then subtract
