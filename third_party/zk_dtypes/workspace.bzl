@@ -17,8 +17,8 @@
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 def repo():
-    ZK_DTYPES_COMMIT = "7119f0e9fecb9743d0df5e119bbd9220a3b44346"
-    ZK_DTYPES_SHA256 = "d8b658f755117d1f2f6af6b835b49757a2a9b9c8b66039a2d298089699564a48"
+    ZK_DTYPES_COMMIT = "9a0ea07acba0cb3f7732984b784ca52ff106b2ea"
+    ZK_DTYPES_SHA256 = "2dffbd844a2949958686e4818108355fa4df6e665a60e4868c7b153fea74f8b0"
     http_archive(
         name = "zk_dtypes",
         sha256 = ZK_DTYPES_SHA256,
