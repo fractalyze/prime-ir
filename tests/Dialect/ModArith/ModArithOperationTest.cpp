@@ -16,8 +16,13 @@ limitations under the License.
 #include "prime_ir/Dialect/ModArith/IR/ModArithOperation.h"
 
 #include "gtest/gtest.h"
+#include "llvm/ADT/APInt.h"
 #include "llvm/ADT/bit.h"
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/BuiltinTypes.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.h"
 #include "prime_ir/Dialect/ModArith/IR/ModArithDialect.h"
+#include "prime_ir/Dialect/ModArith/IR/ModArithTypes.h"
 #include "zk_dtypes/include/elliptic_curve/bn/bn254/fr.h"
 #include "zk_dtypes/include/field/babybear/babybear.h"
 #include "zk_dtypes/include/field/goldilocks/goldilocks.h"
@@ -316,6 +321,48 @@ TYPED_TEST(ModArithOperationTest, ZeroAndOne) {
   auto modRnd = ModArithOperation::fromZkDtype(&this->context, rnd);
   EXPECT_FALSE(modRnd.isZero());
   EXPECT_FALSE(modRnd.isOne());
+}
+
+// MontgomeryAttrStorage::construct used to reduce b = 2⁶⁴ modulo the modulus
+// TRUNCATED to 65 bits, so bReduced — and every constant derived from it
+// (R, R², R⁻¹, b⁻¹) — was corrupted for any multi-limb modulus whose bit 64
+// is clear. When bit 64 is set, 2⁶⁴ mod (modulus mod 2⁶⁵) happens to equal
+// 2⁶⁴, which masked the bug for BN254 and secp256k1 (the typed tests above).
+// Pin the derived constants against their definitions for two bit-64-clear
+// moduli: the BLS12-381 and secp256r1 scalar fields.
+TEST(MontgomeryAttrDerivedConstantsTest, Bit64ClearModulus) {
+  MLIRContext context;
+  context.loadDialect<ModArithDialect>();
+
+  const char *moduliHex[] = {
+      // BLS12-381 Fr
+      "73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001",
+      // secp256r1 Fr
+      "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551",
+  };
+  for (const char *hex : moduliHex) {
+    APInt modulus(256, hex, 16);
+    ASSERT_FALSE(modulus[64]) << "test wants a bit-64-clear modulus";
+    auto modAttr = IntegerAttr::get(IntegerType::get(&context, 256), modulus);
+    ModArithType modType = ModArithType::get(&context, modAttr);
+    MontgomeryAttr mont = modType.getMontgomeryAttr();
+
+    // Work in 512 bits so products cannot overflow.
+    APInt mod512 = modulus.zext(512);
+    auto mulMod = [&](const APInt &a, const APInt &b) {
+      return (a.zext(512) * b.zext(512)).urem(mod512).trunc(256);
+    };
+    APInt one(256, 1);
+
+    // R = 2²⁵⁶ mod n, computed independently of the attr.
+    APInt r = APInt::getOneBitSet(512, 256).urem(mod512).trunc(256);
+    EXPECT_EQ(mont.getR().getValue(), r) << hex;
+    EXPECT_EQ(mont.getRSquared().getValue(), mulMod(r, r)) << hex;
+    EXPECT_EQ(mulMod(mont.getRInv().getValue(), r), one) << hex;
+    // bInv · 2⁶⁴ ≡ 1 (mod n).
+    APInt b64 = APInt::getOneBitSet(256, 64);
+    EXPECT_EQ(mulMod(mont.getBInv().getValue(), b64), one) << hex;
+  }
 }
 
 } // namespace mlir::prime_ir::mod_arith
