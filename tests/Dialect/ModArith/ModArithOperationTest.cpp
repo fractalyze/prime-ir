@@ -359,9 +359,6 @@ TEST(MontgomeryAttrDerivedConstantsTest, Bit64ClearModulus) {
     EXPECT_EQ(mont.getR().getValue(), r) << hex;
     EXPECT_EQ(mont.getRSquared().getValue(), mulMod(r, r)) << hex;
     EXPECT_EQ(mulMod(mont.getRInv().getValue(), r), one) << hex;
-    // bInv · 2⁶⁴ ≡ 1 (mod n).
-    APInt b64 = APInt::getOneBitSet(256, 64);
-    EXPECT_EQ(mulMod(mont.getBInv().getValue(), b64), one) << hex;
   }
 }
 

@@ -32,7 +32,6 @@ IntegerAttr MontgomeryAttr::getNPrime() const { return getImpl()->nPrime; }
 IntegerAttr MontgomeryAttr::getNInv() const { return getImpl()->nInv; }
 IntegerAttr MontgomeryAttr::getR() const { return getImpl()->r; }
 IntegerAttr MontgomeryAttr::getRInv() const { return getImpl()->rInv; }
-IntegerAttr MontgomeryAttr::getBInv() const { return getImpl()->bInv; }
 IntegerAttr MontgomeryAttr::getRSquared() const { return getImpl()->rSquared; }
 const SmallVector<IntegerAttr> &MontgomeryAttr::getInvTwoPowers() const {
   return getImpl()->invTwoPowers;
@@ -109,9 +108,6 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   // Construct the `rInvAttr` with the bitwidth of the modulus
   IntegerAttr rInvAttr = rOp.inverse().getIntegerAttr();
 
-  // Construct the `bInvAttr` with the bitwidth of the modulus
-  IntegerAttr bInvAttr = bReducedOp.inverse().getIntegerAttr();
-
   // Construct the `rSquaredAttr` with the bitwidth of the modulus
   IntegerAttr rSquaredAttr = rOp.square().getIntegerAttr();
 
@@ -140,8 +136,8 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   return new (allocator.allocate<MontgomeryAttrStorage>())
       MontgomeryAttrStorage(std::move(modAttr), std::move(nPrimeAttr),
                             std::move(nInvAttr), std::move(rAttr),
-                            std::move(rInvAttr), std::move(bInvAttr),
-                            std::move(rSquaredAttr), std::move(invTwoPowers));
+                            std::move(rInvAttr), std::move(rSquaredAttr),
+                            std::move(invTwoPowers));
 }
 
 } // namespace detail
