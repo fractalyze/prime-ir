@@ -294,7 +294,8 @@ func.func @test_mont_mul_single_limb_signed_opt(%a : !BBm, %b : !BBm, %c : !BBm)
 // breaks the [0, 2p) contract (b⁻¹ is an arbitrary constant in [0, p)).
 // The first limb iteration's tHigh add must capture its carry-out
 // (addui_extended: tHigh can be as large as p - 1 and p is within 2⁶⁴ of
-// 2²⁵⁶), and the epilogue folds V's 2²⁵⁶ bit via cmpi ne + select.
+// 2²⁵⁶), and the epilogue folds V's 2²⁵⁶ bit via trunci + select — tHigh is
+// 0 or 1 there, so its low bit is the overflow bit.
 !K1m = !mod_arith.int<115792089237316195423570985008687907853269984665640564039457584007908834671663 : i256, true>
 
 // CHECK-LABEL: @test_mont_mul_full_width_standard_redc
@@ -306,7 +307,7 @@ func.func @test_mont_mul_full_width_standard_redc(%a : !K1m, %b : !K1m) -> !K1m 
   // CHECK: arith.addui_extended
   // CHECK-COUNT-3: arith.mului_extended
   // CHECK-NOT: arith.mului_extended
-  // CHECK: arith.cmpi ne
+  // CHECK: arith.trunci
   // CHECK: arith.select
   %res = mod_arith.mont_mul %a, %b : !K1m
   return %res : !K1m

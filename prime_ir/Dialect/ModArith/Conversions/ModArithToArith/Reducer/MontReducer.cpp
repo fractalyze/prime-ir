@@ -175,7 +175,6 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
       b.getIntegerAttr(getElementTypeOrSelf(tLow), limbWidth);
   TypedAttr limbShiftAttr =
       b.getIntegerAttr(getElementTypeOrSelf(tLow), (numLimbs - 1) * limbWidth);
-  TypedAttr oneAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), 1);
 
   TypedAttr modAttrLocal = modAttr;
 
@@ -188,7 +187,6 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
     modAttrLocal = isa<VectorType>(modAttrLocal.getType())
                        ? modAttrLocal
                        : SplatElementsAttr::get(shapedType, modAttrLocal);
-    oneAttr = SplatElementsAttr::get(shapedType, oneAttr);
   }
 
   // Create constants for the Montgomery reduction.
@@ -196,7 +194,6 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
   auto limbWidthConst = arith::ConstantOp::create(b, limbWidthAttr);
   auto limbShiftConst = arith::ConstantOp::create(b, limbShiftAttr);
   auto modConst = arith::ConstantOp::create(b, modAttrLocal);
-  auto oneConst = arith::ConstantOp::create(b, oneAttr);
 
   auto noOverflow = arith::IntegerOverflowFlagsAttr::get(
       b.getContext(),
@@ -225,15 +222,13 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
     auto mN = arith::MulUIExtendedOp::create(b, modConst, mExt);
 
     // T += m * n. Fold the carry out of tLow into mN's high limb first:
-    // mN.high = floor(m·n / 2ʷ) ≤ b - 2 (m ≤ b-1, n < 2ʷ), so the +1 cannot
-    // wrap.
-    tLow = arith::AddIOp::create(b, tLow, mN.getLow());
-    Value carry =
-        arith::CmpIOp::create(b, arith::CmpIPredicate::ult, tLow, mN.getLow());
-    auto mNHighPlusOne =
-        arith::AddIOp::create(b, mN.getHigh(), oneConst, noOverflow);
-    Value mNHigh =
-        arith::SelectOp::create(b, carry, mNHighPlusOne, mN.getHigh());
+    // mN.high = floor(m·n / 2ʷ) ≤ b - 2 (m ≤ b-1, n < 2ʷ), so adding the carry
+    // cannot wrap.
+    auto add = arith::AddUIExtendedOp::create(b, tLow, mN.getLow());
+    tLow = add.getSum();
+    Value carryExt =
+        arith::ExtUIOp::create(b, tLow.getType(), add.getOverflow());
+    Value mNHigh = arith::AddIOp::create(b, mN.getHigh(), carryExt, noOverflow);
 
     Value carryOut; // Bit 2w of T; reachable only in the first iteration.
     if (i == 0) {
@@ -271,14 +266,12 @@ Value MontReducer::reduceMultiLimb(Value tLow, Value tHigh, bool lazy) {
     // is not representable; always canonicalize, folding the overflow bit
     // (the wrapped subtract in getCanonicalFromExtended yields
     // tLow + 2ʷ - n = V - n < n exactly when the bit is set).
-    TypedAttr zeroAttr = b.getIntegerAttr(getElementTypeOrSelf(tLow), 0);
-    Value zeroConst;
-    if (auto shapedType = dyn_cast<ShapedType>(tLow.getType()))
-      zeroConst = createSplatConst(b, zeroAttr, shapedType, tLow);
-    else
-      zeroConst = arith::ConstantOp::create(b, zeroAttr);
-    Value overflow =
-        arith::CmpIOp::create(b, arith::CmpIPredicate::ne, tHigh, zeroConst);
+    // tHigh is 0 or 1, so its low bit *is* the overflow bit — a truncation
+    // rather than a compare against a materialized w-bit zero.
+    Type overflowType = b.getI1Type();
+    if (auto shapedType = dyn_cast<ShapedType>(tHigh.getType()))
+      overflowType = shapedType.cloneWith(std::nullopt, overflowType);
+    Value overflow = arith::TruncIOp::create(b, overflowType, tHigh);
     return getCanonicalFromExtended(tLow, overflow);
   }
 
