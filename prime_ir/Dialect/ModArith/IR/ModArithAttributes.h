@@ -29,12 +29,11 @@ struct MontgomeryAttrStorage : public AttributeStorage {
 
   MontgomeryAttrStorage(IntegerAttr modulus, IntegerAttr nPrime,
                         IntegerAttr nInv, IntegerAttr r, IntegerAttr rInv,
-                        IntegerAttr bInv, IntegerAttr rSquared,
+                        IntegerAttr rSquared,
                         SmallVector<IntegerAttr> invTwoPowers)
       : modulus(std::move(modulus)), nPrime(std::move(nPrime)),
         nInv(std::move(nInv)), r(std::move(r)), rInv(std::move(rInv)),
-        bInv(std::move(bInv)), rSquared(std::move(rSquared)),
-        invTwoPowers(std::move(invTwoPowers)) {}
+        rSquared(std::move(rSquared)), invTwoPowers(std::move(invTwoPowers)) {}
 
   KeyTy getAsKey() const { return KeyTy(modulus); }
 
@@ -52,7 +51,6 @@ struct MontgomeryAttrStorage : public AttributeStorage {
   IntegerAttr nInv;
   IntegerAttr r;
   IntegerAttr rInv;
-  IntegerAttr bInv;
   IntegerAttr rSquared;
   SmallVector<IntegerAttr> invTwoPowers;
 };

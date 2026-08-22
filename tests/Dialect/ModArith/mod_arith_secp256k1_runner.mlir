@@ -32,6 +32,11 @@
 // RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
 // RUN: FileCheck %s -check-prefix=CHECK_INVERSE < %t
 
+// RUN: prime-ir-opt %s -mod-arith-to-arith -convert-elementwise-to-linalg -one-shot-bufferize -convert-linalg-to-parallel-loops -convert-scf-to-cf -convert-cf-to-llvm -convert-to-llvm -convert-vector-to-llvm \
+// RUN:   | mlir-runner -e test_secp256k1_pminus1_squared -entry-point-result=void \
+// RUN:      -shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t
+// RUN: FileCheck %s -check-prefix=CHECK_PMINUS1_SQUARED < %t
+
 func.func private @printMemrefI32(memref<*xi32>) attributes { llvm.emit_c_interface }
 
 // secp256k1 base field: p = 115792089237316195423570985008687907853269984665640564039457584007908834671663
@@ -83,6 +88,35 @@ func.func @test_secp256k1_self_mul() {
 
 // a^2 mod p = 31420896780135511602482624633964787057105052135029862436193230832710629143834
 // CHECK_SELF_MUL: [410727706, -880396485, -539256400, -604627336, 995880535, 1108136652, -129139622, 1165465835]
+
+// Test: (p-1)² ≡ 1. The pre-canonical REDC value V lands exactly on 2²⁵⁶,
+// the smallest value that sets the overflow bit, so this pins the overflow
+// path at its boundary; canonicalization then takes V - p = 2³² + 977, the
+// Montgomery representation of one. The "V ≥ 2p" window is a different case
+// and is not exercised here — classical REDC keeps V < 2p, and 2p for this
+// modulus is just under 2²⁵⁷.
+// The former shift-then-add b⁻¹ REDC variant returned 0 here (its overflow
+// correction dropped a carry past 2²⁵⁶), which is how the frx-level
+// (p-1)·(p-1) → 0 miscompile surfaced.
+func.func @test_secp256k1_pminus1_squared() {
+  %a = mod_arith.constant 115792089237316195423570985008687907853269984665640564039457584007908834671662 : !Fp
+  %a_mont = mod_arith.to_mont %a : !Fpm
+  %sq_mont = mod_arith.mont_mul %a_mont, %a_mont : !Fpm
+  %sq = mod_arith.from_mont %sq_mont : !Fp
+
+  %v = mod_arith.bitcast %sq : !Fp -> i256
+  %vec = vector.from_elements %v : vector<1xi256>
+  %i32vec = vector.bitcast %vec : vector<1xi256> to vector<8xi32>
+  %mem = memref.alloc() : memref<8xi32>
+  %c0 = arith.constant 0 : index
+  vector.store %i32vec, %mem[%c0] : memref<8xi32>, vector<8xi32>
+  %U = memref.cast %mem : memref<8xi32> to memref<*xi32>
+  func.call @printMemrefI32(%U) : (memref<*xi32>) -> ()
+  return
+}
+
+// (p-1)² mod p = 1
+// CHECK_PMINUS1_SQUARED: [1, 0, 0, 0, 0, 0, 0, 0]
 
 // Test inverse: inv(a) * a == 1
 func.func @test_secp256k1_inverse() {

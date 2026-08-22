@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "prime_ir/Dialect/ModArith/IR/ModArithAttributes.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "llvm/ADT/STLExtras.h"
@@ -31,7 +32,6 @@ IntegerAttr MontgomeryAttr::getNPrime() const { return getImpl()->nPrime; }
 IntegerAttr MontgomeryAttr::getNInv() const { return getImpl()->nInv; }
 IntegerAttr MontgomeryAttr::getR() const { return getImpl()->r; }
 IntegerAttr MontgomeryAttr::getRInv() const { return getImpl()->rInv; }
-IntegerAttr MontgomeryAttr::getBInv() const { return getImpl()->bInv; }
 IntegerAttr MontgomeryAttr::getRSquared() const { return getImpl()->rSquared; }
 const SmallVector<IntegerAttr> &MontgomeryAttr::getInvTwoPowers() const {
   return getImpl()->invTwoPowers;
@@ -71,9 +71,16 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   // `b` = 2^`w`
   APInt b = APInt::getOneBitSet(w + 1, w);
 
-  // `bReduced` = `b` (mod `modulus`)
-  APInt modExt = modulus.zextOrTrunc(b.getBitWidth());
-  APInt bReduced = b.urem(modExt);
+  // `bReduced` = `b` (mod `modulus`), computed at a width that holds both
+  // operands. Truncating the modulus to b's width instead (`zextOrTrunc` to
+  // w + 1 bits) computed b mod (modulus mod 2^(w+1)), which corrupted
+  // bReduced — and every constant derived from it (R, R², R⁻¹, b⁻¹) — for
+  // any multi-limb modulus whose bit w is clear (e.g. the BLS12-381,
+  // secp256r1, and curve25519 scalar fields). When bit w is set, 2ʷ mod
+  // (modulus mod 2ʷ⁺¹) happens to equal 2ʷ, which masked the bug for the
+  // widely-tested moduli (BN254, secp256k1, the base fields above).
+  unsigned extWidth = std::max(modulus.getBitWidth(), b.getBitWidth());
+  APInt bReduced = b.zext(extWidth).urem(modulus.zext(extWidth));
   bReduced = bReduced.zextOrTrunc(modulus.getBitWidth());
   ModArithType modType = ModArithType::get(modAttr.getContext(), modAttr);
   ModArithOperation bReducedOp(bReduced, modType);
@@ -100,9 +107,6 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
 
   // Construct the `rInvAttr` with the bitwidth of the modulus
   IntegerAttr rInvAttr = rOp.inverse().getIntegerAttr();
-
-  // Construct the `bInvAttr` with the bitwidth of the modulus
-  IntegerAttr bInvAttr = bReducedOp.inverse().getIntegerAttr();
 
   // Construct the `rSquaredAttr` with the bitwidth of the modulus
   IntegerAttr rSquaredAttr = rOp.square().getIntegerAttr();
@@ -132,8 +136,8 @@ MontgomeryAttrStorage::construct(AttributeStorageAllocator &allocator,
   return new (allocator.allocate<MontgomeryAttrStorage>())
       MontgomeryAttrStorage(std::move(modAttr), std::move(nPrimeAttr),
                             std::move(nInvAttr), std::move(rAttr),
-                            std::move(rInvAttr), std::move(bInvAttr),
-                            std::move(rSquaredAttr), std::move(invTwoPowers));
+                            std::move(rInvAttr), std::move(rSquaredAttr),
+                            std::move(invTwoPowers));
 }
 
 } // namespace detail
