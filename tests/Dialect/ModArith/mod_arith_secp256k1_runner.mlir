@@ -89,9 +89,12 @@ func.func @test_secp256k1_self_mul() {
 // a^2 mod p = 31420896780135511602482624633964787057105052135029862436193230832710629143834
 // CHECK_SELF_MUL: [410727706, -880396485, -539256400, -604627336, 995880535, 1108136652, -129139622, 1165465835]
 
-// Test: (p-1)² ≡ 1. This is the worst case for the REDC output bound: the
-// pre-canonical value V lands exactly on 2p + R = 2²⁵⁶ + p, so both the
-// "V ≥ 2²⁵⁶" overflow bit and the "V ≥ 2p" window are exercised at once.
+// Test: (p-1)² ≡ 1. The pre-canonical REDC value V lands exactly on 2²⁵⁶,
+// the smallest value that sets the overflow bit, so this pins the overflow
+// path at its boundary; canonicalization then takes V - p = 2³² + 977, the
+// Montgomery representation of one. The "V ≥ 2p" window is a different case
+// and is not exercised here — classical REDC keeps V < 2p, and 2p for this
+// modulus is just under 2²⁵⁷.
 // The former shift-then-add b⁻¹ REDC variant returned 0 here (its overflow
 // correction dropped a carry past 2²⁵⁶), which is how the frx-level
 // (p-1)·(p-1) → 0 miscompile surfaced.
