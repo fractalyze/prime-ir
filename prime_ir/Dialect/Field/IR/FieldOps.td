@@ -353,15 +353,17 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
   let description = [{
     Computes the field element a raised to the power of unsigned integer b.
 
-    The optional `unroll` attribute picks the shape of the lowered
-    square-and-multiply schedule for a compile-time-constant exponent: absent
-    or `true` emits it straight-line, `false` keeps the bit-serial loop. Each
-    rolled call site is a control-flow region LLVM has to simplify, so a caller
-    that spells out many of them (a Poseidon permutation applying one S-box per
-    round) pays for the loop in compile time and is measured to execute
-    slightly fewer instructions with it; a caller already unrolled around this
-    op wants the straight-line form and the constant folding it exposes. A
-    dynamic exponent always lowers to the loop.
+    The `unroll` attribute picks the shape of the lowered square-and-multiply
+    schedule for a compile-time-constant exponent: `true` emits it
+    straight-line, `false` keeps the bit-serial loop. It defaults to `true`, so
+    an absent attribute and a builder call that does not name it both mean
+    unrolled, and `false` is the only value a caller ever has to spell out.
+    Each rolled call site is a control-flow region LLVM has to simplify, so a
+    caller that spells out many of them (a Poseidon permutation applying one
+    S-box per round) pays for the loop in compile time and is measured to
+    execute slightly fewer instructions with it; a caller already unrolled
+    around this op wants the straight-line form and the constant folding it
+    exposes. A dynamic exponent always lowers to the loop.
 
     Example:
     ```
@@ -370,7 +372,7 @@ def Field_PowUIOp : Field_Op<"powui", [TypesMatchWith<
     ```
   }];
   let arguments = (ins FieldLike:$base, SignlessIntegerLike:$exp,
-                       OptionalAttr<BoolAttr>:$unroll);
+                       DefaultValuedOptionalAttr<BoolAttr, "true">:$unroll);
   let results = (outs FieldLike:$output);
   let assemblyFormat = "operands attr-dict `:` type($base) `,` type($exp)";
 }
