@@ -803,7 +803,7 @@ struct ConvertPowUI : public OpConversionPattern<PowUIOp> {
     }
 
     unsigned expBitWidth = cast<IntegerType>(exp.getType()).getWidth();
-    bool unroll = op.getUnroll().value_or(true);
+    bool unroll = op.getUnroll();
 
     auto emitBitSerialLoop = [&](Value exp) {
       return generateBitSerialLoop(
