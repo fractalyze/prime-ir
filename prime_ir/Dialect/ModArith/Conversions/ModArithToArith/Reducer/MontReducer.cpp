@@ -96,16 +96,18 @@ Value MontReducer::getCanonicalFromExtended(Value input, uint64_t bound) {
 
 Value MontReducer::getCanonicalFromExtended(Value input, Value overflow) {
   auto cmod = createModulusConst(input.getType(), input);
-  // Canonicalize `overflow·2^w + input` (input ∈ [0, 2p)) in 3 ALU ops, not 4.
-  // `min(input - p, input)` picks input when input < p (the subtract wraps up)
-  // and input - p when input ≥ p — folding the compare into a minui; overflow
-  // forces the subtract branch. Byte-identical to the old
-  // `(input >= p || overflow) ? input - p : input`, minus the cmpi+ori. Uses
-  // subtract-of-p, not getCanonicalDiff's add-of-p, so min stays safe.
+  // Fold the carry first, then one conditional subtract on the selected value:
+  // `s2 = overflow ? input - p : input; min(s2 - p, s2)`. Not the shorter
+  // `overflow ? input - p : min(input - p, input)`: that keeps the carry
+  // predicate live across the minui and ptxas -O3 schedules it into the
+  // register ceiling (255 registers with spills vs 88, fractalyze/xla#655).
+  // Shorter spellings get rewritten into that form by InstCombine or the NVPTX
+  // backend; this one has no select arm equal to a minui operand, so it stays.
   auto sub = arith::SubIOp::create(b, input, cmod);
-  auto min = arith::MinUIOp::create(b, sub, input);
-  auto select = arith::SelectOp::create(b, overflow, sub, min);
-  return select.getResult();
+  auto folded = arith::SelectOp::create(b, overflow, sub, input);
+  auto sub2 = arith::SubIOp::create(b, folded, cmod);
+  auto min = arith::MinUIOp::create(b, sub2, folded);
+  return min.getResult();
 }
 
 Value MontReducer::getCanonicalDiff(Value lhs, Value rhs) {
