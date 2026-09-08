@@ -22,6 +22,12 @@
 // RUN: prime-ir-opt --binary-field-to-arith="outline-tower-ops=true outline-min-tower-level=4" %s \
 // RUN:   | FileCheck %s --check-prefix=OUTLINE
 // RUN: prime-ir-opt --binary-field-to-arith %s | FileCheck %s --check-prefix=INLINE
+// The attribute that matters is the one on the LOWERED function: `func.func`'s
+// inherent `no_inline` is not forwarded by `FuncToLLVM`, so checking only the
+// pre-lowering form would still pass while LLVM re-inlined every helper and
+// undid the outlining entirely.
+// RUN: prime-ir-opt --field-to-llvm="outline-tower-ops=true" %s \
+// RUN:   | FileCheck %s --check-prefix=LOWERED
 
 !BF32 = !field.bf<5>   // GF(2³²), above the threshold used here
 !BF8 = !field.bf<3>    // GF(2⁸), below it
@@ -96,3 +102,10 @@ func.func @two_muls(%a: !BF32, %b: !BF32, %c: !BF32) -> !BF32 {
 // OUTLINE-SAME: llvm.no_inline
 // OUTLINE-COUNT-2: call @__prime_ir_bf_square_l4
 // OUTLINE:      func.func private @__prime_ir_bf_square_l4
+
+// LOWERED: llvm.func internal @__prime_ir_bf_mul_l5
+// LOWERED-SAME: no_inline
+// LOWERED: llvm.func internal @__prime_ir_bf_mul_l4
+// LOWERED-SAME: no_inline
+// LOWERED: llvm.func internal @__prime_ir_bf_square_l5
+// LOWERED-SAME: no_inline

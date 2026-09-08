@@ -29,12 +29,27 @@ IntegerType elementTypeForLevel(MLIRContext *ctx, unsigned towerLevel) {
   return IntegerType::get(ctx, 1u << towerLevel);
 }
 
-/// Keep LLVM from re-inlining the helper. A tower helper body is small
-/// enough that LLVM's inliner folds it back into every caller, which
-/// reinstates the exponential IR this outliner exists to remove
-/// (measured in fractalyze/prime-ir#367). `FuncToLLVM` strips the `llvm.`
-/// prefix and sets the matching `noinline` on the lowered `llvm.func`.
+/// Keep both inliners away from the helper. A helper body is small enough
+/// that an inliner folds it back into every caller, which reinstates the
+/// exponential IR this outliner exists to remove (measured in
+/// fractalyze/prime-ir#367).
+///
+/// Two attributes, because two different inliners read two different things
+/// and neither one covers the other:
+///
+///   - `no_inline` is `func.func`'s INHERENT attribute, read by MLIR's own
+///     inliner interface. `FuncToLLVM` does NOT forward it.
+///   - `llvm.no_inline` is discardable. `FuncToLLVM` strips the `llvm.`
+///     prefix and sets the INHERENT `no_inline` on the resulting `llvm.func`,
+///     which `ModuleTranslation::convertFunctionAttributes` then turns into
+///     `llvm::Attribute::NoInline`. This is the only one of the two that
+///     reaches LLVM.
+///
+/// Setting only the inherent attribute silently drops `noinline` from the
+/// LLVM IR; `binary_field_outline.mlir` asserts it on the `llvm.func` after
+/// `--field-to-llvm` so that regression cannot land unnoticed.
 void markNoInline(func::FuncOp func) {
+  func.setNoInline(true);
   func->setAttr("llvm.no_inline", UnitAttr::get(func.getContext()));
 }
 

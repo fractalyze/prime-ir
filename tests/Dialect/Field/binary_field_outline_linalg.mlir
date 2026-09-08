@@ -13,32 +13,36 @@
 // limitations under the License.
 // ==============================================================================
 
-// Tower outlining (fractalyze/prime-ir#390) on the shape a real consumer feeds
-// it. `binary-field-to-arith` is a scalar-only tower path by contract:
-// elementwise field ops are converted to `linalg.generic` first, so the
-// lowering only ever sees the scalar body. This pins that this is where the
-// outlining lands — one shared helper called from inside the generic body,
-// rather than a tower expanded per loop nest.
+// Tower outlining (fractalyze/prime-ir#390) through the SHIPPED pipeline on a
+// shaped operand.
+//
+// `binary-field-to-arith` is scalar-only: its emitters truncate to a scalar
+// half-width type, so a shaped operand cannot be lowered. `buildFieldToLLVM`
+// therefore runs `convert-elementwise-to-linalg` ahead of it, leaving only the
+// scalar body of a `linalg.generic` for the lowering to see. This runs the
+// real `--field-to-llvm` rather than composing an order by hand, so if that
+// ordering is ever inverted again this test fails instead of silently
+// exercising a path the pipeline does not take.
 
-// RUN: prime-ir-opt %s --convert-elementwise-to-linalg \
-// RUN:     --binary-field-to-arith="outline-tower-ops=true" \
-// RUN:   | FileCheck %s
+// RUN: prime-ir-opt %s --field-to-llvm="outline-tower-ops=true" | FileCheck %s
 
 !BF128 = !field.bf<7>   // GF(2¹²⁸)
 
+// The whole 3⁷ Karatsuba tower reduces to one call per element. The entry
+// function keeps its tensor signature (function boundaries are not bufferized
+// by default), so only its body is in the LLVM dialect.
 // CHECK-LABEL: func.func @tensor_tower_mul
-// CHECK: linalg.generic
-// The whole 3⁷ Karatsuba tower reduces to a single call in the loop body.
-// CHECK: ^bb0(%[[LHS:.*]]: i128, %[[RHS:.*]]: i128, %{{.*}}: i128):
-// CHECK-NEXT: %[[R:.*]] = func.call @__prime_ir_bf_mul_l7(%[[LHS]], %[[RHS]])
-// CHECK-NEXT: linalg.yield %[[R]]
+// CHECK: llvm.call @__prime_ir_bf_mul_l7
+
+// The helper survives to an `llvm.func` still carrying `no_inline`. Asserting
+// it here and not only on the `func.func` is deliberate: `func.func`'s
+// inherent `no_inline` is NOT forwarded by `FuncToLLVM`, so checking the
+// pre-lowering form alone would pass while LLVM silently re-inlined every
+// helper and undid the outlining.
+// CHECK:      llvm.func internal @__prime_ir_bf_mul_l7
+// CHECK-SAME: no_inline
 func.func @tensor_tower_mul(%a: tensor<4x!BF128>, %b: tensor<4x!BF128>)
     -> tensor<4x!BF128> {
   %c = field.mul %a, %b : tensor<4x!BF128>
   return %c : tensor<4x!BF128>
 }
-
-// The helper is emitted once at module scope and shared by every generic that
-// needs it, which is the point of outlining on a per-element loop body.
-// CHECK: func.func private @__prime_ir_bf_mul_l7
-// CHECK-SAME: llvm.no_inline

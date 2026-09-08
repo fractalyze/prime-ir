@@ -47,8 +47,10 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   pm.addNestedPass<func::FuncOp>(createFoldFieldLinalgContraction());
   pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
 
-  // If we convert elementwise to linalg, tensor folding in ModArithDialect will
-  // not work.
+  // Must precede ConvertElementwiseToLinalg below: once elementwise field ops
+  // are wrapped in linalg.generic, ModArithDialect's tensor folding no longer
+  // sees them. That ordering constraint is between these two passes only --
+  // it says nothing about where the binary-field lowering goes.
   pm.addPass(createFieldToModArith());
   // Specialize binary field operations to GFNI/PCLMULQDQ if enabled (x86)
   if (options.specializeGFNI || options.specializePCLMULQDQ) {
@@ -63,6 +65,14 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
     armOpts.usePMULL = options.specializePMULL;
     pm.addPass(createSpecializeBinaryFieldToARM(armOpts));
   }
+  // Scalarize elementwise field ops BEFORE lowering binary fields, so
+  // BinaryFieldToArith only ever sees the scalar body of a linalg.generic.
+  // Its tower and flat emitters are scalar-only: they truncate to a scalar
+  // half-width type, so a shaped operand cannot be lowered at all. Running
+  // this after the lowering (as it used to) meant --field-to-llvm handed the
+  // pass shaped tower ops it could not legalize.
+  pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
+
   // Binary fields lower directly to arith (not through mod_arith)
   BinaryFieldToArithOptions bfOpts;
   bfOpts.outlineTowerOps = options.outlineTowerOps;
@@ -77,7 +87,6 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   // Must run after BinaryFieldToArith to avoid tensor.from_elements folding
   // with binary field types (MLIR's folder doesn't understand custom types).
   pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
-  pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
 
   pm.addPass(mod_arith::createModArithToArith(
