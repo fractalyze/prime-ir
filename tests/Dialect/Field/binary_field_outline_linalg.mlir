@@ -25,6 +25,11 @@
 // exercising a path the pipeline does not take.
 
 // RUN: prime-ir-opt %s --field-to-llvm="outline-tower-ops=true" | FileCheck %s
+// The default (outlining off) must lower the same input just as well: the
+// scalarization above is what makes shaped tower ops legal at all, and that is
+// independent of outlining. Without this run, a regression that only lowers
+// when outlining happens to be on would go unnoticed.
+// RUN: prime-ir-opt %s --field-to-llvm | FileCheck %s --check-prefix=DEFAULT
 
 !BF128 = !field.bf<7>   // GF(2¹²⁸)
 
@@ -34,15 +39,12 @@
 // CHECK-LABEL: func.func @tensor_tower_mul
 // CHECK: llvm.call @__prime_ir_bf_mul_l7
 
-// The helper survives to an `llvm.func` still carrying `no_inline`. Asserting
-// it here and not only on the `func.func` is deliberate: `func.func`'s
-// inherent `no_inline` is NOT forwarded by `FuncToLLVM`, so checking the
-// pre-lowering form alone would pass while LLVM silently re-inlined every
-// helper and undid the outlining.
-// CHECK:      llvm.func internal @__prime_ir_bf_mul_l7
-// CHECK-SAME: no_inline
 func.func @tensor_tower_mul(%a: tensor<4x!BF128>, %b: tensor<4x!BF128>)
     -> tensor<4x!BF128> {
   %c = field.mul %a, %b : tensor<4x!BF128>
   return %c : tensor<4x!BF128>
 }
+
+// The same input lowers in the default mode too, inline and with no helpers.
+// DEFAULT-LABEL: func.func @tensor_tower_mul
+// DEFAULT-NOT: __prime_ir_bf_

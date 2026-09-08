@@ -51,6 +51,14 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   // are wrapped in linalg.generic, ModArithDialect's tensor folding no longer
   // sees them. That ordering constraint is between these two passes only --
   // it says nothing about where the binary-field lowering goes.
+  //
+  // Note that field.inverse is deliberately NOT ElementwiseMappable, so
+  // ConvertElementwiseToLinalg leaves a shaped inverse alone regardless of
+  // order and it reaches this pass whole, where it becomes Montgomery's batch
+  // inversion (one inversion plus ~3(N-1) multiplies for N elements). Making
+  // it elementwise would trade that for N independent scalar inverses --
+  // still correct, and silently orders of magnitude slower.
+  // batch_inverse_not_scalarized.mlir pins this.
   pm.addPass(createFieldToModArith());
   // Specialize binary field operations to GFNI/PCLMULQDQ if enabled (x86)
   if (options.specializeGFNI || options.specializePCLMULQDQ) {
