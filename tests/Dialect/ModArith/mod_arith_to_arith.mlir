@@ -347,13 +347,14 @@ func.func @test_lower_sub_goldilocks(%lhs : !Gp, %rhs : !Gp) -> !Gp {
 func.func @test_lower_add_goldilocks(%lhs : !Gadd, %rhs : !Gadd) -> !Gadd {
   // CHECK-NOT: mod_arith.add
   // CHECK: %[[SUM:.*]], %[[OVF:.*]] = arith.addui_extended %[[LHS]], %[[RHS]] : [[T]], i1
-  // The old cmpi + ori canonicalize must not appear anywhere in the add slice.
-  // CHECK-NOT: arith.cmpi
-  // CHECK-NOT: arith.ori
   // CHECK: %[[CMOD:.*]] = arith.constant -4294967295 : [[T]]
   // CHECK: %[[SUB:.*]] = arith.subi %[[SUM]], %[[CMOD]] : [[T]]
-  // CHECK: %[[MIN:.*]] = arith.minui %[[SUB]], %[[SUM]] : [[T]]
-  // CHECK: %[[RES:.*]] = arith.select %[[OVF]], %[[SUB]], %[[MIN]] : [[T]]
+  // Select first, then minui on the selected value — never `ovf ? sub :
+  // min(sub, sum)`, which ptxas schedules into the register ceiling
+  // (fractalyze/xla#655).
+  // CHECK: %[[S2:.*]] = arith.select %[[OVF]], %[[SUB]], %[[SUM]] : [[T]]
+  // CHECK: %[[SUB2:.*]] = arith.subi %[[S2]], %[[CMOD]] : [[T]]
+  // CHECK: %[[RES:.*]] = arith.minui %[[SUB2]], %[[S2]] : [[T]]
   // CHECK-NOT: arith.cmpi
   // CHECK-NOT: arith.ori
   // CHECK: return %[[RES]] : [[T]]
