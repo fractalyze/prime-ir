@@ -29,9 +29,10 @@
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t.inline
 // RUN: FileCheck %s < %t.inline
 
-// Outlined at the default threshold.
-// RUN: prime-ir-opt %s --binary-field-to-arith="outline-tower-ops=true" \
-// RUN:   | prime-ir-opt --field-to-llvm \
+// Outlined at the default threshold, enabled through the PIPELINE option --
+// this is the path a consumer (xla) actually takes, so it is the one worth
+// executing rather than a standalone pass run.
+// RUN: prime-ir-opt %s --field-to-llvm="outline-tower-ops=true" \
 // RUN:   | mlir-runner -e main -entry-point-result=void \
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t.outlined
 // RUN: FileCheck %s < %t.outlined
@@ -39,8 +40,7 @@
 // Outlined at the lowest useful threshold — the deepest call chain, so the
 // most recursion in the outliner itself.
 // RUN: prime-ir-opt %s \
-// RUN:     --binary-field-to-arith="outline-tower-ops=true outline-min-tower-level=3" \
-// RUN:   | prime-ir-opt --field-to-llvm \
+// RUN:     --field-to-llvm="outline-tower-ops=true outline-min-tower-level=3" \
 // RUN:   | mlir-runner -e main -entry-point-result=void \
 // RUN:      --shared-libs="%mlir_lib_dir/libmlir_runner_utils%shlibext" > %t.outlined3
 // RUN: FileCheck %s < %t.outlined3

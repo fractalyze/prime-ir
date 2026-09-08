@@ -70,6 +70,20 @@ struct FieldToLLVMOptions : public PassPipelineOptions<FieldToLLVMOptions> {
       llvm::cl::desc("Vector size for super-vectorization"),
       llvm::cl::init(16)};
 
+  PassOptions::Option<bool> outlineTowerOps{
+      *this, "outline-tower-ops",
+      llvm::cl::desc("Emit binary tower mul/square as calls to shared noinline "
+                     "helpers instead of expanding the 3^k Karatsuba "
+                     "recursion inline. Large compile-time win on wide towers "
+                     "(bf<6>, bf<7>) at the cost of a call per tower level"),
+      llvm::cl::init(false)};
+
+  PassOptions::Option<unsigned> outlineMinTowerLevel{
+      *this, "outline-min-tower-level",
+      llvm::cl::desc("Lowest tower level to outline when outline-tower-ops is "
+                     "set; levels below it still expand inline"),
+      llvm::cl::init(4)};
+
   PassOptions::Option<bool> lazyReduction{
       *this, "lazy-reduction",
       llvm::cl::desc("Enable lazy reduction optimization via integer range "

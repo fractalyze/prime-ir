@@ -191,13 +191,27 @@ struct ConvertBinaryFieldDouble : public OpConversionPattern<DoubleOp> {
   }
 };
 
+/// The outlined helpers are declared over the scalar element type i(2^k), so a
+/// shaped operand would bind a tensor/vector value to a scalar parameter and
+/// produce IR that does not verify. Shaped tower operands therefore keep
+/// expanding inline, exactly as they did before outlining existed.
+///
+/// Nothing is lost by this: lowering a SHAPED tower mul/square is already
+/// broken independently of outlining -- the recursion truncates to a scalar
+/// half-width type and the result can no longer be materialized back to the
+/// shaped type (fractalyze/prime-ir#452, the gap the shaped specializer tests
+/// call out). Declining to outline keeps that failure unchanged instead of
+/// replacing it with a different invalid module.
+BinaryFieldOutliner *outlinerFor(Type opType, BinaryFieldOutliner *outliner) {
+  return isa<ShapedType>(opType) ? nullptr : outliner;
+}
+
 struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
   ConvertBinaryFieldMul(const TypeConverter &typeConverter,
                         MLIRContext *context, BinaryFieldOutliner *outliner)
       : OpConversionPattern(typeConverter, context), outliner(outliner) {}
 
-  // Null unless `outline-tower-ops` is set.
-  BinaryFieldOutliner *outliner;
+  BinaryFieldOutliner *outliner; // not owned; null unless outline-tower-ops
 
   LogicalResult
   matchAndRewrite(MulOp op, OpAdaptor adaptor,
@@ -227,8 +241,9 @@ struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
       rewriter.replaceOp(op, result);
       return success();
     }
-    BinaryFieldCodeGen lhs(bfType, adaptor.getLhs(), b, outliner);
-    BinaryFieldCodeGen rhs(bfType, adaptor.getRhs(), b, outliner);
+    BinaryFieldOutliner *towerOutliner = outlinerFor(op.getType(), outliner);
+    BinaryFieldCodeGen lhs(bfType, adaptor.getLhs(), b, towerOutliner);
+    BinaryFieldCodeGen rhs(bfType, adaptor.getRhs(), b, towerOutliner);
     BinaryFieldCodeGen result = lhs * rhs;
     rewriter.replaceOp(op, result.getValue());
     return success();
@@ -240,8 +255,7 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
                            MLIRContext *context, BinaryFieldOutliner *outliner)
       : OpConversionPattern(typeConverter, context), outliner(outliner) {}
 
-  // Null unless `outline-tower-ops` is set.
-  BinaryFieldOutliner *outliner;
+  BinaryFieldOutliner *outliner; // not owned; null unless outline-tower-ops
 
   LogicalResult
   matchAndRewrite(SquareOp op, OpAdaptor adaptor,
@@ -270,7 +284,8 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
       rewriter.replaceOp(op, result);
       return success();
     }
-    BinaryFieldCodeGen input(bfType, adaptor.getInput(), b, outliner);
+    BinaryFieldCodeGen input(bfType, adaptor.getInput(), b,
+                             outlinerFor(op.getType(), outliner));
     BinaryFieldCodeGen result = input.square();
     rewriter.replaceOp(op, result.getValue());
     return success();
@@ -282,8 +297,7 @@ struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
                             MLIRContext *context, BinaryFieldOutliner *outliner)
       : OpConversionPattern(typeConverter, context), outliner(outliner) {}
 
-  // Null unless `outline-tower-ops` is set.
-  BinaryFieldOutliner *outliner;
+  BinaryFieldOutliner *outliner; // not owned; null unless outline-tower-ops
 
   LogicalResult
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
@@ -311,7 +325,8 @@ struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
       rewriter.replaceOp(op, result);
       return success();
     }
-    BinaryFieldCodeGen input(bfType, adaptor.getInput(), b, outliner);
+    BinaryFieldCodeGen input(bfType, adaptor.getInput(), b,
+                             outlinerFor(op.getType(), outliner));
     BinaryFieldCodeGen result = input.inverse();
     rewriter.replaceOp(op, result.getValue());
     return success();

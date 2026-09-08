@@ -103,7 +103,8 @@ private:
   BinaryFieldType bfType_;
   Value value_;
   ImplicitLocOpBuilder &builder_;
-  // Null unless the pass enabled outlining; see the constructor.
+  // Not owned; the pass owns the outliner and outlives this codegen. Null
+  // unless the pass enabled outlining; see the constructor.
   BinaryFieldOutliner *outliner_ = nullptr;
 
   // Recursive Karatsuba multiplication for tower level k. Dispatches to an

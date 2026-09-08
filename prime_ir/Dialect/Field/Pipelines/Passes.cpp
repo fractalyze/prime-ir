@@ -64,7 +64,10 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
     pm.addPass(createSpecializeBinaryFieldToARM(armOpts));
   }
   // Binary fields lower directly to arith (not through mod_arith)
-  pm.addPass(createBinaryFieldToArith());
+  BinaryFieldToArithOptions bfOpts;
+  bfOpts.outlineTowerOps = options.outlineTowerOps;
+  bfOpts.outlineMinTowerLevel = options.outlineMinTowerLevel;
+  pm.addPass(createBinaryFieldToArith(bfOpts));
   // Reconcile unrealized casts from binary field specialization and conversion
   // (e.g., i64 -> bf<6> -> i64 chains from PCLMULQDQ + BinaryFieldToArith)
   pm.addPass(createReconcileUnrealizedCastsPass());
