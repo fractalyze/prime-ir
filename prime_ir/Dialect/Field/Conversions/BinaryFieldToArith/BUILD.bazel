@@ -39,13 +39,23 @@ gentbl_cc_library(
 
 prime_ir_cc_library(
     name = "BinaryFieldCodeGen",
-    srcs = ["BinaryFieldCodeGen.cpp"],
-    hdrs = ["BinaryFieldCodeGen.h"],
+    srcs = [
+        "BinaryFieldCodeGen.cpp",
+        "BinaryFieldOutliner.cpp",
+    ],
+    hdrs = [
+        "BinaryFieldCodeGen.h",
+        "BinaryFieldOutliner.h",
+    ],
     deps = [
         ":BinaryFieldTables",
         "//prime_ir/Dialect/Field/IR:Field",
+        "//prime_ir/Utils:FunctionOutlinerBase",
+        "@llvm-project//llvm:Support",
         "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:SCFDialect",
         "@zk_dtypes//zk_dtypes:binary_field",
     ],
@@ -79,7 +89,9 @@ prime_ir_cc_library(
         "//prime_ir/Utils:ConversionUtils",
         "//prime_ir/Utils:ShapedTypeConverter",
         "@llvm-project//mlir:ArithDialect",
+        "@llvm-project//mlir:FuncDialect",
         "@llvm-project//mlir:IR",
+        "@llvm-project//mlir:LLVMDialect",
         "@llvm-project//mlir:Pass",
         "@llvm-project//mlir:SCFDialect",
         "@llvm-project//mlir:TensorDialect",

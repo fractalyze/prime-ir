@@ -19,6 +19,7 @@ limitations under the License.
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/TypeUtilities.h"
+#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldOutliner.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldTables.h"
 
 namespace mlir::prime_ir::field {
@@ -36,8 +37,9 @@ Type cloneWithElementType(Type like, IntegerType elementType) {
 } // namespace
 
 BinaryFieldCodeGen::BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
-                                       ImplicitLocOpBuilder &builder)
-    : bfType_(bfType), value_(value), builder_(builder) {
+                                       ImplicitLocOpBuilder &builder,
+                                       BinaryFieldOutliner *outliner)
+    : bfType_(bfType), value_(value), builder_(builder), outliner_(outliner) {
   // Values arrive at the (byte-rounded) storage width; the tower algorithms
   // run at the element width.
   auto elementTy = IntegerType::get(bfType.getContext(), bfType.getBitWidth());
@@ -63,7 +65,7 @@ BinaryFieldCodeGen
 BinaryFieldCodeGen::operator+(const BinaryFieldCodeGen &other) const {
   // In characteristic 2, addition is XOR
   Value result = arith::XOrIOp::create(builder_, value_, other.value_);
-  return BinaryFieldCodeGen(bfType_, result, builder_);
+  return BinaryFieldCodeGen(bfType_, result, builder_, outliner_);
 }
 
 BinaryFieldCodeGen
@@ -86,13 +88,13 @@ BinaryFieldCodeGen
 BinaryFieldCodeGen::operator*(const BinaryFieldCodeGen &other) const {
   unsigned towerLevel = bfType_.getTowerLevel();
   Value result = mulTower(value_, other.value_, towerLevel);
-  return BinaryFieldCodeGen(bfType_, result, builder_);
+  return BinaryFieldCodeGen(bfType_, result, builder_, outliner_);
 }
 
 BinaryFieldCodeGen BinaryFieldCodeGen::square() const {
   unsigned towerLevel = bfType_.getTowerLevel();
   Value result = squareTower(value_, towerLevel);
-  return BinaryFieldCodeGen(bfType_, result, builder_);
+  return BinaryFieldCodeGen(bfType_, result, builder_, outliner_);
 }
 
 BinaryFieldCodeGen BinaryFieldCodeGen::inverse() const {
@@ -109,7 +111,7 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverse() const {
   // time in every consumer pipeline. Descent is I(k) = I(k−1) + O(M(k−1)).
   if (towerLevel >= 4) {
     Value result = inverseTower(value_, towerLevel);
-    return BinaryFieldCodeGen(bfType_, result, builder_);
+    return BinaryFieldCodeGen(bfType_, result, builder_, outliner_);
   }
 
   // Levels ≤ 2 (n ≤ 4 bits): Fermat's little theorem, a⁻¹ = a^(2ⁿ - 2).
@@ -128,7 +130,7 @@ BinaryFieldCodeGen BinaryFieldCodeGen::inverse() const {
     result = mulTower(result, power, towerLevel);
   }
 
-  return BinaryFieldCodeGen(bfType_, result, builder_);
+  return BinaryFieldCodeGen(bfType_, result, builder_, outliner_);
 }
 
 Value BinaryFieldCodeGen::inverseTower(Value a, unsigned towerLevel) const {
@@ -179,7 +181,8 @@ Value BinaryFieldCodeGen::inverseTower(Value a, unsigned towerLevel) const {
 }
 
 BinaryFieldCodeGen BinaryFieldCodeGen::inverseLookupTable() const {
-  return BinaryFieldCodeGen(bfType_, inverseLookupTable8b(value_), builder_);
+  return BinaryFieldCodeGen(bfType_, inverseLookupTable8b(value_), builder_,
+                            outliner_);
 }
 
 Value BinaryFieldCodeGen::inverseLookupTable8b(Value a) const {
@@ -288,6 +291,13 @@ Value BinaryFieldCodeGen::mulXTower(Value a, unsigned towerLevel) const {
 
 Value BinaryFieldCodeGen::mulTower(Value a, Value b,
                                    unsigned towerLevel) const {
+  if (outliner_ && outliner_->shouldOutline(towerLevel))
+    return outliner_->emitMulCall(builder_, a, b, towerLevel);
+  return expandMulTower(a, b, towerLevel);
+}
+
+Value BinaryFieldCodeGen::expandMulTower(Value a, Value b,
+                                         unsigned towerLevel) const {
   // Base case: tower level 0 is GF(2), multiplication is AND
   if (towerLevel == 0) {
     return arith::AndIOp::create(builder_, a, b);
@@ -342,6 +352,13 @@ Value BinaryFieldCodeGen::mulTower(Value a, Value b,
 }
 
 Value BinaryFieldCodeGen::squareTower(Value a, unsigned towerLevel) const {
+  if (outliner_ && outliner_->shouldOutline(towerLevel))
+    return outliner_->emitSquareCall(builder_, a, towerLevel);
+  return expandSquareTower(a, towerLevel);
+}
+
+Value BinaryFieldCodeGen::expandSquareTower(Value a,
+                                            unsigned towerLevel) const {
   // Base case: tower level 0 is GF(2), squaring is identity
   if (towerLevel == 0) {
     return a;

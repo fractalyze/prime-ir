@@ -36,7 +36,26 @@ def BinaryFieldToArith : Pass<"binary-field-to-arith", "ModuleOp"> {
   }];
   let dependentDialects = [
     "arith::ArithDialect",
+    "func::FuncDialect",
+    // The outlined helpers carry llvm.linkage / llvm.no_inline attributes.
+    "LLVM::LLVMDialect",
     "scf::SCFDialect",
+  ];
+  let options = [
+    Option<"outlineTowerOps", "outline-tower-ops", "bool", /*default=*/"false",
+           "Emit tower-basis mul/square as calls to shared `__prime_ir_bf_*` "
+           "helpers instead of expanding the 3^k Karatsuba recursion inline. "
+           "Cuts IR size by orders of magnitude for wide towers (a bf<7> "
+           "divide is ~68k arith ops inline), at the cost of one call per "
+           "tower level. Off by default: the helpers are `noinline`, so like "
+           "the Montgomery outlining in #367 this trades runtime for compile "
+           "time and the right default is target-dependent.">,
+    Option<"outlineMinTowerLevel", "outline-min-tower-level", "unsigned",
+           /*default=*/"4",
+           "Lowest tower level emitted as an outlined helper when "
+           "`outline-tower-ops` is set. Levels below this still expand "
+           "inline, which bounds call depth: a lower threshold means smaller "
+           "IR but more calls per multiply.">,
   ];
 }
 

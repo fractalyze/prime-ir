@@ -47,8 +47,18 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   pm.addNestedPass<func::FuncOp>(createFoldFieldLinalgContraction());
   pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
 
-  // If we convert elementwise to linalg, tensor folding in ModArithDialect will
-  // not work.
+  // Must precede ConvertElementwiseToLinalg below: once elementwise field ops
+  // are wrapped in linalg.generic, ModArithDialect's tensor folding no longer
+  // sees them. That ordering constraint is between these two passes only --
+  // it says nothing about where the binary-field lowering goes.
+  //
+  // Note that field.inverse is deliberately NOT ElementwiseMappable, so
+  // ConvertElementwiseToLinalg leaves a shaped inverse alone regardless of
+  // order and it reaches this pass whole, where it becomes Montgomery's batch
+  // inversion (one inversion plus ~3(N-1) multiplies for N elements). Making
+  // it elementwise would trade that for N independent scalar inverses --
+  // still correct, and silently orders of magnitude slower.
+  // batch_inverse_not_scalarized.mlir pins this.
   pm.addPass(createFieldToModArith());
   // Specialize binary field operations to GFNI/PCLMULQDQ if enabled (x86)
   if (options.specializeGFNI || options.specializePCLMULQDQ) {
@@ -63,8 +73,28 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
     armOpts.usePMULL = options.specializePMULL;
     pm.addPass(createSpecializeBinaryFieldToARM(armOpts));
   }
+  // Scalarize elementwise field ops BEFORE lowering binary fields.
+  // BinaryFieldToArith's emitters are scalar-only -- they truncate to a
+  // scalar half-width type -- so a shaped operand cannot be lowered. Running
+  // this after the lowering (as it used to) handed the pass shaped tower ops
+  // it could not legalize.
+  //
+  // The rule, exactly: every ElementwiseMappable field op arrives here as the
+  // scalar body of a linalg.generic. field.inverse is the deliberate
+  // exception -- it is not ElementwiseMappable (see the note above), so a
+  // shaped inverse passes through untouched. For prime fields that is the
+  // point: FieldToModArith has already turned it into a batch inversion. For
+  // BINARY fields there is no such lowering yet, so a shaped binary-field
+  // inverse still reaches BinaryFieldToArith whole and fails to legalize.
+  // That gap is fractalyze/prime-ir#453 (batch inversion for binary fields),
+  // and batch_inverse_not_scalarized.mlir pins today's behaviour for it.
+  pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
+
   // Binary fields lower directly to arith (not through mod_arith)
-  pm.addPass(createBinaryFieldToArith());
+  BinaryFieldToArithOptions bfOpts;
+  bfOpts.outlineTowerOps = options.outlineTowerOps;
+  bfOpts.outlineMinTowerLevel = options.outlineMinTowerLevel;
+  pm.addPass(createBinaryFieldToArith(bfOpts));
   // Reconcile unrealized casts from binary field specialization and conversion
   // (e.g., i64 -> bf<6> -> i64 chains from PCLMULQDQ + BinaryFieldToArith)
   pm.addPass(createReconcileUnrealizedCastsPass());
@@ -74,7 +104,6 @@ void buildFieldToLLVM(OpPassManager &pm, const FieldToLLVMOptions &options) {
   // Must run after BinaryFieldToArith to avoid tensor.from_elements folding
   // with binary field types (MLIR's folder doesn't understand custom types).
   pm.addNestedPass<func::FuncOp>(createLinalgGeneralizeNamedOpsPass());
-  pm.addNestedPass<func::FuncOp>(createConvertElementwiseToLinalgPass());
   pm.addNestedPass<func::FuncOp>(createLinalgElementwiseOpFusionPass());
 
   pm.addPass(mod_arith::createModArithToArith(

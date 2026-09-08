@@ -16,6 +16,8 @@ limitations under the License.
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldToArith.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -24,6 +26,7 @@ limitations under the License.
 #include "mlir/IR/TypeUtilities.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldCodeGen.h"
+#include "prime_ir/Dialect/Field/Conversions/BinaryFieldToArith/BinaryFieldOutliner.h"
 #include "prime_ir/Dialect/Field/IR/FieldDialect.h"
 #include "prime_ir/Dialect/Field/IR/FieldOps.h"
 #include "prime_ir/Dialect/Field/IR/FieldTypes.h"
@@ -189,7 +192,11 @@ struct ConvertBinaryFieldDouble : public OpConversionPattern<DoubleOp> {
 };
 
 struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
-  using OpConversionPattern::OpConversionPattern;
+  ConvertBinaryFieldMul(const TypeConverter &typeConverter,
+                        MLIRContext *context, BinaryFieldOutliner *outliner)
+      : OpConversionPattern(typeConverter, context), outliner(outliner) {}
+
+  BinaryFieldOutliner *outliner; // not owned; null unless outline-tower-ops
 
   LogicalResult
   matchAndRewrite(MulOp op, OpAdaptor adaptor,
@@ -219,8 +226,8 @@ struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
       rewriter.replaceOp(op, result);
       return success();
     }
-    BinaryFieldCodeGen lhs(bfType, adaptor.getLhs(), b);
-    BinaryFieldCodeGen rhs(bfType, adaptor.getRhs(), b);
+    BinaryFieldCodeGen lhs(bfType, adaptor.getLhs(), b, outliner);
+    BinaryFieldCodeGen rhs(bfType, adaptor.getRhs(), b, outliner);
     BinaryFieldCodeGen result = lhs * rhs;
     rewriter.replaceOp(op, result.getValue());
     return success();
@@ -228,7 +235,11 @@ struct ConvertBinaryFieldMul : public OpConversionPattern<MulOp> {
 };
 
 struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
-  using OpConversionPattern::OpConversionPattern;
+  ConvertBinaryFieldSquare(const TypeConverter &typeConverter,
+                           MLIRContext *context, BinaryFieldOutliner *outliner)
+      : OpConversionPattern(typeConverter, context), outliner(outliner) {}
+
+  BinaryFieldOutliner *outliner; // not owned; null unless outline-tower-ops
 
   LogicalResult
   matchAndRewrite(SquareOp op, OpAdaptor adaptor,
@@ -257,7 +268,7 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
       rewriter.replaceOp(op, result);
       return success();
     }
-    BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
+    BinaryFieldCodeGen input(bfType, adaptor.getInput(), b, outliner);
     BinaryFieldCodeGen result = input.square();
     rewriter.replaceOp(op, result.getValue());
     return success();
@@ -265,7 +276,11 @@ struct ConvertBinaryFieldSquare : public OpConversionPattern<SquareOp> {
 };
 
 struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
-  using OpConversionPattern::OpConversionPattern;
+  ConvertBinaryFieldInverse(const TypeConverter &typeConverter,
+                            MLIRContext *context, BinaryFieldOutliner *outliner)
+      : OpConversionPattern(typeConverter, context), outliner(outliner) {}
+
+  BinaryFieldOutliner *outliner; // not owned; null unless outline-tower-ops
 
   LogicalResult
   matchAndRewrite(InverseOp op, OpAdaptor adaptor,
@@ -293,7 +308,7 @@ struct ConvertBinaryFieldInverse : public OpConversionPattern<InverseOp> {
       rewriter.replaceOp(op, result);
       return success();
     }
-    BinaryFieldCodeGen input(bfType, adaptor.getInput(), b);
+    BinaryFieldCodeGen input(bfType, adaptor.getInput(), b, outliner);
     BinaryFieldCodeGen result = input.inverse();
     rewriter.replaceOp(op, result.getValue());
     return success();
@@ -812,6 +827,14 @@ struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
           return true;
         });
 
+    // Outlined helpers are shared across the whole module, so the outliner
+    // outlives every pattern application. It stays null unless requested:
+    // a null handle is exactly today's inline lowering.
+    std::optional<BinaryFieldOutliner> outliner;
+    if (outlineTowerOps)
+      outliner.emplace(module, outlineMinTowerLevel);
+    BinaryFieldOutliner *outlinerPtr = outliner ? &*outliner : nullptr;
+
     RewritePatternSet patterns(context);
     patterns.add<
         // clang-format off
@@ -820,14 +843,21 @@ struct BinaryFieldToArith : impl::BinaryFieldToArithBase<BinaryFieldToArith> {
         ConvertBinaryFieldSub,
         ConvertBinaryFieldNegate,
         ConvertBinaryFieldDouble,
-        ConvertBinaryFieldMul,
-        ConvertBinaryFieldSquare,
-        ConvertBinaryFieldInverse,
         ConvertBinaryFieldCmp,
         ConvertBinaryFieldUnrealizedCast,
         ConvertBinaryFieldBitcast
         // clang-format on
         >(typeConverter, context);
+
+    // Only mul/square/inverse expand the tower, so only they take the
+    // outliner.
+    patterns.add<
+        // clang-format off
+        ConvertBinaryFieldMul,
+        ConvertBinaryFieldSquare,
+        ConvertBinaryFieldInverse
+        // clang-format on
+        >(typeConverter, context, outlinerPtr);
 
     // Catch-all: converts any op whose operands/results carry binary field
     // types.
