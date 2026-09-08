@@ -23,6 +23,8 @@ limitations under the License.
 
 namespace mlir::prime_ir::field {
 
+class BinaryFieldOutliner;
+
 // Code generator for binary field (GF(2^n)) operations.
 //
 // Binary fields use tower field construction where GF(2^(2ᵏ)) is built
@@ -43,8 +45,12 @@ public:
   // `value` may arrive on the byte-rounded carrier type (see getCarrierType);
   // the constructor truncates it down to the logical storage width so the
   // tower algorithms always run on i(2^level).
+  // When `outliner` is non-null, tower multiplies and squares at or above
+  // its threshold level are emitted as calls to a shared helper instead of
+  // being expanded inline. A null outliner reproduces the inline lowering.
   BinaryFieldCodeGen(BinaryFieldType bfType, Value value,
-                     ImplicitLocOpBuilder &builder);
+                     ImplicitLocOpBuilder &builder,
+                     BinaryFieldOutliner *outliner = nullptr);
 
   // Get the underlying value, widened back to the byte-rounded carrier.
   Value getValue() const;
@@ -85,15 +91,26 @@ public:
   static BinaryFieldCodeGen one(BinaryFieldType bfType,
                                 ImplicitLocOpBuilder &builder);
 
+  // Expand one tower level inline, recursing through mulTower/squareTower so
+  // the next level down is outlined again when the threshold still applies.
+  // These are the bodies BinaryFieldOutliner emits into its helpers; calling
+  // mulTower/squareTower there instead would emit a call to the very helper
+  // being generated.
+  Value expandMulTower(Value a, Value b, unsigned towerLevel) const;
+  Value expandSquareTower(Value a, unsigned towerLevel) const;
+
 private:
   BinaryFieldType bfType_;
   Value value_;
   ImplicitLocOpBuilder &builder_;
+  // Null unless the pass enabled outlining; see the constructor.
+  BinaryFieldOutliner *outliner_ = nullptr;
 
-  // Recursive Karatsuba multiplication for tower level k
+  // Recursive Karatsuba multiplication for tower level k. Dispatches to an
+  // outlined helper when one is configured for this level.
   Value mulTower(Value a, Value b, unsigned towerLevel) const;
 
-  // Recursive squaring for tower level k
+  // Recursive squaring for tower level k. Outlined like mulTower.
   Value squareTower(Value a, unsigned towerLevel) const;
 
   // Multiply a tower-level-k element by that level's generator βₖ (the root X
