@@ -457,6 +457,15 @@ void buildBoundMap(func::FuncOp funcOp, BoundMap &boundMap) {
 
 namespace {
 Value getSignedFormFromCanonical(Value input, TypedAttr modAttr) {
+  // The signed form is a value in [-p, p) read as a signed w-bit integer, which
+  // is exact only when p < 2ʷ⁻¹. For a full-width modulus (Goldilocks) a - p
+  // falls below -2ʷ⁻¹ for small a and wraps to a - p + 2ʷ ≡ a + (2ʷ mod p).
+  APInt modulus = isa<IntegerAttr>(modAttr)
+                      ? cast<IntegerAttr>(modAttr).getValue()
+                      : cast<DenseElementsAttr>(modAttr).getSplatValue<APInt>();
+  if (modulus.isSignBitSet()) {
+    return {};
+  }
   auto minOp = input.getDefiningOp<arith::MinUIOp>();
   if (!minOp) {
     return {};
