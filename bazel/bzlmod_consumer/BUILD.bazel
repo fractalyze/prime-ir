@@ -31,9 +31,10 @@ load("@rules_cc//cc:cc_test.bzl", "cc_test")
 # There is no `@llvm-project` in the deps because a module extension's
 # repositories are not re-exported: prime_ir's MLIR is reachable through this
 # target's own dependencies, but a consumer with MLIR in its own sources — as
-# riscv-witness has — declares llvm-project for itself. `layering_check` is off
-# in this module's .bazelrc for the same reason; it would demand the direct dep
-# this fixture is showing a consumer does not need.
+# riscv-witness has — declares llvm-project for itself. This module never
+# enables `layering_check` for the same reason: it would demand the direct dep
+# this fixture is showing a consumer does not need. (The root workspace does
+# enable it, but its .bazelrc does not reach a separate workspace.)
 cc_test(
     name = "consume_prime_ir_test",
     size = "small",

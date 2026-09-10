@@ -18,8 +18,9 @@
 prime_ir's own `--config=bzlmod` lane builds it as the *root* module, where
 `archive_override` and patches still apply. A consumer resolves it as a non-root
 module, where they do not — so only a separate module like this one can show
-that `//MODULE.bazel` stands on its own. This is the second acceptance criterion
-of fractalyze/prime-ir#455.
+that `//MODULE.bazel` stands on its own, which is what this fixture exists to
+prove: that a project can `bazel_dep` on prime_ir and resolve every target it
+references.
 
 `local_path_override` stands in for the `archive_override` / `git_override` a
 real consumer writes: it pins no revision, but resolution treats prime_ir as a

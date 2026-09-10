@@ -215,7 +215,7 @@
     },
     "//bazel:llvm_deps.bzl%llvm_deps": {
       "general": {
-        "bzlTransitiveDigest": "M4KtxpRFI9BUdknqxYVHcwod/hb19IcVRGwmC4ncVmU=",
+        "bzlTransitiveDigest": "6ZmNRtA5fSiza7gZgNDTNJmughZBYGbsowY+3ElClsI=",
         "usagesDigest": "A+FIwusu1QtSKzvBNGPEMYQivz4R7XyFQKYz/k1oxHA=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},

@@ -1,15 +1,8 @@
 # Standalone module: this file is not the repository root's .bazelrc, and the
-# root's .bazelrc.ci cannot be reused here — its `--//:has_avx512` names a build
-# setting in whichever repository is root, which in this module is the fixture
-# rather than prime_ir. The `ci` config below is that file's content with the
-# flag re-pointed at `@prime_ir`.
+# root's does not reach a separate workspace.
 common --enable_bzlmod
 common --noenable_workspace
 
 build --cxxopt=-std=c++17
 build --host_cxxopt=-std=c++17
 build --repo_env=CC=clang
-
-build:ci --remote_cache=grpc://gpu-server:9092
-test:ci --test_output=errors
-test:ci --@prime_ir//:has_avx512

@@ -22,6 +22,11 @@ patch list and their order have one home.
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
+# Uncommented together with the `new_local_repository` call in `repo()` below.
+# It is the Starlark rule rather than the WORKSPACE native one, so the local
+# clone works on the bzlmod lane too.
+# load("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
+
 LLVM_COMMIT = "815edc3ff646392bfee2b381d37dd35e4b04f9c5"
 
 LLVM_SHA256 = "bbc6fa4993162bdc7dd39b53927906a455940b87c782d0a37e00127f8bf8c696"
@@ -70,12 +75,9 @@ def repo():
         urls = ["https://github.com/llvm/llvm-project/archive/{commit}.tar.gz".format(commit = LLVM_COMMIT)],
     )
 
-    # Uncomment this, plus its load at the top of the file, and comment out the
+    # Uncomment this, and its load at the top of the file, and comment out the
     # llvm-raw http_archive above, when following the llvm patch workflow from
-    # CONTRIBUTING.md to point Bazel at a local clone. It is the Starlark
-    # `new_local_repository` rather than the WORKSPACE native one, so the swap
-    # works on the bzlmod lane too.
-    # load("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
+    # CONTRIBUTING.md to point Bazel at a local clone.
     # new_local_repository(
     #     name = "llvm-raw",
     #     build_file_content = "# empty",

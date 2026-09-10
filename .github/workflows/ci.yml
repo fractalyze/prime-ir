@@ -76,7 +76,8 @@ jobs:
   # PrimeIR's own bzlmod lane builds it as the *root* module, where
   # `archive_override` and patches still apply; a consumer resolves it as a
   # non-root module, where they do not. Only a separate module can tell the two
-  # apart, so this lane builds one — the second acceptance criterion of #455.
+  # apart, so this lane builds one, and proves that a project can `bazel_dep` on
+  # PrimeIR and resolve every target it references.
   bzlmod-consumer:
     runs-on: [self-hosted, cpu]
     steps:
@@ -85,12 +86,12 @@ jobs:
 
       - name: Run `bazel test` in the consumer module
         working-directory: bazel/bzlmod_consumer
-        run: bazel test --config=ci //...
+        run: bazel --bazelrc=.bazelrc.ci test --config=ci //...
 
       - name: Resolve every PrimeIR target as a dependency
         working-directory: bazel/bzlmod_consumer
         run: |
-          bazel build --config=ci \
+          bazel --bazelrc=.bazelrc.ci build --config=ci \
             @prime_ir//prime_ir/... \
             @prime_ir//tools/...
 
