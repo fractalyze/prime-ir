@@ -20,6 +20,15 @@ zk_dtypes is not in any registry, so the bzlmod lane reaches it through an
 `http_archive` in `workspace.bzl`. MODULE.bazel cannot `load()`, so the pin
 cannot be single-sourced and the two copies can drift — leaving the lanes
 building different revisions of the dependency the rest of the chain hangs on.
+
+Both files put the pin behind `ZK_DTYPES_`-prefixed variables so that one
+substitution finds it in either, which is what lets
+`.github/workflows/pin-bump.yml` hand both paths to the same bump action. This
+test is the other half of that arrangement: it fails if a hand edit, or a bump
+that reached only one file, leaves them disagreeing.
+
+The digest is the same hash written two ways — `http_archive` takes hex,
+`archive_override` takes base64 — so comparing it means converting first.
 """
 
 import base64
@@ -30,12 +39,7 @@ from absl.testing import absltest
 
 _COMMIT_RE = re.compile(r'ZK_DTYPES_COMMIT = "([0-9a-f]{40})"')
 _SHA256_RE = re.compile(r'ZK_DTYPES_SHA256 = "([0-9a-f]{64})"')
-_OVERRIDE_RE = re.compile(
-    r"archive_override\(\s*"
-    r'module_name = "zk_dtypes",\s*'
-    r'integrity = "sha256-([A-Za-z0-9+/=]+)",\s*'
-    r'strip_prefix = "zk_dtypes-([0-9a-f]{40})",'
-)
+_INTEGRITY_RE = re.compile(r'ZK_DTYPES_INTEGRITY = "sha256-([A-Za-z0-9+/=]+)"')
 
 
 def _read(path):
@@ -43,28 +47,33 @@ def _read(path):
     return f.read()
 
 
+def _search(pattern, contents, path):
+  match = pattern.search(contents)
+  if not match:
+    raise AssertionError(f"{path} has no {pattern.pattern}")
+  return match.group(1)
+
+
 class PinSyncTest(absltest.TestCase):
 
   def setUp(self):
     super().setUp()
     workspace_bzl = _read("third_party/zk_dtypes/workspace.bzl")
-    self.workspace_commit = _COMMIT_RE.search(workspace_bzl).group(1)
-    self.workspace_sha256 = _SHA256_RE.search(workspace_bzl).group(1)
+    module_bazel = _read("MODULE.bazel")
 
-    override = _OVERRIDE_RE.search(_read("MODULE.bazel"))
-    self.assertIsNotNone(
-        override, "MODULE.bazel has no zk_dtypes archive_override"
-    )
-    self.module_integrity, self.module_commit = override.groups()
+    self.workspace_commit = _search(_COMMIT_RE, workspace_bzl, "workspace.bzl")
+    self.workspace_sha256 = _search(_SHA256_RE, workspace_bzl, "workspace.bzl")
+    self.module_commit = _search(_COMMIT_RE, module_bazel, "MODULE.bazel")
+    self.module_integrity = _search(_INTEGRITY_RE, module_bazel, "MODULE.bazel")
 
   def test_commits_match(self):
     self.assertEqual(self.workspace_commit, self.module_commit)
 
   def test_hashes_match(self):
-    integrity = base64.b64encode(
+    as_integrity = base64.b64encode(
         binascii.unhexlify(self.workspace_sha256)
     ).decode()
-    self.assertEqual(integrity, self.module_integrity)
+    self.assertEqual(as_integrity, self.module_integrity)
 
 
 if __name__ == "__main__":

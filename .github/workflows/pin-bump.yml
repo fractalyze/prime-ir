@@ -20,6 +20,11 @@ jobs:
         with:
           upstream_repo: zk_dtypes
           upstream_commit: ${{ github.event.client_payload.commit }}
-          pin_file: third_party/zk_dtypes/workspace.bzl
+          # Both lanes pin zk_dtypes and must move together; MODULE.bazel
+          # cannot load() the WORKSPACE lane's pin, so it spells out its own.
+          # //third_party/zk_dtypes:pin_sync_test fails if they drift.
+          pin_file: |
+            third_party/zk_dtypes/workspace.bzl
+            MODULE.bazel
           var_prefix: ZK_DTYPES
           github_token: ${{ secrets.BUMPER_GH_PAT }}

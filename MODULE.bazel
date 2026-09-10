@@ -59,14 +59,26 @@ bazel_dep(name = "rules_shell", version = "0.2.0")
 
 # Not in any registry, so a `bazel_dep` alone cannot resolve it. The override
 # pins the same archive `//third_party/zk_dtypes:workspace.bzl` fetches on the
-# WORKSPACE lane; the two are checked against each other by
-# `//third_party/zk_dtypes:pin_sync_test`.
+# WORKSPACE lane. MODULE.bazel cannot `load()`, so that pin cannot be shared
+# between the two lanes and is spelled out again here; the pair is held together
+# from both ends — `//third_party/zk_dtypes:pin_sync_test` fails if they drift,
+# and `.github/workflows/pin-bump.yml` lists both files so an automated bump
+# moves them in one commit. The prefixed variable names are what let that
+# substitution find the pin in either file, so keep this shape.
+#
+# `archive_override` takes `integrity` and not the `sha256` the
+# WORKSPACE lane's `http_archive` takes: the same digest, base64 rather than
+# hex. `pin_sync_test` converts between the two before comparing.
+ZK_DTYPES_COMMIT = "7a42ac4f9c3213925ac523c6871b580db96f9b8d"
+
+ZK_DTYPES_INTEGRITY = "sha256-8pEUJbq+GJCpyE/VGRcU6cMJUxgyUTO1dpOWiVY7yRw="
+
 bazel_dep(name = "zk_dtypes", version = "0.0.17")
 archive_override(
     module_name = "zk_dtypes",
-    integrity = "sha256-8pEUJbq+GJCpyE/VGRcU6cMJUxgyUTO1dpOWiVY7yRw=",
-    strip_prefix = "zk_dtypes-7a42ac4f9c3213925ac523c6871b580db96f9b8d",
-    urls = ["https://github.com/fractalyze/zk_dtypes/archive/7a42ac4f9c3213925ac523c6871b580db96f9b8d/zk_dtypes-7a42ac4f9c3213925ac523c6871b580db96f9b8d.tar.gz"],
+    integrity = ZK_DTYPES_INTEGRITY,
+    strip_prefix = "zk_dtypes-" + ZK_DTYPES_COMMIT,
+    urls = ["https://github.com/fractalyze/zk_dtypes/archive/{commit}/zk_dtypes-{commit}.tar.gz".format(commit = ZK_DTYPES_COMMIT)],
 )
 
 # `bazel_features` and `rules_java` have no `bazel_dep`. The WORKSPACE build
