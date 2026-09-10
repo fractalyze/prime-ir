@@ -613,3 +613,30 @@ func.func @test_lazy_add_goldilocks(%a : !Gla, %b : !Gla, %c : !Gla) -> !Gla {
   %r = mod_arith.mul %s, %c : !Gla
   return %r : !Gla
 }
+
+// -----
+
+// A gl64-lazy add feeding a Montgomery square is pre-reduced to
+// minui(a - p, a). The signed-square shortcut must not fire on it: a - p read
+// as a signed i64 wraps for a full-width modulus (runtime check in
+// gl64_lazy_square_runner.mlir). Shaped, so the modulus reaches the signed-form
+// check as a splat.
+!Glsq = !mod_arith.int<18446744069414584321 : i64, true>
+
+// LAZY-LABEL:     @test_lazy_add_mont_square_goldilocks_shaped
+// LAZY:           arith.addui_extended
+// LAZY:           arith.minui
+// LAZY-NOT:       arith.mulsi_extended
+// LAZY:           arith.mului_extended
+// LAZY:           return
+
+// EAGER-LABEL:    @test_lazy_add_mont_square_goldilocks_shaped
+// EAGER:          arith.minui
+// EAGER-NOT:      arith.mulsi_extended
+// EAGER:          arith.mului_extended
+// EAGER:          return
+func.func @test_lazy_add_mont_square_goldilocks_shaped(%a : tensor<4x!Glsq>, %b : tensor<4x!Glsq>) -> tensor<4x!Glsq> {
+  %s = mod_arith.add %a, %b : tensor<4x!Glsq>
+  %r = mod_arith.square %s : tensor<4x!Glsq>
+  return %r : tensor<4x!Glsq>
+}
