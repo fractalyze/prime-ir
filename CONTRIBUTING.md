@@ -15,10 +15,11 @@ refresh the patches we carry in this repository.
 
 1. Point Bazel to the local clone while you iterate:
 
-   - Uncomment the `http_archive(name = "llvm-raw", …)` stanza in
-     `WORKSPACE.bazel`.
+   - Comment out the `http_archive(name = "llvm-raw", …)` stanza in
+     `third_party/llvm-project/workspace.bzl`. Both dependency lanes call that
+     file, so the swap covers `--config=bzlmod` as well.
 
-   - Uncomment the `new_local_repository` entry:
+   - Uncomment the `new_local_repository` entry below it:
 
      ```
      new_local_repository(

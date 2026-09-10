@@ -1,0 +1,129 @@
+# Copyright 2026 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+"""PrimeIR as a Bazel module.
+
+The WORKSPACE build stays the default; `--config=bzlmod` builds through this
+file, which is also what a consumer gets when it declares a `bazel_dep` on
+prime_ir. `WORKSPACE.bazel` is the other half of that pairing and has to be kept
+in step: every repository named here is declared either as a `bazel_dep` or by a
+module extension that wraps the same `.bzl` the WORKSPACE build calls, so a
+dependency added to one lane has one obvious home in the other.
+
+Nothing here may carry a patch or a `single_version_override`. Bazel applies
+both only for the root module, so a consumer would silently resolve the
+unpatched dependency. The patched LLVM is safe because its patches hang off an
+`http_archive` inside a module extension, which runs identically for every root
+module — see `//bazel:llvm_deps.bzl`.
+
+`archive_override` is root-only for the same reason, so a consumer of prime_ir
+has to repeat the zk_dtypes override below alongside its own override of
+prime_ir: neither fork is in a registry, and a non-root module cannot pull a
+dependency in from outside one. `//bazel/bzlmod_consumer` is a worked example.
+"""
+
+module(
+    # Tracks the repository's release tags; bump both together.
+    name = "prime_ir",
+    version = "2.0.0",
+    compatibility_level = 1,
+)
+
+# Repo names match the WORKSPACE build so that first-party BUILD files read the
+# same under both. Versions are the WORKSPACE pins where the registry carries
+# them; every deviation is noted at the dependency.
+bazel_dep(name = "bazel_skylib", version = "1.8.1")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "rules_cc", version = "0.2.13")
+bazel_dep(name = "rules_python", version = "1.6.0")
+bazel_dep(name = "abseil-cpp", version = "20250814.0", repo_name = "com_google_absl")
+bazel_dep(name = "googletest", version = "1.17.0", repo_name = "com_google_googletest")
+
+# Not loaded by any first-party file. LLVM's Bazel overlay loads `sh_binary`
+# from it, and `@llvm-project` is a module-extension repository, so it resolves
+# `@rules_shell` through *this* module's mapping — which only a `bazel_dep`
+# here puts it in.
+bazel_dep(name = "rules_shell", version = "0.2.0")
+
+# Not in any registry, so a `bazel_dep` alone cannot resolve it. The override
+# pins the same archive `//third_party/zk_dtypes:workspace.bzl` fetches on the
+# WORKSPACE lane; the two are checked against each other by
+# `//third_party/zk_dtypes:pin_sync_test`.
+bazel_dep(name = "zk_dtypes", version = "0.0.17")
+archive_override(
+    module_name = "zk_dtypes",
+    integrity = "sha256-8pEUJbq+GJCpyE/VGRcU6cMJUxgyUTO1dpOWiVY7yRw=",
+    strip_prefix = "zk_dtypes-7a42ac4f9c3213925ac523c6871b580db96f9b8d",
+    urls = ["https://github.com/fractalyze/zk_dtypes/archive/7a42ac4f9c3213925ac523c6871b580db96f9b8d/zk_dtypes-7a42ac4f9c3213925ac523c6871b580db96f9b8d.tar.gz"],
+)
+
+# `bazel_features` and `rules_java` have no `bazel_dep`. The WORKSPACE build
+# declares both only to order and complete its own macro chain — `bazel_features`
+# ahead of zk_dtypes' python setup, because http_archive resolution is
+# first-wins, and `rules_java` to run the setup macros rules_python's WORKSPACE
+# path leaves to the caller. Under bzlmod version resolution does the ordering
+# and rules_python brings its own Java support in, and no first-party file loads
+# from either repository.
+#
+# `rules_cuda` likewise has none. The WORKSPACE build registers a CUDA toolchain,
+# but no target in this repository is a CUDA rule, so the registration has
+# nothing to apply to. A first CUDA target needs a `bazel_dep` plus a
+# `register_toolchains` here, not just the archive.
+
+non_module_deps = use_extension("//bazel:non_module_deps.bzl", "non_module_deps")
+use_repo(
+    non_module_deps,
+    "local_config_omp",
+    "nanobind",
+    "pybind11",
+    "robin_map",
+)
+
+llvm_deps = use_extension("//bazel:llvm_deps.bzl", "llvm_deps")
+use_repo(llvm_deps, "llvm-raw", "llvm_zlib", "llvm_zstd")
+
+# Second, and after the `use_repo` above: this extension's `.bzl` loads out of
+# `@llvm-raw`, so that repository has to be in this module's mapping first.
+llvm_project = use_extension("//bazel:llvm_configure.bzl", "llvm_project")
+use_repo(llvm_project, "llvm-project")
+
+dev_deps = use_extension("//bazel:dev_deps.bzl", "dev_deps", dev_dependency = True)
+use_repo(dev_deps, "hedron_compile_commands")
+
+# The WORKSPACE build reaches hermetic Python through zk_dtypes' `python_init_*`
+# macros, which wrap these same rules_python extensions and add
+# `@python_version_repo`. That repository exists only for the pywrap rules
+# vendored in `//third_party/rules_pywrap`, which no build target loads — it is
+# listed as a `bzl_library` source and nothing more — so the bzlmod lane does
+# without it.
+python = use_extension("@rules_python//python/extensions:python.bzl", "python")
+python.toolchain(
+    is_default = True,
+    python_version = "3.11",
+)
+
+pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
+pip.parse(
+    hub_name = "prime_ir_pypi",
+    python_version = "3.11",
+    requirements_lock = "//:requirements_lock_3_11.txt",
+)
+
+# The hub cannot be named `pypi` outright: rules_python keys hubs across the
+# whole module graph and rejects a second one by the same name ("Duplicate
+# cross-module pip hub named 'pypi'"), which zk_dtypes already declares.
+# Aliasing here keeps the `@pypi` labels in first-party BUILD files reading the
+# same on both lanes.
+use_repo(pip, pypi = "prime_ir_pypi")

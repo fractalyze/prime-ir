@@ -6,8 +6,15 @@
 # website: https://bazel.build/
 
 # Ignore all bazel-* symlinks. There is no full list since this can change
-# based on the name of the directory bazel is cloned into.
+# based on the name of the directory bazel is cloned into. The second pattern
+# covers nested Bazel modules such as bazel/bzlmod_consumer.
 /bazel-*
+**/bazel-*
+
+# Resolution artifact of the bazel/bzlmod_consumer fixture. Deliberately not
+# pinned: the fixture exists to check what a consumer resolves today, and a
+# checked-in lockfile would mask a change in that resolution.
+/bazel/bzlmod_consumer/MODULE.bazel.lock
 
 # Directories for the Bazel IntelliJ plugin containing the generated
 # IntelliJ project files and plugin configuration. Seperate directories are

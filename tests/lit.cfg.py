@@ -26,7 +26,7 @@ config.suffixes = [".mlir", ".v"]
 
 # lit executes relative to the directory
 #
-#   bazel-bin/tests/<test_target_name>.runfiles/prime_ir/
+#   bazel-bin/tests/<test_target_name>.runfiles/<this repository>/
 #
 # which contains tools/ and tests/ directories and the binary targets built
 # within them, brought in via the `data` attribute in the BUILD file. To
@@ -42,24 +42,46 @@ config.suffixes = [".mlir", ".v"]
 # Hence, to get lit to see tools like `prime-ir-opt`, we need to add the tools/
 # subdirectory to the PATH environment variable.
 #
-# Bazel defines RUNFILES_DIR which includes prime_ir/ and third party dependencies
-# as their own directory. Generally, it seems that $PWD == $RUNFILES_DIR/prime_ir/
+# Bazel defines RUNFILES_DIR, which holds one directory per repository. Neither
+# that directory's name nor this repository's own is a constant: on the WORKSPACE
+# lane they are the apparent names (`prime_ir`, `llvm-project`), while under
+# `--config=bzlmod` this repository is `_main` and an external one carries a
+# canonical name that prefixes the apparent one (`_main~llvm_project~llvm-project`
+# on Bazel 7, `+llvm_project+llvm-project` on Bazel 8). Both lanes are resolved
+# below rather than spelled out.
 
 runfiles_dir = Path(os.environ["RUNFILES_DIR"])
 
-mlir_tools_relpath = "llvm-project/mlir"
-mlir_tools_path = runfiles_dir.joinpath(Path(mlir_tools_relpath))
+# lit runs with this repository's own runfiles directory as the working
+# directory, which is what makes it findable without knowing its name.
+main_repo_dir = Path.cwd()
 
-tool_relpaths = [
-    mlir_tools_relpath,
-    "prime_ir/tools",
-    "llvm-project/llvm",
+
+def external_repo_dir(apparent_name):
+  """Returns the runfiles directory of the external repository so named."""
+  for path in sorted(runfiles_dir.iterdir()):
+    if not path.is_dir():
+      continue
+    if path.name == apparent_name or path.name.endswith(
+        ("~" + apparent_name, "+" + apparent_name)
+    ):
+      return path
+  raise RuntimeError(
+      f"no runfiles directory for @{apparent_name} in {runfiles_dir}"
+  )
+
+
+llvm_project_dir = external_repo_dir("llvm-project")
+mlir_tools_path = llvm_project_dir.joinpath("mlir")
+
+tool_paths = [
+    mlir_tools_path,
+    main_repo_dir.joinpath("tools"),
+    llvm_project_dir.joinpath("llvm"),
 ]
 
 config.environment["PATH"] = (
-    ":".join(str(runfiles_dir.joinpath(Path(path))) for path in tool_relpaths)
-    + ":"
-    + os.environ["PATH"]
+    ":".join(str(path) for path in tool_paths) + ":" + os.environ["PATH"]
 )
 
 substitutions = {

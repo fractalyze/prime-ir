@@ -13,15 +13,19 @@
 # limitations under the License.
 # ==============================================================================
 
-load("@rules_python//python:py_test.bzl", "py_test")
+"""Produces the `@llvm-project` the first-party BUILD files depend on.
 
-py_test(
-    name = "pin_sync_test",
-    size = "small",
-    srcs = ["pin_sync_test.py"],
-    data = [
-        "workspace.bzl",
-        "//:MODULE.bazel",
-    ],
-    deps = ["@pypi//absl_py"],
-)
+LLVM ships no BUILD files of its own; `llvm_configure` overlays the ones under
+`utils/bazel` onto the source archive `//bazel:llvm_deps.bzl` fetched.
+
+The `load()` below is why this is a second file and a second extension: it reads
+a `.bzl` out of `@llvm-raw`, so it cannot be evaluated until that repository
+exists. MODULE.bazel declares the two in that order.
+"""
+
+load("@llvm-raw//utils/bazel:configure.bzl", "llvm_configure")
+
+def _llvm_project_impl(_module_ctx):
+    llvm_configure(name = "llvm-project")
+
+llvm_project = module_extension(implementation = _llvm_project_impl)

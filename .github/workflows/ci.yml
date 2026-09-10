@@ -52,6 +52,52 @@ jobs:
         if: ${{ failure() }}
         uses: fractalyze/.github/.github/actions/upload-bazel-testlogs@main
 
+  # The same tests, resolved through MODULE.bazel instead of WORKSPACE.bazel.
+  # Always the full suite: bazel-diff hashes the WORKSPACE lane's targets, and
+  # the two lanes' repository names differ, so its impacted-target set does not
+  # carry over.
+  build-and-test-bzlmod:
+    runs-on: [self-hosted, cpu]
+    steps:
+      - name: Checkout PrimeIR
+        uses: actions/checkout@v4
+
+      - name: Run `bazel test`
+        run: |
+          bazel --bazelrc=.bazelrc.ci test \
+            --config=ci \
+            --config=bzlmod \
+            //...
+
+      - name: Upload bazel test logs
+        if: ${{ failure() }}
+        uses: fractalyze/.github/.github/actions/upload-bazel-testlogs@main
+
+  # PrimeIR's own bzlmod lane builds it as the *root* module, where
+  # `archive_override` and patches still apply; a consumer resolves it as a
+  # non-root module, where they do not. Only a separate module can tell the two
+  # apart, so this lane builds one — the second acceptance criterion of #455.
+  bzlmod-consumer:
+    runs-on: [self-hosted, cpu]
+    steps:
+      - name: Checkout PrimeIR
+        uses: actions/checkout@v4
+
+      - name: Run `bazel test` in the consumer module
+        working-directory: bazel/bzlmod_consumer
+        run: bazel test --config=ci //...
+
+      - name: Resolve every PrimeIR target as a dependency
+        working-directory: bazel/bzlmod_consumer
+        run: |
+          bazel build --config=ci \
+            @prime_ir//prime_ir/... \
+            @prime_ir//tools/...
+
+      - name: Upload bazel test logs
+        if: ${{ failure() }}
+        uses: fractalyze/.github/.github/actions/upload-bazel-testlogs@main
+
   pre-commit-style:
     if: github.actor != 'fractalyze-dev'
     runs-on: [self-hosted, cpu]
