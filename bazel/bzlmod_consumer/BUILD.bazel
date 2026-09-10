@@ -1,0 +1,48 @@
+# Copyright 2026 The PrimeIR Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ==============================================================================
+
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
+# How a consumer actually uses prime_ir: depend on dialect targets and compile
+# against them. These are the three that riscv-witness' own BUILD files name,
+# and they come as a set for a reason — `//prime_ir/IR:Attributes` is reached
+# from every dialect and calls into the EllipticCurve types, while
+# EllipticCurve depends back on Field. The cycle is broken by depending on
+# headers-only `*Hdrs` targets, which leaves those symbols to whoever performs
+# the final link. Depending on Field alone therefore fails to link, from inside
+# this repository as much as outside it.
+#
+# The CI lane additionally builds `@prime_ir//prime_ir/...` and
+# `@prime_ir//tools/...`, which covers the targets no consumer depends on
+# directly.
+#
+# There is no `@llvm-project` in the deps because a module extension's
+# repositories are not re-exported: prime_ir's MLIR is reachable through this
+# target's own dependencies, but a consumer with MLIR in its own sources — as
+# riscv-witness has — declares llvm-project for itself. This module never
+# enables `layering_check` for the same reason: it would demand the direct dep
+# this fixture is showing a consumer does not need. (The root workspace does
+# enable it, but its .bazelrc does not reach a separate workspace.)
+cc_test(
+    name = "consume_prime_ir_test",
+    size = "small",
+    srcs = ["consume_prime_ir_test.cc"],
+    deps = [
+        "@com_google_googletest//:gtest_main",
+        "@prime_ir//prime_ir/Dialect/EllipticCurve/IR:EllipticCurve",
+        "@prime_ir//prime_ir/Dialect/Field/IR:Field",
+        "@prime_ir//prime_ir/Dialect/ModArith/IR:ModArith",
+    ],
+)

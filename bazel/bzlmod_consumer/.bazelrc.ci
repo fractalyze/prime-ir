@@ -1,0 +1,7 @@
+# The fixture's own copy of the repository root's .bazelrc.ci, which cannot be
+# reused verbatim: `--//:has_avx512` names a build setting in whichever
+# repository is root, and here that is the fixture rather than prime_ir. Passed
+# as `--bazelrc`, as the sibling lanes pass the root's.
+build:ci --remote_cache=grpc://gpu-server:9092
+test:ci --test_output=errors
+test:ci --@prime_ir//:has_avx512

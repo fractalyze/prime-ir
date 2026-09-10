@@ -23,5 +23,5 @@ def repo():
         strip_prefix = "pybind11-2.10.3",
         sha256 = "201966a61dc826f1b1879a24a3317a1ec9214a918c8eb035be2f30c3e9cfbdcb",
         urls = ["https://github.com/pybind/pybind11/archive/v2.10.3.zip"],
-        build_file = "//third_party/pybind11:pybind11.BUILD",
+        build_file = Label("//third_party/pybind11:pybind11.BUILD"),
     )

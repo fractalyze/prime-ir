@@ -1,0 +1,4 @@
+# A standalone Bazel module used to verify that prime_ir resolves as a non-root
+# dependency. It has its own MODULE.bazel and is built by its own CI lane, so
+# the repository's own `//...` must not descend into it.
+bazel/bzlmod_consumer
