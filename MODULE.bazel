@@ -69,9 +69,9 @@ bazel_dep(name = "rules_shell", version = "0.2.0")
 # `archive_override` takes `integrity` and not the `sha256` the
 # WORKSPACE lane's `http_archive` takes: the same digest, base64 rather than
 # hex. `pin_sync_test` converts between the two before comparing.
-ZK_DTYPES_COMMIT = "7a42ac4f9c3213925ac523c6871b580db96f9b8d"
+ZK_DTYPES_COMMIT = "bb3b74f5be54bfa08529a8baea53971350891d8e"
 
-ZK_DTYPES_INTEGRITY = "sha256-8pEUJbq+GJCpyE/VGRcU6cMJUxgyUTO1dpOWiVY7yRw="
+ZK_DTYPES_INTEGRITY = "sha256-zIxQUwIMryjeESanB8BIjRVQLjmKF3QyG9L4MnfEvH0="
 
 bazel_dep(name = "zk_dtypes", version = "0.0.17")
 archive_override(
