@@ -86,6 +86,33 @@ bazel-test-diff() {
     for f in .bazelrc .bazelrc.ci .bazelversion WORKSPACE.bazel MODULE.bazel; do
       [[ -f "$WORKSPACE_PATH/$f" ]] && echo "$WORKSPACE_PATH/$f" >> "$SEED_FILEPATHS"
     done
+    seed-module-extension-inputs
+  }
+
+  # Dependency pins reach the WORKSPACE lane's hashes through the //external:*
+  # targets it queries, whose repository-rule attributes carry the commit and
+  # checksum. The bzlmod lane excludes those targets, and module extensions are
+  # evaluated outside the target graph anyway, so nothing they read -- a pin, an
+  # LLVM patch, the pip lock -- reaches any hash there. Without these seeds an
+  # LLVM bump hashes identically and the lane reports no impacted targets,
+  # going green having built nothing.
+  #
+  # The globs deliberately over-seed: `bazel/*.bzl` catches extension files yet
+  # to be written, at the cost of a full run when one of the few BUILD-loaded
+  # `.bzl` files there changes. Under-seeding fails silently, over-seeding only
+  # costs time.
+  seed-module-extension-inputs() {
+    [[ -n "${CI_BAZEL_CONFIG:-}" ]] || return 0
+    local f
+    for f in "$WORKSPACE_PATH"/third_party/*/workspace.bzl \
+             "$WORKSPACE_PATH"/third_party/*/*.patch \
+             "$WORKSPACE_PATH"/bazel/*.bzl \
+             "$WORKSPACE_PATH"/requirements_lock_*.txt; do
+      [[ -f "$f" ]] && echo "$f" >> "$SEED_FILEPATHS"
+    done
+    # An unmatched glob leaves the last [[ -f ]] false; do not let that abort
+    # the `set -e` caller.
+    return 0
   }
 
   git -C "$WORKSPACE_PATH" checkout "$PREVIOUS_REV" --quiet

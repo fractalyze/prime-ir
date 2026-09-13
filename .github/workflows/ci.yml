@@ -122,11 +122,13 @@ jobs:
           fi
           # `*.bazel*` covers MODULE.bazel(.lock), WORKSPACE.bazel, BUILD.bazel,
           # .bazelrc*, .bazelversion and .bazelignore at any depth: pathspecs use
-          # git's default wildmatch, where `*` also crosses `/`. The last entry
-          # re-runs the lane whenever its own definition changes.
+          # git's default wildmatch, where `*` also crosses `/`. The pip lock is
+          # read by `pip.parse` in MODULE.bazel, so it changes what a consumer
+          # resolves. The last entry re-runs the lane when its own definition
+          # changes.
           CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- \
             '*.bazel*' '*.bzl' 'third_party' 'bazel' \
-            '.github/workflows/ci.yml')
+            '*requirements_lock_*.txt' '.github/workflows/ci.yml')
           if [[ -n "$CHANGED" ]]; then
             echo "Build-definition files changed:"
             echo "$CHANGED"
