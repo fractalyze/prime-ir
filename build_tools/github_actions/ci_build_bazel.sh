@@ -28,9 +28,28 @@ if [[ $# -ne 0 && $# -ne 3 ]] ; then
   exit 1
 fi
 
-# CI options live in .bazelrc.ci as :ci-namespaced configs.
+# CI options live in .bazelrc.ci as :ci-namespaced configs. Setting
+# CI_BAZEL_CONFIG layers a second one on top; the bzlmod lane sets `bzlmod`,
+# which resolves through MODULE.bazel. Empty keeps the WORKSPACE resolution.
+#
+# Every bazel invocation below carries it, bazel-diff's own queries included:
+# the two resolutions build the same targets out of differently named
+# repositories, so an impacted-target set computed under one does not describe
+# the other. Both variables hold whitespace-separated flags and are expanded
+# unquoted on purpose.
+LANE_CONFIG_FLAG=""
+BAZEL_DIFF_LANE_OPTS=""
+if [[ -n "${CI_BAZEL_CONFIG:-}" ]]; then
+  LANE_CONFIG_FLAG="--config=${CI_BAZEL_CONFIG}"
+  # :bzlmod implies --noenable_workspace, which makes bazel-diff's default
+  # //external:all-targets query an error. bazel-diff skips that query on its
+  # own only when its `bazel mod graph` probe reports bzlmod, and that probe
+  # does not carry --config, so say so outright.
+  BAZEL_DIFF_LANE_OPTS="-co ${LANE_CONFIG_FLAG} --excludeExternalTargets"
+fi
+
 bazel-ci() {
-  bazel --bazelrc=.bazelrc.ci "$@" --config ci
+  bazel --bazelrc=.bazelrc.ci "$@" --config ci $LANE_CONFIG_FLAG
 }
 
 bazel-test-all() {
@@ -73,7 +92,8 @@ bazel-test-diff() {
 
   echo "Generating Hashes for Revision '$PREVIOUS_REV'"
   seed-filepaths
-  bazel-diff generate-hashes -w "$WORKSPACE_PATH" -b "$BAZEL_PATH" -s "$SEED_FILEPATHS" $STARTING_HASHES_JSON
+  bazel-diff generate-hashes -w "$WORKSPACE_PATH" -b "$BAZEL_PATH" \
+    $BAZEL_DIFF_LANE_OPTS -s "$SEED_FILEPATHS" $STARTING_HASHES_JSON
 
   UNCOMMITTED_CHANGES="$(git status -s)"
   if [[ -n "$UNCOMMITTED_CHANGES" ]]; then
@@ -86,7 +106,8 @@ bazel-test-diff() {
 
   echo "Generating Hashes for Revision '$FINAL_REV'"
   seed-filepaths
-  bazel-diff generate-hashes -w "$WORKSPACE_PATH" -b "$BAZEL_PATH" -s "$SEED_FILEPATHS" $FINAL_HASHES_JSON
+  bazel-diff generate-hashes -w "$WORKSPACE_PATH" -b "$BAZEL_PATH" \
+    $BAZEL_DIFF_LANE_OPTS -s "$SEED_FILEPATHS" $FINAL_HASHES_JSON
 
   echo "Determining Impacted Targets"
   bazel-diff get-impacted-targets -sh $STARTING_HASHES_JSON -fh $FINAL_HASHES_JSON -o $IMPACTED_TARGETS_PATH -w "$WORKSPACE_PATH"
@@ -120,7 +141,8 @@ bazel-test-diff() {
       tr '\n' ' ' < "$FILTERED_TARGETS_PATH"
       printf ') in kind(rule, $t) except attr("tags", "(^\\[|, )manual(, |\\]$)", $t)'
     } > "$QUERY_FILE"
-    bazel query --query_file="$QUERY_FILE" > "$FILTERED_TARGETS_PATH.rules"
+    bazel query $LANE_CONFIG_FLAG --query_file="$QUERY_FILE" \
+      > "$FILTERED_TARGETS_PATH.rules"
     mv "$FILTERED_TARGETS_PATH.rules" "$FILTERED_TARGETS_PATH"
   fi
 
