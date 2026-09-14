@@ -149,7 +149,16 @@ def glob_lit_tests(
     timeout_override = timeout_override or dict()
     tags_override = tags_override or dict()
     default_tags = default_tags or []
-    tests = native.glob(["*." + ext for ext in test_file_exts], exclude = exclude)
+
+    # `allow_empty` because excluding every test file in a package is a normal
+    # way to call this: a file that needs its own `select()` on the command line
+    # is listed in `exclude` and declared as a `py_test` beside this macro, which
+    # leaves nothing to glob. Bazel 9 rejects an empty glob by default.
+    tests = native.glob(
+        ["*." + ext for ext in test_file_exts],
+        exclude = exclude,
+        allow_empty = True,
+    )
 
     run_lit_tests(
         tests = tests,

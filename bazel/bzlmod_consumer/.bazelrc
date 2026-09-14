@@ -1,7 +1,5 @@
 # Standalone module: this file is not the repository root's .bazelrc, and the
 # root's does not reach a separate workspace.
-common --enable_bzlmod
-common --noenable_workspace
 
 build --cxxopt=-std=c++17
 build --host_cxxopt=-std=c++17

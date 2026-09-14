@@ -16,7 +16,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 
 # Read by //third_party/zk_dtypes:pin_sync_test, which compares the zk_dtypes
-# pin declared here against the one the WORKSPACE lane uses.
+# pin declared here against the one in //third_party/zk_dtypes:workspace.bzl.
 exports_files(["MODULE.bazel"])
 
 bool_flag(
