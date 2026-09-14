@@ -14,17 +14,18 @@
 
 """Loads llvm-project and the two compression libraries its Bazel overlay needs.
 
-Both dependency paths go through `repo()`: `WORKSPACE.bazel` calls it directly,
-and `//bazel:llvm_deps.bzl` wraps it in the `llvm_deps` module extension. The
-archives are declared here rather than at either call site so that the pin, the
-patch list and their order have one home.
+Both callers go through `repo()`: `//bazel:llvm_deps.bzl` wraps it in the
+`llvm_deps` module extension, and WORKSPACE-mode consumers — stablehlo and xla
+load this file out of our tree — call it directly. The archives are declared
+here rather than at either call site so that the pin, the patch list and their
+order have one home.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
 # Uncommented together with the `new_local_repository` call in `repo()` below.
 # It is the Starlark rule rather than the WORKSPACE native one, so the local
-# clone works on the bzlmod lane too.
+# clone works for a module extension too.
 # load("@bazel_tools//tools/build_defs/repo:local.bzl", "new_local_repository")
 
 LLVM_COMMIT = "815edc3ff646392bfee2b381d37dd35e4b04f9c5"

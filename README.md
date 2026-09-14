@@ -124,20 +124,16 @@ retains both performance and correctness across a wide range of devices.
    bazel build //...
    ```
 
-   That resolves dependencies through `WORKSPACE.bazel`, which is the default.
-   `MODULE.bazel` describes the same dependencies for Bazel's module system, and
-   `--config=bzlmod` builds through it instead:
+   That resolves dependencies through `MODULE.bazel`, the only path Bazel 9
+   offers. PrimeIR has no `WORKSPACE.bazel`; the loader `.bzl` files under
+   `third_party/` stay because projects still building in WORKSPACE mode load
+   them out of this tree.
 
-   ```sh
-   bazel build --config=bzlmod //...
-   ```
-
-   A project that wants to depend on PrimeIR uses that second path: declare a
-   `bazel_dep` on `prime_ir` plus an `archive_override` pointing at a revision
-   of this repository, and repeat the `zk_dtypes` override PrimeIR's own
-   `MODULE.bazel` carries — Bazel honours overrides only in the root module, and
-   neither fork is in a registry. `bazel/bzlmod_consumer` is a worked example
-   that CI builds.
+   A project that wants to depend on PrimeIR declares a `bazel_dep` on
+   `prime_ir` plus an `archive_override` pointing at a revision of this
+   repository, and repeats the `zk_dtypes` override PrimeIR's own `MODULE.bazel`
+   carries — Bazel honours overrides only in the root module, and neither fork
+   is in a registry. `bazel/bzlmod_consumer` is a worked example that CI builds.
 
 1. Run a test optimization:
 

@@ -20,7 +20,7 @@ fi
 dest_dir=$1
 repo_root=$(cd -- "$(dirname "$0")/.." && pwd -P)
 
-if [[ ! -f $repo_root/WORKSPACE.bazel ]]; then
+if [[ ! -f $repo_root/MODULE.bazel ]]; then
     echo "error: script must be run from within the prime-ir repository" >&2
     exit 1
 fi

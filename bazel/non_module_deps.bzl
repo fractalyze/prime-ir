@@ -13,15 +13,15 @@
 # limitations under the License.
 # ==============================================================================
 
-"""The bzlmod half of `//bazel:prime_ir_deps.bzl`.
+"""The module-extension half of `//bazel:prime_ir_deps.bzl`.
 
-`prime_ir_deps()` is what `WORKSPACE.bazel` calls; this extension calls the same
-function, so the two lanes fetch one set of pins from one place. Everything it
-declares either ships no Bazel module (nanobind, pybind11 and robin_map are
-built from BUILD files this repository carries, which a registry module would
-replace) or is generated on the host (`local_config_omp`). A dependency the
-registry does carry belongs in MODULE.bazel as a `bazel_dep` instead, so that
-consumers resolve one shared version of it with us.
+`prime_ir_deps()` is the plain macro a WORKSPACE-mode consumer can call; this
+extension calls the same function, so both fetch one set of pins from one place.
+Everything it declares either ships no Bazel module (nanobind, pybind11 and
+robin_map are built from BUILD files this repository carries, which a registry
+module would replace) or is generated on the host (`local_config_omp`). A
+dependency the registry does carry belongs in MODULE.bazel as a `bazel_dep`
+instead, so that consumers resolve one shared version of it with us.
 """
 
 load("//bazel:prime_ir_deps.bzl", "prime_ir_deps")

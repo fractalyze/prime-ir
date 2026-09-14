@@ -13,19 +13,24 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Checks that both dependency lanes pin the same zk_dtypes archive.
+"""Checks that MODULE.bazel and the loader `.bzl` pin the same zk_dtypes archive.
 
-zk_dtypes is not in any registry, so the bzlmod lane reaches it through an
-`archive_override` in MODULE.bazel and the WORKSPACE lane through an
-`http_archive` in `workspace.bzl`. MODULE.bazel cannot `load()`, so the pin
-cannot be single-sourced and the two copies can drift — leaving the lanes
-building different revisions of the dependency the rest of the chain hangs on.
+zk_dtypes is not in any registry, so this build reaches it through an
+`archive_override` in MODULE.bazel, while consumers that still resolve through
+their own WORKSPACE call the `http_archive` in `workspace.bzl`. MODULE.bazel
+cannot `load()`, so the pin cannot be single-sourced and the copies can drift —
+leaving us and those consumers on different revisions of the dependency the
+rest of the chain hangs on.
 
 Both files put the pin behind `ZK_DTYPES_`-prefixed variables so that one
 substitution finds it in either, which is what lets
 `.github/workflows/pin-bump.yml` hand both paths to the same bump action. This
 test is the other half of that arrangement: it fails if a hand edit, or a bump
 that reached only one file, leaves them disagreeing.
+
+`//bazel/bzlmod_consumer/MODULE.bazel` carries a third copy, spelled the same
+way so the bump reaches it, but `.bazelignore` puts it outside this build's
+target graph and no test reads it — fractalyze/prime-ir#463.
 
 The digest is the same hash written two ways — `http_archive` takes hex,
 `archive_override` takes base64 — so comparing it means converting first.

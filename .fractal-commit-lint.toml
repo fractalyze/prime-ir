@@ -15,7 +15,6 @@ require_scope = false
 test_dirs = ["tests"]
 
 exempt_paths = [
-  "WORKSPACE.bazel",
   "MODULE.bazel",
   "MODULE.bazel.lock",
   "BUILD.bazel",

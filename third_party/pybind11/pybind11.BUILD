@@ -24,6 +24,11 @@ cc_library(
             "include/pybind11/common.h",
         ],
     ),
+    # The Python headers arrive through a toolchain-resolved alias, and
+    # `layering_check` cannot follow `current_py_cc_headers` to a module map, so
+    # it reports `Python.h` as undeclared even though the dependency below is
+    # exactly the one that provides it.
+    features = ["-layering_check"],
     includes = ["include"],
     visibility = ["//visibility:public"],
     deps = ["@rules_python//python/cc:current_py_cc_headers"],

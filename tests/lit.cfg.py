@@ -43,12 +43,11 @@ config.suffixes = [".mlir", ".v"]
 # subdirectory to the PATH environment variable.
 #
 # Bazel defines RUNFILES_DIR, which holds one directory per repository. Neither
-# that directory's name nor this repository's own is a constant: on the WORKSPACE
-# lane they are the apparent names (`prime_ir`, `llvm-project`), while under
-# `--config=bzlmod` this repository is `_main` and an external one carries a
-# canonical name that prefixes the apparent one (`_main~llvm_project~llvm-project`
-# on Bazel 7, `+llvm_project+llvm-project` on Bazel 8). Both lanes are resolved
-# below rather than spelled out.
+# that directory's name nor this repository's own is a constant: this repository
+# is `_main`, and an external one carries a canonical name that prefixes the
+# apparent one (`+llvm_project+llvm-project`). The separator in that prefix is a
+# Bazel implementation detail, so the lookup below matches on the apparent-name
+# suffix rather than spelling any of it out.
 
 runfiles_dir = Path(os.environ["RUNFILES_DIR"])
 

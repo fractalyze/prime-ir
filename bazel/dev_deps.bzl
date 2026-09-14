@@ -15,8 +15,8 @@
 
 """Tooling a contributor runs by hand; no build target depends on it.
 
-`WORKSPACE.bazel` calls `prime_ir_dev_deps()` and MODULE.bazel wraps it in a
-`dev_dependency` extension, so a consumer of prime_ir never fetches any of it.
+MODULE.bazel wraps `prime_ir_dev_deps()` in a `dev_dependency` extension, so a
+consumer of prime_ir never fetches any of it.
 """
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
