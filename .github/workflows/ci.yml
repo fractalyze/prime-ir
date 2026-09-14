@@ -53,21 +53,40 @@ jobs:
         uses: fractalyze/.github/.github/actions/upload-bazel-testlogs@main
 
   # The same tests, resolved through MODULE.bazel instead of WORKSPACE.bazel.
-  # Always the full suite: bazel-diff hashes the WORKSPACE lane's targets, and
-  # the two lanes' repository names differ, so its impacted-target set does not
-  # carry over.
+  # bazel-diff runs natively under `--config=bzlmod`, so the impacted set is
+  # computed against the module graph this lane builds. The WORKSPACE lane's set
+  # cannot be reused: the two resolutions build the same targets out of
+  # differently named repositories, so most target hashes differ between them.
   build-and-test-bzlmod:
     runs-on: [self-hosted, cpu]
+    env:
+      CI_BAZEL_CONFIG: bzlmod
     steps:
+      # Full history so bazel-diff can check out and hash the PR base revision.
       - name: Checkout PrimeIR
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Run `bazel test`
+      - name: Run `bazel test` (diff only)
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          bazel --bazelrc=.bazelrc.ci test \
-            --config=ci \
-            --config=bzlmod \
-            //...
+          BAZEL_DIFF=$(mktemp -t bazel-diff.XXXXXX.jar)
+          # Fetch via the release API rather than the browser-download CDN: the
+          # latter intermittently 504s and a bare `curl -Lo` would save the HTML
+          # error page as a corrupt jar. `gh` validates the asset and --clobber
+          # overwrites the mktemp placeholder.
+          gh release download 17.0.2 --repo Tinder/bazel-diff \
+            --pattern bazel-diff_deploy.jar --output "$BAZEL_DIFF" --clobber
+          ./build_tools/github_actions/ci_build_bazel.sh "$BAZEL_DIFF" \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}"
+
+      - name: Run `bazel test` (all)
+        if: github.event_name != 'pull_request'
+        run: ./build_tools/github_actions/ci_build_bazel.sh
 
       - name: Upload bazel test logs
         if: ${{ failure() }}
@@ -81,14 +100,51 @@ jobs:
   bzlmod-consumer:
     runs-on: [self-hosted, cpu]
     steps:
+      # Full history so the change detection below can diff against the PR base.
       - name: Checkout PrimeIR
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # What PrimeIR exposes to a consumer is decided entirely by its build
+      # definition, so a PR touching none of those files cannot change this
+      # lane's result. Pushes to main always run it.
+      - name: Detect build-definition changes
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [[ -z "$BASE_SHA" ]]; then
+            echo "Not a pull request; running the lane."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # `*.bazel*` covers MODULE.bazel(.lock), WORKSPACE.bazel, BUILD.bazel,
+          # .bazelrc*, .bazelversion and .bazelignore at any depth: pathspecs use
+          # git's default wildmatch, where `*` also crosses `/`. The pip lock is
+          # read by `pip.parse` in MODULE.bazel, so it changes what a consumer
+          # resolves. The last entry re-runs the lane when its own definition
+          # changes.
+          CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- \
+            '*.bazel*' '*.bzl' 'third_party' 'bazel' \
+            '*requirements_lock_*.txt' '.github/workflows/ci.yml')
+          if [[ -n "$CHANGED" ]]; then
+            echo "Build-definition files changed:"
+            echo "$CHANGED"
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No build-definition change; skipping the consumer lane."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Run `bazel test` in the consumer module
+        if: steps.changes.outputs.run == 'true'
         working-directory: bazel/bzlmod_consumer
         run: bazel --bazelrc=.bazelrc.ci test --config=ci //...
 
       - name: Resolve every PrimeIR target as a dependency
+        if: steps.changes.outputs.run == 'true'
         working-directory: bazel/bzlmod_consumer
         run: |
           bazel --bazelrc=.bazelrc.ci build --config=ci \
