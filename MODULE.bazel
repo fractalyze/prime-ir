@@ -70,9 +70,9 @@ bazel_dep(name = "rules_shell", version = "0.2.0")
 # `archive_override` takes `integrity` and not the `sha256` the loader's
 # `http_archive` takes: the same digest, base64 rather than hex. `pin_sync_test`
 # converts between the two before comparing.
-ZK_DTYPES_COMMIT = "a45ddd0782891028191f429614912c314811acaa"
+ZK_DTYPES_COMMIT = "2d17be85febb2b49ba2a80bf6e45318a22d1c0f9"
 
-ZK_DTYPES_INTEGRITY = "sha256-3wm9QGTJBfQcCxoke4mvIZhmPEVG/gcAxXNbHMOfScU="
+ZK_DTYPES_INTEGRITY = "sha256-cOh8XPYYuUdFVeD3wy8c2N+Srae4ATddlUCQHxj+rr0="
 
 bazel_dep(name = "zk_dtypes", version = "0.0.17")
 archive_override(

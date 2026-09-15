@@ -1,0 +1,24 @@
+# Bazel writes and rewrites this; keep it out of language stats and collapsed by
+# default in diffs. Keeping it current is enforced: the CI lane builds in
+# Bazel's default --lockfile_mode=update, which rewrites a stale lock in place,
+# and then fails on `git diff --exit-code -- MODULE.bazel.lock`. Asking Bazel to
+# reject a stale lock instead (--lockfile_mode=error) does not work there --
+# bazel-diff's hash passes rewrite it before the gated command reads it, so the
+# check passed a deliberately stale lock; see fractalyze/ci-infra#9.
+#
+# To regenerate by hand: `bazel mod deps --lockfile_mode=update` records only
+# the extensions that command evaluates, so follow it with a default-config
+# `bazel build //...` and keep only a lock a second build leaves byte-identical.
+#
+# The merge attribute names a driver rather than defining one — git only ever
+# takes a driver from git config, never from a clone — so two branches that both
+# regenerated the lock merge structurally where the driver is configured, and
+# fall back to git's three-way merge where it is not. The driver is Bazel's own,
+# at
+# https://github.com/bazelbuild/bazel/blob/8220c6198837d5c13d53fea211cf3282aa12408a/scripts/bazel-lockfile-merge.jq
+# and is installed once per clone with:
+#   git config merge.bazel-lockfile-merge.name "Bazel lockfile merge"
+#   git config merge.bazel-lockfile-merge.driver \
+#     "jq -s -f /path/to/bazel-lockfile-merge.jq -- %O %A %B > %A.tmp && mv %A.tmp %A"
+MODULE.bazel.lock linguist-generated=true
+MODULE.bazel.lock merge=bazel-lockfile-merge

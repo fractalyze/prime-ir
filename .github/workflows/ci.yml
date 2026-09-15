@@ -47,6 +47,17 @@ jobs:
         if: github.event_name != 'pull_request'
         run: ./build_tools/github_actions/ci_build_bazel.sh
 
+      # The steps above build in Bazel's default --lockfile_mode=update, so a
+      # stale committed lock is rewritten in place rather than rejected -- and
+      # that rewrite is the signal: if the file moved here, what git carries did
+      # not describe this build. Asking Bazel to reject it instead
+      # (--lockfile_mode=error) does not work in this lane, because bazel-diff's
+      # hash passes rewrite the lock before the gated command ever reads it; see
+      # fractalyze/ci-infra#9. The consumer fixture is excluded by construction:
+      # its own lock is deliberately unpinned and gitignored.
+      - name: Check MODULE.bazel.lock is current
+        run: git diff --exit-code -- MODULE.bazel.lock
+
       # Capture the runner-local test.log a failed test leaves behind — the CI
       # stream only carries the FAIL summary, not the gtest output.
       - name: Upload bazel test logs

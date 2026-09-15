@@ -221,6 +221,31 @@
   },
   "selectedYankedVersions": {},
   "moduleExtensions": {
+    "//bazel:dev_deps.bzl%dev_deps": {
+      "general": {
+        "bzlTransitiveDigest": "msBMWhu0HY7/fH/7yQd3Wyly2X94hz4apv18D3zqgVk=",
+        "usagesDigest": "e/qZl6E3QjxSyWcASYW3DrA4Uvo1BW0oRUdc4IONPto=",
+        "recordedInputs": [
+          "REPO_MAPPING:,bazel_tools bazel_tools",
+          "REPO_MAPPING:,zk_dtypes zk_dtypes+"
+        ],
+        "generatedRepoSpecs": {
+          "hedron_compile_commands": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "patch_args": [
+                "-p1"
+              ],
+              "patches": [
+                "@@zk_dtypes+//third_party/bazel-compile-commands-extractor:allow_header_as_a_source_file.patch"
+              ],
+              "strip_prefix": "bazel-compile-commands-extractor-ed994039a951b736091776d677f324b3903ef939",
+              "url": "https://github.com/hedronvision/bazel-compile-commands-extractor/archive/ed994039a951b736091776d677f324b3903ef939.tar.gz"
+            }
+          }
+        }
+      }
+    },
     "//bazel:llvm_configure.bzl%llvm_project": {
       "general": {
         "bzlTransitiveDigest": "uQzQa03qn77EDIGS/t0ssk+G5581OzBDqQvx4iBnWxY=",
@@ -296,7 +321,7 @@
     },
     "//bazel:non_module_deps.bzl%non_module_deps": {
       "general": {
-        "bzlTransitiveDigest": "5GHY5VcGJCfeeeWWQkmiSjMN8FZm8JJ+tD8KVpUNu+w=",
+        "bzlTransitiveDigest": "O4bvcJ5sDwjXlHPaiznJimv2PK9hh586Ku2XOMQKDGU=",
         "usagesDigest": "0Sd9YlfIQwpseg2QSvJUBlyUTS9NewwOHj+gRkNn6oM=",
         "recordedInputs": [
           "REPO_MAPPING:,bazel_tools bazel_tools"
@@ -592,6 +617,28 @@
                 ]
               },
               "toolchain_target_settings": {}
+            }
+          }
+        }
+      }
+    },
+    "@@zk_dtypes+//bazel:non_module_deps.bzl%non_module_deps": {
+      "general": {
+        "bzlTransitiveDigest": "suliDuLYZo2nHKu95qDEED/yh211nYAmjzBuJZqCTeE=",
+        "usagesDigest": "oSJ5F4xs6Es1YqcwUD0ZQ6DwcffeWvKI7TJK5cR2TPY=",
+        "recordedInputs": [
+          "REPO_MAPPING:zk_dtypes+,bazel_tools bazel_tools"
+        ],
+        "generatedRepoSpecs": {
+          "eigen_archive": {
+            "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_archive",
+            "attributes": {
+              "build_file": "@@zk_dtypes+//third_party/eigen3:eigen_archive.BUILD",
+              "sha256": "1a432ccbd597ea7b9faa1557b1752328d6adc1a3db8969f6fe793ff704be3bf0",
+              "strip_prefix": "eigen-4c38131a16803130b66266a912029504f2cf23cd",
+              "urls": [
+                "https://gitlab.com/libeigen/eigen/-/archive/4c38131a16803130b66266a912029504f2cf23cd/eigen-4c38131a16803130b66266a912029504f2cf23cd.tar.gz"
+              ]
             }
           }
         }
