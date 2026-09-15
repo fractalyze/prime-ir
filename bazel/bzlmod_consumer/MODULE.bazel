@@ -48,9 +48,9 @@ local_path_override(
 # TODO(fractalyze/prime-ir#463): no test reads this copy — `.bazelignore` puts
 # this module outside prime_ir's target graph, so
 # `//third_party/zk_dtypes:pin_sync_test` cannot address it.
-ZK_DTYPES_COMMIT = "a45ddd0782891028191f429614912c314811acaa"
+ZK_DTYPES_COMMIT = "2d17be85febb2b49ba2a80bf6e45318a22d1c0f9"
 
-ZK_DTYPES_INTEGRITY = "sha256-3wm9QGTJBfQcCxoke4mvIZhmPEVG/gcAxXNbHMOfScU="
+ZK_DTYPES_INTEGRITY = "sha256-cOh8XPYYuUdFVeD3wy8c2N+Srae4ATddlUCQHxj+rr0="
 
 bazel_dep(name = "zk_dtypes", version = "0.0.17")
 archive_override(
